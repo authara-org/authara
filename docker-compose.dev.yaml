@@ -1,12 +1,18 @@
 services:
 
-  frontend:
+  frontend-webpack:
     image: node:20-alpine
     working_dir: /frontend
     volumes:
       - ./frontend:/frontend
     command: npm run dev:webpack
 
+  frontend-tailwind:
+    image: node:20-alpine
+    working_dir: /frontend
+    volumes:
+      - ./frontend:/frontend
+    command: npm run dev:tailwind
 
   postgres:
     image: postgres:16.2
