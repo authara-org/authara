@@ -8,6 +8,7 @@ import (
 
 	"github.com/alexlup06/authgate/internal/auth"
 	httpmiddleware "github.com/alexlup06/authgate/internal/http/middleware"
+	"github.com/alexlup06/authgate/internal/http/providers/google"
 	"github.com/alexlup06/authgate/internal/session"
 
 	"github.com/go-chi/chi/v5"
@@ -21,8 +22,10 @@ type Server struct {
 type Config struct {
 	Addr    string
 	Auth    *auth.Service
+	Dev     bool
 	Session *session.Service
 	Logger  *slog.Logger
+	Google  *google.Client
 }
 
 func NewServer(cfg Config) *Server {

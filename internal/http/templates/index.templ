@@ -1,7 +1,52 @@
 package templates
 
-templ Index() {
-	<div>
-		Hello World!	
-	</div>
+import "github.com/alexlup06/authgate/internal/http/context"
+
+templ Layout() {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<title>Go Starter</title>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<meta name="description" content="This helps you to quickly get going."/>
+			<meta property="og:site_name" content="Go Starter"/>
+			<link rel="stylesheet" href="/auth/static/app.css"/>
+			<link rel="preload" href="/auth/static/fonts/FunnelSans-VariableFont_wght.ttf" as="font" type="font/ttf" crossorigin="anonymous"/>
+			<style>
+				@font-face {
+					font-family: 'FunnelSans';
+					src: url('/auth/static/fonts/FunnelSans-VariableFont_wght.ttf') format('opentype');
+					font-display: swap;
+				}
+				body {
+					font-family: 'FunnelSans', Arial, sans-serif;
+				}
+			</style>
+			<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "WebSite",
+				"name": "Go Starter",
+				"url": "https://example.com",
+			}
+			</script>
+			<script src="/auth/static/htmx.min.js" defer></script>
+			<script src="/auth/static/alpine.min.js" defer></script>
+			<script src="/auth/static/app.js" defer></script>
+		</head>
+		<body class="m-0">
+			{ children... }
+		</body>
+	</html>
+}
+
+templ PartialRender() {
+	if context.IsHTMX(ctx) {
+		{ children... }
+	} else {
+		@Layout() {
+			{ children... }
+		}
+	}
 }

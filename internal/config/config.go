@@ -14,6 +14,8 @@ type Config struct {
 	HTTP    HTTP
 	Auth    Auth
 	Logging Logging
+
+	Google Google
 }
 
 func Load() (*Config, error) {

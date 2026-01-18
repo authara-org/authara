@@ -11,6 +11,7 @@ import (
 	"github.com/alexlup06/authgate/internal/auth"
 	"github.com/alexlup06/authgate/internal/config"
 	httpserver "github.com/alexlup06/authgate/internal/http"
+	"github.com/alexlup06/authgate/internal/http/providers/google"
 	"github.com/alexlup06/authgate/internal/logging"
 	"github.com/alexlup06/authgate/internal/session"
 	"github.com/alexlup06/authgate/internal/store"
@@ -70,11 +71,15 @@ func main() {
 		Store: store,
 	})
 
+	googleClient := google.New(cfg.Auth.GoogleClientID)
+
 	server := httpserver.NewServer(httpserver.Config{
 		Addr:    cfg.HTTP.Addr,
 		Auth:    authService,
+		Dev:     cfg.Dev,
 		Session: sessionService,
 		Logger:  logger,
+		Google:  googleClient,
 	})
 
 	ctx, stop := signal.NotifyContext(

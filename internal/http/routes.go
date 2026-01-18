@@ -15,15 +15,17 @@ func registerRoutes(r chi.Router, cfg Config) {
 
 	// Auth UI + API
 	r.Route("/auth", func(r chi.Router) {
-		h := handlers.NewAuthHandler(cfg.Auth, cfg.Session)
+		h := handlers.NewAuthHandler(cfg.Auth, cfg.Session, cfg.Google)
 
 		r.Get("/login", h.LoginPage)
-		r.Post("/login", h.Login)
+		r.Post("/login", h.LoginPost)
 		r.Post("/logout", h.Logout)
 
 		r.Get("/signup", h.SignupPage)
-		r.Post("/signup", h.Signup)
+		r.Post("/signup", h.SignupPost)
 	})
+
+	handlers.RegisterStatic(r, handlers.StaticConfig{Dev: cfg.Dev})
 
 	// // Session validation (for SDK / backends)
 	// r.Get("/sessions/validate", func(w http.ResponseWriter, r *http.Request) {

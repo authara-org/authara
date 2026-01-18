@@ -7,13 +7,6 @@ services:
       - ./frontend:/frontend
     command: npm run dev:webpack
 
-  frontend-tailwind:
-    image: node:20-alpine
-    working_dir: /frontend
-    volumes:
-      - ./frontend:/frontend
-    command: npm run dev:tailwind
-
   postgres:
     image: postgres:16.2
     restart: always
@@ -32,35 +25,45 @@ services:
   backend-migrations:
     build:
       context: ./migrations
-    environment:
-      POSTGRESQL_HOST: ${POSTGRESQL_HOST}
-      POSTGRESQL_PORT: ${POSTGRESQL_PORT}
-      POSTGRESQL_DATABASE: ${POSTGRESQL_DATABASE}
-      POSTGRESQL_USERNAME: ${POSTGRESQL_USERNAME}
-      POSTGRESQL_PASSWORD: ${POSTGRESQL_PASSWORD}
+    env_file:
+        - .env
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./migrations:/migrations
-    command: ["up", "-env=development", "-config=./dbconfig.yaml"]
+    command: ["up", "-env=default", "-config=./dbconfig.yaml"]
     restart: "no"
 
-  server:
+  gateway:
+    image: ghcr.io/alexlup06-authgate/authgate-gateway:1.0.0
+    ports:
+      - "3000:3000"
+    environment:
+      GATEWAY_PORT: 3000
+      AUTHGATE_UPSTREAM: authgate:8080
+      APP_UPSTREAM: testapp:3000
+    depends_on:
+      - authgate
+      - testapp
+
+  authgate:
     build:
       context: .
       dockerfile: docker/Dockerfile.dev
-    ports:
-      - "8080:8080"
     volumes:
       - .:/app
-      - ./internal/http/static:/static
-      - ./frontend/dist/app.js:/static/app.js
     env_file:
         - .env
     depends_on:
       backend-migrations:
         condition: service_completed_successfully
+
+  testapp:
+    build:
+      context: ./integrations/testapp/
+    volumes:
+      - ./integrations/testapp:/app
 
 volumes:
   postgres-data:

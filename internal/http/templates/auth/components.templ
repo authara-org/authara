@@ -1,0 +1,17 @@
+package auth
+
+templ AuthLayout() {
+	<div class="flex w-full h-screen">
+		<div class="w-1/2 flex">
+			<div class="h-fit mx-auto mt-20 max-w-md w-96">
+				{ children... }
+			</div>
+		</div>
+		<div class="w-1/2 bg-blue-50"></div>
+	</div>
+}
+
+templ HeaderSection(title, description string) {
+	<h1 class="text-4xl mb-2 text-center">{ title }</h1>
+	<h2 class="text-md mb-10 text-center text-grey-700">{ description }</h2>
+}

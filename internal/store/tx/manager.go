@@ -18,13 +18,6 @@ func New(store *store.Store) *Manager {
 	return &Manager{store: store}
 }
 
-type contextKey string
-
-const (
-	dbKey contextKey = "store.tx.db"
-	txKey contextKey = "store.tx.state"
-)
-
 type transactionState struct {
 	committed  bool
 	rolledBack bool
@@ -34,10 +27,7 @@ type transactionState struct {
 // Public API
 // ---------------------------------------------------------------------
 
-func (m *Manager) WithTransaction(
-	ctx context.Context,
-	fn func(context.Context) error,
-) error {
+func (m *Manager) WithTransaction(ctx context.Context, fn func(context.Context) error) error {
 	txCtx, cancel, err := m.withCancel(ctx)
 	if err != nil {
 		return err
@@ -94,17 +84,13 @@ func (m *Manager) Rollback(ctx context.Context) error {
 // Internal helpers
 // ---------------------------------------------------------------------
 
-func (m *Manager) withCancel(
-	parent context.Context,
-) (context.Context, context.CancelFunc, error) {
+func (m *Manager) withCancel(parent context.Context) (context.Context, context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(parent)
 	txCtx, err := m.withContext(ctx)
 	return txCtx, cancel, err
 }
 
-func (m *Manager) withContext(
-	parent context.Context,
-) (context.Context, error) {
+func (m *Manager) withContext(parent context.Context) (context.Context, error) {
 	session := m.store.DB().
 		WithContext(parent).
 		Begin(&sql.TxOptions{
@@ -115,8 +101,8 @@ func (m *Manager) withContext(
 		return nil, session.Error
 	}
 
-	ctx := context.WithValue(parent, dbKey, session)
-	ctx = context.WithValue(ctx, txKey, &transactionState{})
+	ctx := context.WithValue(parent, store.DbKey, session)
+	ctx = context.WithValue(ctx, store.TxKey, &transactionState{})
 
 	go m.cleanup(ctx)
 
@@ -131,11 +117,11 @@ func (m *Manager) cleanup(ctx context.Context) {
 }
 
 // ---------------------------------------------------------------------
-// Context utilities (store-internal only)
+// Context utilities
 // ---------------------------------------------------------------------
 
 func getDB(ctx context.Context) (*gorm.DB, error) {
-	db, ok := ctx.Value(dbKey).(*gorm.DB)
+	db, ok := ctx.Value(store.DbKey).(*gorm.DB)
 	if !ok {
 		return nil, fmt.Errorf("no transaction in context")
 	}
@@ -143,23 +129,23 @@ func getDB(ctx context.Context) (*gorm.DB, error) {
 }
 
 func isCommitted(ctx context.Context) bool {
-	state, ok := ctx.Value(txKey).(*transactionState)
+	state, ok := ctx.Value(store.TxKey).(*transactionState)
 	return ok && state.committed
 }
 
 func isFinished(ctx context.Context) bool {
-	state, ok := ctx.Value(txKey).(*transactionState)
+	state, ok := ctx.Value(store.TxKey).(*transactionState)
 	return ok && (state.committed || state.rolledBack)
 }
 
 func setCommitted(ctx context.Context) {
-	if state, ok := ctx.Value(txKey).(*transactionState); ok {
+	if state, ok := ctx.Value(store.TxKey).(*transactionState); ok {
 		state.committed = true
 	}
 }
 
 func setRolledBack(ctx context.Context) {
-	if state, ok := ctx.Value(txKey).(*transactionState); ok {
+	if state, ok := ctx.Value(store.TxKey).(*transactionState); ok {
 		state.rolledBack = true
 	}
 }

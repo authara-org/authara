@@ -1,0 +1,172 @@
+package auth
+
+import (
+	"github.com/alexlup06/authgate/internal/http/templates"
+	"github.com/alexlup06/authgate/internal/http/templates/components/icons"
+)
+
+templ Signup() {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@HeaderSection("Create an account", "Join to get unlimited access.")
+			<div x-data="{open:false}">
+				<button
+					x-show="!open"
+					@click="open=true"
+					class="w-full bg-blue-600 text-white h-12 px-4 rounded-xl cursor-pointer"
+				>
+					<div class="flex w-full justify-center gap-3 items-center">
+						<div class="h-6 w-6">
+							@icons.Email()
+						</div>
+						Sign up with Email
+					</div>
+				</button>
+				@SignupForm()
+			</div>
+			<div class="relative flex justify-center my-5">
+				<p class="bg-white text-sm px-4">Or, Signup with email</p>
+				<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 -z-10"></div>
+			</div>
+			<div class="flex flex-col gap-1 mb-6">
+				@AppleSignin("Sign up")
+				@GoogleSignin("Sign up")
+			</div>
+			<div class="text-center mt-6">
+				<p>
+					Already have an account ? &nbsp;
+					<a
+						hx-get="/auth/login"
+						hx-target="body"
+						hx-push-url="true"
+						class="cursor-pointer underline text-blue-800"
+					>
+						Login here
+					</a>
+				</p>
+			</div>
+		}
+	}
+}
+
+templ SignupForm() {
+	<form
+		x-cloak
+		x-show="open"
+		autocomplete="on"
+		hx-post="/auth/signup"
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		<label for="email" class="pb-4 text-grey-800">
+			<div class="pb-2">Email <span class="text-red-600">*</span></div>
+		</label>
+		<input
+			type="email"
+			id="email"
+			name="email"
+			autocomplete="username"
+			placeholder="Enter your email address"
+			required
+			class={
+				"border-2 border-grey-100 w-full rounded-xl px-4 py-3 text-sm mb-4",
+				templ.KV("border-2 border-errorColor", ctx.Value("isWrongEmail") == "true"),
+			}
+			if ctx.Value("isWrongEmail")=="true" {
+				value={ ctx.Value("email").(string) }
+			}
+		/>
+		<label for="new-password" class="text-grey-800">
+			<div class="pb-2">Password <span class="text-red-600">*</span></div>
+		</label>
+		<input
+			type="password"
+			id="new-password"
+			name="password"
+			autocomplete="new-password"
+			placeholder="Enter your password"
+			required
+			class="w-full pl-4 pr-12 py-3 text-sm border-2 border-grey-100 rounded-xl mb-2"
+			if ctx.Value("isWrongEmail")=="true" {
+				value={ ctx.Value("password").(string) }
+			}
+		/>
+		<input
+			type="password"
+			placeholder="Confirm your password"
+			required
+			class="w-full pl-4 pr-12 py-3 text-sm border-2 border-grey-100 rounded-xl mb-4"
+		/>
+		<button type="submit" class="bg-blue-600 w-full rounded-xl px-4 py-3 text-white cursor-pointer">
+			<div class="flex items-center justify-center gap-2">
+				<div class="h-6 w-6">
+					@icons.Signup()
+				</div>
+				Create Account
+			</div>
+		</button>
+	</form>
+}
+
+templ VerifySignUp() {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@HeaderSection("Verify your Account", "Please type in the code you have received from the email.")
+			@VerifySignupForm()
+		}
+	}
+}
+
+templ VerifySignupForm() {
+	<form hx-post="/auth/verify-signup" hx-targer="this" id="verification-code-input-form" hx-trigger="submit">
+		<div id="code-container" class="flex justify-center space-x-3 mb-6">
+			for  i:=0;i<6;i++ {
+				<input
+					type="text"
+					maxlength="1"
+					class={
+						"code-input appearance-none w-12 h-14 text-2xl text-center rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-blue-500",
+						templ.KV("border-gray-300", ctx.Value("incorrect-code") != "false"),
+						templ.KV("border-red-700", ctx.Value("incorrect-code") == "false"),
+					}
+				/>
+			}
+		</div>
+		<input id="hidden-code-input" hidden name="code"/>
+		<button type="submit" class="bg-blue-600 w-full rounded-xl px-4 py-3 text-white cursor-pointer">
+			<div class="flex items-center justify-center gap-2">
+				<div class="h-6 w-6">
+					@icons.Signup()
+				</div>
+				Verifiy Account
+			</div>
+		</button>
+	</form>
+}
+
+templ SuccessfullSignup() {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			<div class="flex justify-center mb-6 mt-2">
+				<div class="w-20 h-20 rounded-full p-4 text-teal-700 bg-teal-100 stroke-2">
+					@icons.Check()
+				</div>
+			</div>
+			@HeaderSection("You’re all set!",
+				"Congratulations you have successfully created an account. You are now able to use the app.")
+			<button
+				hx-get="/private"
+				hx-target="body"
+				hx-push-url="true"
+				class="bg-blue-600 w-full rounded-xl px-4 py-3 text-white cursor-pointer"
+			>
+				<div class="flex items-center justify-center gap-2">
+					Go to Dashboard	
+					<div class="h-6 w-6">
+						@icons.ArrowRight()
+					</div>
+				</div>
+			</button>
+		}
+	}
+}

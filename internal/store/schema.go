@@ -19,7 +19,7 @@ func (s *Store) CurrentSchemaVersion(ctx context.Context) (string, error) {
 	err := silentDB.WithContext(ctx).
 		Raw(`
 			SELECT id
-			FROM backend_migrations
+			FROM public.schema_migrations
 			ORDER BY applied_at DESC
 			LIMIT 1
 		`).

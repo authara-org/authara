@@ -1,0 +1,144 @@
+package auth
+
+import (
+	"github.com/alexlup06/authgate/internal/http/templates"
+	"github.com/alexlup06/authgate/internal/http/templates/components/icons"
+)
+
+templ Login() {
+	if ctx.Value("HX-Request")==nil {
+		@templates.Layout() {
+			@login()
+		}
+	} else {
+		@login()
+	}
+}
+
+templ login() {
+	@AuthLayout() {
+		@HeaderSection("Welcome Back!", "Enter to get unlimited access.")
+		@LoginForm()
+		<div class="relative flex justify-center my-5">
+			<p class="bg-white text-sm px-4">Or, Login with</p>
+			<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 -z-10"></div>
+		</div>
+		<div class="flex flex-col gap-1 mb-6">
+			@AppleSignin("Sign in")
+			@GoogleSignin("Sign in")
+		</div>
+		<div class="text-center">
+			<p>
+				Don't have an Account? &nbsp;
+				<a
+					hx-get="/auth/signup"
+					hx-target="body"
+					hx-push-url="true"
+					class="cursor-pointer underline text-blue-800"
+				>
+					Create an account
+				</a>
+			</p>
+		</div>
+	}
+}
+
+templ LoginForm() {
+	<form
+		autocomplete="on"
+		hx-post="/auth/login"
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-on="htmx:beforeSwap: if(event.detail.xhr.status === 200) { window.location.href = '/'; }"
+	>
+		<label for="email" class="pb-4 text-grey-800">
+			<div class="pb-1.5">Email <span class="text-red-600">*</span></div>
+		</label>
+		<input
+			type="email"
+			id="email"
+			name="email"
+			autocomplete="username"
+			placeholder="Enter your email address"
+			required
+			class={
+				"border-2 border-grey-100 w-full rounded-xl px-4 py-3 text-sm mb-4",
+				templ.KV("border-2 border-errorColor", ctx.Value("isWrongEmail") == "true"),
+			}
+			if ctx.Value("isWrongEmail")=="true" {
+				value={ ctx.Value("email").(string) }
+			}
+		/>
+		<label for="current-password" class="text-grey-800">
+			<div class="pb-1.5">Password <span class="text-red-600">*</span></div>
+		</label>
+		<div x-data="{ show: false }" class="mb-4 relative">
+			<input
+				:type="show ? 'text' : 'password'"
+				id="current-password"
+				name="password"
+				autocomplete="current-password"
+				placeholder="Enter your password"
+				required
+				class="w-full pl-4 pr-12 py-3 text-sm border-2 border-grey-100 rounded-xl"
+				if ctx.Value("isWrongEmail")=="true" {
+					value={ ctx.Value("password").(string) }
+				}
+			/>
+			<button
+				type="button"
+				@click="show = !show"
+				class="absolute cursor-pointer right-0 h-full px-4"
+			>
+				<div class="h-5 w-5 my-auto">
+					<div x-show="!show">
+						@icons.Hide()
+					</div>
+					<div x-show="show">
+						@icons.Show()
+					</div>
+				</div>
+			</button>
+		</div>
+		<div class="flex justify-between mb-4">
+			<label class="flex items-center space-x-1.5 cursor-pointer select-none">
+				<input
+					type="checkbox"
+					name="remember"
+					class="peer hidden"
+					checked
+				/>
+				<div class="h-4.5 w-4.5 rounded-md border-2 border-blue-600 flex items-center justify-center peer-checked:bg-blue-600 transition">
+					<!-- Checkmark -->
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 20 20"
+						fill="currentColor"
+						class="w-4 h-4 text-white peer-checked:block"
+					>
+						<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8.414 15l-4.707-4.707a1 1 0 011.414-1.414L8.414 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+					</svg>
+				</div>
+				<span class="text-blue-800 text-sm">Remember me</span>
+			</label>
+			<div>
+				<a
+					hx-get="/auth/request-password-reset"
+					hx-target="body"
+					hx-push-url="true"
+					class="cursor-pointer text-sm text-blue-800"
+				>
+					Forgot your password?
+				</a>
+			</div>
+		</div>
+		<button type="submit" class="bg-blue-600 w-full rounded-xl px-4 py-3 text-white cursor-pointer">
+			<div class="flex items-center justify-center gap-2">
+				<div class="h-6 w-6">
+					@icons.Login()
+				</div>
+				Log In
+			</div>
+		</button>
+	</form>
+}

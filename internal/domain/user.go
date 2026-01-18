@@ -6,10 +6,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// User represents a user of the system.
-// This is a pure domain model.
 type User struct {
-	ID        uuid.UUID
+	// ID is nil only before persistence.
+	// After loading or creating a user, ID is always non-nil.
+	ID        *uuid.UUID
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
