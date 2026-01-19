@@ -79,7 +79,7 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (*doma
 		user = created
 
 		provider := domain.AuthProvider{
-			UserID:         *user.ID,
+			UserID:         user.ID,
 			Provider:       domain.ProviderPassword,
 			PasswordHash:   &hash,
 			ProviderUserID: nil,
@@ -110,7 +110,7 @@ func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (*domain
 		return &domain.User{}, err
 	}
 
-	authPovider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, *user.ID)
+	authPovider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
 	if err != nil {
 		return &domain.User{}, err
 	}
@@ -126,42 +126,3 @@ func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (*domain
 func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) (*domain.User, error) {
 	return &domain.User{}, nil
 }
-
-//
-// // Login validates credentials and returns the user.
-// func (s *Service) Login(
-// 	ctx context.Context,
-// 	email string,
-// 	password string,
-// ) (*domain.User, error) {
-// 	var (
-// 		user     domain.User
-// 		provider domain.AuthProvider
-// 	)
-//
-// 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-// 		var err error
-//
-// 		user, err = s.store.GetUserByEmail(txCtx, email)
-// 		if err != nil {
-// 			return ErrInvalidCredentials
-// 		}
-//
-// 		provider, err = s.store.GetPasswordProviderByUserID(txCtx, user.ID)
-// 		if err != nil {
-// 			return ErrInvalidCredentials
-// 		}
-//
-// 		if !verifyPassword(provider.PasswordHash, password) {
-// 			return ErrInvalidCredentials
-// 		}
-//
-// 		return nil
-// 	})
-//
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	return &user, nil
-// }

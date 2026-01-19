@@ -12,7 +12,7 @@ import (
 
 func toDomainUser(m model.User) domain.User {
 	return domain.User{
-		ID:        m.ID,
+		ID:        *m.ID,
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,
 		Username:  m.Username,
@@ -22,7 +22,7 @@ func toDomainUser(m model.User) domain.User {
 
 func toModelUser(d domain.User) model.User {
 	return model.User{
-		ID:       d.ID,
+		ID:       nil,
 		Username: d.Username,
 		Email:    d.Email,
 	}

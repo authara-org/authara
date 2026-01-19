@@ -15,20 +15,22 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+type ServerConfig struct {
+	Addr            string
+	Auth            *auth.Service
+	Dev             bool
+	Session         *session.Service
+	Logger          *slog.Logger
+	Google          *google.Client
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
+}
+
 type Server struct {
 	httpServer *http.Server
 }
 
-type Config struct {
-	Addr    string
-	Auth    *auth.Service
-	Dev     bool
-	Session *session.Service
-	Logger  *slog.Logger
-	Google  *google.Client
-}
-
-func NewServer(cfg Config) *Server {
+func NewServer(cfg ServerConfig) *Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)

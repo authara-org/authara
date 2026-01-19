@@ -46,8 +46,12 @@ CREATE TABLE IF NOT EXISTS authgate.auth_providers (
 	password_hash varchar(255),
 	two_factor_authentication boolean NOT NULL DEFAULT false,
 
-	CONSTRAINT unique_provider_user UNIQUE (provider, provider_user_id)
+	CONSTRAINT unique_user_provider UNIQUE (user_id, provider)
 );
+
+CREATE UNIQUE INDEX unique_provider_user_nonnull
+ON authgate.auth_providers (provider, provider_user_id)
+WHERE provider_user_id IS NOT NULL;
 
 CREATE TRIGGER trg_auth_provider_updated_at
 BEFORE UPDATE ON authgate.auth_providers
@@ -62,18 +66,31 @@ CREATE TABLE IF NOT EXISTS authgate.sessions (
 
 	user_id uuid NOT NULL REFERENCES authgate.users(id) ON DELETE CASCADE,
 
-	refresh_token varchar(512) NOT NULL UNIQUE,
-	issued_at timestamptz NOT NULL DEFAULT now(),
 	expires_at timestamptz NOT NULL,
-	revoked boolean NOT NULL DEFAULT false,
+	revoked_at timestamptz,
 
-	user_agent varchar(255)
+	user_agent varchar(255) NOT NULL
 );
 
 CREATE TRIGGER trg_session_updated_at
 BEFORE UPDATE ON authgate.sessions
 FOR EACH ROW
 EXECUTE FUNCTION authgate.set_updated_at();
+
+
+CREATE TABLE IF NOT EXISTS authgate.refresh_tokens (
+	id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	created_at timestamptz NOT NULL DEFAULT now(),
+
+	session_id uuid NOT NULL REFERENCES authgate.sessions(id) ON DELETE CASCADE,
+	token_hash varchar(512) NOT NULL UNIQUE,
+
+	expires_at timestamptz NOT NULL,
+	consumed_at timestamptz
+);
+
+CREATE INDEX idx_refresh_tokens_session_id
+ON authgate.refresh_tokens(session_id);
 
 -- +migrate Down
 DROP SCHEMA authgate CASCADE;

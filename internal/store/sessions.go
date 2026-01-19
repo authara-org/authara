@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/alexlup06/authgate/internal/domain"
 	"github.com/alexlup06/authgate/internal/store/model"
@@ -12,16 +13,14 @@ import (
 
 func toDomainSession(m model.Session) domain.Session {
 	return domain.Session{
-		ID:        m.ID,
+		ID:     *m.ID,
+		UserID: m.UserID,
+
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,
 
-		UserID: uuid.MustParse(m.UserID),
-
-		RefreshToken: m.RefreshToken,
-		IssuedAt:     m.IssuedAt,
-		ExpiresAt:    m.ExpiresAt,
-		Revoked:      m.Revoked,
+		ExpiresAt: m.ExpiresAt,
+		RevokedAt: m.RevokedAt,
 
 		UserAgent: m.UserAgent,
 	}
@@ -29,13 +28,42 @@ func toDomainSession(m model.Session) domain.Session {
 
 func toModelSession(d domain.Session) model.Session {
 	return model.Session{
-		ID:           d.ID,
-		UserID:       d.UserID.String(),
-		RefreshToken: d.RefreshToken,
-		IssuedAt:     d.IssuedAt,
-		ExpiresAt:    d.ExpiresAt,
-		Revoked:      d.Revoked,
-		UserAgent:    d.UserAgent,
+		ID:     nil,
+		UserID: d.UserID,
+
+		CreatedAt: d.CreatedAt,
+		UpdatedAt: d.UpdatedAt,
+
+		ExpiresAt: d.ExpiresAt,
+		RevokedAt: d.RevokedAt,
+
+		UserAgent: d.UserAgent,
+	}
+}
+
+func toDomainRefreshToken(m model.RefreshToken) domain.RefreshToken {
+	return domain.RefreshToken{
+		ID:        *m.ID,
+		SessionID: m.SessionID,
+
+		TokenHash: m.TokenHash,
+
+		CreatedAt:  m.CreatedAt,
+		ExpiresAt:  m.ExpiresAt,
+		ConsumedAt: m.ConsumedAt,
+	}
+}
+
+func toModelRefreshToken(d domain.RefreshToken) model.RefreshToken {
+	return model.RefreshToken{
+		ID:        nil,
+		SessionID: d.SessionID,
+
+		TokenHash: d.TokenHash,
+
+		CreatedAt:  d.CreatedAt,
+		ExpiresAt:  d.ExpiresAt,
+		ConsumedAt: d.ConsumedAt,
 	}
 }
 
@@ -52,11 +80,11 @@ func (s *Store) CreateSession(ctx context.Context, session domain.Session) (doma
 	return toDomainSession(m), nil
 }
 
-func (s *Store) GetSessionByRefreshToken(ctx context.Context, token string) (domain.Session, error) {
+func (s *Store) GetSessionByID(ctx context.Context, sessionID uuid.UUID) (domain.Session, error) {
 	var m model.Session
 
 	err := s.dbFromContext(ctx).
-		Where("refresh_token = ?", token).
+		Where("id = ?", sessionID).
 		First(&m).
 		Error
 
@@ -70,31 +98,86 @@ func (s *Store) GetSessionByRefreshToken(ctx context.Context, token string) (dom
 	return toDomainSession(m), nil
 }
 
-func (s *Store) RevokeSession(ctx context.Context, sessionID uuid.UUIDs) error {
+func (s *Store) RevokeSession(ctx context.Context, sessionID uuid.UUID, revokedAt time.Time) error {
 	res := s.dbFromContext(ctx).
 		Model(&model.Session{}).
-		Where("id = ? AND revoked = false").
-		Update("revoked", true)
+		Where("id = ?", sessionID).
+		Update("revoked_at", revokedAt)
+
+	if res.Error != nil {
+		return res.Error
+	}
+
+	return nil
+}
+
+func (s *Store) RevokeAllSessionsForUser(ctx context.Context, userID uuid.UUID, revokedAt time.Time) error {
+	res := s.dbFromContext(ctx).
+		Model(&model.Session{}).
+		Where("user_id = ? AND revoked_at IS NULL", userID).
+		Update("revoked_at", revokedAt)
+
+	if res.Error != nil {
+		return res.Error
+	}
+
+	return nil
+}
+
+func (s *Store) CreateRefreshToken(ctx context.Context, token domain.RefreshToken) error {
+	m := toModelRefreshToken(token)
+	err := s.dbFromContext(ctx).
+		Create(&m).
+		Error
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) GetRefreshTokenByHash(ctx context.Context, hash string) (domain.RefreshToken, error) {
+	var m model.RefreshToken
+
+	err := s.dbFromContext(ctx).
+		Where("token_hash = ?", hash).
+		First(&m).
+		Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.RefreshToken{}, ErrRefreshTokenNotFound
+		}
+		return domain.RefreshToken{}, err
+	}
+	return toDomainRefreshToken(m), nil
+}
+
+func (s *Store) ConsumeRefreshToken(ctx context.Context, tokenID uuid.UUID, consumedAt time.Time) error {
+	res := s.dbFromContext(ctx).
+		Model(&model.RefreshToken{}).
+		Where("id = ?", tokenID).
+		Update("consumed_at", consumedAt)
 
 	if res.Error != nil {
 		return res.Error
 	}
 
 	if res.RowsAffected == 0 {
-		return ErrSessionNotFound
+		return ErrRefreshTokenNotFound
 	}
 
 	return nil
 }
 
-func (s *Store) RevokeAllSessionsForUser(ctx context.Context, userID uuid.UUID) error {
-	res := s.dbFromContext(ctx).
-		Model(&model.Session{}).
-		Where("user_id = ? AND revoked = false", userID).
-		Update("revoked", true)
+func (s *Store) DeleteRefreshTokensBySession(ctx context.Context, sessionID uuid.UUID) error {
+	err := s.dbFromContext(ctx).
+		Where("session_id = ?", sessionID.String()).
+		Delete(&model.RefreshToken{}).
+		Error
 
-	if res.Error != nil {
-		return res.Error
+	if err != nil {
+		return err
 	}
 
 	return nil

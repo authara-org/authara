@@ -12,7 +12,7 @@ import (
 
 func toDomainAuthProvider(m model.AuthProvider) domain.AuthProvider {
 	return domain.AuthProvider{
-		ID:        m.ID,
+		ID:        *m.ID,
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,
 
@@ -26,7 +26,7 @@ func toDomainAuthProvider(m model.AuthProvider) domain.AuthProvider {
 
 func toModelAuthProvider(d domain.AuthProvider) model.AuthProvider {
 	return model.AuthProvider{
-		ID:       d.ID,
+		ID:       nil,
 		UserID:   d.UserID.String(),
 		Provider: string(d.Provider),
 

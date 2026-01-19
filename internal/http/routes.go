@@ -7,22 +7,30 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func registerRoutes(r chi.Router, cfg Config) {
-	// Health
+func registerRoutes(r chi.Router, cfg ServerConfig) {
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// Auth UI + API
 	r.Route("/auth", func(r chi.Router) {
-		h := handlers.NewAuthHandler(cfg.Auth, cfg.Session, cfg.Google)
+		h := handlers.NewAuthHandler(
+			cfg.Auth,
+			cfg.Session,
+			cfg.Google,
+			handlers.AuthHandlerConfig{
+				AccessTokenTTL:  cfg.AccessTokenTTL,
+				RefreshTokenTTL: cfg.RefreshTokenTTL,
+			})
 
 		r.Get("/login", h.LoginPage)
 		r.Post("/login", h.LoginPost)
+
 		r.Post("/logout", h.Logout)
 
 		r.Get("/signup", h.SignupPage)
 		r.Post("/signup", h.SignupPost)
+
+		r.Post("/google/callback", h.GoogleCallback)
 	})
 
 	handlers.RegisterStatic(r, handlers.StaticConfig{Dev: cfg.Dev})

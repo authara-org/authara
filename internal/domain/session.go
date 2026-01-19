@@ -7,18 +7,14 @@ import (
 )
 
 type Session struct {
-	// ID is nil only before persistence.
-	// After loading or creating a session, ID is always non-nil.
-	ID        *uuid.UUID
+	ID     uuid.UUID
+	UserID uuid.UUID
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	UserID uuid.UUID
+	ExpiresAt time.Time
+	RevokedAt *time.Time
 
-	RefreshToken string
-	IssuedAt     time.Time
-	ExpiresAt    time.Time
-	Revoked      bool
-
-	UserAgent *string
+	UserAgent string
 }
