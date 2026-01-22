@@ -183,8 +183,7 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	session.SetAccessToken(w, accessToken, int(h.accessTokenTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.refreshTokenTTL.Seconds()))
 
-	w.Header().Set("HX-Redirect", "/")
-	w.WriteHeader(http.StatusOK)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +200,5 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	session.ClearSessionCookies(w)
 
-	w.Header().Set("HX-Redirect", "/")
-	w.WriteHeader(http.StatusOK)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
