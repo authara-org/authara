@@ -1,6 +1,7 @@
 package token
 
 import (
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -8,8 +9,8 @@ import (
 )
 
 type AccessClaims struct {
-	UserID    string `json:"uid"`
-	SessionID string `json:"sid"`
+	SessionID string   `json:"sid"`
+	Roles     []string `json:"roles"`
 
 	jwt.RegisteredClaims
 }
@@ -32,15 +33,22 @@ func NewAccessTokenService(
 	}
 }
 
-func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, now time.Time) (string, error) {
+func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, roles []string, now time.Time) (string, error) {
 	kid, key := s.keys.SigningKey()
 
+	for _, role := range roles {
+		if !strings.HasPrefix(role, "authgate:") {
+			return "", ErrInvalidRoleNamespace
+		}
+	}
+
 	claims := AccessClaims{
-		UserID:    userID.String(),
 		SessionID: sessionId.String(),
+		Roles:     roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
 			Subject:   userID.String(),
+			Audience:  jwt.ClaimStrings{"app"},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.ttl)),
 		},
@@ -60,6 +68,8 @@ func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, now
 func (s *AccessTokenService) Parse(tokenString string, now time.Time) (*AccessClaims, error) {
 	parser := jwt.NewParser(
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
+		jwt.WithAudience("app"),
+		jwt.WithIssuer(s.issuer),
 	)
 
 	token, err := parser.ParseWithClaims(
@@ -93,8 +103,14 @@ func (s *AccessTokenService) Parse(tokenString string, now time.Time) (*AccessCl
 		return nil, ErrExpiredToken
 	}
 
-	if claims.Issuer != s.issuer {
+	if claims.Subject == "" || claims.SessionID == "" {
 		return nil, ErrInvalidClaims
+	}
+
+	for _, role := range claims.Roles {
+		if !strings.HasPrefix(role, "authgate:") {
+			return nil, ErrInvalidRoleNamespace
+		}
 	}
 
 	return claims, nil

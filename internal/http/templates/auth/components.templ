@@ -2,12 +2,12 @@ package auth
 
 templ AuthLayout() {
 	<div class="flex w-full h-screen">
-		<div class="w-1/2 flex">
+		<div class="w-full md:w-1/2 px-2 flex justify-center">
 			<div class="h-fit mx-auto mt-20 max-w-md w-96">
 				{ children... }
 			</div>
 		</div>
-		<div class="w-1/2 bg-blue-50"></div>
+		<div class="hidden md:block w-1/2 bg-blue-50"></div>
 	</div>
 }
 

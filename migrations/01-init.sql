@@ -35,6 +35,24 @@ FOR EACH ROW
 EXECUTE FUNCTION authgate.set_updated_at();
 
 
+CREATE TABLE roles (
+    id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name      TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+CREATE TABLE authgate.user_roles (
+	user_id UUID NOT NULL REFERENCES authgate.users(id) ON DELETE CASCADE,
+	role_id UUID NOT NULL REFERENCES authgate.roles(id) ON DELETE CASCADE,
+	PRIMARY KEY (user_id, role_id)
+);
+
+INSERT INTO authgate.roles (name)
+VALUES ('authgate:admin')
+ON CONFLICT (name) DO NOTHING;
+
+
 CREATE TABLE IF NOT EXISTS authgate.auth_providers (
 	id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	created_at timestamptz NOT NULL DEFAULT now(),

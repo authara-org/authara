@@ -110,6 +110,12 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 	session.SetAccessToken(w, accessToken, int(h.accessTokenTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.refreshTokenTTL.Seconds()))
 
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -182,6 +188,12 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	session.SetAccessToken(w, accessToken, int(h.accessTokenTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.refreshTokenTTL.Seconds()))
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

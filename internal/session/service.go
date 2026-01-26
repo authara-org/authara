@@ -75,9 +75,21 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, userAgent
 			return err
 		}
 
+		roles := []string{}
+
+		isAdmin, err := s.store.IsUserAdmin(ctx, userID)
+		if err != nil {
+			return err
+		}
+
+		if isAdmin {
+			roles = append(roles, "authgate:admin")
+		}
+
 		accessToken, err = s.accessTokens.Generate(
 			userID,
 			createdSession.ID,
+			roles,
 			now,
 		)
 		if err != nil {
@@ -117,6 +129,10 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, now t
 			return ErrInvalidRefreshToken
 		}
 
+		if session.ExpiresAt.Before(now) {
+			return ErrInvalidRefreshToken
+		}
+
 		needToRotate := shouldRotate(rt, now, s.refreshTokenRotation)
 		if needToRotate {
 			err = s.store.ConsumeRefreshToken(ctx, rt.ID, now)
@@ -150,9 +166,21 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, now t
 			newRefreshToken = refreshToken
 		}
 
+		roles := []string{}
+
+		isAdmin, err := s.store.IsUserAdmin(ctx, session.UserID)
+		if err != nil {
+			return err
+		}
+
+		if isAdmin {
+			roles = append(roles, "authgate:admin")
+		}
+
 		newAccessToken, err = s.accessTokens.Generate(
 			session.UserID,
 			rt.SessionID,
+			roles,
 			now,
 		)
 		if err != nil {
