@@ -33,6 +33,11 @@ type Server struct {
 func NewServer(cfg ServerConfig) *Server {
 	r := chi.NewRouter()
 
+	redirectIfAuthenticated := httpmiddleware.RedirectIfAuthenticated(
+		cfg.Session,
+		time.Now,
+	)
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
@@ -41,7 +46,7 @@ func NewServer(cfg ServerConfig) *Server {
 	// Logging middleware (yours)
 	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
 
-	registerRoutes(r, cfg)
+	registerRoutes(r, cfg, redirectIfAuthenticated)
 
 	srv := &http.Server{
 		Addr:         cfg.Addr,

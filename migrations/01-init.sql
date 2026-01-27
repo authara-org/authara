@@ -49,7 +49,7 @@ CREATE TABLE authgate.user_roles (
 );
 
 INSERT INTO authgate.roles (name)
-VALUES ('authgate:admin')
+VALUES ('admin')
 ON CONFLICT (name) DO NOTHING;
 
 

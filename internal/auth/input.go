@@ -1,15 +1,9 @@
 package auth
 
-type Provider string
-
-const (
-	ProviderPassword Provider = "password"
-	ProviderGoogle   Provider = "google"
-	ProviderApple    Provider = "apple"
-)
+import "github.com/alexlup06/authgate/internal/domain"
 
 type SignupInput struct {
-	Provider Provider
+	Provider domain.Provider
 
 	Email    string
 	Password string
@@ -18,7 +12,7 @@ type SignupInput struct {
 }
 
 type LoginInput struct {
-	Provider Provider
+	Provider domain.Provider
 
 	Email    string
 	Password string

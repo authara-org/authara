@@ -3,7 +3,7 @@ ifneq (,$(wildcard .env))
 	export
 endif
 
-.PHONY: dev dev-tailwind connect-db migrate-up db-clean db-drop-table db-reset
+.PHONY: dev dev-tailwind connect-db migrate-up db-clean db-drop-table db-reset admin-by-email
 
 DOCKER_COMPOSE_DEV = docker compose -f docker-compose.dev.yaml
 POSTGRES_SERVICE   = postgres
@@ -58,3 +58,19 @@ db-reset:
 	    CREATE SCHEMA public;"
 	$(MAKE) migrate-up
 
+admin-by-email:
+ifndef EMAIL
+	$(error EMAIL is required. Usage: make admin-by-email EMAIL=user@example.com)
+endif
+	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
+	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
+	-c "\
+	WITH u AS ( \
+		SELECT id FROM $(POSTGRESQL_SCHEMA).users WHERE email = '$(EMAIL)' \
+	), r AS ( \
+		SELECT id FROM $(POSTGRESQL_SCHEMA).roles WHERE name = 'admin' \
+	) \
+	INSERT INTO $(POSTGRESQL_SCHEMA).user_roles (user_id, role_id) \
+	SELECT u.id, r.id FROM u, r \
+	ON CONFLICT DO NOTHING; \
+	"

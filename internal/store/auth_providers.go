@@ -67,7 +67,7 @@ func (s *Store) GetAuthProviderByMethodAndUserID(ctx context.Context, provider d
 	return toDomainAuthProvider(m), nil
 }
 
-func (s *Store) GetAuthProviderByProviderUserID(ctx context.Context, provider domain.Provider, providerUserID string) (domain.AuthProvider, error) {
+func (s *Store) GetAuthProviderByProviderAndProviderUserID(ctx context.Context, provider domain.Provider, providerUserID string) (domain.AuthProvider, error) {
 	var m model.AuthProvider
 
 	err := s.dbFromContext(ctx).

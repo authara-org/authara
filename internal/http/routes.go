@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func registerRoutes(r chi.Router, cfg ServerConfig) {
+func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated func(http.Handler) http.Handler) {
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -22,13 +22,16 @@ func registerRoutes(r chi.Router, cfg ServerConfig) {
 				RefreshTokenTTL: cfg.RefreshTokenTTL,
 			})
 
-		r.Get("/login", h.LoginPage)
-		r.Post("/login", h.LoginPost)
+		r.Group(func(r chi.Router) {
+			r.Use(redirectIfAuthenticated)
 
-		r.Post("/logout", h.Logout)
+			r.Get("/login", h.LoginPage)
+			r.Get("/signup", h.SignupPage)
+		})
 
-		r.Get("/signup", h.SignupPage)
 		r.Post("/signup", h.SignupPost)
+		r.Post("/login", h.LoginPost)
+		r.Post("/logout", h.Logout)
 
 		r.Post("/google/callback", h.GoogleCallback)
 	})

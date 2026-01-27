@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/alexlup06/authgate/internal/auth"
+	"github.com/alexlup06/authgate/internal/domain"
 	"github.com/alexlup06/authgate/internal/http/providers/google"
 	authview "github.com/alexlup06/authgate/internal/http/templates/auth"
 	"github.com/alexlup06/authgate/internal/session"
@@ -88,7 +89,7 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := auth.SignupInput{
-		Provider: auth.ProviderPassword,
+		Provider: domain.ProviderPassword,
 		Email:    email,
 		Password: password,
 	}
@@ -120,6 +121,20 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
+
+	access, ok := session.ReadAccessToken(r)
+	if ok {
+		_, err := h.session.ValidateAccessToken(
+			r.Context(),
+			access,
+			time.Now(),
+		)
+		if err == nil {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+	}
+
 	ctx := r.Context()
 	now := time.Now()
 
@@ -167,7 +182,7 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := auth.LoginInput{
-		Provider: auth.ProviderPassword,
+		Provider: domain.ProviderPassword,
 		Email:    email,
 		Password: password,
 	}
@@ -199,7 +214,68 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+
+	idToken := r.FormValue("credential")
+	gtoken := r.FormValue("g_csrf_token")
+
+	if idToken == "" || gtoken == "" {
+		http.Error(w, "tokens are empty", http.StatusBadRequest)
+		return
+	}
+
+	csrfCookie, err := r.Cookie("g_csrf_token")
+	if err != nil {
+		http.Error(w, "invalid csfr cookie", http.StatusUnauthorized)
+		return
+	}
+
+	if gtoken == "" || gtoken != csrfCookie.Value {
+		http.Error(w, "invalid g_csfr_token", http.StatusUnauthorized)
+		return
+	}
+
+	identity, err := h.google.VerifyIDToken(ctx, idToken)
+	if err != nil {
+		http.Error(w, "invalid id token", http.StatusUnauthorized)
+		return
+	}
+
+	input := auth.LoginInput{
+		Provider: domain.ProviderGoogle,
+		Email:    identity.Email,
+		OAuthID:  identity.OAuthID,
+	}
+
+	user, err := h.auth.Login(ctx, input)
+	if err != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	ua := r.UserAgent()
+	now := time.Now()
+	accessToken, refreshToken, err := h.session.CreateSession(ctx, user.ID, ua, now)
+	if err != nil {
+		http.Error(w, "session error", http.StatusInternalServerError)
+		return
+	}
+
+	session.SetAccessToken(w, accessToken, int(h.accessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, refreshToken, int(h.refreshTokenTTL.Seconds()))
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
