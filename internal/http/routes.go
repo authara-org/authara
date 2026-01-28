@@ -4,15 +4,17 @@ import (
 	"net/http"
 
 	"github.com/alexlup06/authgate/internal/http/handlers"
+	"github.com/alexlup06/authgate/internal/http/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
 func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated func(http.Handler) http.Handler) {
-	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
+	healthHandler := handlers.NewHealthHandler(cfg.Store)
+	r.Get("/auth/health", healthHandler.Health)
 
 	r.Route("/auth", func(r chi.Router) {
+		r.Use(middleware.CSRFMiddleware)
+
 		h := handlers.NewAuthHandler(
 			cfg.Auth,
 			cfg.Session,
@@ -31,9 +33,9 @@ func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated func
 
 		r.Post("/signup", h.SignupPost)
 		r.Post("/login", h.LoginPost)
-		r.Post("/logout", h.Logout)
+		r.Post("/logout", h.LogoutPost)
 
-		r.Post("/google/callback", h.GoogleCallback)
+		r.Post("/oauth/google/callback", h.GoogleCallback)
 	})
 
 	handlers.RegisterStatic(r, handlers.StaticConfig{Dev: cfg.Dev})

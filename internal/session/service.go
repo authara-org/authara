@@ -44,7 +44,17 @@ func New(cfg SessionConfig) *Service {
 	}
 }
 
-func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, userAgent string, now time.Time) (accessToken string, refreshToken string, err error) {
+func (s *Service) CreateSession(
+	ctx context.Context,
+	userID uuid.UUID,
+	audience token.Audience,
+	userAgent string,
+	now time.Time,
+) (
+	accessToken string,
+	refreshToken string,
+	err error,
+) {
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		session := domain.Session{
 			UserID:    userID,
@@ -82,6 +92,10 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, userAgent
 			return err
 		}
 
+		if audience == token.AudienceAdmin && !isAdmin {
+			return ErrForbidden
+		}
+
 		if isAdmin {
 			roles = append(roles, "authgate:admin")
 		}
@@ -89,6 +103,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, userAgent
 		accessToken, err = s.accessTokens.Generate(
 			userID,
 			createdSession.ID,
+			audience,
 			roles,
 			now,
 		)
@@ -106,7 +121,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, userAgent
 	return accessToken, refreshToken, nil
 }
 
-func (s *Service) RefreshSession(ctx context.Context, refreshToken string, now time.Time) (newAccessToken string, newRefreshToken string, err error) {
+func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audience token.Audience, now time.Time) (newAccessToken string, newRefreshToken string, err error) {
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		hashed := hashRefreshToken(refreshToken)
 
@@ -129,7 +144,7 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, now t
 			return ErrInvalidRefreshToken
 		}
 
-		if session.ExpiresAt.Before(now) {
+		if session.ExpiresAt.Before(now) || session.RevokedAt != nil {
 			return ErrInvalidRefreshToken
 		}
 
@@ -173,6 +188,10 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, now t
 			return err
 		}
 
+		if audience == token.AudienceAdmin && !isAdmin {
+			return ErrForbidden
+		}
+
 		if isAdmin {
 			roles = append(roles, "authgate:admin")
 		}
@@ -180,6 +199,7 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, now t
 		newAccessToken, err = s.accessTokens.Generate(
 			session.UserID,
 			rt.SessionID,
+			audience,
 			roles,
 			now,
 		)

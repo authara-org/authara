@@ -1,5 +1,7 @@
 package auth
 
+import httpctx "github.com/alexlup06/authgate/internal/http/context"
+
 templ AuthLayout() {
 	<div class="flex w-full h-screen">
 		<div class="w-full md:w-1/2 px-2 flex justify-center">
@@ -14,4 +16,10 @@ templ AuthLayout() {
 templ HeaderSection(title, description string) {
 	<h1 class="text-4xl mb-2 text-center">{ title }</h1>
 	<h2 class="text-md mb-10 text-center text-grey-700">{ description }</h2>
+}
+
+templ CSRFInput() {
+	if tok, ok := httpctx.CSRFToken(ctx); ok {
+		<input type="hidden" name="csrf_token" value={ tok }/>
+	}
 }

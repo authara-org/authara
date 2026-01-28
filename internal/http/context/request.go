@@ -2,29 +2,28 @@ package context
 
 import "context"
 
-type ctxKey string
+type htmxKeyType struct{}
+type csrfKeyType struct{}
 
-const (
-	CtxHXRequest ctxKey = "hx-request"
-	CtxBlog      ctxKey = "x-blog"
-	CtxFilters   ctxKey = "filters"
-	CtxFullPath  ctxKey = "full-path"
+var (
+	htmxKey = htmxKeyType{}
+	csrfKey = csrfKeyType{}
 )
 
-func WithKV(ctx context.Context, key ctxKey, value any) context.Context {
-	return context.WithValue(ctx, key, value)
-}
-
-func GetKV[T any](ctx context.Context, key ctxKey) (T, bool) {
-	v, ok := ctx.Value(key).(T)
-	return v, ok
-}
-
 func WithHTMX(ctx context.Context) context.Context {
-	return context.WithValue(ctx, CtxHXRequest, true)
+	return context.WithValue(ctx, htmxKey, true)
 }
 
 func IsHTMX(ctx context.Context) bool {
-	v, ok := GetKV[bool](ctx, CtxHXRequest)
+	v, ok := ctx.Value(htmxKey).(bool)
 	return ok && v
+}
+
+func WithCSRF(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, csrfKey, token)
+}
+
+func CSRFToken(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(csrfKey).(string)
+	return v, ok
 }

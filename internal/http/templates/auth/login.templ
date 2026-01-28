@@ -1,6 +1,7 @@
 package auth
 
 import (
+	httpcontext "github.com/alexlup06/authgate/internal/http/context"
 	"github.com/alexlup06/authgate/internal/http/templates"
 	"github.com/alexlup06/authgate/internal/http/templates/components/icons"
 )
@@ -31,7 +32,7 @@ templ login() {
 			<p>
 				Don't have an Account? &nbsp;
 				<a
-					hx-get="/auth/signup"
+					hx-get={ "/auth/signup?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
 					hx-target="body"
 					hx-push-url="true"
 					class="cursor-pointer underline text-blue-800"
@@ -46,11 +47,11 @@ templ login() {
 templ LoginForm() {
 	<form
 		autocomplete="on"
-		hx-post="/auth/login"
+		hx-post={ "/auth/login?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
 		hx-target="this"
 		hx-swap="outerHTML"
-		hx-on="htmx:beforeSwap: if(event.detail.xhr.status === 200) { window.location.href = '/'; }"
 	>
+		@CSRFInput()
 		<label for="email" class="pb-4 text-grey-800">
 			<div class="pb-1.5">Email <span class="text-red-600">*</span></div>
 		</label>

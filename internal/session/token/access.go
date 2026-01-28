@@ -8,6 +8,13 @@ import (
 	"github.com/google/uuid"
 )
 
+type Audience string
+
+const (
+	AudienceApp   Audience = "app"
+	AudienceAdmin Audience = "admin"
+)
+
 type AccessClaims struct {
 	SessionID string   `json:"sid"`
 	Roles     []string `json:"roles"`
@@ -33,7 +40,7 @@ func NewAccessTokenService(
 	}
 }
 
-func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, roles []string, now time.Time) (string, error) {
+func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, audience Audience, roles []string, now time.Time) (string, error) {
 	kid, key := s.keys.SigningKey()
 
 	for _, role := range roles {
@@ -48,7 +55,7 @@ func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, rol
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
 			Subject:   userID.String(),
-			Audience:  jwt.ClaimStrings{"app"},
+			Audience:  jwt.ClaimStrings{string(audience)},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.ttl)),
 		},
@@ -68,7 +75,7 @@ func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, rol
 func (s *AccessTokenService) Parse(tokenString string, now time.Time) (*AccessClaims, error) {
 	parser := jwt.NewParser(
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
-		jwt.WithAudience("app"),
+		jwt.WithAudience("app", "admin"),
 		jwt.WithIssuer(s.issuer),
 	)
 

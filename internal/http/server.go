@@ -10,6 +10,7 @@ import (
 	httpmiddleware "github.com/alexlup06/authgate/internal/http/middleware"
 	"github.com/alexlup06/authgate/internal/http/providers/google"
 	"github.com/alexlup06/authgate/internal/session"
+	"github.com/alexlup06/authgate/internal/store"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -21,6 +22,7 @@ type ServerConfig struct {
 	Dev             bool
 	Session         *session.Service
 	Logger          *slog.Logger
+	Store           *store.Store
 	Google          *google.Client
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
@@ -38,12 +40,13 @@ func NewServer(cfg ServerConfig) *Server {
 		time.Now,
 	)
 
+	r.Use(httpmiddleware.ReturnTo)
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	// Logging middleware (yours)
 	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
 
 	registerRoutes(r, cfg, redirectIfAuthenticated)

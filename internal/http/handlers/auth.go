@@ -7,7 +7,12 @@ import (
 
 	"github.com/alexlup06/authgate/internal/auth"
 	"github.com/alexlup06/authgate/internal/domain"
+	"github.com/alexlup06/authgate/internal/http/authflow"
+	"github.com/alexlup06/authgate/internal/http/context"
+	httpcontext "github.com/alexlup06/authgate/internal/http/context"
+	"github.com/alexlup06/authgate/internal/http/csrf"
 	"github.com/alexlup06/authgate/internal/http/providers/google"
+	"github.com/alexlup06/authgate/internal/http/redirect"
 	authview "github.com/alexlup06/authgate/internal/http/templates/auth"
 	"github.com/alexlup06/authgate/internal/session"
 )
@@ -41,27 +46,17 @@ func NewAuthHandler(
 }
 
 func (h *AuthHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	now := time.Now()
-
-	refreshToken, ok := session.ReadRefreshToken(r)
-	if ok {
-		access, newRefresh, err := h.session.RefreshSession(
-			ctx,
-			refreshToken,
-			now,
-		)
-		if err == nil {
-			session.SetAccessToken(w, access, int(h.accessTokenTTL.Seconds()))
-			session.SetRefreshToken(w, newRefresh, int(h.refreshTokenTTL.Seconds()))
-
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-
-			return
-		}
-
-		session.ClearSessionCookies(w)
+	if authflow.TryRedirectAuthenticated(w, r, h.session, h.accessTokenTTL, h.refreshTokenTTL) {
+		return
 	}
+
+	tok, err := csrf.EnsureCookie(w, r)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	r = r.WithContext(context.WithCSRF(r.Context(), tok))
 
 	_ = Render(
 		w,
@@ -100,9 +95,15 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	if !ok {
+		returnTo = "/"
+	}
+
+	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()
 	now := time.Now()
-	accessToken, refreshToken, err := h.session.CreateSession(ctx, user.ID, ua, now)
+	accessToken, refreshToken, err := h.session.CreateSession(ctx, user.ID, audience, ua, now)
 	if err != nil {
 		http.Error(w, "session error", http.StatusInternalServerError)
 		return
@@ -111,50 +112,21 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 	session.SetAccessToken(w, accessToken, int(h.accessTokenTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.refreshTokenTTL.Seconds()))
 
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", "/")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }
 
 func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
-
-	access, ok := session.ReadAccessToken(r)
-	if ok {
-		_, err := h.session.ValidateAccessToken(
-			r.Context(),
-			access,
-			time.Now(),
-		)
-		if err == nil {
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
+	if authflow.TryRedirectAuthenticated(w, r, h.session, h.accessTokenTTL, h.refreshTokenTTL) {
+		return
 	}
 
-	ctx := r.Context()
-	now := time.Now()
-
-	refreshToken, ok := session.ReadRefreshToken(r)
-	if ok {
-		access, newRefresh, err := h.session.RefreshSession(
-			ctx,
-			refreshToken,
-			now,
-		)
-		if err == nil {
-			session.SetAccessToken(w, access, int(h.accessTokenTTL.Seconds()))
-			session.SetRefreshToken(w, newRefresh, int(h.refreshTokenTTL.Seconds()))
-
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
-
-		session.ClearSessionCookies(w)
+	tok, err := csrf.EnsureCookie(w, r)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
 	}
+
+	r = r.WithContext(context.WithCSRF(r.Context(), tok))
 
 	_ = Render(
 		w,
@@ -193,9 +165,15 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	if !ok {
+		returnTo = "/"
+	}
+
+	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()
 	now := time.Now()
-	accessToken, refreshToken, err := h.session.CreateSession(ctx, user.ID, ua, now)
+	accessToken, refreshToken, err := h.session.CreateSession(ctx, user.ID, audience, ua, now)
 	if err != nil {
 		http.Error(w, "session error", http.StatusInternalServerError)
 		return
@@ -204,13 +182,13 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	session.SetAccessToken(w, accessToken, int(h.accessTokenTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.refreshTokenTTL.Seconds()))
 
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", "/")
-		w.WriteHeader(http.StatusOK)
+	_, err = csrf.EnsureCookie(w, r)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }
 
 func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
@@ -258,9 +236,15 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	if !ok {
+		returnTo = "/"
+	}
+
+	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()
 	now := time.Now()
-	accessToken, refreshToken, err := h.session.CreateSession(ctx, user.ID, ua, now)
+	accessToken, refreshToken, err := h.session.CreateSession(ctx, user.ID, audience, ua, now)
 	if err != nil {
 		http.Error(w, "session error", http.StatusInternalServerError)
 		return
@@ -269,16 +253,10 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	session.SetAccessToken(w, accessToken, int(h.accessTokenTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.refreshTokenTTL.Seconds()))
 
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", "/")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }
 
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	refreshToken, exists := session.ReadRefreshToken(r)
@@ -288,5 +266,10 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	session.ClearSessionCookies(w)
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	if !ok {
+		returnTo = "/"
+	}
+
+	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }

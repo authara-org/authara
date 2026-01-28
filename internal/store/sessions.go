@@ -156,7 +156,7 @@ func (s *Store) GetRefreshTokenByHash(ctx context.Context, hash string) (domain.
 func (s *Store) ConsumeRefreshToken(ctx context.Context, tokenID uuid.UUID, consumedAt time.Time) error {
 	res := s.dbFromContext(ctx).
 		Model(&model.RefreshToken{}).
-		Where("id = ?", tokenID).
+		Where("id = ? AND consumed_at IS NULL", tokenID).
 		Update("consumed_at", consumedAt)
 
 	if res.Error != nil {

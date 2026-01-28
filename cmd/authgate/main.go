@@ -112,6 +112,7 @@ func main() {
 		Dev:             cfg.Dev,
 		Session:         sessionService,
 		Logger:          logger,
+		Store:           store,
 		Google:          googleClient,
 		AccessTokenTTL:  cfg.Token.AccessTokenTTL,
 		RefreshTokenTTL: cfg.Session.RefreshTokenTTL,

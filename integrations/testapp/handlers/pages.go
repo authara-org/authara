@@ -10,7 +10,7 @@ func Home(w http.ResponseWriter, r *http.Request) {
 		<html>
 			<body>
 				<h1>TestApp</h1>
-				<a href="/auth/login">Login</a>
+				<a href="/auth/login?return_to=/private">Login</a>
 			</body>
 		</html>
 	`)
