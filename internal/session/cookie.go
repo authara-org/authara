@@ -9,18 +9,20 @@ const (
 	accessCookieName  = "authgate_access"
 	refreshCookieName = "authgate_refresh"
 
-	cookiePath = "/"
+	accessCookiePath  = "/"
+	refreshCookiePath = "/auth"
 )
 
 func SetAccessToken(w http.ResponseWriter, token string, maxAgeSeconds int) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     accessCookieName,
 		Value:    token,
-		Path:     cookiePath,
+		Path:     accessCookiePath,
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   maxAgeSeconds,
+		Expires:  time.Now().Add(time.Duration(maxAgeSeconds) * time.Second),
 	})
 }
 
@@ -28,11 +30,12 @@ func SetRefreshToken(w http.ResponseWriter, token string, maxAgeSeconds int) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    token,
-		Path:     cookiePath,
+		Path:     refreshCookiePath,
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   maxAgeSeconds,
+		Expires:  time.Now().Add(time.Duration(maxAgeSeconds) * time.Second),
 	})
 }
 
@@ -42,7 +45,7 @@ func ClearSessionCookies(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     accessCookieName,
 		Value:    "",
-		Path:     cookiePath,
+		Path:     accessCookiePath,
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
@@ -53,7 +56,7 @@ func ClearSessionCookies(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    "",
-		Path:     cookiePath,
+		Path:     refreshCookiePath,
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
