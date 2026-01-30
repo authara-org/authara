@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "dev:webpack": "webpack --mode development --watch",
     "dev:tailwind": "tailwindcss -i ./src/styles/style.css -o ./dist/app.css --watch",
     "build": "npm run build:webpack && npm run build:tailwind",
@@ -13,6 +15,7 @@
     "@tailwindcss/cli": "^4.1.18",
     "@tailwindcss/container-queries": "^0.1.1",
     "autoprefixer": "^10.4.20",
+    "prettier": "^3.8.1",
     "tailwindcss": "^4.1.18",
     "ts-loader": "^9.5.1",
     "typescript": "^5.7.2",

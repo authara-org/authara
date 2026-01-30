@@ -64,6 +64,13 @@ jobs:
         run: npm run build:tailwind
 
       # ------------------------------------------------------------
+      # Prettier formatting
+      # ------------------------------------------------------------
+      - name: Formatting
+        working-directory: frontend
+        run: npm run format:check
+
+      # ------------------------------------------------------------
       # TypeScript + Webpack
       # ------------------------------------------------------------
       - name: Build frontend bundle

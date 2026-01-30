@@ -2,5 +2,5 @@
 @config "../../tailwind.config.js";
 
 [x-cloak] {
-    display: none !important;
+  display: none !important;
 }

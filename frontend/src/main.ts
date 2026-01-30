@@ -1,20 +1,19 @@
-export { }
-
+export {};
 
 declare global {
-	interface Window {
-		htmx: any;
-	}
+  interface Window {
+    htmx: any;
+  }
 }
 
 window.htmx.config.allowNestedOobSwaps = false; // Disable nested OOB swaps
-window.htmx.config.defaultSwapStyle = "outerHTML" // Disable nested OOB swaps
+window.htmx.config.defaultSwapStyle = "outerHTML"; // Disable nested OOB swaps
 
-document.body.addEventListener('htmx:beforeSwap', function(evt: any) {
-	// Allow 422 and 400 responses to swap
-	// We treat these as form validation errors
-	if (evt.detail.xhr.status === 422 || evt.detail.xhr.status === 400) {
-		evt.detail.shouldSwap = true;
-		evt.detail.isError = false;
-	}
+document.body.addEventListener("htmx:beforeSwap", function (evt: any) {
+  // Allow 422 and 400 responses to swap
+  // We treat these as form validation errors
+  if (evt.detail.xhr.status === 422 || evt.detail.xhr.status === 400) {
+    evt.detail.shouldSwap = true;
+    evt.detail.isError = false;
+  }
 });
