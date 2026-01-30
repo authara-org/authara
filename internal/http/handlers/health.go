@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alexlup06/authgate/internal/store"
+	"github.com/alexlup06-authgate/authgate/internal/store"
 )
 
 type HealthHandler struct {

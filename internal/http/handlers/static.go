@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/alexlup06/authgate/internal/http/staticfs"
+	"github.com/alexlup06-authgate/authgate/internal/http/staticfs"
 	"github.com/go-chi/chi/v5"
 )
 

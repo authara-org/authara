@@ -3,9 +3,9 @@ package auth
 import (
 	"context"
 
-	"github.com/alexlup06/authgate/internal/domain"
-	"github.com/alexlup06/authgate/internal/store"
-	"github.com/alexlup06/authgate/internal/store/tx"
+	"github.com/alexlup06-authgate/authgate/internal/domain"
+	"github.com/alexlup06-authgate/authgate/internal/store"
+	"github.com/alexlup06-authgate/authgate/internal/store/tx"
 )
 
 type Config struct {

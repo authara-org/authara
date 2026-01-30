@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alexlup06/authgate/internal/store"
-	"github.com/alexlup06/authgate/internal/store/tx"
+	"github.com/alexlup06-authgate/authgate/internal/store"
+	"github.com/alexlup06-authgate/authgate/internal/store/tx"
 )
 
 func setupAuthService(t *testing.T) (*Service, context.Context) {

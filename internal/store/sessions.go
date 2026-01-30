@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/alexlup06/authgate/internal/domain"
-	"github.com/alexlup06/authgate/internal/store/model"
+	"github.com/alexlup06-authgate/authgate/internal/domain"
+	"github.com/alexlup06-authgate/authgate/internal/store/model"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )

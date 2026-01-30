@@ -17,7 +17,8 @@ func Generate() (string, error) {
 }
 
 func EnsureCookie(w http.ResponseWriter, r *http.Request) (string, error) {
-	if c, err := r.Cookie(CookieName); err == nil && c.Value != "" {
+	c, err := r.Cookie(CookieName)
+	if err == nil && c.Value != "" {
 		return c.Value, nil
 	}
 
@@ -33,6 +34,7 @@ func EnsureCookie(w http.ResponseWriter, r *http.Request) (string, error) {
 		Secure:   true,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
+		MaxAge:   60 * 60 * 24 * 30,
 	})
 
 	return tok, nil

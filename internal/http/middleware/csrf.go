@@ -4,10 +4,10 @@ import (
 	"crypto/subtle"
 	"net/http"
 
-	"github.com/alexlup06/authgate/internal/http/csrf"
+	"github.com/alexlup06-authgate/authgate/internal/http/csrf"
 )
 
-func CSRFMiddleware(next http.Handler) http.Handler {
+func CSRFOnGetMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Only protect state-changing methods
 		switch r.Method {
@@ -22,14 +22,9 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if r.URL.Path == "/auth/logout" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		c, err := r.Cookie(csrf.CookieName)
 		if err != nil || c.Value == "" {
-			http.Error(w, "CSRF token missing", http.StatusForbidden)
+			http.Error(w, "CSRF cookie token missing", http.StatusForbidden)
 			return
 		}
 
@@ -40,7 +35,7 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 		}
 
 		if reqTok == "" {
-			http.Error(w, "CSRF token missing", http.StatusForbidden)
+			http.Error(w, "CSRF token missing in request", http.StatusForbidden)
 			return
 		}
 

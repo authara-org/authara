@@ -1,20 +1,21 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/alexlup06/authgate/internal/auth"
-	"github.com/alexlup06/authgate/internal/domain"
-	"github.com/alexlup06/authgate/internal/http/authflow"
-	"github.com/alexlup06/authgate/internal/http/context"
-	httpcontext "github.com/alexlup06/authgate/internal/http/context"
-	"github.com/alexlup06/authgate/internal/http/csrf"
-	"github.com/alexlup06/authgate/internal/http/providers/google"
-	"github.com/alexlup06/authgate/internal/http/redirect"
-	authview "github.com/alexlup06/authgate/internal/http/templates/auth"
-	"github.com/alexlup06/authgate/internal/session"
+	"github.com/alexlup06-authgate/authgate/internal/auth"
+	"github.com/alexlup06-authgate/authgate/internal/domain"
+	"github.com/alexlup06-authgate/authgate/internal/http/authflow"
+	"github.com/alexlup06-authgate/authgate/internal/http/context"
+	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/csrf"
+	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
+	"github.com/alexlup06-authgate/authgate/internal/http/redirect"
+	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
+	"github.com/alexlup06-authgate/authgate/internal/session"
 )
 
 type AuthHandlerConfig struct {
@@ -272,4 +273,37 @@ func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
+}
+
+func (h *AuthHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	refreshToken, ok := session.ReadRefreshToken(r)
+	if !ok || refreshToken == "" {
+		http.Error(w, "refresh token missing", http.StatusUnauthorized)
+		return
+	}
+
+	audience, err := redirect.AudienceFromRequest(r)
+	if err != nil {
+		http.Error(w, "invalid audience", http.StatusBadRequest)
+		return
+	}
+
+	now := time.Now()
+	newAccessToken, newRefreshToken, err := h.session.RefreshSession(ctx, refreshToken, audience, now)
+	switch {
+	case errors.Is(err, session.ErrInvalidRefreshToken), errors.Is(err, session.ErrForbidden):
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+
+	case err != nil:
+		http.Error(w, "session error", http.StatusInternalServerError)
+		return
+	}
+
+	session.SetAccessToken(w, newAccessToken, int(h.accessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, newRefreshToken, int(h.refreshTokenTTL.Seconds()))
+
+	w.WriteHeader(http.StatusOK)
 }

@@ -4,7 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alexlup06/authgate/internal/session"
+	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/csrf"
+	"github.com/alexlup06-authgate/authgate/internal/http/redirect"
+	"github.com/alexlup06-authgate/authgate/internal/session"
 )
 
 func RedirectIfAuthenticated(
@@ -31,7 +34,18 @@ func RedirectIfAuthenticated(
 				now(),
 			)
 			if err == nil {
-				http.Redirect(w, r, "/", http.StatusSeeOther)
+				returnTo, ok := httpcontext.ReturnTo(r.Context())
+				if !ok {
+					returnTo = "/"
+				}
+
+				_, err = csrf.EnsureCookie(w, r)
+				if err != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
+
+				redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 				return
 			}
 

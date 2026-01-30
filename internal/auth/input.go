@@ -1,6 +1,6 @@
 package auth
 
-import "github.com/alexlup06/authgate/internal/domain"
+import "github.com/alexlup06-authgate/authgate/internal/domain"
 
 type SignupInput struct {
 	Provider domain.Provider

@@ -3,8 +3,8 @@ package http
 import (
 	"net/http"
 
-	"github.com/alexlup06/authgate/internal/http/handlers"
-	"github.com/alexlup06/authgate/internal/http/middleware"
+	"github.com/alexlup06-authgate/authgate/internal/http/handlers"
+	"github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -13,7 +13,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated func
 	r.Get("/auth/health", healthHandler.Health)
 
 	r.Route("/auth", func(r chi.Router) {
-		r.Use(middleware.CSRFMiddleware)
+		r.Use(middleware.CSRFOnGetMiddleware)
 
 		h := handlers.NewAuthHandler(
 			cfg.Auth,
@@ -36,17 +36,9 @@ func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated func
 		r.Post("/logout", h.LogoutPost)
 
 		r.Post("/oauth/google/callback", h.GoogleCallback)
+
+		r.Post("/refresh", h.RefreshPost)
 	})
 
 	handlers.RegisterStatic(r, handlers.StaticConfig{Dev: cfg.Dev})
-
-	// // Session validation (for SDK / backends)
-	// r.Get("/sessions/validate", func(w http.ResponseWriter, r *http.Request) {
-	// 	user, err := cfg.Session.ValidateRequest(r)
-	// 	if err != nil {
-	// 		w.WriteHeader(http.StatusUnauthorized)
-	// 		return
-	// 	}
-	// 	writeJSON(w, user)
-	// })
 }

@@ -1,9 +1,11 @@
 package redirect
 
 import (
+	"errors"
+	"net/http"
 	"strings"
 
-	"github.com/alexlup06/authgate/internal/session/token"
+	"github.com/alexlup06-authgate/authgate/internal/session/token"
 )
 
 func AudienceForPath(path string) token.Audience {
@@ -11,4 +13,20 @@ func AudienceForPath(path string) token.Audience {
 		return token.AudienceAdmin
 	}
 	return token.AudienceApp
+}
+
+func AudienceFromRequest(r *http.Request) (token.Audience, error) {
+	raw := r.URL.Query().Get("audience")
+	if raw == "" {
+		return token.AudienceApp, nil
+	}
+
+	switch raw {
+	case "app":
+		return token.AudienceApp, nil
+	case "admin":
+		return token.AudienceAdmin, nil
+	default:
+		return "", errors.New("invalid audience")
+	}
 }

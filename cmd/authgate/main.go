@@ -9,16 +9,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alexlup06/authgate/internal/auth"
-	"github.com/alexlup06/authgate/internal/config"
-	httpserver "github.com/alexlup06/authgate/internal/http"
-	"github.com/alexlup06/authgate/internal/http/providers/google"
-	"github.com/alexlup06/authgate/internal/logging"
-	"github.com/alexlup06/authgate/internal/session"
-	"github.com/alexlup06/authgate/internal/session/token"
-	"github.com/alexlup06/authgate/internal/store"
-	"github.com/alexlup06/authgate/internal/store/schema"
-	"github.com/alexlup06/authgate/internal/store/tx"
+	"github.com/alexlup06-authgate/authgate/internal/auth"
+	"github.com/alexlup06-authgate/authgate/internal/config"
+	httpserver "github.com/alexlup06-authgate/authgate/internal/http"
+	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
+	"github.com/alexlup06-authgate/authgate/internal/logging"
+	"github.com/alexlup06-authgate/authgate/internal/session"
+	"github.com/alexlup06-authgate/authgate/internal/session/token"
+	"github.com/alexlup06-authgate/authgate/internal/store"
+	"github.com/alexlup06-authgate/authgate/internal/store/schema"
+	"github.com/alexlup06-authgate/authgate/internal/store/tx"
 )
 
 func main() {

@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alexlup06/authgate/internal/auth"
-	httpmiddleware "github.com/alexlup06/authgate/internal/http/middleware"
-	"github.com/alexlup06/authgate/internal/http/providers/google"
-	"github.com/alexlup06/authgate/internal/session"
-	"github.com/alexlup06/authgate/internal/store"
+	"github.com/alexlup06-authgate/authgate/internal/auth"
+	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
+	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
+	"github.com/alexlup06-authgate/authgate/internal/session"
+	"github.com/alexlup06-authgate/authgate/internal/store"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
