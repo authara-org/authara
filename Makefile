@@ -3,6 +3,8 @@ ifneq (,$(wildcard .env))
 	export
 endif
 
+POSTGRESQL_SCHEMA ?= authgate
+
 .PHONY: dev dev-tailwind connect-db migrate-up db-clean db-drop-table db-reset admin-by-email
 
 DOCKER_COMPOSE_DEV = docker compose -f docker-compose.dev.yaml
@@ -36,19 +38,30 @@ connect-db:
 migrate-up:
 	$(DOCKER_COMPOSE_DEV) run --rm backend-migrations
 
-
 db-clean:
 	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
-	psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) \
-	-c "DROP SCHEMA IF EXISTS $(POSTGRES_SCHEMA) CASCADE; CREATE SCHEMA $(POSTGRES_SCHEMA);"
+	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
+	-c "\
+	DO $$ \
+	DECLARE r RECORD; \
+	BEGIN \
+	  FOR r IN ( \
+	    SELECT tablename \
+	    FROM pg_tables \
+	    WHERE schemaname = '$(POSTGRESQL_SCHEMA)' \
+	  ) LOOP \
+	    EXECUTE 'TRUNCATE TABLE $(POSTGRESQL_SCHEMA).' || quote_ident(r.tablename) || ' RESTART IDENTITY CASCADE'; \
+	  END LOOP; \
+	END $$; \
+	"
 
-db-drop-table:
+db-truncate-table:
 ifndef TABLE
 	$(error TABLE is required. Usage: make db-drop-table TABLE=table_name)
 endif
 	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
 	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
-	-c "DROP TABLE IF EXISTS $(POSTGRESQL_SCHEMA).$(TABLE) CASCADE;"
+	-c "TRUNCATE TABLE $(POSTGRESQL_SCHEMA).$(TABLE) RESTART IDENTITY CASCADE;"
 
 db-reset:
 	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
