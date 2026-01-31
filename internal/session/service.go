@@ -118,6 +118,9 @@ func (s *Service) CreateSession(
 		return "", "", err
 	}
 
+	_ = s.store.DeleteExpiredSessions(ctx, now)
+	_ = s.store.DeleteExpiredRefreshTokens(ctx, now)
+
 	return accessToken, refreshToken, nil
 }
 
