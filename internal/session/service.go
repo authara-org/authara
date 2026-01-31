@@ -241,9 +241,19 @@ func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error
 	return err
 }
 
-// for SDK
-func (s *Service) ValidateAccessToken(ctx context.Context, accessToken string, now time.Time) (userID uuid.UUID, err error) {
-	return uuid.UUID{}, nil
+func (s *Service) ValidateAccessToken(ctx context.Context, accessToken string, now time.Time) (uuid.UUID, error) {
+
+	claims, err := s.accessTokens.Parse(accessToken, now)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil || userID == uuid.Nil {
+		return uuid.Nil, token.ErrInvalidToken
+	}
+
+	return userID, nil
 }
 
 func generateRefreshToken() (string, error) {

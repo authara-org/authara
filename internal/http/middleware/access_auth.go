@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -25,6 +26,7 @@ func RequireAccessAuth(sessionSvc *session.Service, now func() time.Time) func(h
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
+			fmt.Println(userID)
 
 			ctx = httpcontext.WithUserID(ctx, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
