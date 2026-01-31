@@ -1,6 +1,6 @@
 package templates
 
-import "github.com/alexlup06-authgate/authgate/internal/http/context"
+import httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
 
 templ Layout() {
 	<!DOCTYPE html>
@@ -42,7 +42,7 @@ templ Layout() {
 }
 
 templ PartialRender() {
-	if context.IsHTMX(ctx) {
+	if httpcontext.IsHTMX(ctx) {
 		{ children... }
 	} else {
 		@Layout() {
