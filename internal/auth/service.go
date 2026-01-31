@@ -6,6 +6,7 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/domain"
 	"github.com/alexlup06-authgate/authgate/internal/store"
 	"github.com/alexlup06-authgate/authgate/internal/store/tx"
+	"github.com/google/uuid"
 )
 
 type Config struct {
@@ -23,6 +24,14 @@ func New(cfg Config) *Service {
 		store: cfg.Store,
 		tx:    cfg.Tx,
 	}
+}
+
+func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
+	user, err := s.store.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (*domain.User, error) {
@@ -100,17 +109,17 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (*doma
 func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (*domain.User, error) {
 	user, err := s.store.GetUserByEmail(ctx, in.Email)
 	if err != nil {
-		return &domain.User{}, err
+		return nil, err
 	}
 
 	authPovider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
 	if err != nil {
-		return &domain.User{}, err
+		return nil, err
 	}
 
 	verified, err := Verify(in.Password, *authPovider.PasswordHash)
 	if err != nil || !verified {
-		return &domain.User{}, err
+		return nil, err
 	}
 
 	return &user, nil

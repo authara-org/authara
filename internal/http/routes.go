@@ -8,12 +8,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated func(http.Handler) http.Handler) {
+func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated, requireAccessAuth func(http.Handler) http.Handler) {
 	healthHandler := handlers.NewHealthHandler(cfg.Store)
 	r.Get("/auth/health", healthHandler.Health)
 
 	r.Route("/auth", func(r chi.Router) {
-		r.Use(middleware.CSRFOnGetMiddleware)
+		r.Use(middleware.RequireCSRF)
 
 		h := handlers.NewAuthHandler(
 			cfg.Auth,
@@ -31,13 +31,24 @@ func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated func
 			r.Get("/signup", h.SignupPage)
 		})
 
-		r.Post("/signup", h.SignupPost)
-		r.Post("/login", h.LoginPost)
-		r.Post("/logout", h.LogoutPost)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireCSRF)
 
-		r.Post("/oauth/google/callback", h.GoogleCallback)
+			r.Post("/signup", h.SignupPost)
+			r.Post("/login", h.LoginPost)
+			r.Post("/logout", h.LogoutPost)
+			r.Post("/refresh", h.RefreshPost)
+		})
 
-		r.Post("/refresh", h.RefreshPost)
+		r.Route("/oauth", func(r chi.Router) {
+			r.Post("/google/callback", h.GoogleCallback)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(requireAccessAuth)
+
+			r.Get("/user", h.UserGet)
+		})
 	})
 
 	handlers.RegisterStatic(r, handlers.StaticConfig{Dev: cfg.Dev})

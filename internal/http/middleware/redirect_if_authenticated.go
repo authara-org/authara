@@ -10,10 +10,7 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/session"
 )
 
-func RedirectIfAuthenticated(
-	sessionService *session.Service,
-	now func() time.Time,
-) func(http.Handler) http.Handler {
+func RedirectIfAuthenticated(sessionService *session.Service, now func() time.Time) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Only guard UI pages

@@ -9,11 +9,11 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/auth"
 	"github.com/alexlup06-authgate/authgate/internal/domain"
 	"github.com/alexlup06-authgate/authgate/internal/http/authflow"
-	"github.com/alexlup06-authgate/authgate/internal/http/context"
 	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
 	"github.com/alexlup06-authgate/authgate/internal/http/csrf"
 	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
 	"github.com/alexlup06-authgate/authgate/internal/http/redirect"
+	"github.com/alexlup06-authgate/authgate/internal/http/response"
 	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 )
@@ -306,4 +306,22 @@ func (h *AuthHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 	session.SetRefreshToken(w, newRefreshToken, int(h.refreshTokenTTL.Seconds()))
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *AuthHandler) UserGet(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID, ok := httpcontext.UserID(ctx)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.auth.GetUser(ctx, userID)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, user)
 }

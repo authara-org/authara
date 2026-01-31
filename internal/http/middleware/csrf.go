@@ -7,7 +7,7 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/http/csrf"
 )
 
-func CSRFOnGetMiddleware(next http.Handler) http.Handler {
+func RequireCSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Only protect state-changing methods
 		switch r.Method {
