@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"log"
 	"os"
 	"os/signal"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/auth"
+	"github.com/alexlup06-authgate/authgate/internal/bootstrap"
 	"github.com/alexlup06-authgate/authgate/internal/config"
 	httpserver "github.com/alexlup06-authgate/authgate/internal/http"
 	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
@@ -29,22 +29,6 @@ func main() {
 
 	logger, err := logging.New(cfg.Logging.Level)
 	logger.Info("starting authgate")
-
-	decodedKeys := make(map[string][]byte)
-
-	for id, encoded := range cfg.Token.Keys {
-		key, err := base64.StdEncoding.DecodeString(encoded)
-		if err != nil {
-			logger.Error("invalid JWT key", "key_id", id, "err", err)
-			os.Exit(1)
-		}
-		decodedKeys[id] = key
-	}
-
-	keySet, err := token.NewKeySet(
-		cfg.Token.ActiveKeyID,
-		decodedKeys,
-	)
 	if err != nil {
 		logger.Error("invalid token key configuration", "err", err)
 		os.Exit(1)
@@ -65,27 +49,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	startupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	schemaVersion, err := store.CurrentSchemaVersion(startupCtx)
+	err = bootstrap.CheckSchemaVersion(store, schema.RequiredSchemaVersion)
 	if err != nil {
-		logger.Error("failed to read schema version", "err", err)
-		os.Exit(1)
-	}
-
-	if schemaVersion != schema.RequiredSchemaVersion {
-		logger.Error(
-			"database schema version mismatch",
-			"current", schemaVersion,
-			"required", schema.RequiredSchemaVersion,
-		)
+		logger.Error("startup failed", "err", err)
 		os.Exit(1)
 	}
 
 	txManager := tx.New(store)
 
 	accessTokenService := token.NewAccessTokenService(
-		keySet,
+		cfg.Token.KeySet,
 		cfg.Token.Issuer,
 		cfg.Token.AccessTokenTTL,
 	)
@@ -104,12 +77,12 @@ func main() {
 		RefreshTokenRotation: cfg.Session.RefreshTokenRotation,
 	})
 
-	googleClient := google.New(cfg.Google.ClientID)
+	googleClient := google.New(cfg.OAuth.GoogleClientID)
 
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Addr:            cfg.HTTP.Addr,
 		Auth:            authService,
-		Dev:             cfg.Dev,
+		Dev:             cfg.Values.AppEnv == "dev",
 		Session:         sessionService,
 		Logger:          logger,
 		Store:           store,
