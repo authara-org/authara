@@ -57,7 +57,7 @@ func (h *AuthHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r = r.WithContext(context.WithCSRF(r.Context(), tok))
+	r = r.WithContext(httpcontext.WithCSRF(r.Context(), tok))
 
 	_ = Render(
 		w,
@@ -127,7 +127,7 @@ func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r = r.WithContext(context.WithCSRF(r.Context(), tok))
+	r = r.WithContext(httpcontext.WithCSRF(r.Context(), tok))
 
 	_ = Render(
 		w,
