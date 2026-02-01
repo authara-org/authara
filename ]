@@ -1,0 +1,23 @@
+package session
+
+import "slices"
+
+type Role string
+
+const (
+	AuthgateAdmin Role = "authgate:admin"
+)
+
+type Roles struct {
+	roles []Role
+}
+
+func (r *Roles) AddAdmin() {
+	if !slices.Contains(r.roles, AuthgateAdmin) {
+		r.roles = append(r.roles, AuthgateAdmin)
+	}
+}
+
+func (r *Roles) IsAdmin() bool {
+	return slices.Contains(r.roles, AuthgateAdmin)
+}

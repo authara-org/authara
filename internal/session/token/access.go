@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexlup06-authgate/authgate/internal/session/roles"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -16,8 +17,8 @@ const (
 )
 
 type AccessClaims struct {
-	SessionID string   `json:"sid"`
-	Roles     []string `json:"roles"`
+	SessionID uuid.UUID    `json:"sid"`
+	Roles     []roles.Role `json:"roles"`
 
 	jwt.RegisteredClaims
 }
@@ -40,17 +41,16 @@ func NewAccessTokenService(
 	}
 }
 
-func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, audience Audience, roles []string, now time.Time) (string, error) {
+func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, audience Audience, roles []roles.Role, now time.Time) (string, error) {
 	kid, key := s.keys.SigningKey()
 
-	for _, role := range roles {
-		if !strings.HasPrefix(role, "authgate:") {
-			return "", ErrInvalidRoleNamespace
-		}
+	err := validateRoles(roles)
+	if err != nil {
+		return "", err
 	}
 
 	claims := AccessClaims{
-		SessionID: sessionId.String(),
+		SessionID: sessionId,
 		Roles:     roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
@@ -110,15 +110,23 @@ func (s *AccessTokenService) Parse(tokenString string, now time.Time) (*AccessCl
 		return nil, ErrExpiredToken
 	}
 
-	if claims.Subject == "" || claims.SessionID == "" {
+	if claims.Subject == "" || claims.SessionID == uuid.Nil {
 		return nil, ErrInvalidClaims
 	}
 
-	for _, role := range claims.Roles {
-		if !strings.HasPrefix(role, "authgate:") {
-			return nil, ErrInvalidRoleNamespace
-		}
+	err = validateRoles(claims.Roles)
+	if err != nil {
+		return nil, err
 	}
 
 	return claims, nil
+}
+
+func validateRoles(roles []roles.Role) error {
+	for _, role := range roles {
+		if !strings.HasPrefix(string(role), "authgate:") {
+			return ErrInvalidRoleNamespace
+		}
+	}
+	return nil
 }

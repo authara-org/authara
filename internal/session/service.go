@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/domain"
+	"github.com/alexlup06-authgate/authgate/internal/session/roles"
 	"github.com/alexlup06-authgate/authgate/internal/session/token"
 	"github.com/alexlup06-authgate/authgate/internal/store"
 	"github.com/alexlup06-authgate/authgate/internal/store/tx"
@@ -85,8 +86,6 @@ func (s *Service) CreateSession(
 			return err
 		}
 
-		roles := []string{}
-
 		isAdmin, err := s.store.IsUserAdmin(ctx, userID)
 		if err != nil {
 			return err
@@ -96,15 +95,16 @@ func (s *Service) CreateSession(
 			return ErrForbidden
 		}
 
+		var roles roles.Roles
 		if isAdmin {
-			roles = append(roles, "authgate:admin")
+			roles.AddAdmin()
 		}
 
 		accessToken, err = s.accessTokens.Generate(
 			userID,
 			createdSession.ID,
 			audience,
-			roles,
+			roles.Roles,
 			now,
 		)
 		if err != nil {
@@ -184,8 +184,6 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			newRefreshToken = refreshToken
 		}
 
-		roles := []string{}
-
 		isAdmin, err := s.store.IsUserAdmin(ctx, session.UserID)
 		if err != nil {
 			return err
@@ -195,15 +193,16 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrForbidden
 		}
 
+		var roles roles.Roles
 		if isAdmin {
-			roles = append(roles, "authgate:admin")
+			roles.AddAdmin()
 		}
 
 		newAccessToken, err = s.accessTokens.Generate(
 			session.UserID,
 			rt.SessionID,
 			audience,
-			roles,
+			roles.Roles,
 			now,
 		)
 		if err != nil {
