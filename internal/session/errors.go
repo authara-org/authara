@@ -10,4 +10,5 @@ var (
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 	ErrRefreshTokenReuse   = errors.New("refresh token reuse")
 	ErrForbidden           = errors.New("forbidden")
+	ErrUserDisabled        = errors.New("user is disabled")
 )

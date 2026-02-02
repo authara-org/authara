@@ -57,6 +57,14 @@ func (s *Service) CreateSession(
 	err error,
 ) {
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		disabled, err := s.store.IsUserDisabled(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if disabled {
+			return ErrUserDisabled
+		}
+
 		session := domain.Session{
 			UserID:    userID,
 			UserAgent: userAgent,
@@ -145,6 +153,14 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		session, err := s.store.GetSessionByID(ctx, rt.SessionID)
 		if err != nil {
 			return ErrInvalidRefreshToken
+		}
+
+		disabled, err := s.store.IsUserDisabled(ctx, session.UserID)
+		if err != nil {
+			return err
+		}
+		if disabled {
+			return ErrUserDisabled
 		}
 
 		if session.ExpiresAt.Before(now) || session.RevokedAt != nil {
