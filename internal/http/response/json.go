@@ -10,3 +10,12 @@ func JSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+func ErrorJSON(w http.ResponseWriter, status int, code ErrorCode, message string) {
+	JSON(w, status, ErrorResponse{
+		Error: Error{
+			Code:    code,
+			Message: message,
+		},
+	})
+}

@@ -282,25 +282,48 @@ func (h *AuthHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 
 	refreshToken, ok := session.ReadRefreshToken(r)
 	if !ok || refreshToken == "" {
-		http.Error(w, "refresh token missing", http.StatusUnauthorized)
+		response.ErrorJSON(
+			w,
+			http.StatusUnauthorized,
+			response.CodeUnauthorized,
+			"Refresh token missing",
+		)
 		return
 	}
 
 	audience, err := redirect.AudienceFromRequest(r)
 	if err != nil {
-		http.Error(w, "invalid audience", http.StatusBadRequest)
+		response.ErrorJSON(
+			w,
+			http.StatusBadRequest,
+			response.CodeInvalidRequest,
+			"Invalid audience",
+		)
+
 		return
 	}
 
 	now := time.Now()
 	newAccessToken, newRefreshToken, err := h.session.RefreshSession(ctx, refreshToken, audience, now)
+
 	switch {
-	case errors.Is(err, session.ErrInvalidRefreshToken), errors.Is(err, session.ErrForbidden):
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	case errors.Is(err, session.ErrInvalidRefreshToken),
+		errors.Is(err, session.ErrForbidden):
+		response.ErrorJSON(
+			w,
+			http.StatusUnauthorized,
+			response.CodeUnauthorized,
+			"Invalid refresh token",
+		)
 		return
 
 	case err != nil:
-		http.Error(w, "session error", http.StatusInternalServerError)
+		response.ErrorJSON(
+			w,
+			http.StatusInternalServerError,
+			response.CodeInternalError,
+			"Session error",
+		)
 		return
 	}
 
@@ -315,17 +338,27 @@ func (h *AuthHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 
 	userID, ok := httpcontext.UserID(ctx)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		response.ErrorJSON(
+			w,
+			http.StatusUnauthorized,
+			response.CodeUnauthorized,
+			"Unauthorized",
+		)
 		return
 	}
 
 	user, err := h.auth.GetUser(ctx, userID)
 	if err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		response.ErrorJSON(
+			w,
+			http.StatusUnauthorized,
+			response.CodeUnauthorized,
+			"Unauthorized",
+		)
 		return
 	}
 
-	response.JSON(w, http.StatusOK, user)
+	response.JSON(w, http.StatusOK, response.UserFromDomain(*user))
 }
 
 func (h *AuthHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {
@@ -333,13 +366,23 @@ func (h *AuthHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := uuid.Parse(chi.URLParam(r, "userID"))
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		response.ErrorJSON(
+			w,
+			http.StatusBadRequest,
+			response.CodeInvalidRequest,
+			"Invalid user ID",
+		)
 		return
 	}
 
 	err = h.auth.DisableUser(ctx, userID)
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		response.ErrorJSON(
+			w,
+			http.StatusInternalServerError,
+			response.CodeInternalError,
+			"Server error",
+		)
 		return
 	}
 

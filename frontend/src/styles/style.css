@@ -4,3 +4,15 @@
 [x-cloak] {
   display: none !important;
 }
+
+#submit-button > #loading-indicator-submit {
+	opacity: 0;
+}
+
+#submit-button.htmx-request > #submit-label {
+	visibility: hidden;
+}
+
+#submit-button.htmx-request > #loading-indicator-submit {
+	opacity: 1;
+}
