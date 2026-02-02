@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/domain"
 	"github.com/alexlup06-authgate/authgate/internal/store/model"
@@ -116,4 +117,25 @@ func (s *Store) IsUserAdmin(ctx context.Context, userID uuid.UUID) (bool, error)
 	}
 
 	return exists, nil
+}
+
+func (s *Store) DisableUser(ctx context.Context, userID uuid.UUID, disabledAt time.Time) error {
+	return s.dbFromContext(ctx).
+		Model(&model.User{}).
+		Where("user_id = ?", userID).
+		Update("disabled_at", disabledAt).
+		Error
+}
+
+func (s *Store) IsUserDisabled(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var exists bool
+
+	err := s.dbFromContext(ctx).
+		Model(&model.User{}).
+		Select("count(1) > 0").
+		Where("id = ? AND disabled_at IS NOT NULL", userID).
+		Find(&exists).
+		Error
+
+	return exists, err
 }

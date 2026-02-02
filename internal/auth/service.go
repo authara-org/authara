@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/domain"
 	"github.com/alexlup06-authgate/authgate/internal/store"
@@ -178,4 +179,15 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 	}
 
 	return &user, nil
+}
+
+func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
+	now := time.Now()
+
+	err := s.store.DisableUser(ctx, userID, now)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

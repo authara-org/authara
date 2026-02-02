@@ -1,19 +1,20 @@
 package http
 
 import (
-	"net/http"
-
 	"github.com/alexlup06-authgate/authgate/internal/http/handlers"
 	"github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
-func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated, requireAccessAuth func(http.Handler) http.Handler) {
-	healthHandler := handlers.NewHealthHandler(cfg.Store)
-	r.Get("/auth/health", healthHandler.Health)
+func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
+
+	r.Group(func(r chi.Router) {
+		h := handlers.NewHealthHandler(cfg.Store)
+
+		r.Get("/auth/health", h.Health)
+	})
 
 	r.Route("/auth", func(r chi.Router) {
-		r.Use(middleware.RequireCSRF)
 
 		h := handlers.NewAuthHandler(
 			cfg.Auth,
@@ -25,7 +26,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated, req
 			})
 
 		r.Group(func(r chi.Router) {
-			r.Use(redirectIfAuthenticated)
+			r.Use(mw.RedirectIfAuthenticated)
 
 			r.Get("/login", h.LoginPage)
 			r.Get("/signup", h.SignupPage)
@@ -45,10 +46,22 @@ func registerRoutes(r chi.Router, cfg ServerConfig, redirectIfAuthenticated, req
 		})
 
 		r.Group(func(r chi.Router) {
-			r.Use(requireAccessAuth)
+			r.Use(mw.RequireAppAccessAuth)
 
 			r.Get("/user", h.UserGet)
 		})
+
+		r.Route("/auth/admin", func(r chi.Router) {
+			r.Use(mw.RequireAdminAccessAuth)
+			r.Use(mw.RequireAdminRole)
+
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireCSRF)
+
+				r.Post("/users/{userID}/disable", h.DisableUserPost)
+			})
+		})
+
 	})
 
 	handlers.RegisterStatic(r, handlers.StaticConfig{Dev: cfg.Dev})

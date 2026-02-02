@@ -104,7 +104,7 @@ func (s *Service) CreateSession(
 			userID,
 			createdSession.ID,
 			audience,
-			roles.Roles,
+			roles,
 			now,
 		)
 		if err != nil {
@@ -202,7 +202,7 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			session.UserID,
 			rt.SessionID,
 			audience,
-			roles.Roles,
+			roles,
 			now,
 		)
 		if err != nil {
@@ -243,19 +243,28 @@ func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error
 	return err
 }
 
-func (s *Service) ValidateAccessToken(ctx context.Context, accessToken string, now time.Time) (uuid.UUID, error) {
+func (s *Service) ValidateAccessToken(ctx context.Context, accessToken string, now time.Time) (*AccessIdentity, error) {
 
 	claims, err := s.accessTokens.Parse(accessToken, now)
 	if err != nil {
-		return uuid.Nil, err
+		return nil, err
 	}
 
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil || userID == uuid.Nil {
-		return uuid.Nil, token.ErrInvalidToken
+		return nil, token.ErrInvalidToken
 	}
 
-	return userID, nil
+	rs, err := roles.FromClaims(claims.Roles)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AccessIdentity{
+		UserID:    userID,
+		SessionID: claims.SessionID,
+		Roles:     rs,
+	}, nil
 }
 
 func generateRefreshToken() (string, error) {

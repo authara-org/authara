@@ -28,15 +28,22 @@ type ServerConfig struct {
 	RefreshTokenTTL time.Duration
 }
 
+type Middlewares struct {
+	RedirectIfAuthenticated func(http.Handler) http.Handler
+
+	RequireAppAccessAuth   func(http.Handler) http.Handler
+	RequireAdminAccessAuth func(http.Handler) http.Handler
+	RequireAdminRole       func(http.Handler) http.Handler
+
+	RequireCSRF func(http.Handler) http.Handler
+}
+
 type Server struct {
 	httpServer *http.Server
 }
 
-func NewServer(cfg ServerConfig) *Server {
+func NewServer(cfg ServerConfig, mw Middlewares) *Server {
 	r := chi.NewRouter()
-
-	redirectIfAuthenticated := httpmiddleware.RedirectIfAuthenticated(cfg.Session, time.Now)
-	requireAccessAuth := httpmiddleware.RequireAccessAuth(cfg.Session, time.Now)
 
 	r.Use(httpmiddleware.ReturnTo)
 
@@ -47,7 +54,7 @@ func NewServer(cfg ServerConfig) *Server {
 
 	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
 
-	registerRoutes(r, cfg, redirectIfAuthenticated, requireAccessAuth)
+	registerRoutes(r, cfg, mw)
 
 	srv := &http.Server{
 		Addr:         cfg.Addr,

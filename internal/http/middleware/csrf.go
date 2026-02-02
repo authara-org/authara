@@ -9,19 +9,6 @@ import (
 
 func RequireCSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Only protect state-changing methods
-		switch r.Method {
-		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-		default:
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		if r.URL.Path == "/auth/oauth/google/callback" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		c, err := r.Cookie(csrf.CookieName)
 		if err != nil || c.Value == "" {
 			http.Error(w, "CSRF cookie token missing", http.StatusForbidden)

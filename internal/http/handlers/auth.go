@@ -16,6 +16,8 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/http/response"
 	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
 	"github.com/alexlup06-authgate/authgate/internal/session"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type AuthHandlerConfig struct {
@@ -324,4 +326,22 @@ func (h *AuthHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, user)
+}
+
+func (h *AuthHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	err = h.auth.DisableUser(ctx, userID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

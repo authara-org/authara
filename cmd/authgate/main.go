@@ -12,6 +12,7 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/bootstrap"
 	"github.com/alexlup06-authgate/authgate/internal/config"
 	httpserver "github.com/alexlup06-authgate/authgate/internal/http"
+	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
 	"github.com/alexlup06-authgate/authgate/internal/logging"
 	"github.com/alexlup06-authgate/authgate/internal/session"
@@ -79,6 +80,20 @@ func main() {
 
 	googleClient := google.New(cfg.OAuth.GoogleClientID)
 
+	redirectIfAuthenticated := httpmiddleware.RedirectIfAuthenticated(sessionService, time.Now)
+	requireAppAccessAuth := httpmiddleware.RequireAccessAuth(sessionService, token.AudienceApp, time.Now)
+	requireAdminAccessAuth := httpmiddleware.RequireAccessAuth(sessionService, token.AudienceAdmin, time.Now)
+	requireAdminRole := httpmiddleware.RequireAdmin
+	requireCSRF := httpmiddleware.RequireCSRF
+
+	mw := httpserver.Middlewares{
+		RedirectIfAuthenticated: redirectIfAuthenticated,
+		RequireAppAccessAuth:    requireAppAccessAuth,
+		RequireAdminAccessAuth:  requireAdminAccessAuth,
+		RequireAdminRole:        requireAdminRole,
+		RequireCSRF:             requireCSRF,
+	}
+
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Addr:            cfg.HTTP.Addr,
 		Auth:            authService,
@@ -89,7 +104,7 @@ func main() {
 		Google:          googleClient,
 		AccessTokenTTL:  cfg.Token.AccessTokenTTL,
 		RefreshTokenTTL: cfg.Session.RefreshTokenTTL,
-	})
+	}, mw)
 
 	ctx, stop := signal.NotifyContext(
 		context.Background(),

@@ -1,7 +1,6 @@
 package token
 
 import (
-	"strings"
 	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/session/roles"
@@ -41,17 +40,12 @@ func NewAccessTokenService(
 	}
 }
 
-func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, audience Audience, roles []roles.Role, now time.Time) (string, error) {
+func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, audience Audience, roles roles.Roles, now time.Time) (string, error) {
 	kid, key := s.keys.SigningKey()
-
-	err := validateRoles(roles)
-	if err != nil {
-		return "", err
-	}
 
 	claims := AccessClaims{
 		SessionID: sessionId,
-		Roles:     roles,
+		Roles:     roles.List(),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
 			Subject:   userID.String(),
@@ -114,19 +108,5 @@ func (s *AccessTokenService) Parse(tokenString string, now time.Time) (*AccessCl
 		return nil, ErrInvalidClaims
 	}
 
-	err = validateRoles(claims.Roles)
-	if err != nil {
-		return nil, err
-	}
-
 	return claims, nil
-}
-
-func validateRoles(roles []roles.Role) error {
-	for _, role := range roles {
-		if !strings.HasPrefix(string(role), "authgate:") {
-			return ErrInvalidRoleNamespace
-		}
-	}
-	return nil
 }
