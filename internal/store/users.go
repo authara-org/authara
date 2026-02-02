@@ -122,7 +122,7 @@ func (s *Store) IsUserAdmin(ctx context.Context, userID uuid.UUID) (bool, error)
 func (s *Store) DisableUser(ctx context.Context, userID uuid.UUID, disabledAt time.Time) error {
 	return s.dbFromContext(ctx).
 		Model(&model.User{}).
-		Where("user_id = ?", userID).
+		Where("id = ?", userID).
 		Update("disabled_at", disabledAt).
 		Error
 }
