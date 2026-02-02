@@ -11,6 +11,8 @@ type User struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
+	DisabledAt *time.Time
+
 	Email    string
 	Username string
 }

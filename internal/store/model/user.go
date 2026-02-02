@@ -11,6 +11,8 @@ type User struct {
 	CreatedAt time.Time  `gorm:"not null;column:created_at"`
 	UpdatedAt time.Time  `gorm:"not null;column:updated_at"`
 
+	DisabledAt *time.Time `gorm:"column:disabled_at"`
+
 	Username string `gorm:"type:varchar(255);not null;column:username"`
 	Email    string `gorm:"type:varchar(255);not null;uniqueIndex;column:email"`
 }
