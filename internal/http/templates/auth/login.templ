@@ -33,7 +33,7 @@ templ login() {
 				Don't have an Account? &nbsp;
 				<a
 					hx-get={ "/auth/signup?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
-					hx-target="body"
+					hx-target="#body"
 					hx-push-url="true"
 					class="cursor-pointer underline text-blue-800"
 				>

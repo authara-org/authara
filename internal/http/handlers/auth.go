@@ -10,11 +10,11 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/domain"
 	"github.com/alexlup06-authgate/authgate/internal/http/authflow"
 	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
-	"github.com/alexlup06-authgate/authgate/internal/http/csrf"
 	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
 	"github.com/alexlup06-authgate/authgate/internal/http/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/http/response"
 	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/toast"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -53,14 +53,6 @@ func (h *AuthHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tok, err := csrf.EnsureCookie(w, r)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-
-	r = r.WithContext(httpcontext.WithCSRF(r.Context(), tok))
-
 	_ = Render(
 		w,
 		r,
@@ -94,7 +86,18 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.auth.Signup(ctx, input)
 	if err != nil {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		signupForm := authview.SignupForm()
+		toastMessage := toast.ToastMessage(
+			toast.Error,
+			"Could not create account. Please check your details.",
+		)
+
+		_ = Render(
+			w,
+			r,
+			http.StatusUnprocessableEntity,
+			toast.OOBWrapper(signupForm, toastMessage),
+		)
 		return
 	}
 
@@ -122,14 +125,6 @@ func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 	if authflow.TryRedirectAuthenticated(w, r, h.session, h.accessTokenTTL, h.refreshTokenTTL) {
 		return
 	}
-
-	tok, err := csrf.EnsureCookie(w, r)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-
-	r = r.WithContext(httpcontext.WithCSRF(r.Context(), tok))
 
 	_ = Render(
 		w,
@@ -164,7 +159,18 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.auth.Login(ctx, input)
 	if err != nil {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		loginForm := authview.LoginForm()
+		toastMessage := toast.ToastMessage(
+			toast.Error,
+			"Invalid email or password.",
+		)
+
+		_ = Render(
+			w,
+			r,
+			http.StatusUnprocessableEntity,
+			toast.OOBWrapper(loginForm, toastMessage),
+		)
 		return
 	}
 
@@ -184,12 +190,6 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	session.SetAccessToken(w, accessToken, int(h.accessTokenTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.refreshTokenTTL.Seconds()))
-
-	_, err = csrf.EnsureCookie(w, r)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
 
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }

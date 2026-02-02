@@ -1,6 +1,9 @@
 package templates
 
-import httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
+import (
+	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/toast"
+)
 
 templ Layout() {
 	<!DOCTYPE html>
@@ -36,7 +39,10 @@ templ Layout() {
 			<script src="/auth/static/app.js" defer></script>
 		</head>
 		<body class="m-0">
-			{ children... }
+			<div id="body">
+				{ children... }
+			</div>
+			@toast.ToastWrapper()
 		</body>
 	</html>
 }
