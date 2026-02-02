@@ -54,6 +54,7 @@ templ SignupForm() {
 	<form
 		x-cloak
 		x-show="open"
+		x-data="{password: '', confirm: ''}"
 		autocomplete="on"
 		hx-post={ "/auth/signup?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
 		hx-target="this"
@@ -71,39 +72,86 @@ templ SignupForm() {
 			autocomplete="username"
 			placeholder="Enter your email address"
 			required
-			class={
-				"border-2 border-grey-100 w-full rounded-xl px-4 py-3 text-sm mb-4",
-				templ.KV("border-2 border-errorColor", ctx.Value("isWrongEmail") == "true"),
-			}
-			if ctx.Value("isWrongEmail")=="true" {
-				value={ ctx.Value("email").(string) }
-			}
+			class="border-2 border-grey-100 w-full rounded-xl px-4 py-3 text-sm mb-4"
 		/>
 		<label for="new-password" class="text-grey-800">
 			<div class="pb-2">Password <span class="text-red-600">*</span></div>
 		</label>
-		<input
-			type="password"
-			id="new-password"
-			name="password"
-			autocomplete="new-password"
-			placeholder="Enter your password"
-			required
-			class="w-full pl-4 pr-12 py-3 text-sm border-2 border-grey-100 rounded-xl mb-2"
-			if ctx.Value("isWrongEmail")=="true" {
-				value={ ctx.Value("password").(string) }
-			}
-		/>
-		<input
-			type="password"
-			placeholder="Confirm your password"
-			required
-			class="w-full pl-4 pr-12 py-3 text-sm border-2 border-grey-100 rounded-xl mb-4"
-		/>
+		<div x-data="{ show: false }" class="mb-1.5 relative">
+			<input
+				:type="show ? 'text' : 'password'"
+				id="new-password"
+				name="password"
+				x-model="password"
+				autocomplete="new-password"
+				placeholder="Enter your password"
+				required
+				minlength="8"
+				:class="{
+					'border-grey-100': password.length === 0,
+					'border-red-500': password.length > 0 && password.length < 8,
+					'border-green-500': password.length >= 8
+				}"
+				class="w-full pl-4 pr-12 py-3 text-sm border-2 border-grey-100 rounded-xl"
+			/>
+			<button
+				type="button"
+				@click="show = !show"
+				class="absolute cursor-pointer right-0 h-full px-4"
+			>
+				<div class="h-5 w-5 my-auto">
+					<div x-show="!show">
+						@icons.Hide()
+					</div>
+					<div x-show="show">
+						@icons.Show()
+					</div>
+				</div>
+			</button>
+		</div>
+		<p class="text-xs text-grey-600 mb-4">
+			Password must be at least 8 characters long.
+		</p>
+		<div x-data="{ show: false }" class="relative">
+			<input
+				:type="show ? 'text' : 'password'"
+				name="confirm_password"
+				autocomplete="new-password"
+				x-model="confirm"
+				placeholder="Confirm your password"
+				required
+				:class="{
+					'border-grey-100': confirm.length === 0,
+					'border-red-500': confirm.length > 0 && confirm !== password,
+					'border-green-500': confirm.length > 0 && confirm === password
+				}"
+				class="w-full pl-4 pr-12 py-3 text-sm border-2 rounded-xl"
+			/>
+			<button
+				type="button"
+				@click="show = !show"
+				class="absolute cursor-pointer right-0 h-full px-4"
+			>
+				<div class="h-5 w-5 my-auto">
+					<div x-show="!show">
+						@icons.Hide()
+					</div>
+					<div x-show="show">
+						@icons.Show()
+					</div>
+				</div>
+			</button>
+		</div>
+		<p
+			x-show="confirm.length > 0 && confirm !== password"
+			class="text-xs text-red-600 mt-1.5"
+		>
+			Passwords do not match.
+		</p>
 		<button
 			id="submit-button"
 			type="submit"
-			class="bg-blue-600 w-full rounded-xl px-4 py-3 text-white cursor-pointer relative"
+			class="bg-blue-600 w-full rounded-xl px-4 py-3 mt-4 text-white cursor-pointer relative"
 		>
 			<div
 				id="submit-label"

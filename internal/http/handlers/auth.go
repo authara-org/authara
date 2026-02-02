@@ -73,8 +73,19 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 	email = strings.ToLower(email)
 	password := r.FormValue("password")
 
-	if email == "" || password == "" {
-		http.Error(w, "email and password required", http.StatusBadRequest)
+	if !isValidEmail(email) || !isValidPassword(password) {
+		signupForm := authview.SignupForm()
+		toastMessage := toast.ToastMessage(
+			toast.Error,
+			"Please provide a valid email and password.",
+		)
+
+		_ = Render(
+			w,
+			r,
+			http.StatusUnprocessableEntity,
+			toast.OOBWrapper(signupForm, toastMessage),
+		)
 		return
 	}
 
