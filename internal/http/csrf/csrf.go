@@ -31,7 +31,7 @@ func EnsureCookie(w http.ResponseWriter, r *http.Request) (string, error) {
 		Name:     CookieName,
 		Value:    tok,
 		Path:     "/",
-		Secure:   true,
+		Secure:   secureCookies,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   60 * 60 * 24 * 30,

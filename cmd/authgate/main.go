@@ -12,6 +12,7 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/bootstrap"
 	"github.com/alexlup06-authgate/authgate/internal/config"
 	httpserver "github.com/alexlup06-authgate/authgate/internal/http"
+	"github.com/alexlup06-authgate/authgate/internal/http/csrf"
 	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
 	"github.com/alexlup06-authgate/authgate/internal/logging"
@@ -57,6 +58,11 @@ func main() {
 	}
 
 	txManager := tx.New(store)
+
+	secure := cfg.Values.AppEnv == "prod"
+
+	csrf.Configure(secure)
+	session.Configure(secure)
 
 	accessTokenService := token.NewAccessTokenService(
 		cfg.Token.KeySet,
