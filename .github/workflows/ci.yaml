@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  GO_VERSION: "1.25"
+  NODE_VERSION: "24"
+
+jobs:
+  # ------------------------------------------------------------
+  # Backend: lint + test
+  # ------------------------------------------------------------
+  backend-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: authgate_test
+          POSTGRES_USER: authgate
+          POSTGRES_PASSWORD: authgate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U authgate"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      POSTGRESQL_HOST: localhost
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: authgate_test
+      POSTGRESQL_USERNAME: authgate
+      POSTGRESQL_PASSWORD: authgate
+      POSTGRESQL_SCHEMA: public
+      POSTGRESQL_TIMEZONE: UTC
+      POSTGRESQL_LOG_SQL: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Wait for Postgres
+        run: |
+          until pg_isready -h localhost -p 5432 -U authgate; do
+            echo "waiting for postgres..."
+            sleep 2
+          done
+
+      - name: Apply database migrations
+        run: |
+          docker build \
+            -f migrations/Dockerfile \
+            -t authgate-migrations:test \
+            ./migrations
+
+          docker run --rm \
+            --network host \
+            -e POSTGRESQL_HOST \
+            -e POSTGRESQL_PORT \
+            -e POSTGRESQL_DATABASE \
+            -e POSTGRESQL_USERNAME \
+            -e POSTGRESQL_PASSWORD \
+            authgate-migrations:test \
+            up \
+            -env=default \
+            -config=./dbconfig.yaml
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.977
+
+      - name: Generate templ files
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          templ generate
+
+      - name: Install goimports
+        run: go install golang.org/x/tools/cmd/goimports@v0.41.0
+
+      - name: Check goimports formatting
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          test -z "$(goimports -l .)"
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run Go tests
+        run: go test ./...
+
+  # ------------------------------------------------------------
+  # Frontend: format + build
+  # ------------------------------------------------------------
+  frontend-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Tailwind CSS
+        working-directory: frontend
+        run: npm run build:tailwind
+
+      - name: Check formatting
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: Build frontend bundle
+        working-directory: frontend
+        run: npm run build:webpack
+
+  # ------------------------------------------------------------
+  # Docker build (main branch only)
+  # ------------------------------------------------------------
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-build]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -f docker/Dockerfile.prod \
+            -t authgate:${{ github.sha }} \
+            .
+
