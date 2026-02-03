@@ -6,13 +6,13 @@
 }
 
 #submit-button > #loading-indicator-submit {
-	opacity: 0;
+  opacity: 0;
 }
 
 #submit-button.htmx-request > #submit-label {
-	visibility: hidden;
+  visibility: hidden;
 }
 
 #submit-button.htmx-request > #loading-indicator-submit {
-	opacity: 1;
+  opacity: 1;
 }
