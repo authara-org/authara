@@ -82,6 +82,18 @@ jobs:
             -config=./dbconfig.yaml
 
       # ------------------------------------------------------------
+      # templ generate
+      # ------------------------------------------------------------
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.977
+
+      - name: Generate templ files
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          templ generate
+
+
+      # ------------------------------------------------------------
       # Run Go tests
       # ------------------------------------------------------------
       - name: Run Go tests
