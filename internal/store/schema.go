@@ -9,20 +9,15 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func (s *Store) CurrentSchemaVersion(ctx context.Context) (string, error) {
-	var version sql.NullString
+func (s *Store) CurrentSchemaVersion(ctx context.Context) (int, error) {
+	var version sql.NullInt32
 
 	silentDB := s.db.Session(&gorm.Session{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 
 	err := silentDB.WithContext(ctx).
-		Raw(`
-			SELECT id
-			FROM public.schema_migrations
-			ORDER BY applied_at DESC
-			LIMIT 1
-		`).
+		Raw(`SELECT version FROM public.schema_version LIMIT 1`).
 		Scan(&version).Error
 
 	if err != nil {
@@ -30,12 +25,12 @@ func (s *Store) CurrentSchemaVersion(ctx context.Context) (string, error) {
 			"failed to query schema version",
 			"err", err,
 		)
-		return "", err
+		return 0, err
 	}
 
 	if !version.Valid {
-		return "", nil
+		return 0, nil
 	}
 
-	return version.String, nil
+	return int(version.Int32), nil
 }

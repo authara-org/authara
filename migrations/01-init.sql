@@ -13,6 +13,13 @@ END;
 $func$ LANGUAGE plpgsql;
 -- +migrate StatementEnd
 
+CREATE TABLE IF NOT EXISTS public.schema_version (
+  version INTEGER NOT NULL PRIMARY KEY
+);
+
+INSERT INTO schema_version (version)
+VALUES (1)
+ON CONFLICT (version) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS authgate.users (
 	id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
