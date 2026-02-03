@@ -30,9 +30,6 @@ func Load() (*Config, error) {
 	if err := cfg.DB.validate(); err != nil {
 		return nil, err
 	}
-	if err := cfg.HTTP.validate(); err != nil {
-		return nil, err
-	}
 	if err := cfg.Logging.validate(); err != nil {
 		return nil, err
 	}
@@ -45,6 +42,8 @@ func Load() (*Config, error) {
 	if err := cfg.Session.validate(); err != nil {
 		return nil, err
 	}
+
+	cfg.HTTP.Addr = ":8080"
 
 	cfg.Logging.parse(cfg.Values.AppEnv)
 	cfg.Token.parse()

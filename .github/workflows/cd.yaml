@@ -29,6 +29,7 @@ jobs:
         run: |
           docker build \
             -f docker/Dockerfile.prod \
+            --build-arg VERSION=${{ github.ref_name }} \
             -t ghcr.io/alexlup06-authgate/authgate-core:${{ github.ref_name }} \
             .
 

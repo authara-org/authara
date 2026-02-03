@@ -17,6 +17,7 @@ import (
 )
 
 type ServerConfig struct {
+	Version         string
 	Addr            string
 	Auth            *auth.Service
 	Dev             bool

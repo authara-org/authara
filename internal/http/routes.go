@@ -9,9 +9,10 @@ import (
 func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 	r.Group(func(r chi.Router) {
-		h := handlers.NewHealthHandler(cfg.Store)
 
-		r.Get("/auth/health", h.Health)
+		r.Get("/auth/health", handlers.Health)
+		r.Get("/auth/version", handlers.Version(cfg.Version))
+
 	})
 
 	r.Route("/auth", func(r chi.Router) {

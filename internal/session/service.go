@@ -57,6 +57,14 @@ func (s *Service) CreateSession(
 	err error,
 ) {
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		isAdmin, err := s.store.IsUserAdmin(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if audience == token.AudienceAdmin && !isAdmin {
+			return ErrForbidden
+		}
+
 		disabled, err := s.store.IsUserDisabled(ctx, userID)
 		if err != nil {
 			return err
@@ -92,15 +100,6 @@ func (s *Service) CreateSession(
 		err = s.store.CreateRefreshToken(ctx, rt)
 		if err != nil {
 			return err
-		}
-
-		isAdmin, err := s.store.IsUserAdmin(ctx, userID)
-		if err != nil {
-			return err
-		}
-
-		if audience == token.AudienceAdmin && !isAdmin {
-			return ErrForbidden
 		}
 
 		var roles roles.Roles
@@ -140,12 +139,10 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		if err != nil {
 			return ErrInvalidRefreshToken
 		}
-
 		if rt.ConsumedAt != nil {
 			_ = s.store.RevokeSession(ctx, rt.SessionID, now)
 			return ErrRefreshTokenReuse
 		}
-
 		if rt.ExpiresAt.Before(now) {
 			return ErrInvalidRefreshToken
 		}
@@ -154,6 +151,17 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		if err != nil {
 			return ErrInvalidRefreshToken
 		}
+		if session.ExpiresAt.Before(now) || session.RevokedAt != nil {
+			return ErrInvalidRefreshToken
+		}
+
+		isAdmin, err := s.store.IsUserAdmin(ctx, session.UserID)
+		if err != nil {
+			return err
+		}
+		if audience == token.AudienceAdmin && !isAdmin {
+			return ErrForbidden
+		}
 
 		disabled, err := s.store.IsUserDisabled(ctx, session.UserID)
 		if err != nil {
@@ -161,10 +169,6 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		}
 		if disabled {
 			return ErrUserDisabled
-		}
-
-		if session.ExpiresAt.Before(now) || session.RevokedAt != nil {
-			return ErrInvalidRefreshToken
 		}
 
 		needToRotate := shouldRotate(rt, now, s.refreshTokenRotation)
@@ -198,15 +202,6 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			}
 		} else {
 			newRefreshToken = refreshToken
-		}
-
-		isAdmin, err := s.store.IsUserAdmin(ctx, session.UserID)
-		if err != nil {
-			return err
-		}
-
-		if audience == token.AudienceAdmin && !isAdmin {
-			return ErrForbidden
 		}
 
 		var roles roles.Roles

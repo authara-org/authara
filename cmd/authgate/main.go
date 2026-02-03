@@ -23,7 +23,15 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/store/tx"
 )
 
+var Version = "dev"
+
 func main() {
+	// Binary self-check for Docker HEALTHCHECK
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(0)
+	}
+
+	// regular server
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
@@ -101,6 +109,7 @@ func main() {
 	}
 
 	server := httpserver.NewServer(httpserver.ServerConfig{
+		Version:         Version,
 		Addr:            cfg.HTTP.Addr,
 		Auth:            authService,
 		Dev:             cfg.Values.AppEnv == "dev",

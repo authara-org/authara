@@ -1,4 +1,6 @@
-# ---------- Frontend Builder ----------
+#
+# Frontend Builder 
+#
 FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app
@@ -11,14 +13,14 @@ COPY internal/http/templates ./internal/http/templates
 
 RUN cd frontend && npm run build
 
-# ---------- Backend Builder ----------
+#
+# Backend Builder
+#
 FROM golang:1.25-alpine AS backend-builder
 
 WORKDIR /app
 
 RUN apk add --no-cache git
-
-# Install templ
 RUN go install github.com/a-h/templ/cmd/templ@v0.3.977
 
 COPY go.mod go.sum ./
@@ -26,26 +28,33 @@ RUN go mod download
 
 COPY . .
 
-# Generate templ files
 RUN templ generate
-
-# Copy frontend assets into server static dir
 COPY --from=frontend-builder /app/frontend/dist ./internal/http/static
 
-# Build binary
-RUN go build -o /bin/authgate ./cmd/authgate
+ARG VERSION=dev
 
-# ---------- Runtime ----------
-FROM alpine
+RUN CGO_ENABLED=0 \
+  go build \
+  -ldflags "-X main.Version=${VERSION}" \
+  -o /app/authgate \
+  ./cmd/authgate
 
-RUN apk add --no-cache ca-certificates
-RUN adduser -D -g '' authgate
+#
+# Runtime
+#
+FROM gcr.io/distroless/base-debian12
 
-USER authgate
-WORKDIR /home/authgate
+WORKDIR /app
 
-COPY --from=backend-builder /bin/authgate ./authgate
+COPY --from=backend-builder /app/authgate /app/authgate
+COPY --from=backend-builder /app/internal/http/static /app/internal/http/static
+COPY --from=backend-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+USER nonroot
 
 EXPOSE 8080
 
-ENTRYPOINT ["./authgate"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+  CMD ["/app/authgate", "healthcheck"]
+
+ENTRYPOINT ["/app/authgate"]
