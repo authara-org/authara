@@ -9,6 +9,7 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/auth"
 	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
+	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/store"
 
@@ -24,6 +25,7 @@ type ServerConfig struct {
 	Session         *session.Service
 	Logger          *slog.Logger
 	Store           *store.Store
+	AuthLimiter     ratelimit.AuthLimiter
 	Google          *google.Client
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration

@@ -77,7 +77,7 @@ templ SignupForm() {
 		<label for="new-password" class="text-grey-800">
 			<div class="pb-2">Password <span class="text-red-600">*</span></div>
 		</label>
-		<div x-data="{ show: false }" class="mb-1.5 relative">
+		<div x-data="{ show: false }" class="relative">
 			<input
 				:type="show ? 'text' : 'password'"
 				id="new-password"
@@ -109,10 +109,13 @@ templ SignupForm() {
 				</div>
 			</button>
 		</div>
-		<p class="text-xs text-grey-600 mb-4">
+		<p
+			class="text-xs text-grey-600 mt-1.5"
+			x-show="password.length<8"
+		>
 			Password must be at least 8 characters long.
 		</p>
-		<div x-data="{ show: false }" class="relative">
+		<div x-data="{ show: false }" class="relative mt-4">
 			<input
 				:type="show ? 'text' : 'password'"
 				name="confirm_password"

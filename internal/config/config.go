@@ -8,13 +8,14 @@ import (
 )
 
 type Config struct {
-	Values  Values
-	DB      DB
-	HTTP    HTTP
-	Logging Logging
-	OAuth   OAuth
-	Token   Token
-	Session Session
+	Values    Values
+	DB        DB
+	HTTP      HTTP
+	Logging   Logging
+	OAuth     OAuth
+	Token     Token
+	Session   Session
+	RateLimit RateLimit
 }
 
 func Load() (*Config, error) {
@@ -42,12 +43,24 @@ func Load() (*Config, error) {
 	if err := cfg.Session.validate(); err != nil {
 		return nil, err
 	}
+	if err := cfg.RateLimit.validate(); err != nil {
+		return nil, err
+	}
 
 	cfg.HTTP.Addr = ":8080"
 
-	cfg.Logging.parse(cfg.Values.AppEnv)
-	cfg.Token.parse()
-	cfg.Session.parse()
+	if err := cfg.Logging.parse(cfg.Values.AppEnv); err != nil {
+		return nil, err
+	}
+	if err := cfg.Token.parse(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Session.parse(); err != nil {
+		return nil, err
+	}
+	if err := cfg.RateLimit.parse(); err != nil {
+		return nil, err
+	}
 
 	if err := cfg.validate(); err != nil {
 		return nil, err

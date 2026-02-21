@@ -18,10 +18,11 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	r.Route("/auth", func(r chi.Router) {
 
 		h := handlers.NewAuthHandler(
-			cfg.Auth,
-			cfg.Session,
-			cfg.Google,
 			handlers.AuthHandlerConfig{
+				AuthService:     cfg.Auth,
+				SessionService:  cfg.Session,
+				Limiter:         cfg.AuthLimiter,
+				Google:          cfg.Google,
 				AccessTokenTTL:  cfg.AccessTokenTTL,
 				RefreshTokenTTL: cfg.RefreshTokenTTL,
 			})

@@ -26,7 +26,7 @@ func (l *Logging) validate() error {
 	return nil
 }
 
-func (l *Logging) parse(appEnv string) {
+func (l *Logging) parse(appEnv string) error {
 	switch appEnv {
 	case "dev":
 		l.Level = "debug"
@@ -35,4 +35,5 @@ func (l *Logging) parse(appEnv string) {
 	default:
 		l.Level = "debug"
 	}
+	return nil
 }

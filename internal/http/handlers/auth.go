@@ -15,12 +15,18 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/http/response"
 	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/toast"
+	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type AuthHandlerConfig struct {
+	AuthService    *auth.Service
+	SessionService *session.Service
+	Limiter        ratelimit.AuthLimiter
+	Google         *google.Client
+
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
 }
@@ -28,21 +34,18 @@ type AuthHandlerConfig struct {
 type AuthHandler struct {
 	auth            *auth.Service
 	session         *session.Service
+	limiter         ratelimit.AuthLimiter
 	google          *google.Client
 	accessTokenTTL  time.Duration
 	refreshTokenTTL time.Duration
 }
 
-func NewAuthHandler(
-	authService *auth.Service,
-	sessionService *session.Service,
-	google *google.Client,
-	cfg AuthHandlerConfig,
-) *AuthHandler {
+func NewAuthHandler(cfg AuthHandlerConfig) *AuthHandler {
 	return &AuthHandler{
-		auth:            authService,
-		session:         sessionService,
-		google:          google,
+		auth:            cfg.AuthService,
+		session:         cfg.SessionService,
+		limiter:         cfg.Limiter,
+		google:          cfg.Google,
 		accessTokenTTL:  cfg.AccessTokenTTL,
 		refreshTokenTTL: cfg.RefreshTokenTTL,
 	}
@@ -93,6 +96,24 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		Provider: domain.ProviderPassword,
 		Email:    email,
 		Password: password,
+	}
+
+	ip := clientIP(r)
+	allowed, err := h.limiter.AllowSignupAttempt(ctx, ip, email)
+	if err != nil || !allowed {
+		signupForm := authview.SignupForm()
+		toastMessage := toast.ToastMessage(
+			toast.Error,
+			"Too many attempts. Please try again later.",
+		)
+
+		_ = Render(
+			w,
+			r,
+			http.StatusTooManyRequests,
+			toast.OOBWrapper(signupForm, toastMessage),
+		)
+		return
 	}
 
 	user, err := h.auth.Signup(ctx, input)
@@ -168,8 +189,26 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		Password: password,
 	}
 
+	ip := clientIP(r)
+	allowed, err := h.limiter.AllowSignupAttempt(ctx, ip, email)
+	if err != nil || !allowed {
+		loginform := authview.LoginForm()
+		toastMessage := toast.ToastMessage(
+			toast.Error,
+			"Too many attempts. Please try again later.",
+		)
+
+		_ = Render(
+			w,
+			r,
+			http.StatusTooManyRequests,
+			toast.OOBWrapper(loginform, toastMessage),
+		)
+		return
+	}
+
 	user, err := h.auth.Login(ctx, input)
-	if err != nil {
+	if err != nil || user == nil {
 		loginForm := authview.LoginForm()
 		toastMessage := toast.ToastMessage(
 			toast.Error,

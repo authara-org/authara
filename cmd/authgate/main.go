@@ -16,6 +16,7 @@ import (
 	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
 	"github.com/alexlup06-authgate/authgate/internal/logging"
+	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/session/token"
 	"github.com/alexlup06-authgate/authgate/internal/store"
@@ -108,6 +109,8 @@ func main() {
 		RequireCSRF:             requireCSRF,
 	}
 
+	limiter := ratelimit.NewInMemoryLimiter(ratelimit.LimiterConfig{})
+
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Version:         Version,
 		Addr:            cfg.HTTP.Addr,
@@ -116,6 +119,7 @@ func main() {
 		Session:         sessionService,
 		Logger:          logger,
 		Store:           store,
+		AuthLimiter:     limiter,
 		Google:          googleClient,
 		AccessTokenTTL:  cfg.Token.AccessTokenTTL,
 		RefreshTokenTTL: cfg.Session.RefreshTokenTTL,
