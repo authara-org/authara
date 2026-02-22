@@ -1,30 +1,58 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
-	"log/slog"
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
 )
 
 func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
+			if strings.HasPrefix(r.URL.Path, "/auth/static/") {
+				next.ServeHTTP(w, r)
+				return
+			}
 
-			// Wrap ResponseWriter to capture status code
-			ww := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+			start := time.Now()
+			ww := &responseWriter{
+				ResponseWriter: w,
+				status:         http.StatusOK,
+			}
 
 			next.ServeHTTP(ww, r)
 
-			logger.Info(
-				"http request",
+			duration := time.Since(start).Milliseconds()
+
+			route := ""
+			if rc := chi.RouteContext(r.Context()); rc != nil {
+				route = rc.RoutePattern()
+			}
+
+			args := []any{
+				"request_id", chimw.GetReqID(r.Context()),
 				"method", r.Method,
 				"path", r.URL.Path,
+				"route", route,
 				"status", ww.status,
-				"duration_ms", time.Since(start).Milliseconds(),
-				"remote_addr", r.RemoteAddr,
-			)
+				"bytes_out", ww.bytes,
+				"duration_ms", duration,
+				"client_ip", r.RemoteAddr,
+				"user_agent", r.UserAgent(),
+			}
+
+			switch {
+			case ww.status >= 500:
+				logger.Error("http request", args...)
+			case ww.status >= 400:
+				logger.Warn("http request", args...)
+			default:
+				logger.Info("http request", args...)
+			}
 		})
 	}
 }
@@ -32,9 +60,16 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 type responseWriter struct {
 	http.ResponseWriter
 	status int
+	bytes  int
 }
 
 func (w *responseWriter) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *responseWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	w.bytes += n
+	return n, err
 }

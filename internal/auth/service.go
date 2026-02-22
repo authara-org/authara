@@ -62,14 +62,6 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (*doma
 	var user domain.User
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		exists, err := s.store.UserExistsByEmail(txCtx, in.Email)
-		if err != nil {
-			return err
-		}
-		if exists {
-			return ErrUserAlreadyExists
-		}
-
 		hash, err := Hash(in.Password)
 		if err != nil {
 			return err
@@ -81,6 +73,9 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (*doma
 
 		created, err := s.store.CreateUser(txCtx, user)
 		if err != nil {
+			if store.IsUniqueViolation(err, store.ConstraintUserEmail) {
+				return ErrUserAlreadyExists
+			}
 			return err
 		}
 		user = created
@@ -186,6 +181,24 @@ func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 
 	err := s.store.DisableUser(ctx, userID, now)
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username string) error {
+	err := ValidateUsername(username)
+	if err != nil {
+		return err
+	}
+
+	err = s.store.UpdateUsername(ctx, userID, username)
+
+	if err != nil {
+		if store.IsUniqueViolation(err, store.ConstraintUserUsername) {
+			return ErrUsernameTaken
+		}
 		return err
 	}
 

@@ -22,6 +22,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				AuthService:     cfg.Auth,
 				SessionService:  cfg.Session,
 				Limiter:         cfg.AuthLimiter,
+				Logger:          cfg.Logger,
 				Google:          cfg.Google,
 				AccessTokenTTL:  cfg.AccessTokenTTL,
 				RefreshTokenTTL: cfg.RefreshTokenTTL,
@@ -47,14 +48,21 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Post("/google/callback", h.GoogleCallback)
 		})
 
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireAppAccessAuth)
+		r.Route("/user", func(r chi.Router) {
+			r.Use(mw.RequireAppAccessAuthWithRefresh)
 
-			r.Get("/user", h.UserGet)
+			r.Get("/account", h.AccountGet)
+
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireCSRF)
+
+				r.Post("/username", h.ChangeUsernamePost)
+			})
+
 		})
 
 		r.Route("/auth/admin", func(r chi.Router) {
-			r.Use(mw.RequireAdminAccessAuth)
+			r.Use(mw.RequireAdminAccessAuthWithRefresh)
 			r.Use(mw.RequireAdminRole)
 
 			r.Group(func(r chi.Router) {
@@ -62,6 +70,12 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Post("/users/{userID}/disable", h.DisableUserPost)
 			})
+		})
+
+		r.Route("/api/v1", func(r chi.Router) {
+			r.Use(mw.RequireAppAccessAuthAPI)
+
+			r.Get("/user", h.UserGet)
 		})
 
 	})

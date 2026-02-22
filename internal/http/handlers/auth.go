@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/alexlup06-authgate/authgate/internal/auth"
 	"github.com/alexlup06-authgate/authgate/internal/domain"
 	"github.com/alexlup06-authgate/authgate/internal/http/authflow"
@@ -15,6 +17,7 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/http/response"
 	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/toast"
+	userview "github.com/alexlup06-authgate/authgate/internal/http/templates/user"
 	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/go-chi/chi/v5"
@@ -25,6 +28,7 @@ type AuthHandlerConfig struct {
 	AuthService    *auth.Service
 	SessionService *session.Service
 	Limiter        ratelimit.AuthLimiter
+	Logger         *slog.Logger
 	Google         *google.Client
 
 	AccessTokenTTL  time.Duration
@@ -35,6 +39,7 @@ type AuthHandler struct {
 	auth            *auth.Service
 	session         *session.Service
 	limiter         ratelimit.AuthLimiter
+	logger          *slog.Logger
 	google          *google.Client
 	accessTokenTTL  time.Duration
 	refreshTokenTTL time.Duration
@@ -45,6 +50,7 @@ func NewAuthHandler(cfg AuthHandlerConfig) *AuthHandler {
 		auth:            cfg.AuthService,
 		session:         cfg.SessionService,
 		limiter:         cfg.Limiter,
+		logger:          cfg.Logger,
 		google:          cfg.Google,
 		accessTokenTTL:  cfg.AccessTokenTTL,
 		refreshTokenTTL: cfg.RefreshTokenTTL,
@@ -87,7 +93,7 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 			w,
 			r,
 			http.StatusUnprocessableEntity,
-			toast.OOBWrapper(signupForm, toastMessage),
+			templ.Join(signupForm, toastMessage),
 		)
 		return
 	}
@@ -111,7 +117,7 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 			w,
 			r,
 			http.StatusTooManyRequests,
-			toast.OOBWrapper(signupForm, toastMessage),
+			templ.Join(signupForm, toastMessage),
 		)
 		return
 	}
@@ -128,7 +134,7 @@ func (h *AuthHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 			w,
 			r,
 			http.StatusUnprocessableEntity,
-			toast.OOBWrapper(signupForm, toastMessage),
+			templ.Join(signupForm, toastMessage),
 		)
 		return
 	}
@@ -202,7 +208,7 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 			w,
 			r,
 			http.StatusTooManyRequests,
-			toast.OOBWrapper(loginform, toastMessage),
+			templ.Join(loginform, toastMessage),
 		)
 		return
 	}
@@ -219,7 +225,7 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 			w,
 			r,
 			http.StatusUnprocessableEntity,
-			toast.OOBWrapper(loginForm, toastMessage),
+			templ.Join(loginForm, toastMessage),
 		)
 		return
 	}
@@ -409,6 +415,123 @@ func (h *AuthHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, response.UserFromDomain(*user))
+}
+
+func (h *AuthHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID, ok := httpcontext.UserID(ctx)
+	if !ok {
+		redirect.Redirect(w, r, "/auth/login?return_to=/auth/user", http.StatusSeeOther)
+		return
+	}
+
+	user, err := h.auth.GetUser(ctx, userID)
+	if err != nil {
+		changeUsernameForm := userview.ChangeUsernameForm(user.Email)
+		toastMessage := toast.ToastMessage(
+			toast.Error,
+			"Failed to load user",
+		)
+
+		_ = Render(
+			w,
+			r,
+			http.StatusUnprocessableEntity,
+			templ.Join(changeUsernameForm, toastMessage),
+		)
+		return
+	}
+
+	_ = Render(
+		w,
+		r,
+		http.StatusOK,
+		userview.Account(user.Username, user.Email, true),
+	)
+}
+
+func (h *AuthHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID, ok := httpcontext.UserID(ctx)
+	if !ok {
+		redirect.Redirect(w, r, "/auth/login?return_to=/auth/user", http.StatusSeeOther)
+		return
+	}
+
+	user, err := h.auth.GetUser(ctx, userID)
+	if err != nil {
+		changeUsernameForm := userview.ChangeUsernameForm(user.Username)
+		toastMessage := toast.ToastMessage(
+			toast.Error,
+			"Failed to load user",
+		)
+
+		_ = Render(
+			w,
+			r,
+			http.StatusUnprocessableEntity,
+			templ.Join(changeUsernameForm, toastMessage),
+		)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		changeUsernameForm := userview.ChangeUsernameForm(user.Username)
+		toastMessage := toast.ToastMessage(
+			toast.Error,
+			"Failed to read new username",
+		)
+
+		_ = Render(
+			w,
+			r,
+			http.StatusUnprocessableEntity,
+			templ.Join(changeUsernameForm, toastMessage),
+		)
+		return
+	}
+
+	username := r.FormValue("username")
+	username = strings.TrimSpace(username)
+
+	err = h.auth.ChangeUsername(ctx, userID, username)
+	if err != nil {
+		status := http.StatusUnprocessableEntity
+		msg := "Could not update username"
+
+		switch {
+		case errors.Is(err, auth.ErrUsernameTaken):
+			msg = "Username is already taken"
+		case errors.Is(err, auth.ErrInvalidUsername):
+			msg = "Invalid username"
+		default:
+			h.logger.Error("change username failed", "err", err)
+			status = http.StatusInternalServerError
+			msg = "Something went wrong"
+		}
+
+		_ = Render(
+			w, r,
+			status,
+			templ.Join(
+				userview.ChangeUsernameForm(user.Username),
+				toast.ToastMessage(toast.Error, msg),
+			),
+		)
+		return
+	}
+
+	_ = Render(
+		w, r,
+		http.StatusOK,
+		templ.Join(
+			userview.ChangeUsernameForm(username),
+			toast.ToastMessage(toast.Success, "Username updated"),
+			userview.DisplayUsername(username),
+		),
+	)
 }
 
 func (h *AuthHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {

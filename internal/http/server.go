@@ -34,9 +34,10 @@ type ServerConfig struct {
 type Middlewares struct {
 	RedirectIfAuthenticated func(http.Handler) http.Handler
 
-	RequireAppAccessAuth   func(http.Handler) http.Handler
-	RequireAdminAccessAuth func(http.Handler) http.Handler
-	RequireAdminRole       func(http.Handler) http.Handler
+	RequireAppAccessAuthWithRefresh   func(http.Handler) http.Handler
+	RequireAppAccessAuthAPI           func(http.Handler) http.Handler
+	RequireAdminAccessAuthWithRefresh func(http.Handler) http.Handler
+	RequireAdminRole                  func(http.Handler) http.Handler
 
 	RequireCSRF func(http.Handler) http.Handler
 }

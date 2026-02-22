@@ -28,7 +28,9 @@ CREATE TABLE IF NOT EXISTS authgate.users (
 	username varchar(255) NOT NULL,
 	email varchar(255) NOT NULL,
 	disabled_at timestamptz,
-	CONSTRAINT unique_user_email UNIQUE (email)
+
+	CONSTRAINT unique_user_email UNIQUE (email),
+	CONSTRAINT unuique_user_username UNIQUE (username)
 );
 
 DROP TRIGGER IF EXISTS trg_user_updated_at ON authgate.users;
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS authgate.auth_providers (
 	provider_user_id varchar(255),
 	password_hash varchar(255),
 	two_factor_authentication boolean NOT NULL DEFAULT false,
+	
 	CONSTRAINT unique_user_provider UNIQUE (user_id, provider)
 );
 

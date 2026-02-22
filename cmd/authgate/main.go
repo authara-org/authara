@@ -96,20 +96,47 @@ func main() {
 	googleClient := google.New(cfg.OAuth.GoogleClientID)
 
 	redirectIfAuthenticated := httpmiddleware.RedirectIfAuthenticated(sessionService, time.Now)
-	requireAppAccessAuth := httpmiddleware.RequireAccessAuth(sessionService, token.AudienceApp, time.Now)
-	requireAdminAccessAuth := httpmiddleware.RequireAccessAuth(sessionService, token.AudienceAdmin, time.Now)
+	requireAppAccessAuthAPI := httpmiddleware.RequireAccessAuth(sessionService, token.AudienceApp, time.Now)
+	requireAppAccessAuthWithRefresh := httpmiddleware.RequireAccessAuthWithRefresh(
+		sessionService,
+		token.AudienceApp,
+		cfg.Token.AccessTokenTTL,
+		cfg.Session.RefreshTokenTTL,
+		time.Now,
+	)
+	requireAdminAccessAuthWithRefresh := httpmiddleware.RequireAccessAuthWithRefresh(
+		sessionService,
+		token.AudienceAdmin,
+		cfg.Token.AccessTokenTTL,
+		cfg.Session.RefreshTokenTTL,
+		time.Now,
+	)
 	requireAdminRole := httpmiddleware.RequireAdmin
 	requireCSRF := httpmiddleware.RequireCSRF
 
 	mw := httpserver.Middlewares{
-		RedirectIfAuthenticated: redirectIfAuthenticated,
-		RequireAppAccessAuth:    requireAppAccessAuth,
-		RequireAdminAccessAuth:  requireAdminAccessAuth,
-		RequireAdminRole:        requireAdminRole,
-		RequireCSRF:             requireCSRF,
+		RedirectIfAuthenticated:           redirectIfAuthenticated,
+		RequireAppAccessAuthAPI:           requireAppAccessAuthAPI,
+		RequireAppAccessAuthWithRefresh:   requireAppAccessAuthWithRefresh,
+		RequireAdminAccessAuthWithRefresh: requireAdminAccessAuthWithRefresh,
+		RequireAdminRole:                  requireAdminRole,
+		RequireCSRF:                       requireCSRF,
 	}
 
-	limiter := ratelimit.NewInMemoryLimiter(ratelimit.LimiterConfig{})
+	limiter := ratelimit.NewInMemoryLimiter(ratelimit.LimiterConfig{
+		LoginIPLimit:     cfg.RateLimit.LoginIPLimit,
+		LoginIPWindow:    cfg.RateLimit.LoginIPWindow,
+		LoginEmailLimit:  cfg.RateLimit.LoginEmailLimit,
+		LoginEmailWindow: cfg.RateLimit.LoginEmailWindow,
+
+		SignupIPLimit:     cfg.RateLimit.SignupIPLimit,
+		SignupIPWindow:    cfg.RateLimit.SignupIPWindow,
+		SignupEmailLimit:  cfg.RateLimit.SignupEmailLimit,
+		SignupEmailWindow: cfg.RateLimit.SignupEmailWindow,
+
+		CleanupEvery: cfg.RateLimit.CleanupEvery,
+		MaxEntries:   cfg.RateLimit.MaxEntries,
+	})
 
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Version:         Version,

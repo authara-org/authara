@@ -141,3 +141,16 @@ func (s *Store) IsUserDisabled(ctx context.Context, userID uuid.UUID) (bool, err
 
 	return exists, err
 }
+
+func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username string) error {
+	res := s.dbFromContext(ctx).
+		Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("username", username)
+
+	if res.RowsAffected == 0 {
+		return ErrUserNotFound
+	}
+
+	return res.Error
+}

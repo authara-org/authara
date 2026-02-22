@@ -7,4 +7,6 @@ var (
 	ErrUserAlreadyExists     = errors.New("user already exists")
 	ErrUnsupportedProvider   = errors.New("auth provider is not supported")
 	ErrAccountExistsMustLink = errors.New("account exists; must link provider explicitly")
+	ErrUsernameTaken         = errors.New("username already taken")
+	ErrInvalidUsername       = errors.New("invalid username")
 )
