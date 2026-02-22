@@ -5,9 +5,8 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/icons"
 )
 
-templ GoogleSignin(inOrUp string) {
+templ GoogleSignin(action string) {
 	<script src="https://accounts.google.com/gsi/client" async></script>
-	<!-- Custom Button -->
 	<button
 		id="google-signin-btn"
 		class="relative w-full flex items-center cursor-pointer justify-center gap-3 h-12 px-4 border-2 border-gray-200 rounded-xl
@@ -20,7 +19,7 @@ templ GoogleSignin(inOrUp string) {
 			data-auto_prompt="false"
 		></div>
 		<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="h-4.5 w-4.5" alt="Google logo"/>
-		<span>{ inOrUp } with Google</span>
+		<span>{ action } with Google</span>
 		<div class="opacity-0 absolute left-0">
 			<div
 				class="g_id_signin"
@@ -46,7 +45,7 @@ templ GoogleSignin(inOrUp string) {
 	</button>
 }
 
-templ AppleSignin(inOrUp string) {
+templ AppleSignin(action string) {
 	// <div id="appleid-signin" class="h-10" data-color="black" data-border="true" data-type="sign-in"></div>
 	// <script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>
 	<button
@@ -54,6 +53,6 @@ templ AppleSignin(inOrUp string) {
 				text-base rounded-xl px-6 h-12"
 	>
 		@icons.AppleLogoMediumWhite()
-		{ inOrUp } with Apple
+		{ action } with Apple
 	</button>
 }

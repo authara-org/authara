@@ -3,54 +3,46 @@ package auth
 import (
 	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/button"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/icons"
 )
 
 templ Login() {
-	if ctx.Value("HX-Request")==nil {
-		@templates.Layout() {
-			@login()
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@HeaderSection("Welcome Back!", "Enter to get unlimited access.")
+			@LoginForm()
+			<div class="relative flex justify-center my-5">
+				<p class="bg-white text-sm px-4">Or, Login with</p>
+				<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 -z-10"></div>
+			</div>
+			<div class="flex flex-col gap-2 mb-6">
+				@GoogleSignin("Sign in")
+			</div>
+			<div class="text-center">
+				<p>
+					Don't have an Account? &nbsp;
+					<a
+						hx-get={ "/auth/signup?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
+						hx-target="#body"
+						hx-push-url="true"
+						class="cursor-pointer underline text-blue-800"
+					>
+						Create an account
+					</a>
+				</p>
+			</div>
 		}
-	} else {
-		@login()
-	}
-}
-
-templ login() {
-	@AuthLayout() {
-		@HeaderSection("Welcome Back!", "Enter to get unlimited access.")
-		@LoginForm()
-		<div class="relative flex justify-center my-5">
-			<p class="bg-white text-sm px-4">Or, Login with</p>
-			<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 -z-10"></div>
-		</div>
-		<div class="flex flex-col gap-2 mb-6">
-			// @AppleSignin("Sign in")
-			@GoogleSignin("Sign in")
-		</div>
-		<div class="text-center">
-			<p>
-				Don't have an Account? &nbsp;
-				<a
-					hx-get={ "/auth/signup?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
-					hx-target="#body"
-					hx-push-url="true"
-					class="cursor-pointer underline text-blue-800"
-				>
-					Create an account
-				</a>
-			</p>
-		</div>
 	}
 }
 
 templ LoginForm() {
 	<form
+		x-data
 		autocomplete="on"
 		hx-post={ "/auth/login?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
 		hx-target="this"
 		hx-swap="outerHTML"
-		hx-indicator="#submit-button"
 	>
 		@CSRFInput()
 		<label for="email" class="pb-4 text-grey-800">
@@ -102,7 +94,6 @@ templ LoginForm() {
 					checked
 				/>
 				<div class="h-4.5 w-4.5 rounded-md border-2 border-blue-600 flex items-center justify-center peer-checked:bg-blue-600 transition">
-					<!-- Checkmark -->
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 20 20"
@@ -125,28 +116,6 @@ templ LoginForm() {
 				</a>
 			</div>
 		</div>
-		<button
-			id="submit-button"
-			type="submit"
-			class="bg-blue-600 w-full rounded-xl px-4 py-3 text-white cursor-pointer relative"
-		>
-			<div
-				id="submit-label"
-				class="flex items-center justify-center gap-2"
-			>
-				<div class="h-6 w-6">
-					@icons.Login()
-				</div>
-				Log In
-			</div>
-			<div
-				id="loading-indicator-submit"
-				class="absolute inset-0 flex items-center justify-center"
-			>
-				<div class="h-8 w-8">
-					@SpinningSVG()
-				</div>
-			</div>
-		</button>
+		@button.LoadingButton("Login", icons.Login(), "")
 	</form>
 }
