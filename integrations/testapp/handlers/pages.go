@@ -52,15 +52,18 @@ func Private(w http.ResponseWriter, r *http.Request) {
 				<h1>Private Page</h1>
 				<p>You are authenticated.</p>
 				<p><strong>Email:</strong> %s</p>
+				<p><strong>Username:</strong> %s</p>
 
 				<form method="%s" action="%s">
 					<input type="hidden" name="%s" value="%s">
 					<button type="submit">Logout</button>
 				</form>
+				<a href="/auth/user/account">Show Account</a>
 			</body>
 		</html>
 	`,
 		html.EscapeString(user.Email),
+		html.EscapeString(user.Username),
 		logout.Method,
 		logout.Action,
 		logout.CSRFName,
