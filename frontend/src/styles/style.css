@@ -5,14 +5,11 @@
   display: none !important;
 }
 
-#submit-button > #loading-indicator-submit {
-  opacity: 0;
-}
+.btn-loading > .btn-spinner { opacity: 0; pointer-events: none; }
+.btn-loading > .btn-label { visibility: visible; }
 
-#submit-button.htmx-request > #submit-label {
-  visibility: hidden;
-}
+.btn-loading.htmx-request > .btn-label { visibility: hidden; }
+.btn-loading.htmx-request > .btn-spinner { opacity: 1; }
 
-#submit-button.htmx-request > #loading-indicator-submit {
-  opacity: 1;
-}
+.htmx-request .btn-loading > .btn-label { visibility: hidden; }
+.htmx-request .btn-loading > .btn-spinner { opacity: 1; }
