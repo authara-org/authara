@@ -4,6 +4,10 @@ github.com/alexlup06-authgate/authgate-go v0.3.0 h1:3DlxONv2E78ilCgxzR4QEwu1LtOP
 github.com/alexlup06-authgate/authgate-go v0.3.0/go.mod h1:QjJvZSqRWNyGWk3cDjsVex2KyoYdHyyJWyMbwp2XAAI=
 github.com/alexlup06-authgate/authgate-go v0.3.2 h1:OvYhJFj2y2DbCSSgwxhMbHuW6xS8tk/j2aWaf19ePzQ=
 github.com/alexlup06-authgate/authgate-go v0.3.2/go.mod h1:QjJvZSqRWNyGWk3cDjsVex2KyoYdHyyJWyMbwp2XAAI=
+github.com/alexlup06-authgate/authgate-go v0.4.0 h1:P9KdzGiOE3KjRk0aKI8Cc9T6hCN5qsceUHewKDXblc4=
+github.com/alexlup06-authgate/authgate-go v0.4.0/go.mod h1:QjJvZSqRWNyGWk3cDjsVex2KyoYdHyyJWyMbwp2XAAI=
+github.com/alexlup06-authgate/authgate-go v0.4.1 h1:ueXOBLJj3km78QnbV15uX+4ylFVWcdKvWgR680Ns5Bc=
+github.com/alexlup06-authgate/authgate-go v0.4.1/go.mod h1:QjJvZSqRWNyGWk3cDjsVex2KyoYdHyyJWyMbwp2XAAI=
 github.com/go-chi/chi/v5 v5.2.3 h1:WQIt9uxdsAbgIYgid+BpYc+liqQZGMHRaUwp0JUcvdE=
 github.com/go-chi/chi/v5 v5.2.3/go.mod h1:L2yAIGWB3H+phAw1NxKwWM+7eUH/lU8pOMm5hHcoops=
 github.com/golang-jwt/jwt/v5 v5.2.1 h1:OuVbFODueb089Lh128TAcimifWaLhJwVflnrgM17wHk=

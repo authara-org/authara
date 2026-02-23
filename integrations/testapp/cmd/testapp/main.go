@@ -15,13 +15,14 @@ import (
 func main() {
 	r := chi.NewRouter()
 
-	sdk, err := authgate.New(authgate.Config{
+	appSdk, err := authgate.New(authgate.Config{
 		Audience: "app",
 		Issuer:   "authgate",
 		Keys: map[string][]byte{
 			"key-2026-01": mustKey("VZp2u1sYz0g2nF2vY8q8dP7cZQpL5cRrXn0k7FZ0xkE="),
 			"key-2025-09": mustKey("Qk8K6E3XrV6mF4T9yZcA2p9xYbDqZpM0JwH3uZ8sL1E="),
 		},
+		AuthGateBaseURL: "http://authgate:8080",
 	})
 
 	if err != nil {
@@ -35,7 +36,7 @@ func main() {
 	r.Get("/", handlers.Home)
 
 	r.Group(func(r chi.Router) {
-		r.Use(sdk.RequireAuth)
+		r.Use(appSdk.RequireAuthWithRefresh)
 		r.Get("/private", handlers.Private)
 	})
 

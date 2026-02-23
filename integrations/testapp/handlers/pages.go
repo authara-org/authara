@@ -58,7 +58,7 @@ func Private(w http.ResponseWriter, r *http.Request) {
 					<input type="hidden" name="%s" value="%s">
 					<button type="submit">Logout</button>
 				</form>
-				<a href="/auth/user/account">Show Account</a>
+				<a href="/auth/account">Show Account</a>
 			</body>
 		</html>
 	`,
