@@ -1,0 +1,67 @@
+package user
+
+import (
+	"encoding/json"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/button"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/icons"
+)
+
+func usernameFormState(username string) string {
+	u, _ := json.Marshal(username)
+
+	return `(() => {
+		  const u = ` + string(u) + `;
+		  return {
+		    username: u,
+		    initialUsername: u,
+		    get unchanged() { return this.username === this.initialUsername },
+		  };
+		})()`
+}
+
+templ ChangeUsernameForm(username string) {
+	<form
+		x-data={ usernameFormState(username) }
+		autocomplete="on"
+		hx-post="/auth/user/username"
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="space-y-3"
+	>
+		@CSRFInput()
+		@UsernameField()
+		<p class="text-xs text-grey-600">
+			This is your public display name.
+		</p>
+		<div class="flex items-center gap-2">
+			<div class="w-fit">
+				@button.LoadingButton("Save", nil, "unchanged")
+			</div>
+			<span class="text-xs text-grey-600">
+				Allowed: letters, digits, <span class="font-mono">-</span> and <span class="font-mono">_</span>
+			</span>
+		</div>
+	</form>
+}
+
+templ UsernameField() {
+	<label for="username" class="block text-sm text-grey-800">
+		<div class="font-medium">Username</div>
+	</label>
+	<div class="relative">
+		<div class="absolute inset-y-0 left-0 pl-4 flex items-center text-grey-600">
+			<span class="text-sm h-5 aspect-square stroke-2">
+				@icons.At()
+			</span>
+		</div>
+		<input
+			id="username"
+			name="username"
+			type="text"
+			x-model="username"
+			placeholder="your_username"
+			class="border-2 border-grey-100 w-full rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+			required
+		/>
+	</div>
+}

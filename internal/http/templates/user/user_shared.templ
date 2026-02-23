@@ -1,0 +1,17 @@
+package user
+
+import httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
+
+templ DisplayUsername(name string) {
+	<h1
+		id="display-username"
+		class="text-3xl font-semibold text-grey-900"
+		hx-swap-oob="true"
+	>{ name }</h1>
+}
+
+templ CSRFInput() {
+	if tok, ok := httpcontext.CSRFToken(ctx); ok {
+		<input type="hidden" name="csrf_token" value={ tok }/>
+	}
+}
