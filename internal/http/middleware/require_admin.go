@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
+	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
 )
 
 func RequireAdmin(next http.Handler) http.Handler {

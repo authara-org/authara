@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
+	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/session/token"
 )

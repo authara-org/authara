@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
-	"github.com/alexlup06-authgate/authgate/internal/http/csrf"
-	"github.com/alexlup06-authgate/authgate/internal/http/redirect"
+	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 )
 

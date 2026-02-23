@@ -1,14 +1,14 @@
-package handlers
+package auth
 
 import "strings"
 
-func isValidEmail(email string) bool {
+func IsValidEmail(email string) bool {
 	if len(email) > 254 {
 		return false
 	}
 	return strings.Contains(email, "@")
 }
 
-func isValidPassword(pw string) bool {
+func IsValidPassword(pw string) bool {
 	return len(pw) >= 8 && len(pw) <= 128
 }

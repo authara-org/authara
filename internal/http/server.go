@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/auth"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/providers/google"
 	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
-	"github.com/alexlup06-authgate/authgate/internal/http/providers/google"
 	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/store"

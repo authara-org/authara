@@ -1,84 +1,109 @@
 package http
 
 import (
-	"github.com/alexlup06-authgate/authgate/internal/http/handlers"
-	"github.com/alexlup06-authgate/authgate/internal/http/middleware"
+	authhandler "github.com/alexlup06-authgate/authgate/internal/http/handlers/auth"
+	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/api"
+	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/ui"
+	"github.com/alexlup06-authgate/authgate/internal/http/handlers/meta"
 	"github.com/go-chi/chi/v5"
 )
 
 func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
-
 	r.Group(func(r chi.Router) {
-
-		r.Get("/auth/health", handlers.Health)
-		r.Get("/auth/version", handlers.Version(cfg.Version))
-
+		r.Get("/auth/health", meta.Health)
+		r.Get("/auth/version", meta.Version(cfg.Version))
 	})
 
+	deps := authhandler.Deps{
+		Auth:       cfg.Auth,
+		Session:    cfg.Session,
+		Limiter:    cfg.AuthLimiter,
+		Logger:     cfg.Logger,
+		Google:     cfg.Google,
+		AccessTTL:  cfg.AccessTokenTTL,
+		RefreshTTL: cfg.RefreshTokenTTL,
+	}
+
+	uih := ui.NewUIHandler(deps)
+	apih := api.NewAPIHandler(deps)
+
 	r.Route("/auth", func(r chi.Router) {
+		// Auth
+		r.Group(func(r chi.Router) {
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RedirectIfAuthenticated)
 
-		h := handlers.NewAuthHandler(
-			handlers.AuthHandlerConfig{
-				AuthService:     cfg.Auth,
-				SessionService:  cfg.Session,
-				Limiter:         cfg.AuthLimiter,
-				Logger:          cfg.Logger,
-				Google:          cfg.Google,
-				AccessTokenTTL:  cfg.AccessTokenTTL,
-				RefreshTokenTTL: cfg.RefreshTokenTTL,
+				// r.Get("/login", uih.LoginPage)
+				r.Get("/signup", uih.SignupPage)
 			})
-
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RedirectIfAuthenticated)
-
-			r.Get("/login", h.LoginPage)
-			r.Get("/signup", h.SignupPage)
-		})
-
-		r.Group(func(r chi.Router) {
-			r.Use(middleware.RequireCSRF)
-
-			r.Post("/signup", h.SignupPost)
-			r.Post("/login", h.LoginPost)
-			r.Post("/logout", h.LogoutPost)
-			r.Post("/refresh", h.RefreshPost)
-		})
-
-		r.Route("/oauth", func(r chi.Router) {
-			r.Post("/google/callback", h.GoogleCallback)
-		})
-
-		r.Route("/user", func(r chi.Router) {
-			r.Use(mw.RequireAppAccessAuthWithRefresh)
-
-			r.Get("/account", h.AccountGet)
 
 			r.Group(func(r chi.Router) {
-				r.Use(middleware.RequireCSRF)
+				r.Use(mw.RequireCSRF)
 
-				r.Post("/username", h.ChangeUsernamePost)
+				r.Post("/signup", uih.SignupPost)
+				r.Post("/login", uih.LoginPost)
+				r.Post("/sessions/logout", uih.LogoutPost)
+				r.Post("/sessions/refresh", uih.RefreshPost)
 			})
 
+			r.Route("/oauth", func(r chi.Router) {
+				r.Post("/google/callback", uih.GoogleCallback)
+			})
 		})
 
-		r.Route("/auth/admin", func(r chi.Router) {
+		// regular user
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireAppAccessAuthWithRefresh)
+
+			r.Get("/account", uih.AccountGet)
+
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireCSRF)
+
+				r.Post("/user/username", uih.ChangeUsernamePost)
+			})
+		})
+
+		// admin
+		r.Route("/admin", func(r chi.Router) {
 			r.Use(mw.RequireAdminAccessAuthWithRefresh)
 			r.Use(mw.RequireAdminRole)
 
+			// UI
 			r.Group(func(r chi.Router) {
-				r.Use(middleware.RequireCSRF)
 
-				r.Post("/users/{userID}/disable", h.DisableUserPost)
+			})
+
+			// API
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireCSRF)
+
+				r.Post("/users/{userID}/disable", uih.DisableUserPost)
 			})
 		})
 
+		// API
 		r.Route("/api/v1", func(r chi.Router) {
-			r.Use(mw.RequireAppAccessAuthAPI)
+			r.Get("/csrf", apih.CSRFGet)
 
-			r.Get("/user", h.UserGet)
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireCSRF)
+
+				r.Post("/login", apih.LoginPost)
+				r.Post("/signup", apih.SignupPost)
+				r.Post("/sessions/logout", apih.LogoutPost)
+				r.Post("/sessions/refresh", apih.RefreshPost)
+
+			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireAppAccessAuthAPI)
+
+				r.Get("/user", apih.UserGet)
+			})
 		})
 
 	})
 
-	handlers.RegisterStatic(r, handlers.StaticConfig{Dev: cfg.Dev})
+	meta.RegisterStatic(r, meta.StaticConfig{Dev: cfg.Dev})
 }

@@ -1,11 +1,11 @@
-package handlers
+package render
 
 import (
 	"net/http"
 
 	"github.com/a-h/templ"
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/context"
-	"github.com/alexlup06-authgate/authgate/internal/http/csrf"
+	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
 )
 
 func Render(
