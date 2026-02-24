@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 )
@@ -31,7 +31,7 @@ func RedirectIfAuthenticated(sessionService *session.Service, now func() time.Ti
 				now(),
 			)
 			if err == nil {
-				returnTo, ok := httpcontext.ReturnTo(r.Context())
+				returnTo, ok := httpctx.ReturnTo(r.Context())
 				if !ok {
 					returnTo = "/"
 				}

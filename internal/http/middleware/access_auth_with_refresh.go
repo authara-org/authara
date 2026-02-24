@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"time"
 
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/session/token"
@@ -30,9 +30,9 @@ func RequireAccessAuthWithRefresh(
 			if accessToken, ok := session.ReadAccessToken(r); ok && accessToken != "" {
 				identity, err := sessionSvc.ValidateAccessToken(ctx, accessToken, now())
 				if err == nil {
-					ctx = httpcontext.WithUserID(ctx, identity.UserID)
-					ctx = httpcontext.WithRoles(ctx, identity.Roles)
-					ctx = httpcontext.WithSessionID(ctx, identity.SessionID)
+					ctx = httpctx.WithUserID(ctx, identity.UserID)
+					ctx = httpctx.WithRoles(ctx, identity.Roles)
+					ctx = httpctx.WithSessionID(ctx, identity.SessionID)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -55,9 +55,9 @@ func RequireAccessAuthWithRefresh(
 					// populate context from new access token
 					identity, err := sessionSvc.ValidateAccessToken(ctx, newAccess, now())
 					if err == nil {
-						ctx = httpcontext.WithUserID(ctx, identity.UserID)
-						ctx = httpcontext.WithRoles(ctx, identity.Roles)
-						ctx = httpcontext.WithSessionID(ctx, identity.SessionID)
+						ctx = httpctx.WithUserID(ctx, identity.UserID)
+						ctx = httpctx.WithRoles(ctx, identity.Roles)
+						ctx = httpctx.WithSessionID(ctx, identity.SessionID)
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
 					}
@@ -71,7 +71,7 @@ func RequireAccessAuthWithRefresh(
 			}
 
 			// 3) Not authenticated -> redirect to login (HTMX-safe)
-			returnTo, ok := httpcontext.ReturnTo(ctx)
+			returnTo, ok := httpctx.ReturnTo(ctx)
 			if !ok || returnTo == "" {
 				returnTo = "/"
 			}

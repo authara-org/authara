@@ -1,11 +1,12 @@
-package authflow
+package flow
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 )
@@ -19,7 +20,7 @@ func TryRedirectAuthenticated(
 ) bool {
 	now := time.Now()
 
-	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	returnTo, ok := httpctx.ReturnTo(r.Context())
 	if !ok {
 		current := r.URL.Path
 		if r.URL.RawQuery != "" {
@@ -51,6 +52,7 @@ func TryRedirectAuthenticated(
 
 		session.ClearSessionCookies(w)
 	}
+	fmt.Println("no refresh")
 
 	return false
 }

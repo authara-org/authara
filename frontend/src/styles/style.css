@@ -13,3 +13,8 @@
 
 .htmx-request .btn-loading > .btn-label { visibility: hidden; }
 .htmx-request .btn-loading > .btn-spinner { opacity: 1; }
+
+.modal-backdrop-blur {
+  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.4);
+}

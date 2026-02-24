@@ -1,14 +1,14 @@
 package user
 
 import (
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/button"
 )
 
 templ AccountFooterActions() {
 	<div class="p-6 sm:p-8 bg-grey-50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
 		<form
-			hx-post={ templ.SafeURL("/auth/logout?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/private")) }
+			hx-post={ templ.SafeURL("/auth/sessions/logout?return_to=" + httpctx.ReturnToOrDefault(ctx, "/private")) }
 			class="w-full sm:w-auto"
 		>
 			@CSRFInput()

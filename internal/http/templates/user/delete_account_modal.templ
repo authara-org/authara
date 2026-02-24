@@ -1,0 +1,68 @@
+package user
+
+import (
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/button"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/csrf"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/icons"
+)
+
+templ DeleteAccountModal() {
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop-blur"
+		data-purpose="confirmation-modal"
+		id="delete-modal"
+		x-show="deleteOpen"
+		x-cloak
+		x-transition.opacity
+		@keydown.escape.window="deleteOpen = false"
+		aria-hidden="true"
+	>
+		<!-- Backdrop -->
+		<div class="absolute inset-0" @click="deleteOpen = false"></div>
+		<!-- Modal Container -->
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="modal-headline"
+			class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all"
+			x-show="deleteOpen"
+			x-transition.scale.origin.center
+			@click.stop
+		>
+			<!-- Header -->
+			<div class="px-6 pt-8 pb-4 text-center">
+				<div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+					<div class="h-6 w-6 stroke-2 text-red-600">
+						@icons.Attention()
+					</div>
+				</div>
+				<h3 class="text-xl font-bold text-gray-900" id="modal-headline">
+					Delete your account?
+				</h3>
+			</div>
+			<!-- Body -->
+			<div class="px-8 pb-8">
+				<p class="text-sm text-gray-600 text-center leading-relaxed">
+					This action is permanent and cannot be undone. All your data will be permanently removed.
+				</p>
+			</div>
+			<!-- Actions -->
+			<form
+				hx-post="/auth/user/delete"
+				hx-swap="none"
+			>
+				<div class="px-6 py-4 bg-gray-50 flex flex-col sm:flex-row-reverse gap-3">
+					@csrf.CSRFInput()
+					@button.LoadingButton("Delete Account", nil, "")
+					<button
+						type="button"
+						class="w-full rounded-xl px-4 py-3 text-grey-500 border-2 border-grey-400 cursor-pointer"
+						@click="deleteOpen = false"
+					>
+						Cancel
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+}

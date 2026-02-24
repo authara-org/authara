@@ -1,7 +1,7 @@
 package user
 
 import (
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/icons"
 )
 
@@ -44,7 +44,7 @@ templ AccountLinkedAccounts(googleConnected bool) {
 				</button>
 			} else {
 				<a
-					href={ templ.SafeURL("/auth/login?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/")) }
+					href={ templ.SafeURL("/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/")) }
 					class="text-sm font-semibold text-blue-800 underline"
 				>
 					Connect

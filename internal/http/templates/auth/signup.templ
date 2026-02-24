@@ -1,9 +1,10 @@
 package auth
 
 import (
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/button"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/csrf"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/icons"
 )
 
@@ -37,7 +38,7 @@ templ Signup() {
 				<p>
 					Already have an account ? &nbsp;
 					<a
-						hx-get={ "/auth/login?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
+						hx-get={ "/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 						hx-target="#body"
 						hx-push-url="true"
 						class="cursor-pointer underline text-blue-800"
@@ -56,12 +57,12 @@ templ SignupForm() {
 		x-show="open"
 		x-data="{password: '', confirm: ''}"
 		autocomplete="on"
-		hx-post={ "/auth/signup?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
+		hx-post={ "/auth/signup?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 		hx-target="this"
 		hx-swap="outerHTML"
 		hx-indicator="#submit-button"
 	>
-		@CSRFInput()
+		@csrf.CSRFInput()
 		<label for="email" class="pb-4 text-grey-800">
 			<div class="pb-2">Email <span class="text-red-600">*</span></div>
 		</label>

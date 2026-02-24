@@ -6,7 +6,7 @@ import (
 
 	"github.com/alexlup06-authgate/authgate/internal/auth"
 	"github.com/alexlup06-authgate/authgate/internal/domain"
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 )
@@ -56,7 +56,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	returnTo, ok := httpctx.ReturnTo(r.Context())
 	if !ok {
 		returnTo = "/"
 	}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/alexlup06-authgate/authgate/internal/auth"
 	authhandler "github.com/alexlup06-authgate/authgate/internal/http/handlers/auth"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/providers/google"
+	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
 	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 )

@@ -1,7 +1,7 @@
 package auth
 
 import (
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/icons"
 )
 
@@ -15,7 +15,7 @@ templ GoogleSignin(action string) {
 		<div
 			id="g_id_onload"
 			data-client_id="746226029362-45jlp3v84tkmt8u60knci2u7r2pckc21.apps.googleusercontent.com"
-			data-login_uri={ "/auth/oauth/google/callback?return_to=" + httpcontext.ReturnToOrDefault(ctx, "/") }
+			data-login_uri={ "/auth/oauth/google/callback?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 			data-auto_prompt="false"
 		></div>
 		<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="h-4.5 w-4.5" alt="Google logo"/>

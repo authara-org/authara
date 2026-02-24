@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/auth"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/providers/google"
 	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
+	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
 	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/store"
@@ -40,6 +40,8 @@ type Middlewares struct {
 	RequireAdminRole                  func(http.Handler) http.Handler
 
 	RequireCSRF func(http.Handler) http.Handler
+
+	ReturnTo func(http.Handler) http.Handler
 }
 
 type Server struct {
@@ -48,8 +50,6 @@ type Server struct {
 
 func NewServer(cfg ServerConfig, mw Middlewares) *Server {
 	r := chi.NewRouter()
-
-	r.Use(httpmiddleware.ReturnTo)
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)

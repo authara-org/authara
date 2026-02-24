@@ -171,16 +171,10 @@ func (s *Store) ConsumeRefreshToken(ctx context.Context, tokenID uuid.UUID, cons
 }
 
 func (s *Store) DeleteRefreshTokensBySession(ctx context.Context, sessionID uuid.UUID) error {
-	err := s.dbFromContext(ctx).
+	return s.dbFromContext(ctx).
 		Where("session_id = ?", sessionID.String()).
 		Delete(&model.RefreshToken{}).
 		Error
-
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time) error {

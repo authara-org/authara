@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/session/token"
 )
@@ -27,9 +27,9 @@ func RequireAccessAuth(sessionSvc *session.Service, audience token.Audience, now
 				return
 			}
 
-			ctx = httpcontext.WithUserID(ctx, identity.UserID)
-			ctx = httpcontext.WithRoles(ctx, identity.Roles)
-			ctx = httpcontext.WithSessionID(ctx, identity.SessionID)
+			ctx = httpctx.WithUserID(ctx, identity.UserID)
+			ctx = httpctx.WithRoles(ctx, identity.Roles)
+			ctx = httpctx.WithSessionID(ctx, identity.SessionID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

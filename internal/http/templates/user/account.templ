@@ -4,8 +4,11 @@ import "github.com/alexlup06-authgate/authgate/internal/http/templates"
 
 templ Account(username, email string, googleConnected bool) {
 	@templates.PartialRender() {
-		<div class="min-h-screen bg-background-light">
-			<main class="mx-auto max-w-3xl px-4 sm:px-6 py-10">
+		<div
+			x-data="{ deleteOpen: false }"
+			class="min-h-screen bg-background-light"
+		>
+			<div class="mx-auto max-w-3xl px-4 sm:px-6 py-10">
 				@AccountProfileHeader(username, email)
 				<div class="rounded-2xl border border-grey-200 bg-white overflow-hidden">
 					@AccountPersonalInfo(username, email)
@@ -13,7 +16,8 @@ templ Account(username, email string, googleConnected bool) {
 					@AccountFooterActions()
 				</div>
 				@AccountDangerZone()
-			</main>
+			</div>
+			@DeleteAccountModal()
 		</div>
 	}
 }

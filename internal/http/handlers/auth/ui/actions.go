@@ -11,7 +11,7 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/auth"
 	"github.com/alexlup06-authgate/authgate/internal/domain"
 	authhandler "github.com/alexlup06-authgate/authgate/internal/http/handlers/auth"
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/httputil"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
@@ -93,7 +93,7 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	returnTo, ok := httpctx.ReturnTo(r.Context())
 	if !ok {
 		returnTo = "/"
 	}
@@ -171,7 +171,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	returnTo, ok := httpctx.ReturnTo(r.Context())
 	if !ok {
 		returnTo = "/"
 	}
@@ -201,7 +201,7 @@ func (h *UIHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 
 	session.ClearSessionCookies(w)
 
-	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	returnTo, ok := httpctx.ReturnTo(r.Context())
 	if !ok {
 		returnTo = "/"
 	}
@@ -212,7 +212,7 @@ func (h *UIHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 func (h *UIHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 
-	returnTo, ok := httpcontext.ReturnTo(r.Context())
+	returnTo, ok := httpctx.ReturnTo(r.Context())
 	if !ok {
 		returnTo = r.URL.Path
 		if r.URL.RawQuery != "" {
@@ -248,7 +248,7 @@ func (h *UIHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := httpcontext.UserID(ctx)
+	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		redirect.Redirect(w, r, "/auth/login?return_to=/auth/user", http.StatusSeeOther)
 		return
@@ -357,4 +357,38 @@ func (h *UIHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: Change to htmx reponse
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	returnTo, ok := httpctx.ReturnTo(r.Context())
+	if !ok {
+		returnTo = "/"
+	}
+
+	userID, ok := httpctx.UserID(ctx)
+	if !ok {
+		redirect.Redirect(w, r, "/auth/login?return_to=/auth/account"+url.QueryEscape(returnTo), http.StatusSeeOther)
+		return
+	}
+
+	err := h.Auth.DeleteUser(ctx, userID)
+	if err != nil {
+		toastMessage := toast.ToastMessage(
+			toast.Error,
+			"Error deleting Account",
+		)
+
+		_ = render.Render(
+			w,
+			r,
+			http.StatusTooManyRequests,
+			toastMessage,
+		)
+		return
+	}
+
+	session.ClearSessionCookies(w)
+	redirect.Redirect(w, r, "/auth/successfull-deletion", http.StatusSeeOther)
 }

@@ -35,6 +35,10 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (*domain.User, 
 	return &user, nil
 }
 
+func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
+	return s.store.DeleteUser(ctx, userID)
+}
+
 func (s *Service) Login(ctx context.Context, in LoginInput) (*domain.User, error) {
 	switch in.Provider {
 	case domain.ProviderPassword:

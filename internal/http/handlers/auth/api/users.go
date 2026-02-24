@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/response"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -12,7 +12,7 @@ import (
 func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := httpcontext.UserID(ctx)
+	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		response.ErrorJSON(
 			w,

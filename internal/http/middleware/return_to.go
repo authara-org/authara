@@ -2,9 +2,8 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
-	httpcontext "github.com/alexlup06-authgate/authgate/internal/http/kit/context"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 )
 
 func ReturnTo(next http.Handler) http.Handler {
@@ -13,22 +12,22 @@ func ReturnTo(next http.Handler) http.Handler {
 		if rt := r.URL.Query().Get("return_to"); rt != "" {
 			if normalized, ok := normalizeReturnTo(rt); ok {
 				r = r.WithContext(
-					httpcontext.WithReturnTo(r.Context(), normalized),
+					httpctx.WithReturnTo(r.Context(), normalized),
 				)
 			}
 		}
 
 		// 2. Fallback: current request path + query
-		if _, ok := httpcontext.ReturnTo(r.Context()); !ok {
+		if _, ok := httpctx.ReturnTo(r.Context()); !ok {
 			current := r.URL.Path
 			if r.URL.RawQuery != "" {
 				current += "?" + r.URL.RawQuery
 			}
 
 			// Prevent auth redirect loops
-			if !strings.HasPrefix(r.URL.Path, "/auth/") {
+			if r.URL.Path != "/auth/signup" || r.URL.Path != "/auth/login" {
 				r = r.WithContext(
-					httpcontext.WithReturnTo(r.Context(), current),
+					httpctx.WithReturnTo(r.Context(), current),
 				)
 			}
 		}

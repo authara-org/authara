@@ -13,9 +13,9 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/config"
 	httpserver "github.com/alexlup06-authgate/authgate/internal/http"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/providers/google"
 	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/alexlup06-authgate/authgate/internal/logging"
+	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
 	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/session/token"
@@ -113,6 +113,7 @@ func main() {
 	)
 	requireAdminRole := httpmiddleware.RequireAdmin
 	requireCSRF := httpmiddleware.RequireCSRF
+	returnTo := httpmiddleware.ReturnTo
 
 	mw := httpserver.Middlewares{
 		RedirectIfAuthenticated:           redirectIfAuthenticated,
@@ -121,6 +122,7 @@ func main() {
 		RequireAdminAccessAuthWithRefresh: requireAdminAccessAuthWithRefresh,
 		RequireAdminRole:                  requireAdminRole,
 		RequireCSRF:                       requireCSRF,
+		ReturnTo:                          returnTo,
 	}
 
 	limiter := ratelimit.NewInMemoryLimiter(ratelimit.LimiterConfig{

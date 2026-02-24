@@ -154,3 +154,10 @@ func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username s
 
 	return res.Error
 }
+
+func (s *Store) DeleteUser(ctx context.Context, userID uuid.UUID) error {
+	return s.dbFromContext(ctx).
+		Where("id = ?", userID).
+		Delete(&model.User{}).
+		Error
+}
