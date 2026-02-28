@@ -16,7 +16,7 @@ templ Signup() {
 				<button
 					x-show="!open"
 					@click="open=true"
-					class="w-full bg-blue-600 text-white h-12 px-4 rounded-xl cursor-pointer"
+					class="w-full bg-blue-600 text-white h-12 px-4 rounded-xl cursor-pointer hover:bg-blue-700 transition-colors"
 				>
 					<div class="flex w-full justify-center gap-3 items-center">
 						<div class="h-6 w-6">
@@ -28,20 +28,22 @@ templ Signup() {
 				@SignupForm()
 			</div>
 			<div class="relative flex justify-center my-5">
-				<p class="bg-white text-sm px-4 z-2">Or, Signup with email</p>
-				<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 z-1"></div>
+				<p class="bg-white dark:bg-grey-900 text-sm px-4 z-2 text-grey-700 dark:text-grey-300">
+					Or, Signup with email
+				</p>
+				<div class="absolute w-full top-1/2 -translate-y-1/2 left-0 h-0.5 bg-grey-200 dark:bg-grey-800 z-1"></div>
 			</div>
 			<div class="flex flex-col gap-2 mb-6">
 				@GoogleSignin("Sign up")
 			</div>
 			<div class="text-center mt-6">
-				<p>
+				<p class="text-grey-800 dark:text-grey-200">
 					Already have an account ? &nbsp;
 					<a
 						hx-get={ "/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 						hx-target="#body"
 						hx-replace-url="true"
-						class="cursor-pointer underline text-blue-800"
+						class="cursor-pointer underline text-blue-800 dark:text-blue-400"
 					>
 						Login here
 					</a>
@@ -62,7 +64,7 @@ templ SignupForm() {
 		hx-swap="outerHTML"
 	>
 		@csrf.CSRFInput()
-		<label for="email" class="pb-4 text-grey-800">
+		<label for="email" class="pb-4 text-grey-800 dark:text-grey-200">
 			<div class="pb-2">Email <span class="text-red-600">*</span></div>
 		</label>
 		<input
@@ -72,9 +74,13 @@ templ SignupForm() {
 			autocomplete="username"
 			placeholder="Enter your email address"
 			required
-			class="border-2 border-grey-100 w-full rounded-xl px-4 py-3 text-sm mb-4"
+			class="border-2 border-grey-100 dark:border-grey-800
+				bg-white dark:bg-grey-900
+				text-grey-900 dark:text-grey-100
+				placeholder:text-grey-400 dark:placeholder:text-grey-500
+				w-full rounded-xl px-4 py-3 text-sm mb-4"
 		/>
-		<label for="new-password" class="text-grey-800">
+		<label for="new-password" class="text-grey-800 dark:text-grey-200">
 			<div class="pb-2">Password <span class="text-red-600">*</span></div>
 		</label>
 		<div x-data="{ show: false }" class="relative">
@@ -88,16 +94,20 @@ templ SignupForm() {
 				required
 				minlength="8"
 				:class="{
-					'border-grey-100': password.length === 0,
+					'border-grey-100 dark:border-grey-800': password.length === 0,
 					'border-red-500': password.length > 0 && password.length < 8,
 					'border-green-500': password.length >= 8
 				}"
-				class="w-full pl-4 pr-12 py-3 text-sm border-2 border-grey-100 rounded-xl"
+				class="w-full pl-4 pr-12 py-3 text-sm border-2 rounded-xl
+					bg-white dark:bg-grey-900
+					text-grey-900 dark:text-grey-100
+					placeholder:text-grey-400 dark:placeholder:text-grey-500
+					focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40"
 			/>
 			<button
 				type="button"
 				@click="show = !show"
-				class="absolute cursor-pointer right-0 h-full px-4"
+				class="absolute cursor-pointer right-0 h-full px-4 text-grey-700 dark:text-grey-300"
 			>
 				<div class="h-5 w-5 my-auto">
 					<div x-show="!show">
@@ -110,7 +120,7 @@ templ SignupForm() {
 			</button>
 		</div>
 		<p
-			class="text-xs text-grey-600 mt-1.5"
+			class="text-xs text-grey-600 dark:text-grey-400 mt-1.5"
 			x-show="password.length<8"
 		>
 			Password must be at least 8 characters long.
@@ -124,16 +134,20 @@ templ SignupForm() {
 				placeholder="Confirm your password"
 				required
 				:class="{
-					'border-grey-100': confirm.length === 0,
+					'border-grey-100 dark:border-grey-800': confirm.length === 0,
 					'border-red-500': confirm.length > 0 && confirm !== password,
 					'border-green-500': confirm.length > 0 && confirm === password
 				}"
-				class="w-full pl-4 pr-12 py-3 text-sm border-2 rounded-xl"
+				class="w-full pl-4 pr-12 py-3 text-sm border-2 rounded-xl
+					bg-white dark:bg-grey-900
+					text-grey-900 dark:text-grey-100
+					placeholder:text-grey-400 dark:placeholder:text-grey-500
+					focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40"
 			/>
 			<button
 				type="button"
 				@click="show = !show"
-				class="absolute cursor-pointer right-0 h-full px-4"
+				class="absolute cursor-pointer right-0 h-full px-4 text-grey-700 dark:text-grey-300"
 			>
 				<div class="h-5 w-5 my-auto">
 					<div x-show="!show">
@@ -147,7 +161,7 @@ templ SignupForm() {
 		</div>
 		<p
 			x-show="confirm.length > 0 && confirm !== password"
-			class="text-xs text-red-600 mt-1.5"
+			class="text-xs text-red-600 dark:text-red-400 mt-1.5"
 		>
 			Passwords do not match.
 		</p>
