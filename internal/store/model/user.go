@@ -13,8 +13,9 @@ type User struct {
 
 	DisabledAt *time.Time `gorm:"column:disabled_at"`
 
-	Username string `gorm:"type:varchar(255);not null;column:username"`
-	Email    string `gorm:"type:varchar(255);not null;uniqueIndex;column:email"`
+	Username           string `gorm:"type:varchar(255);not null;column:username"`
+	UsernameNormalized string `gorm:"type:varchar(255);not null;column:username_normalized"`
+	Email              string `gorm:"type:varchar(255);not null;uniqueIndex;column:email"`
 }
 
 func (User) TableName() string {

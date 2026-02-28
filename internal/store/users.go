@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/domain"
@@ -10,6 +11,10 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+func NormalizeUsername(u string) string {
+	return strings.ToLower(strings.TrimSpace(u))
+}
 
 func toDomainUser(m model.User) domain.User {
 	return domain.User{
@@ -24,15 +29,17 @@ func toDomainUser(m model.User) domain.User {
 
 func toModelUser(d domain.User) model.User {
 	return model.User{
-		ID:         nil,
-		Username:   d.Username,
-		Email:      d.Email,
-		DisabledAt: d.DisabledAt,
+		ID:                 nil,
+		Username:           d.Username,
+		UsernameNormalized: NormalizeUsername(d.Username),
+		Email:              d.Email,
+		DisabledAt:         d.DisabledAt,
 	}
 }
 
 func (s *Store) CreateUser(ctx context.Context, user domain.User) (domain.User, error) {
 	m := toModelUser(user)
+	m.UsernameNormalized = NormalizeUsername(user.Username)
 
 	db := s.dbFromContext(ctx)
 

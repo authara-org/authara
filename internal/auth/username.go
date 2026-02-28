@@ -1,5 +1,12 @@
 package auth
 
+import (
+	"crypto/rand"
+	"math/big"
+	"strings"
+	"unicode"
+)
+
 func ValidateUsername(username string) error {
 	if len(username) < 3 || len(username) > 30 {
 		return ErrInvalidUsername
@@ -8,7 +15,11 @@ func ValidateUsername(username string) error {
 	for i := 0; i < len(username); i++ {
 		c := username[i]
 
-		if isLetter(c) || isDigit(c) || c == '-' || c == '_' {
+		if (c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') ||
+			c == '-' ||
+			c == '_' {
 			continue
 		}
 
@@ -18,10 +29,64 @@ func ValidateUsername(username string) error {
 	return nil
 }
 
-func isLetter(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+func isLetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z')
 }
 
-func isDigit(c byte) bool {
-	return c >= '0' && c <= '9'
+func isDigit(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+var maxFiveDigits = big.NewInt(90000)
+
+func SecureFiveDigits() (int64, error) {
+	n, err := rand.Int(rand.Reader, maxFiveDigits)
+	if err != nil {
+		return 0, err
+	}
+	return n.Int64() + 10000, nil
+}
+
+// sanitizeUsername:
+// - keeps only [a-zA-z0-9_-]
+// - turns runs of other chars into a single '-'
+// - trims leading/trailing '-' and '_'
+func SanitizeUsername(s string) string {
+	const maxLen = 24
+
+	var b strings.Builder
+	b.Grow(len(s))
+
+	prevDash := false
+	for _, r := range s {
+		// keep ASCII letters/digits/_/-
+		if isLetter(r) || isDigit(r) || r == '-' || r == '_' {
+			b.WriteRune(r)
+			prevDash = false
+			continue
+		}
+
+		// treat any whitespace/punct/etc as separator => single '-'
+		if unicode.IsSpace(r) || unicode.IsPunct(r) || unicode.IsSymbol(r) {
+			if b.Len() > 0 && !prevDash {
+				b.WriteByte('-')
+				prevDash = true
+			}
+			continue
+		}
+
+		// everything else (e.g. non-ascii letters) => separator too
+		if b.Len() > 0 && !prevDash {
+			b.WriteByte('-')
+			prevDash = true
+		}
+	}
+
+	out := b.String()
+	out = strings.Trim(out, "-_")
+	if len(out) > maxLen {
+		out = strings.Trim(out[:maxLen], "-_")
+	}
+	return out
 }

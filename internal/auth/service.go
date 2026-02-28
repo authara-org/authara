@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/domain"
@@ -40,6 +42,24 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 }
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (*domain.User, error) {
+	if in.Username == "" {
+		local := strings.SplitN(in.Email, "@", 2)[0]
+		local = SanitizeUsername(local) // you can choose whether this lowercases or not
+		if local == "" {
+			local = "user"
+		}
+
+		suffix, err := SecureFiveDigits()
+		if err != nil {
+			return nil, err
+		}
+
+		// If you want generated usernames always lowercase:
+		local = strings.ToLower(local)
+
+		in.Username = fmt.Sprintf("%s-%05d", local, suffix)
+	}
+
 	switch in.Provider {
 	case domain.ProviderPassword:
 		return s.loginWithPassword(ctx, in)
@@ -53,6 +73,24 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*domain.User, error
 }
 
 func (s *Service) Signup(ctx context.Context, in SignupInput) (*domain.User, error) {
+	if in.Username == "" {
+		local := strings.SplitN(in.Email, "@", 2)[0]
+		local = SanitizeUsername(local) // you can choose whether this lowercases or not
+		if local == "" {
+			local = "user"
+		}
+
+		suffix, err := SecureFiveDigits()
+		if err != nil {
+			return nil, err
+		}
+
+		// If you want generated usernames always lowercase:
+		local = strings.ToLower(local)
+
+		in.Username = fmt.Sprintf("%s-%05d", local, suffix)
+	}
+
 	switch in.Provider {
 	case domain.ProviderPassword:
 		return s.signupWithPassword(ctx, in)
@@ -72,7 +110,8 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (*doma
 		}
 
 		user = domain.User{
-			Email: in.Email,
+			Email:    in.Email,
+			Username: in.Username,
 		}
 
 		created, err := s.store.CreateUser(txCtx, user)
@@ -156,7 +195,8 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 		// => create user with that provider
 
 		domainUser := domain.User{
-			Email: in.Email,
+			Email:    in.Email,
+			Username: in.Username,
 		}
 		user, err = s.store.CreateUser(txCtx, domainUser)
 		if err != nil {
