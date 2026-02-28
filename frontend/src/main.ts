@@ -21,3 +21,22 @@ document.body.addEventListener("htmx:beforeSwap", function (evt: any) {
     evt.detail.isError = false;
   }
 });
+
+function showRedirecting() {
+  document.documentElement.classList.add("is-redirecting");
+}
+
+function hideRedirecting() {
+  document.documentElement.classList.remove("is-redirecting");
+}
+
+document.body.addEventListener("htmx:afterRequest", (e: Event) => {
+  const evt = e as CustomEvent<any>;
+  const xhr = evt.detail?.xhr;
+  if (!xhr) return;
+
+  const redirect = xhr.getResponseHeader("HX-Redirect");
+  if (redirect) showRedirecting();
+});
+
+window.addEventListener("pageshow", hideRedirecting);
