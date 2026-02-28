@@ -2,6 +2,7 @@ package templates
 
 import (
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/toast"
 )
 
@@ -17,21 +18,23 @@ templ Layout() {
 			<link rel="stylesheet" href="/auth/static/app.css"/>
 			<link rel="preload" href="/auth/static/fonts/FunnelSans-VariableFont_wght.ttf" as="font" type="font/ttf" crossorigin="anonymous"/>
 			<style>
+				[x-cloak] { display: none !important; }
+
 				@font-face {
 					font-family: 'FunnelSans';
 					src: url('/auth/static/fonts/FunnelSans-VariableFont_wght.ttf') format('opentype');
 					font-display: swap;
 				}
-				body {
-					font-family: 'FunnelSans', Arial, sans-serif;
-				}
+				body { font-family: 'FunnelSans', Arial, sans-serif; }
+
+				.is-redirecting .redirect-overlay { display: flex; }
 			</style>
 			<script type="application/ld+json">
 			{
 				"@context": "https://schema.org",
 				"@type": "WebSite",
 				"name": "Go Starter",
-				"url": "https://example.com",
+				"url": "https://example.com"
 			}
 			</script>
 			<script src="/auth/static/htmx.min.js" defer></script>
@@ -39,10 +42,11 @@ templ Layout() {
 			<script src="/auth/static/app.js" defer></script>
 		</head>
 		<body class="m-0">
-			<div id="body">
+			<main id="body">
 				{ children... }
-			</div>
+			</main>
 			@toast.ToastWrapper()
+			@redirect.RedirectOverlay()
 		</body>
 	</html>
 }

@@ -14,8 +14,8 @@ templ Login() {
 			@HeaderSection("Welcome Back!", "Enter to get unlimited access.")
 			@LoginForm()
 			<div class="relative flex justify-center my-5">
-				<p class="bg-white text-sm px-4">Or, Login with</p>
-				<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 -z-10"></div>
+				<p class="bg-white text-sm px-4 z-2">Or, Login with</p>
+				<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 z-1"></div>
 			</div>
 			<div class="flex flex-col gap-2 mb-6">
 				@GoogleSignin("Sign in")
@@ -26,7 +26,7 @@ templ Login() {
 					<a
 						hx-get={ "/auth/signup?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 						hx-target="#body"
-						hx-push-url="true"
+						hx-replace-url="true"
 						class="cursor-pointer underline text-blue-800"
 					>
 						Create an account
@@ -106,17 +106,20 @@ templ LoginForm() {
 				</div>
 				<span class="text-blue-800 text-sm">Remember me</span>
 			</label>
-			<div>
-				<a
-					hx-get="/auth/request-password-reset"
-					hx-target="body"
-					hx-push-url="true"
-					class="cursor-pointer text-sm text-blue-800"
-				>
-					Forgot your password?
-				</a>
-			</div>
+			//			<div>
+			//				<a
+			//					hx-get="/auth/request-password-reset"
+			//					hx-target="body"
+			//					hx-push-url="true"
+			//					class="cursor-pointer text-sm text-blue-800"
+			//				>
+			//					Forgot your password?
+			//				</a>
+			//			</div>
 		</div>
-		@button.LoadingButton("Login", icons.Login(), "")
+		@button.Button(button.ButtonConfig{
+			Label: "Login",
+			Icon:  icons.Login(),
+		})
 	</form>
 }

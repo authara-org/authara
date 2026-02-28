@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS authgate.users (
 	created_at timestamptz NOT NULL DEFAULT now(),
 	updated_at timestamptz NOT NULL DEFAULT now(),
 	username varchar(255) NOT NULL,
+	username_normalized varchar(255) NOT NULL,
 	email varchar(255) NOT NULL,
 	disabled_at timestamptz,
 

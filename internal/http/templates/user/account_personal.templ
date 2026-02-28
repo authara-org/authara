@@ -3,10 +3,10 @@ package user
 import "github.com/alexlup06-authgate/authgate/internal/http/templates/components/icons"
 
 templ AccountPersonalInfo(username, email string) {
-	<div class="p-6 sm:p-8 border-b border-grey-100">
+	<div>
 		<div class="flex items-center gap-2 mb-6">
-			<div class="h-8 w-8 rounded-xl bg-blue-50 text-blue-800 flex items-center justify-center">
-				<svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<div class="h-8 w-8 p-1.5 rounded-xl bg-blue-50 text-blue-800 flex items-center justify-center stroke-2">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class="h-full w-full" stroke="currentColor" stroke-width="inherit">
 					<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
 					<circle cx="12" cy="7" r="4"></circle>
 				</svg>
@@ -21,7 +21,7 @@ templ AccountPersonalInfo(username, email string) {
 				</label>
 				<div class="relative">
 					<div class="absolute inset-y-0 left-0 pl-4 flex items-center text-grey-600">
-						<span class="text-sm h-5 aspect-square stroke-2">
+						<span class="h-5 aspect-square stroke-2">
 							@icons.Email()
 						</span>
 					</div>

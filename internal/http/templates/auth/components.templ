@@ -1,13 +1,20 @@
 package auth
 
+import "github.com/alexlup06-authgate/authgate/internal/http/templates/components/card"
+import "github.com/alexlup06-authgate/authgate/internal/http/templates/components/button"
+
 templ AuthLayout() {
-	<div class="flex w-full h-screen">
-		<div class="w-full md:w-1/2 px-2 flex justify-center">
-			<div class="h-fit mx-auto mt-20 max-w-md w-96">
-				{ children... }
-			</div>
+	<div class="flex w-full min-h-screen bg-background-light">
+		<div class="mt-4 sm:mt-14 px-4 sm:px-6 w-full">
+			@card.FullPageCard(card.FullPageCardConfig{Size: card.Small}) {
+				<div class="w-full p-8 sm:p-14 pt-8 sm:pt-10">
+					<div class="mb-6 sm:mb-10">
+						@button.Back()
+					</div>
+					{ children... }
+				</div>
+			}
 		</div>
-		<div class="hidden md:block w-1/2 bg-blue-50"></div>
 	</div>
 }
 

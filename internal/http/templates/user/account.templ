@@ -1,6 +1,7 @@
 package user
 
 import "github.com/alexlup06-authgate/authgate/internal/http/templates"
+import "github.com/alexlup06-authgate/authgate/internal/http/templates/components/button"
 
 templ Account(username, email string, googleConnected bool) {
 	@templates.PartialRender() {
@@ -8,11 +9,22 @@ templ Account(username, email string, googleConnected bool) {
 			x-data="{ deleteOpen: false }"
 			class="min-h-screen bg-background-light"
 		>
-			<div class="mx-auto max-w-3xl px-4 sm:px-6 py-10">
-				@AccountProfileHeader(username, email)
-				<div class="rounded-2xl border border-grey-200 bg-white overflow-hidden">
-					@AccountPersonalInfo(username, email)
-					@AccountLinkedAccounts(googleConnected)
+			<div class="mx-auto max-w-2xl px-4 sm:px-6 py-4 sm:py-14">
+				<div class="rounded-2xl max-w-2xl border border-grey-200 bg-white overflow-hidden">
+					<div class="border-b border-grey-100">
+						<div class="">
+							<div class="bg-gr0 p-8 sm:p-10 border-b border-grey-200">
+								<div class="mb-6 sm:mb-6">
+									@button.Back()
+								</div>
+								@AccountProfileHeader(username, email)
+							</div>
+							<div class="p-8 sm:p-10">
+								@AccountPersonalInfo(username, email)
+							</div>
+							//@AccountLinkedAccounts(googleConnected)
+						</div>
+					</div>
 					@AccountFooterActions()
 				</div>
 				@AccountDangerZone()

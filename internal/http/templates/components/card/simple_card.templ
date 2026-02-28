@@ -1,0 +1,38 @@
+package card
+
+type Size string
+
+const (
+	Small  = "small"
+	Medium = "medium"
+	Large  = "large"
+)
+
+type FullPageCardConfig struct {
+	Size Size
+}
+
+templ FullPageCard(cfg FullPageCardConfig) {
+	{{
+	if cfg.Size == "" {
+		cfg.Size = Medium
+	}
+	}}
+	<div class={ "rounded-2xl border border-grey-200 bg-white overflow-hidden w-full mx-auto" + fullpageCardSize(cfg.Size) }>
+		{ children... }
+	</div>
+}
+
+func fullpageCardSize(size Size) string {
+	class := ""
+	switch {
+	case size == Small:
+		class = " max-w-lg"
+	case size == Medium:
+		class = " max-w-xl"
+	case size == Large:
+		class = " max-w-2xl"
+
+	}
+	return class
+}

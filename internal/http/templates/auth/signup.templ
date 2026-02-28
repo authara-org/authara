@@ -28,8 +28,8 @@ templ Signup() {
 				@SignupForm()
 			</div>
 			<div class="relative flex justify-center my-5">
-				<p class="bg-white text-sm px-4">Or, Signup with email</p>
-				<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 -z-10"></div>
+				<p class="bg-white text-sm px-4 z-2">Or, Signup with email</p>
+				<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 z-1"></div>
 			</div>
 			<div class="flex flex-col gap-2 mb-6">
 				@GoogleSignin("Sign up")
@@ -40,7 +40,7 @@ templ Signup() {
 					<a
 						hx-get={ "/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 						hx-target="#body"
-						hx-push-url="true"
+						hx-replace-url="true"
 						class="cursor-pointer underline text-blue-800"
 					>
 						Login here
@@ -60,7 +60,6 @@ templ SignupForm() {
 		hx-post={ "/auth/signup?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 		hx-target="this"
 		hx-swap="outerHTML"
-		hx-indicator="#submit-button"
 	>
 		@csrf.CSRFInput()
 		<label for="email" class="pb-4 text-grey-800">
@@ -152,7 +151,12 @@ templ SignupForm() {
 		>
 			Passwords do not match.
 		</p>
-		@button.LoadingButton("Create Account", icons.Signup(), "")
+		<div class="mt-4 w-full">
+			@button.Button(button.ButtonConfig{
+				Label: "Signup",
+				Icon:  icons.Signup(),
+			})
+		</div>
 	</form>
 }
 

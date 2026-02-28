@@ -3,22 +3,22 @@ package user
 import (
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/button"
+	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/icons"
 )
 
 templ AccountFooterActions() {
 	<div class="p-6 sm:p-8 bg-grey-50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
 		<form
-			hx-post={ templ.SafeURL("/auth/sessions/logout?return_to=" + httpctx.ReturnToOrDefault(ctx, "/private")) }
+			hx-post={ templ.SafeURL("/auth/sessions/logout?return_to=" + httpctx.ReturnToOrDefault(ctx, "/")) }
 			class="w-full sm:w-auto"
 		>
 			@CSRFInput()
-			<button
-				type="submit"
-				class="btn-loading relative w-full sm:w-auto cursor-pointer rounded-xl px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-50 border border-red-100 bg-white"
-			>
-				<span class="btn-label">Sign out</span>
-				@button.ButtonSpinner()
-			</button>
+			@button.Button(button.ButtonConfig{
+				Label:   "Log out",
+				Icon:    icons.Logout(),
+				Variant: button.Outline,
+				Color:   button.Attention,
+			})
 		</form>
 	</div>
 }

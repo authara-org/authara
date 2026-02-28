@@ -17,21 +17,6 @@ func ReturnTo(next http.Handler) http.Handler {
 			}
 		}
 
-		// 2. Fallback: current request path + query
-		if _, ok := httpctx.ReturnTo(r.Context()); !ok {
-			current := r.URL.Path
-			if r.URL.RawQuery != "" {
-				current += "?" + r.URL.RawQuery
-			}
-
-			// Prevent auth redirect loops
-			if r.URL.Path != "/auth/signup" || r.URL.Path != "/auth/login" {
-				r = r.WithContext(
-					httpctx.WithReturnTo(r.Context(), current),
-				)
-			}
-		}
-
 		next.ServeHTTP(w, r)
 	})
 }

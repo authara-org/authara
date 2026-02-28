@@ -3,14 +3,13 @@ package ui
 import (
 	"net/http"
 
-	"github.com/a-h/templ"
 	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/ui/flow"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
 	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
-	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/toast"
 	userview "github.com/alexlup06-authgate/authgate/internal/http/templates/user"
+	"github.com/alexlup06-authgate/authgate/internal/session"
 )
 
 func (h *UIHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
@@ -49,19 +48,9 @@ func (h *UIHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.Auth.GetUser(ctx, userID)
-	if err != nil {
-		changeUsernameForm := userview.ChangeUsernameForm(user.Email)
-		toastMessage := toast.ToastMessage(
-			toast.Error,
-			"Failed to load user",
-		)
-
-		_ = render.Render(
-			w,
-			r,
-			http.StatusUnprocessableEntity,
-			templ.Join(changeUsernameForm, toastMessage),
-		)
+	if err != nil || user == nil {
+		session.ClearSessionCookies(w)
+		redirect.Redirect(w, r, "/auth/login?return_to=/auth/user", http.StatusSeeOther)
 		return
 	}
 
