@@ -60,6 +60,13 @@ func Private(w http.ResponseWriter, r *http.Request) {
 				</form>
 				<a href="/auth/account">Show Account</a>
 			</body>
+			<script>
+				window.addEventListener("pageshow", (event) => {
+				  if (event.persisted) {
+				    window.location.reload();
+				  }
+				});
+			</script>
 		</html>
 	`,
 		html.EscapeString(user.Email),
