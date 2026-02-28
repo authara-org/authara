@@ -18,7 +18,12 @@ templ FullPageCard(cfg FullPageCardConfig) {
 		cfg.Size = Medium
 	}
 	}}
-	<div class={ "rounded-2xl border border-grey-200 bg-white overflow-hidden w-full mx-auto" + fullpageCardSize(cfg.Size) }>
+	<div
+		class={ "rounded-2xl border border-grey-200 dark:border-grey-800 " +
+		"bg-white dark:bg-grey-900 " +
+		"overflow-hidden w-full mx-auto " +
+		fullpageCardSize(cfg.Size) }
+	>
 		{ children... }
 	</div>
 }

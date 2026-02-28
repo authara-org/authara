@@ -14,20 +14,22 @@ templ Login() {
 			@HeaderSection("Welcome Back!", "Enter to get unlimited access.")
 			@LoginForm()
 			<div class="relative flex justify-center my-5">
-				<p class="bg-white text-sm px-4 z-2">Or, Login with</p>
-				<div class="absolute w-full top-1/2 -translate-y-1/2 left 0 h-0.5 bg-grey-200 z-1"></div>
+				<p class="bg-white dark:bg-grey-900 text-sm px-4 z-2 text-grey-700 dark:text-grey-300">
+					Or, Login with
+				</p>
+				<div class="absolute w-full top-1/2 -translate-y-1/2 left-0 h-0.5 bg-grey-200 dark:bg-grey-800 z-1"></div>
 			</div>
 			<div class="flex flex-col gap-2 mb-6">
 				@GoogleSignin("Sign in")
 			</div>
 			<div class="text-center">
-				<p>
+				<p class="text-grey-800 dark:text-grey-200">
 					Don't have an Account? &nbsp;
 					<a
 						hx-get={ "/auth/signup?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 						hx-target="#body"
 						hx-replace-url="true"
-						class="cursor-pointer underline text-blue-800"
+						class="cursor-pointer underline text-blue-800 dark:text-blue-400"
 					>
 						Create an account
 					</a>
@@ -46,7 +48,7 @@ templ LoginForm() {
 		hx-swap="outerHTML"
 	>
 		@csrf.CSRFInput()
-		<label for="email" class="pb-4 text-grey-800">
+		<label for="email" class="pb-4 text-grey-800 dark:text-grey-200">
 			<div class="pb-1.5">Email <span class="text-red-600">*</span></div>
 		</label>
 		<input
@@ -56,9 +58,9 @@ templ LoginForm() {
 			autocomplete="username"
 			placeholder="Enter your email address"
 			required
-			class="border-2 border-grey-100 w-full rounded-xl px-4 py-3 text-sm mb-4"
+			class="border-2 border-grey-100 dark:border-grey-800 bg-white dark:bg-grey-900 text-grey-900 dark:text-grey-100 placeholder:text-grey-400 dark:placeholder:text-grey-500 w-full rounded-xl px-4 py-3 text-sm mb-4"
 		/>
-		<label for="current-password" class="text-grey-800">
+		<label for="current-password" class="text-grey-800 dark:text-grey-200">
 			<div class="pb-1.5">Password <span class="text-red-600">*</span></div>
 		</label>
 		<div x-data="{ show: false }" class="mb-4 relative">
@@ -69,12 +71,12 @@ templ LoginForm() {
 				autocomplete="current-password"
 				placeholder="Enter your password"
 				required
-				class="w-full pl-4 pr-12 py-3 text-sm border-2 border-grey-100 rounded-xl"
+				class="w-full pl-4 pr-12 py-3 text-sm border-2 border-grey-100 dark:border-grey-800 bg-white dark:bg-grey-900 text-grey-900 dark:text-grey-100 placeholder:text-grey-400 dark:placeholder:text-grey-500 rounded-xl"
 			/>
 			<button
 				type="button"
 				@click="show = !show"
-				class="absolute cursor-pointer right-0 h-full px-4"
+				class="absolute cursor-pointer right-0 h-full px-4 text-grey-700 dark:text-grey-300"
 			>
 				<div class="h-5 w-5 my-auto">
 					<div x-show="!show">
@@ -104,18 +106,8 @@ templ LoginForm() {
 						<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8.414 15l-4.707-4.707a1 1 0 011.414-1.414L8.414 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
 					</svg>
 				</div>
-				<span class="text-blue-800 text-sm">Remember me</span>
+				<span class="text-blue-800 dark:text-blue-400 text-sm">Remember me</span>
 			</label>
-			//			<div>
-			//				<a
-			//					hx-get="/auth/request-password-reset"
-			//					hx-target="body"
-			//					hx-push-url="true"
-			//					class="cursor-pointer text-sm text-blue-800"
-			//				>
-			//					Forgot your password?
-			//				</a>
-			//			</div>
 		</div>
 		@button.Button(button.ButtonConfig{
 			Label: "Login",

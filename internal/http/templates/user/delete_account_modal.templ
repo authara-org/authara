@@ -18,31 +18,34 @@ templ DeleteAccountModal() {
 		aria-hidden="true"
 	>
 		<!-- Backdrop -->
-		<div class="absolute inset-0" @click="deleteOpen = false"></div>
+		<div
+			class="absolute inset-0 bg-black/40 dark:bg-black/60"
+			@click="deleteOpen = false"
+		></div>
 		<!-- Modal Container -->
 		<div
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="modal-headline"
-			class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all"
+			class="relative bg-white dark:bg-grey-900 border border-grey-200 dark:border-grey-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all"
 			x-show="deleteOpen"
 			x-transition.scale.origin.center
 			@click.stop
 		>
 			<!-- Header -->
 			<div class="px-6 pt-8 pb-4 text-center">
-				<div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
-					<div class="h-6 w-6 stroke-2 text-red-600">
+				<div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-950/40 mb-4">
+					<div class="h-6 w-6 stroke-2 text-red-600 dark:text-red-400">
 						@icons.Attention()
 					</div>
 				</div>
-				<h3 class="text-xl font-bold text-gray-900" id="modal-headline">
+				<h3 class="text-xl font-bold text-grey-900 dark:text-grey-100" id="modal-headline">
 					Delete your account?
 				</h3>
 			</div>
 			<!-- Body -->
 			<div class="px-8 pb-8">
-				<p class="text-sm text-gray-600 text-center leading-relaxed">
+				<p class="text-sm text-grey-600 dark:text-grey-300 text-center leading-relaxed">
 					This action is permanent and cannot be undone. All your data will be permanently removed.
 				</p>
 			</div>
@@ -51,7 +54,7 @@ templ DeleteAccountModal() {
 				hx-post="/auth/user/delete"
 				hx-swap="none"
 			>
-				<div class="px-6 py-4 bg-gray-50 flex flex-col sm:flex-row-reverse gap-3">
+				<div class="px-6 py-4 bg-grey-50 dark:bg-grey-950 flex flex-col sm:flex-row-reverse gap-3">
 					@csrf.CSRFInput()
 					@button.Button(button.ButtonConfig{
 						Label: "Delete Account",

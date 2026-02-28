@@ -3,15 +3,22 @@ package user
 templ AccountProfileHeader(username, email string) {
 	<div class="flex flex-col sm:flex-row sm:items-center gap-6">
 		<div class="relative">
-			<div class="h-24 w-24 rounded-full bg-blue-50 border-3 border-white flex items-center justify-center overflow-hidden">
-				<span class="text-blue-800 font-bold text-2xl">
+			<div
+				class="h-24 w-24 rounded-full
+				bg-blue-50 dark:bg-blue-900/30
+				border-3 border-white dark:border-grey-900
+				flex items-center justify-center overflow-hidden"
+			>
+				<span class="text-blue-800 dark:text-blue-300 font-bold text-2xl">
 					{ initials(username, email) }
 				</span>
 			</div>
 		</div>
 		<div class="flex-1">
 			@DisplayUsername(displayName(username, email))
-			<p class="mt-1 text-sm text-grey-700">{ email }</p>
+			<p class="mt-1 text-sm text-grey-700 dark:text-grey-300">
+				{ email }
+			</p>
 		</div>
 	</div>
 }

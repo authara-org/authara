@@ -51,22 +51,22 @@ templ ChangeUsernameForm(username string) {
 					Disabled:           true,
 				})
 			</div>
-			<span class="text-xs text-grey-600">
+			<span class="text-xs text-grey-600 dark:text-grey-400">
 				Allowed: letters, digits, <span class="font-mono">-</span> and <span class="font-mono">_</span>
 			</span>
 		</div>
-		<p class="text-xs text-grey-600">
+		<p class="text-xs text-grey-600 dark:text-grey-400">
 			This is your public display name.
 		</p>
 	</form>
 }
 
 templ UsernameField(username string) {
-	<label for="username" class="block text-sm text-grey-800">
+	<label for="username" class="block text-sm text-grey-800 dark:text-grey-200">
 		<div class="font-medium">Username</div>
 	</label>
 	<div class="relative">
-		<div class="absolute inset-y-0 left-0 pl-4 flex items-center text-grey-600">
+		<div class="absolute inset-y-0 left-0 pl-4 flex items-center text-grey-600 dark:text-grey-400">
 			<span class="text-sm h-5 aspect-square stroke-2">
 				@icons.At()
 			</span>
@@ -78,7 +78,12 @@ templ UsernameField(username string) {
 			value={ username }
 			x-model="username"
 			placeholder="your_username"
-			class="border-2 border-grey-100 w-full rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+			class="border-2 border-grey-100 dark:border-grey-800
+				bg-white dark:bg-grey-900
+				text-grey-900 dark:text-grey-100
+				placeholder:text-grey-400 dark:placeholder:text-grey-500
+				w-full rounded-xl pl-12 pr-4 py-3 text-sm
+				focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40"
 			required
 		/>
 	</div>

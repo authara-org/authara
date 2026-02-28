@@ -5,9 +5,11 @@ import "github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 templ DisplayUsername(name string) {
 	<h1
 		id="display-username"
-		class="text-3xl font-semibold text-grey-900"
+		class="text-3xl font-semibold text-grey-900 dark:text-grey-100"
 		hx-swap-oob="true"
-	>{ name }</h1>
+	>
+		{ name }
+	</h1>
 }
 
 templ CSRFInput() {
