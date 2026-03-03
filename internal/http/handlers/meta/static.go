@@ -27,6 +27,6 @@ func RegisterStatic(r chi.Router, cfg StaticConfig) {
 
 	r.Handle(
 		"/auth/static/*",
-		http.StripPrefix("/auth/static/", http.FileServer(fs)),
+		http.StripPrefix("/auth/static/", PrecompressedFileServer(fs)),
 	)
 }

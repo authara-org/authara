@@ -32,6 +32,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 		// Auth
 		r.Group(func(r chi.Router) {
+
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RedirectIfAuthenticated)
 
@@ -86,26 +87,31 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Post("/users/{userID}/disable", uih.DisableUserPost)
 			})
 		})
+	})
 
-		// API
-		r.Route("/api/v1", func(r chi.Router) {
-			r.Get("/csrf", apih.CSRFGet)
+	// API
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/csrf", apih.CSRFGet)
 
-			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireCSRF)
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireCSRF)
 
-				r.Post("/login", apih.LoginPost)
-				r.Post("/signup", apih.SignupPost)
-				r.Post("/sessions/logout", apih.LogoutPost)
-				r.Post("/sessions/refresh", apih.RefreshPost)
+			r.Post("/login", apih.LoginPost)
+			r.Post("/signup", apih.SignupPost)
+			r.Post("/sessions/logout", apih.LogoutPost)
+			r.Post("/sessions/refresh", apih.RefreshPost)
 
-			})
+		})
 
-			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireAppAccessAuthAPI)
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireAppAccessAuthAPI)
 
-				r.Get("/user", apih.UserGet)
-			})
+			r.Get("/user", apih.UserGet)
+		})
+
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(mw.RequireAppAccessAuthAPI)
+
 		})
 
 	})

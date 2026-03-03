@@ -104,6 +104,7 @@ func main() {
 		cfg.Session.RefreshTokenTTL,
 		time.Now,
 	)
+	requireAdminAccessAuthAPI := httpmiddleware.RequireAccessAuth(sessionService, token.AudienceAdmin, time.Now)
 	requireAdminAccessAuthWithRefresh := httpmiddleware.RequireAccessAuthWithRefresh(
 		sessionService,
 		token.AudienceAdmin,
@@ -119,6 +120,7 @@ func main() {
 		RedirectIfAuthenticated:           redirectIfAuthenticated,
 		RequireAppAccessAuthAPI:           requireAppAccessAuthAPI,
 		RequireAppAccessAuthWithRefresh:   requireAppAccessAuthWithRefresh,
+		RequireAdminAccessAuthAPI:         requireAdminAccessAuthAPI,
 		RequireAdminAccessAuthWithRefresh: requireAdminAccessAuthWithRefresh,
 		RequireAdminRole:                  requireAdminRole,
 		RequireCSRF:                       requireCSRF,

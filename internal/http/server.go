@@ -37,6 +37,7 @@ type Middlewares struct {
 	RequireAppAccessAuthWithRefresh   func(http.Handler) http.Handler
 	RequireAppAccessAuthAPI           func(http.Handler) http.Handler
 	RequireAdminAccessAuthWithRefresh func(http.Handler) http.Handler
+	RequireAdminAccessAuthAPI         func(http.Handler) http.Handler
 	RequireAdminRole                  func(http.Handler) http.Handler
 
 	RequireCSRF func(http.Handler) http.Handler
