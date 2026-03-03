@@ -1,7 +1,6 @@
 package flow
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -52,7 +51,6 @@ func TryRedirectAuthenticated(
 
 		session.ClearSessionCookies(w)
 	}
-	fmt.Println("no refresh")
 
 	return false
 }
