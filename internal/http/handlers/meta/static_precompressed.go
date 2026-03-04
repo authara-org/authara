@@ -21,9 +21,21 @@ func PrecompressedFileServer(fs http.FileSystem) http.Handler {
 		name := path.Clean("/" + r.URL.Path)
 		name = strings.TrimPrefix(name, "/")
 
+		if name == "manifest.json" {
+			http.NotFound(w, r)
+			return
+		}
+
+		if strings.HasSuffix(name, ".br") || strings.HasSuffix(name, ".gz") {
+			http.NotFound(w, r)
+			return
+		}
+
 		ae := r.Header.Get("Accept-Encoding")
 		tryBr := strings.Contains(ae, "br")
 		tryGz := strings.Contains(ae, "gzip")
+
+		setCacheHeaders(w)
 
 		if tryBr && fileExists(fs, name+".br") {
 			serveEncoded(w, r, fs, name+".br", name, "br")
@@ -61,4 +73,8 @@ func serveEncoded(w http.ResponseWriter, r *http.Request, fs http.FileSystem, en
 	rr.URL.Path = "/" + encodedName
 
 	http.FileServer(fs).ServeHTTP(w, rr)
+}
+
+func setCacheHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 }
