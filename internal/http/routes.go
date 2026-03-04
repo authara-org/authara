@@ -22,6 +22,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 		Google:     cfg.Google,
 		AccessTTL:  cfg.AccessTokenTTL,
 		RefreshTTL: cfg.RefreshTokenTTL,
+		Render:     cfg.Render,
 	}
 
 	uih := ui.NewUIHandler(deps)

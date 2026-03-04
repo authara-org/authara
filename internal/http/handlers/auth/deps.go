@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/auth"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
 	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
 	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
 	"github.com/alexlup06-authgate/authgate/internal/session"
@@ -19,4 +20,6 @@ type Deps struct {
 
 	AccessTTL  time.Duration
 	RefreshTTL time.Duration
+
+	Render render.Renderer
 }

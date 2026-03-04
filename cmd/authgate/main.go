@@ -13,6 +13,7 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/config"
 	httpserver "github.com/alexlup06-authgate/authgate/internal/http"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
 	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/alexlup06-authgate/authgate/internal/logging"
 	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
@@ -142,6 +143,12 @@ func main() {
 		MaxEntries:   cfg.RateLimit.MaxEntries,
 	})
 
+	assets, err := render.LoadAssetsManifest("./internal/http/static/manifest.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	renderer := render.New(assets)
+
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Version:         Version,
 		Addr:            cfg.HTTP.Addr,
@@ -154,6 +161,7 @@ func main() {
 		Google:          googleClient,
 		AccessTokenTTL:  cfg.Token.AccessTokenTTL,
 		RefreshTokenTTL: cfg.Session.RefreshTokenTTL,
+		Render:          renderer,
 	}, mw)
 
 	ctx, stop := signal.NotifyContext(

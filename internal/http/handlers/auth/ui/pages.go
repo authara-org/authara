@@ -6,7 +6,6 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/ui/flow"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
 	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
 	userview "github.com/alexlup06-authgate/authgate/internal/http/templates/user"
 	"github.com/alexlup06-authgate/authgate/internal/session"
@@ -17,7 +16,7 @@ func (h *UIHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = render.Render(
+	_ = h.Render(
 		w,
 		r,
 		http.StatusOK,
@@ -30,7 +29,7 @@ func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = render.Render(
+	_ = h.Render(
 		w,
 		r,
 		http.StatusOK,
@@ -54,7 +53,7 @@ func (h *UIHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = render.Render(
+	_ = h.Render(
 		w,
 		r,
 		http.StatusOK,
@@ -63,7 +62,7 @@ func (h *UIHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UIHandler) SuccessfullDeletionPage(w http.ResponseWriter, r *http.Request) {
-	_ = render.Render(
+	_ = h.Render(
 		w,
 		r,
 		http.StatusOK,

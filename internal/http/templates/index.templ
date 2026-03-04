@@ -1,9 +1,12 @@
 package templates
 
 import (
+	"context"
+	"fmt"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/redirect"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/toast"
+	"github.com/alexlup06-authgate/authgate/internal/http/ui"
 )
 
 templ Layout() {
@@ -15,20 +18,9 @@ templ Layout() {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<meta name="description" content="This helps you to quickly get going."/>
 			<meta property="og:site_name" content="Go Starter"/>
-			<link rel="stylesheet" href="/auth/static/app.css"/>
-			<link rel="preload" href="/auth/static/fonts/FunnelSans-VariableFont_wght.ttf" as="font" type="font/ttf" crossorigin="anonymous"/>
-			<style>
-				[x-cloak] { display: none !important; }
-
-				@font-face {
-					font-family: 'FunnelSans';
-					src: url('/auth/static/fonts/FunnelSans-VariableFont_wght.ttf') format('opentype');
-					font-display: swap;
-				}
-				body { font-family: 'FunnelSans', Arial, sans-serif; }
-
-				.is-redirecting .redirect-overlay { display: flex; }
-			</style>
+			<link rel="preload" href={ ui.Static(ctx, "FunnelSans-VariableFont_wght.ttf") } as="font" type="font/ttf" crossorigin="anonymous"/>
+			<link rel="stylesheet" href={ ui.Static(ctx, "app.css") }/>
+			@CriticalStyles()
 			<script type="application/ld+json">
 			{
 				"@context": "https://schema.org",
@@ -37,9 +29,9 @@ templ Layout() {
 				"url": "https://example.com"
 			}
 			</script>
-			<script src="/auth/static/htmx.min.js" defer></script>
-			<script src="/auth/static/alpine.min.js" defer></script>
-			<script src="/auth/static/app.js" defer></script>
+			<script src={ ui.Static(ctx, "htmx.min.js") } defer></script>
+			<script src={ ui.Static(ctx, "alpine.min.js") } defer></script>
+			<script src={ ui.Static(ctx, "app.js") } defer></script>
 		</head>
 		<body class="m-0 bg-background-light dark:bg-background-dark">
 			<main id="body">
@@ -49,6 +41,25 @@ templ Layout() {
 			@redirect.RedirectOverlay()
 		</body>
 	</html>
+}
+
+templ CriticalStyles() {
+	@templ.Raw(criticalCSS(ctx))
+}
+
+func criticalCSS(ctx context.Context) string {
+	fontURL := ui.Static(ctx, "FunnelSans-VariableFont_wght.ttf")
+	return fmt.Sprintf(`
+			<style>
+				[x-cloak]{ display: none !important; }
+				@font-face{
+				  font-family:"FunnelSans";
+				  src:url("%s") format("truetype");
+				  font-display: swap;
+				}
+				body{ font-family: "FunnelSans", Arial, sans-serif; }
+			</style>
+		`, fontURL)
 }
 
 templ PartialRender() {

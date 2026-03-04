@@ -1,4 +1,4 @@
-export {};
+export { };
 
 declare global {
   interface Window {
@@ -9,7 +9,7 @@ declare global {
 window.htmx.config.allowNestedOobSwaps = false; // Disable nested OOB swaps
 window.htmx.config.defaultSwapStyle = "outerHTML"; // Disable nested OOB swaps
 
-document.body.addEventListener("htmx:beforeSwap", function (evt: any) {
+document.body.addEventListener("htmx:beforeSwap", function(evt: any) {
   // Allow 422 and 400 responses to swap
   // We treat these as form validation errors
   if (

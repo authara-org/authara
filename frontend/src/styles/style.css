@@ -52,3 +52,8 @@
   backdrop-filter: blur(4px);
   background-color: rgba(0, 0, 0, 0.4);
 }
+
+.is-redirecting .redirect-overlay { 
+  display: flex; 
+}
+

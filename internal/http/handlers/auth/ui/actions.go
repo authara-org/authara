@@ -14,7 +14,6 @@ import (
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/httputil"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/response"
 	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
 	"github.com/alexlup06-authgate/authgate/internal/http/templates/components/toast"
@@ -43,7 +42,7 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 			"Please provide a valid email and password.",
 		)
 
-		_ = render.Render(
+		_ = h.Render(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
@@ -67,7 +66,7 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 			"Too many attempts. Please try again later.",
 		)
 
-		_ = render.Render(
+		_ = h.Render(
 			w,
 			r,
 			http.StatusTooManyRequests,
@@ -84,7 +83,7 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 			"Could not create account. Please check your details.",
 		)
 
-		_ = render.Render(
+		_ = h.Render(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
@@ -145,7 +144,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 			"Too many attempts. Please try again later.",
 		)
 
-		_ = render.Render(
+		_ = h.Render(
 			w,
 			r,
 			http.StatusTooManyRequests,
@@ -162,7 +161,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 			"Invalid email or password.",
 		)
 
-		_ = render.Render(
+		_ = h.Render(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
@@ -262,7 +261,7 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 			"Failed to load user",
 		)
 
-		_ = render.Render(
+		_ = h.Render(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
@@ -278,7 +277,7 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 			"Failed to read new username",
 		)
 
-		_ = render.Render(
+		_ = h.Render(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
@@ -306,7 +305,7 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 			msg = "Something went wrong"
 		}
 
-		_ = render.Render(
+		_ = h.Render(
 			w, r,
 			status,
 			templ.Join(
@@ -317,7 +316,7 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = render.Render(
+	_ = h.Render(
 		w, r,
 		http.StatusOK,
 		templ.Join(
@@ -380,7 +379,7 @@ func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 			"Error deleting Account",
 		)
 
-		_ = render.Render(
+		_ = h.Render(
 			w,
 			r,
 			http.StatusTooManyRequests,

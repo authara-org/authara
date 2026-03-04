@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alexlup06-authgate/authgate/internal/auth"
+	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
 	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
 	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
@@ -29,6 +30,7 @@ type ServerConfig struct {
 	Google          *google.Client
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
+	Render          render.Renderer
 }
 
 type Middlewares struct {
