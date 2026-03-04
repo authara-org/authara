@@ -20,12 +20,8 @@ func Home(w http.ResponseWriter, r *http.Request) {
 }
 
 func Private(w http.ResponseWriter, r *http.Request) {
-	// Backend AuthGate client (usually created once and reused)
 	client := authgate.NewClient("http://authgate:8080") // AuthGate base URL
 
-	fmt.Println(authgate.UserIDFromContext(r.Context()))
-
-	// Fetch current user identity
 	user, err := client.GetCurrentUser(r.Context(), r)
 	if err != nil {
 		http.Error(w, "internal error aa", http.StatusInternalServerError)
