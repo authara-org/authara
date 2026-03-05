@@ -40,11 +40,11 @@ func main() {
 	}
 
 	logger, err := logging.New(cfg.Logging.Level)
-	logger.Info("starting authgate")
 	if err != nil {
 		logger.Error("invalid token key configuration", "err", err)
 		os.Exit(1)
 	}
+	logger.Info("starting authgate")
 
 	store, err := store.New(store.Config{
 		Host:     cfg.DB.Host,
