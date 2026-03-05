@@ -78,11 +78,11 @@ templ LoginForm() {
 				@click="show = !show"
 				class="absolute cursor-pointer right-0 h-full px-4 text-grey-700 dark:text-grey-300"
 			>
-				<div class="h-5 w-5 my-auto">
-					<div x-show="!show">
+				<div class="h-5 w-5 my-auto relative">
+					<div class="absolute inset-0 bg-white dark:bg-grey-900">
 						@icons.Hide()
 					</div>
-					<div x-show="show">
+					<div x-cloak x-show="show" class="absolute inset-0 bg-white dark:bg-grey-900">
 						@icons.Show()
 					</div>
 				</div>
