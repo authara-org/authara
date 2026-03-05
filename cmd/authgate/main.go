@@ -17,7 +17,7 @@ import (
 	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/alexlup06-authgate/authgate/internal/logging"
 	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
-	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
+	"github.com/alexlup06-authgate/authgate/internal/ratelimiter"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/session/token"
 	"github.com/alexlup06-authgate/authgate/internal/store"
@@ -128,7 +128,7 @@ func main() {
 		ReturnTo:                          returnTo,
 	}
 
-	limiter := ratelimit.NewInMemoryLimiter(ratelimit.LimiterConfig{
+	limiter := ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{
 		LoginIPLimit:     cfg.RateLimit.LoginIPLimit,
 		LoginIPWindow:    cfg.RateLimit.LoginIPWindow,
 		LoginEmailLimit:  cfg.RateLimit.LoginEmailLimit,

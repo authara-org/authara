@@ -8,14 +8,14 @@ import (
 	authhandler "github.com/alexlup06-authgate/authgate/internal/http/handlers/auth"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
 	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
-	"github.com/alexlup06-authgate/authgate/internal/ratelimit"
+	"github.com/alexlup06-authgate/authgate/internal/ratelimiter"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 )
 
 type UIHandler struct {
 	Auth    *auth.Service
 	Session *session.Service
-	Limiter ratelimit.AuthLimiter
+	Limiter ratelimiter.AuthLimiter
 	Logger  *slog.Logger
 	Google  *google.Client
 
