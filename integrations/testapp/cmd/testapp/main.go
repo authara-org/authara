@@ -40,8 +40,8 @@ func main() {
 		r.Get("/private", handlers.Private)
 	})
 
-	log.Println("testapp listening on :3000")
-	log.Fatal(http.ListenAndServe(":3000", r))
+	log.Println("testapp listening on :8080")
+	log.Fatal(http.ListenAndServe(":8080", r))
 }
 
 func mustKey(b64 string) []byte {
