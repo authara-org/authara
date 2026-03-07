@@ -28,20 +28,20 @@ type transactionState struct {
 // ---------------------------------------------------------------------
 
 func (m *Manager) WithTransaction(ctx context.Context, fn func(context.Context) error) error {
-	txCtx, cancel, err := m.withCancel(ctx)
+	txCtx, cancel, owned, err := m.withCancel(ctx)
 	if err != nil {
 		return err
 	}
 	defer cancel()
 
 	if err := fn(txCtx); err != nil {
-		if !isFinished(txCtx) {
+		if owned && !isFinished(txCtx) {
 			_ = m.Rollback(txCtx)
 		}
 		return err
 	}
 
-	if !isFinished(txCtx) {
+	if owned && !isFinished(txCtx) {
 		return m.Commit(txCtx)
 	}
 
@@ -80,14 +80,35 @@ func (m *Manager) Rollback(ctx context.Context) error {
 	return nil
 }
 
+// Begin starts a transaction if none exists yet.
+// If the parent context already contains a transaction, it is reused.
+func (m *Manager) Begin(parent context.Context) (context.Context, context.CancelFunc, error) {
+	txCtx, cancel, _, err := m.withCancel(parent)
+	return txCtx, cancel, err
+}
+
 // ---------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------
 
-func (m *Manager) withCancel(parent context.Context) (context.Context, context.CancelFunc, error) {
+func (m *Manager) withCancel(parent context.Context) (context.Context, context.CancelFunc, bool, error) {
+	// Reuse existing transaction if already present in context.
+	if existing, ok := parent.Value(store.DbKey).(*gorm.DB); ok && existing != nil {
+		// ensure tx state exists
+		if _, ok := parent.Value(store.TxKey).(*transactionState); ok {
+			return parent, func() {}, false, nil
+		}
+		ctx := context.WithValue(parent, store.TxKey, &transactionState{})
+		return ctx, func() {}, false, nil
+	}
+
 	ctx, cancel := context.WithCancel(parent)
 	txCtx, err := m.withContext(ctx)
-	return txCtx, cancel, err
+	if err != nil {
+		cancel()
+		return nil, func() {}, false, err
+	}
+	return txCtx, cancel, true, nil
 }
 
 func (m *Manager) withContext(parent context.Context) (context.Context, error) {
