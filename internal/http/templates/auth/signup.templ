@@ -29,7 +29,7 @@ templ Signup() {
 			</div>
 			<div class="relative flex justify-center my-5">
 				<p class="bg-white dark:bg-grey-900 text-sm px-4 z-2 text-grey-700 dark:text-grey-300">
-					Or, Signup with email
+					or
 				</p>
 				<div class="absolute w-full top-1/2 -translate-y-1/2 left-0 h-0.5 bg-grey-200 dark:bg-grey-800 z-1"></div>
 			</div>
@@ -38,7 +38,7 @@ templ Signup() {
 			</div>
 			<div class="text-center mt-6">
 				<p class="text-grey-800 dark:text-grey-200">
-					Already have an account ? &nbsp;
+					Already have an account?
 					<a
 						hx-get={ "/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 						hx-target="#body"
