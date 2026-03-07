@@ -5,16 +5,29 @@ endif
 
 POSTGRESQL_SCHEMA ?= authgate
 
-.PHONY: dev dev-tailwind connect-db migrate-up db-clean db-drop-table db-reset admin-by-email
+DOCKER_COMPOSE_FILE = docker-compose.dev.yaml
+DOCKER_COMPOSE_DEV  = docker compose -f $(DOCKER_COMPOSE_FILE)
+DOCKER_COMPOSE_TEST = docker compose -f $(DOCKER_COMPOSE_FILE)
 
-DOCKER_COMPOSE_DEV = docker compose -f docker-compose.dev.yaml
 POSTGRES_SERVICE   = postgres
+AUTHGATE_SERVICE   = authgate
+MIGRATIONS_SERVICE = backend-migrations
+
+TEST_DB_NAME       ?= authgate_test
+TEST_DB_HOST       ?= postgres
+TEST_DB_PORT       ?= 5432
+TEST_DB_SCHEMA     ?= authgate
+TEST_DB_TIMEZONE   ?= UTC
+TEST_DB_LOG_SQL    ?= false
+
+.PHONY: dev dev-tailwind connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email \
+	test test-up test-db-create test-migrate test-run test-down test-reset
 
 dev:
 	@if command -v tmux >/dev/null 2>&1; then \
 		echo "Starting dev environment with tmux..."; \
 		tmux new-session -d -s authgate \
-			'docker compose -f docker-compose.dev.yaml up' \; \
+			'$(DOCKER_COMPOSE_DEV) up' \; \
 			split-window -h \
 			'cd frontend && npm run dev:tailwind' \; \
 			attach; \
@@ -23,7 +36,7 @@ dev:
 		echo "tmux not found."; \
 		echo ""; \
 		echo "Please run the following in two terminals:"; \
-		echo "  1) docker compose -f docker-compose.dev.yaml up"; \
+		echo "  1) $(DOCKER_COMPOSE_DEV) up"; \
 		echo "  2) cd frontend && npm run dev:tailwind"; \
 		echo ""; \
 	fi
@@ -36,7 +49,7 @@ connect-db:
 	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE)
 
 migrate-up:
-	$(DOCKER_COMPOSE_DEV) run --rm backend-migrations
+	$(DOCKER_COMPOSE_DEV) run --rm $(MIGRATIONS_SERVICE)
 
 db-clean:
 	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
@@ -57,7 +70,7 @@ db-clean:
 
 db-truncate-table:
 ifndef TABLE
-	$(error TABLE is required. Usage: make db-drop-table TABLE=table_name)
+	$(error TABLE is required. Usage: make db-truncate-table TABLE=table_name)
 endif
 	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
 	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
@@ -87,3 +100,57 @@ endif
 	SELECT u.id, r.id FROM u, r \
 	ON CONFLICT DO NOTHING; \
 	"
+
+# Full local test flow
+test: test-up test-db-create test-migrate test-run
+
+test-up:
+	$(DOCKER_COMPOSE_TEST) up -d $(POSTGRES_SERVICE)
+	until $(DOCKER_COMPOSE_TEST) exec -T $(POSTGRES_SERVICE) \
+		pg_isready -U $(POSTGRESQL_USERNAME) -d postgres >/dev/null 2>&1; do \
+		echo "waiting for postgres..."; \
+		sleep 2; \
+	done
+
+test-db-create:
+	@if ! $(DOCKER_COMPOSE_TEST) exec -T $(POSTGRES_SERVICE) \
+		psql -U $(POSTGRESQL_USERNAME) -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$(TEST_DB_NAME)'" | grep -q 1; then \
+		echo "creating test database $(TEST_DB_NAME)..."; \
+		$(DOCKER_COMPOSE_TEST) exec -T $(POSTGRES_SERVICE) \
+			psql -U $(POSTGRESQL_USERNAME) -d postgres -v ON_ERROR_STOP=1 \
+			-c "CREATE DATABASE $(TEST_DB_NAME)"; \
+	else \
+		echo "test database $(TEST_DB_NAME) already exists"; \
+	fi
+
+test-migrate:
+	$(DOCKER_COMPOSE_TEST) run --rm \
+		-e POSTGRESQL_HOST=$(TEST_DB_HOST) \
+		-e POSTGRESQL_PORT=$(TEST_DB_PORT) \
+		-e POSTGRESQL_DATABASE=$(TEST_DB_NAME) \
+		-e POSTGRESQL_USERNAME=$(POSTGRESQL_USERNAME) \
+		-e POSTGRESQL_PASSWORD=$(POSTGRESQL_PASSWORD) \
+		$(MIGRATIONS_SERVICE) \
+		up -env=default -config=./dbconfig.yaml
+
+test-run:
+	$(DOCKER_COMPOSE_TEST) run --rm \
+		-e POSTGRESQL_HOST=$(TEST_DB_HOST) \
+		-e POSTGRESQL_PORT=$(TEST_DB_PORT) \
+		-e POSTGRESQL_DATABASE=$(TEST_DB_NAME) \
+		-e POSTGRESQL_USERNAME=$(POSTGRESQL_USERNAME) \
+		-e POSTGRESQL_PASSWORD=$(POSTGRESQL_PASSWORD) \
+		-e POSTGRESQL_SCHEMA=$(TEST_DB_SCHEMA) \
+		-e POSTGRESQL_TIMEZONE=$(TEST_DB_TIMEZONE) \
+		-e POSTGRESQL_LOG_SQL=$(TEST_DB_LOG_SQL) \
+		$(AUTHGATE_SERVICE) \
+		go test ./... -count=1
+
+test-reset:
+	$(DOCKER_COMPOSE_TEST) exec -T $(POSTGRES_SERVICE) \
+		psql -U $(POSTGRESQL_USERNAME) -d postgres -v ON_ERROR_STOP=1 \
+		-c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$(TEST_DB_NAME)' AND pid <> pg_backend_pid();" \
+		-c "DROP DATABASE IF EXISTS $(TEST_DB_NAME);"
+
+test-down:
+	$(DOCKER_COMPOSE_TEST) down
