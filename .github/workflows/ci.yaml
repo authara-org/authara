@@ -23,8 +23,6 @@ jobs:
           POSTGRES_DB: authgate_test
           POSTGRES_USER: authgate
           POSTGRES_PASSWORD: authgate
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd="pg_isready -U authgate"
           --health-interval=10s
