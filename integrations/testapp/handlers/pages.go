@@ -5,7 +5,7 @@ import (
 	"html"
 	"net/http"
 
-	"github.com/alexlup06-authgate/authgate-go/authgate"
+	"github.com/authara-org/authara-go/authara"
 )
 
 func Home(w http.ResponseWriter, r *http.Request) {
@@ -20,7 +20,7 @@ func Home(w http.ResponseWriter, r *http.Request) {
 }
 
 func Private(w http.ResponseWriter, r *http.Request) {
-	client := authgate.NewClient("http://authgate:8080") // AuthGate base URL
+	client := authara.NewClient("http://authara:8080") // Authara base URL
 
 	user, err := client.GetCurrentUser(r.Context(), r)
 	if err != nil {
@@ -33,7 +33,7 @@ func Private(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logout, ok := authgate.LogoutFormDataFromRequest(
+	logout, ok := authara.LogoutFormDataFromRequest(
 		r,
 		"/auth/login?return_to=/private",
 	)

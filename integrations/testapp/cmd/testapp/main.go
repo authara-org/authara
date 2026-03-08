@@ -8,21 +8,21 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/alexlup06-authgate/authgate-go/authgate"
-	"github.com/alexlup06-authgate/authgate-testapp/handlers"
+	"github.com/authara-org/authara-go/authara"
+	"github.com/authara-org/authara-testapp/handlers"
 )
 
 func main() {
 	r := chi.NewRouter()
 
-	appSdk, err := authgate.New(authgate.Config{
+	appSdk, err := authara.New(authara.Config{
 		Audience: "app",
-		Issuer:   "authgate",
+		Issuer:   "authara",
 		Keys: map[string][]byte{
 			"key-2026-01": mustKey("VZp2u1sYz0g2nF2vY8q8dP7cZQpL5cRrXn0k7FZ0xkE="),
 			"key-2025-09": mustKey("Qk8K6E3XrV6mF4T9yZcA2p9xYbDqZpM0JwH3uZ8sL1E="),
 		},
-		AuthGateBaseURL: "http://authgate:8080",
+		AutharaBaseURL: "http://authara:8080",
 	})
 
 	if err != nil {
