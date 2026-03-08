@@ -12,14 +12,16 @@ type User struct {
 	Username  string    `json:"username"`
 	Disabled  bool      `json:"disabled"`
 	CreatedAt time.Time `json:"created_at"`
+	Roles     []string  `json:"roles"`
 }
 
-func UserFromDomain(u domain.User) User {
+func UserWithRoles(u domain.User, roles []string) User {
 	return User{
 		ID:        u.ID.String(),
 		Email:     u.Email,
 		Username:  u.Username,
 		Disabled:  u.DisabledAt != nil,
 		CreatedAt: u.CreatedAt,
+		Roles:     roles,
 	}
 }

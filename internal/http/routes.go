@@ -1,12 +1,31 @@
 package http
 
 import (
+	"net/http"
+	"time"
+
 	authhandler "github.com/alexlup06-authgate/authgate/internal/http/handlers/auth"
 	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/api"
 	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/ui"
 	"github.com/alexlup06-authgate/authgate/internal/http/handlers/meta"
+	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
+
+func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
+	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
+
+	registerRoutes(r, cfg, mw)
+
+	return r
+}
 
 func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	r.Group(func(r chi.Router) {
@@ -91,14 +110,14 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 		// API
 		r.Route("/api/v1", func(r chi.Router) {
-			r.Get("/csrf", apih.CSRFGet)
+			// r.Get("/csrf", apih.CSRFGet)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireCSRF)
 
-				r.Post("/login", apih.LoginPost)
-				r.Post("/signup", apih.SignupPost)
-				r.Post("/sessions/logout", apih.LogoutPost)
+				// r.Post("/login", apih.LoginPost)
+				// r.Post("/signup", apih.SignupPost)
+				// r.Post("/sessions/logout", apih.LogoutPost)
 				r.Post("/sessions/refresh", apih.RefreshPost)
 
 			})
@@ -107,6 +126,8 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Use(mw.RequireAppAccessAuthAPI)
 
 				r.Get("/user", apih.UserGet)
+				// r.Post("/user/username", apih.ChangeUsername)
+				// r.Post("/user/delete", apih.DeleteUser)
 			})
 
 			r.Route("/admin", func(r chi.Router) {

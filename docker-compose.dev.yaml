@@ -36,12 +36,12 @@ services:
     restart: "no"
 
   gateway:
-    image: ghcr.io/alexlup06-authgate/authgate-gateway:1.1.1
+    image: ghcr.io/authara-org/authgate-gateway:1.2.0
     ports:
       - "3000:3000"
     environment:
       GATEWAY_BIND: :3000
-      AUTHGATE_UPSTREAM: authgate:8080
+      AUTHARA_UPSTREAM: authgate:8080
       APP_UPSTREAM: testapp:8080
     depends_on:
       - authgate

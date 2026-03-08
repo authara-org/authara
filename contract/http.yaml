@@ -1,0 +1,183 @@
+version: 1
+
+routes:
+  # ------------------------------------------------------------
+  # Meta
+  # ------------------------------------------------------------
+  - method: GET
+    path: /auth/health
+    stability: stable
+    kind: meta
+    notes: Health endpoint.
+
+  - method: GET
+    path: /auth/version
+    stability: stable
+    kind: meta
+    notes: Version endpoint.
+
+  # ------------------------------------------------------------
+  # Auth UI
+  # ------------------------------------------------------------
+  - method: GET
+    path: /auth/login
+    stability: stable
+    kind: html
+    notes: Login page.
+
+  - method: GET
+    path: /auth/signup
+    stability: stable
+    kind: html
+    notes: Signup page.
+
+  - method: POST
+    path: /auth/sessions/logout
+    stability: stable
+    kind: action
+    notes: Logout current session.
+
+  - method: POST
+    path: /auth/sessions/refresh
+    stability: stable
+    kind: action
+    notes: Refresh current session.
+
+  # ------------------------------------------------------------
+  # OAuth
+  # ------------------------------------------------------------
+  - method: POST
+    path: /auth/oauth/google/callback
+    stability: stable
+    kind: browser-callback
+    notes: Google OAuth callback.
+
+  # ------------------------------------------------------------
+  # Authenticated user routes
+  # ------------------------------------------------------------
+  - method: GET
+    path: /auth/account
+    stability: stable
+    kind: html
+    notes: Authenticated user account page.
+
+  # ------------------------------------------------------------
+  # JSON API v1
+  # ------------------------------------------------------------
+  - method: GET
+    path: /auth/api/v1/user
+    stability: stable
+    kind: json
+    notes: Returns current authenticated user.
+
+json_success_responses:
+  - endpoint: GET /auth/api/v1/user
+    stability: stable
+    response:
+      id: uuid
+      username: string
+      email: string
+      disabled: bool
+      created_at: string
+
+json_error_envelope:
+  stability: stable
+  shape:
+    error:
+      code: string
+      message: string
+
+json_error_contracts:
+  - endpoint: GET /auth/api/v1/user
+    stability: stable
+    allowed_codes:
+      - unauthorized
+      - internal_error
+
+  - endpoint: POST /auth/api/v1/sessions/refresh
+    stability: stable
+    allowed_codes:
+      - unauthorized
+      - invalid_request
+      - internal_error
+
+  - endpoint: POST /auth/api/v1/sessions/logout
+    stability: stable
+    allowed_codes:
+      - unauthorized
+      - internal_error
+
+cookies:
+  - name: authgate_access
+    stability: stable
+    purpose: Access token cookie.
+
+  - name: authgate_refresh
+    stability: stable
+    purpose: Refresh token cookie.
+
+  - name: authgate_csrf
+    stability: stable
+    purpose: CSRF protection cookie.
+
+headers:
+  - name: HX-Redirect
+    stability: stable
+    purpose: HTMX redirect behavior.
+
+query_parameters:
+  - name: return_to
+    stability: stable
+    applies_to:
+      - /auth/login
+      - /auth/signup
+    semantics:
+      - must be a relative path starting with /
+      - values starting with // are rejected
+      - invalid values are ignored
+      - used as post-auth redirect target
+
+behavior:
+  redirects:
+    - name: unauthenticated_protected_page_redirect
+      stability: stable
+      notes: Protected browser routes redirect unauthenticated users to login.
+
+    - name: authenticated_login_signup_redirect
+      stability: stable
+      notes: Already-authenticated users are redirected away from login/signup pages.
+
+    - name: htmx_redirect_header_behavior
+      stability: stable
+      notes: HTMX flows may use HX-Redirect.
+
+    - name: return_to_redirect_parameter
+      stability: stable
+      notes: return_to is honored for valid internal relative paths and ignored for invalid values.
+
+  csrf:
+    - name: csrf_required_for_state_changing_browser_requests
+      stability: stable
+      notes: CSRF is required on protected state-changing browser routes where middleware is applied.
+
+  sessions:
+    - name: access_and_refresh_token_model
+      stability: stable
+      notes: AuthGate uses access-token plus refresh-token session semantics.
+
+    - name: refresh_token_reuse_detection
+      stability: stable
+      notes: Reuse of consumed refresh token is treated as a security event.
+
+compatibility_rules:
+  patch:
+    breaking_changes_allowed: false
+    additive_changes_allowed: false
+
+  minor:
+    breaking_changes_allowed: false
+    additive_changes_allowed: true
+
+  major:
+    breaking_changes_allowed: true
+    additive_changes_allowed: true

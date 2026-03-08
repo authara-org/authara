@@ -37,6 +37,25 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (*domain.User, 
 	return &user, nil
 }
 
+type CurrentUser struct {
+	User  domain.User
+	Roles []string
+}
+
+func (s *Service) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*CurrentUser, error) {
+	user, err := s.store.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	cu := CurrentUser{
+		User:  user,
+		Roles: []string{},
+	}
+
+	return &cu, nil
+}
+
 func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 	return s.store.DeleteUser(ctx, userID)
 }

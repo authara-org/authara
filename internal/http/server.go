@@ -8,14 +8,10 @@ import (
 
 	"github.com/alexlup06-authgate/authgate/internal/auth"
 	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
-	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
 	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
 	"github.com/alexlup06-authgate/authgate/internal/ratelimiter"
 	"github.com/alexlup06-authgate/authgate/internal/session"
 	"github.com/alexlup06-authgate/authgate/internal/store"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 type ServerConfig struct {
@@ -52,20 +48,11 @@ type Server struct {
 }
 
 func NewServer(cfg ServerConfig, mw Middlewares) *Server {
-	r := chi.NewRouter()
-
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(30 * time.Second))
-
-	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
-
-	registerRoutes(r, cfg, mw)
+	handler := NewRouter(cfg, mw)
 
 	srv := &http.Server{
 		Addr:         cfg.Addr,
-		Handler:      r,
+		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

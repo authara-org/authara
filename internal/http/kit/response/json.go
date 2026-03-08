@@ -6,9 +6,12 @@ import (
 )
 
 func JSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		http.Error(w, "json encoding error", http.StatusInternalServerError)
+	}
 }
 
 func ErrorJSON(w http.ResponseWriter, status int, code ErrorCode, message string) {

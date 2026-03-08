@@ -97,7 +97,7 @@ func main() {
 	googleClient := google.New(cfg.OAuth.GoogleClientID)
 
 	redirectIfAuthenticated := httpmiddleware.RedirectIfAuthenticated(sessionService, time.Now)
-	requireAppAccessAuthAPI := httpmiddleware.RequireAccessAuth(sessionService, token.AudienceApp, time.Now)
+	requireAppAccessAuthAPI := httpmiddleware.RequireAPIAccessAuth(sessionService, token.AudienceApp, time.Now)
 	requireAppAccessAuthWithRefresh := httpmiddleware.RequireAccessAuthWithRefresh(
 		sessionService,
 		token.AudienceApp,
@@ -105,7 +105,7 @@ func main() {
 		cfg.Session.RefreshTokenTTL,
 		time.Now,
 	)
-	requireAdminAccessAuthAPI := httpmiddleware.RequireAccessAuth(sessionService, token.AudienceAdmin, time.Now)
+	requireAdminAccessAuthAPI := httpmiddleware.RequireAPIAccessAuth(sessionService, token.AudienceAdmin, time.Now)
 	requireAdminAccessAuthWithRefresh := httpmiddleware.RequireAccessAuthWithRefresh(
 		sessionService,
 		token.AudienceAdmin,

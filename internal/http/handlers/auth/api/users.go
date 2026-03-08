@@ -23,7 +23,7 @@ func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.Auth.GetUser(ctx, userID)
+	cu, err := h.Auth.GetCurrentUser(ctx, userID)
 	if err != nil {
 		response.ErrorJSON(
 			w,
@@ -34,7 +34,15 @@ func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.JSON(w, http.StatusOK, response.UserFromDomain(*user))
+	response.JSON(w, http.StatusOK, response.UserWithRoles(cu.User, cu.Roles))
+}
+
+func (h *APIHandler) ChangeUsername(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func (h *APIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+
 }
 
 func (h *APIHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {
