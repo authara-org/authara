@@ -1,5 +1,5 @@
-# AuthGate
+# Authara
 
 Own your auth.  
 Drop-in, self-hosted authentication. No third-party dependencies.
-Stop rewriting auth. Run AuthGate.
+Stop rewriting auth. Run Authara.

@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/response"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )

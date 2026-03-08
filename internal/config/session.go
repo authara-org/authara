@@ -6,9 +6,9 @@ import (
 )
 
 type Session struct {
-	SessionTTLDays          int    `env:"AUTHGATE_SESSION_TTL_DAYS,default=60"`
-	RefreshTokenTTLDays     int    `env:"AUTHGATE_REFRESH_TOKEN_TTL_DAYS,default=14"`
-	RefreshTokenRotationRaw string `env:"AUTHGATE_REFRESH_TOKEN_ROTATION_INTERVAL,default=24h"`
+	SessionTTLDays          int    `env:"AUTHARA_SESSION_TTL_DAYS,default=60"`
+	RefreshTokenTTLDays     int    `env:"AUTHARA_REFRESH_TOKEN_TTL_DAYS,default=14"`
+	RefreshTokenRotationRaw string `env:"AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL,default=24h"`
 
 	SessionTTL           time.Duration
 	RefreshTokenTTL      time.Duration
@@ -18,21 +18,21 @@ type Session struct {
 func (s *Session) validate() error {
 	if s.SessionTTLDays <= 0 {
 		return fmt.Errorf(
-			"AUTHGATE_SESSION_TTL_DAYS must be greater than 0 (got %d)",
+			"AUTHARA_SESSION_TTL_DAYS must be greater than 0 (got %d)",
 			s.SessionTTLDays,
 		)
 	}
 
 	if s.RefreshTokenTTLDays <= 0 {
 		return fmt.Errorf(
-			"AUTHGATE_REFRESH_TOKEN_TTL_DAYS must be greater than 0 (got %d)",
+			"AUTHARA_REFRESH_TOKEN_TTL_DAYS must be greater than 0 (got %d)",
 			s.RefreshTokenTTLDays,
 		)
 	}
 
 	if s.RefreshTokenTTLDays > s.SessionTTLDays {
 		return fmt.Errorf(
-			"AUTHGATE_REFRESH_TOKEN_TTL_DAYS (%d) must not exceed AUTHGATE_SESSION_TTL_DAYS (%d)",
+			"AUTHARA_REFRESH_TOKEN_TTL_DAYS (%d) must not exceed AUTHARA_SESSION_TTL_DAYS (%d)",
 			s.RefreshTokenTTLDays,
 			s.SessionTTLDays,
 		)
@@ -64,7 +64,7 @@ func parseRotationInterval(v string) (time.Duration, error) {
 		d, err := time.ParseDuration(v)
 		if err != nil {
 			return 0, fmt.Errorf(
-				"invalid AUTHGATE_REFRESH_TOKEN_ROTATION_INTERVAL: %q",
+				"invalid AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL: %q",
 				v,
 			)
 		}

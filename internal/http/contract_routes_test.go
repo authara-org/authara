@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
-	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
-	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
-	"github.com/alexlup06-authgate/authgate/internal/ratelimiter"
+	"github.com/authara-org/authara/internal/http/kit/render"
+	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
+	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 )

@@ -1,12 +1,12 @@
 # API Contract
 
-This document defines the **public compatibility contract** of AuthGate.
+This document defines the **public compatibility contract** of Authara.
 
 Its purpose is to make upgrades safe for:
 
-- applications integrating AuthGate
-- SDKs built on top of AuthGate
-- operators deploying AuthGate in production
+- applications integrating Authara
+- SDKs built on top of Authara
+- operators deploying Authara in production
 
 If behavior described here changes incompatibly, that change is considered **breaking** and must follow the versioning policy below.
 
@@ -14,7 +14,7 @@ If behavior described here changes incompatibly, that change is considered **bre
 
 # 1. Scope
 
-This contract applies to the **externally observable behavior** of AuthGate.
+This contract applies to the **externally observable behavior** of Authara.
 
 It includes:
 
@@ -37,7 +37,7 @@ It does **not** include:
 
 # 2. Versioning Policy
 
-AuthGate follows semantic versioning for its public contract.
+Authara follows semantic versioning for its public contract.
 
 ## Patch release (`x.y.Z`)
 Patch releases must **not** break existing integrations.
@@ -88,7 +88,7 @@ All breaking changes must be documented clearly in release notes and migration g
 
 # 3. Stability Levels
 
-AuthGate uses the following stability levels:
+Authara uses the following stability levels:
 
 ## Stable
 Behavior is part of the public contract and may not break except in a major release.
@@ -161,17 +161,17 @@ Precise HTML content is not stable unless explicitly documented.
 
 # 5. Redirect Contract
 
-Redirect behavior is part of the public contract because AuthGate is designed to integrate with SSR/HTMX-style applications.
+Redirect behavior is part of the public contract because Authara is designed to integrate with SSR/HTMX-style applications.
 
 ## 5.1 Browser redirects
 
-For browser flows, AuthGate may use HTTP redirects for navigation.
+For browser flows, Authara may use HTTP redirects for navigation.
 
 The meaning of redirects for login, signup, logout, and protected-page flows is part of the stable contract.
 
 ## 5.2 HTMX redirects
 
-Where AuthGate uses the `HX-Redirect` response header for HTMX-aware flows, that behavior is considered stable once released.
+Where Authara uses the `HX-Redirect` response header for HTMX-aware flows, that behavior is considered stable once released.
 
 Applications and SDKs may rely on:
 
@@ -186,9 +186,9 @@ Changing HTMX redirect behavior incompatibly is a breaking change.
 
 The following cookie names are stable public contract:
 
-- `authgate_access`
-- `authgate_refresh`
-- `authgate_csrf`
+- `authara_access`
+- `authara_refresh`
+- `authara_csrf`
 
 ## 6.1 Stable cookie identity
 
@@ -196,13 +196,13 @@ These cookie names must not change except in a major release.
 
 ## 6.2 Stable cookie roles
 
-### `authgate_access`
+### `authara_access`
 Used for the short-lived access token.
 
-### `authgate_refresh`
+### `authara_refresh`
 Used for the refresh token / session continuation flow.
 
-### `authgate_csrf`
+### `authara_csrf`
 Used for CSRF protection.
 
 ## 6.3 Cookie attributes
@@ -225,7 +225,7 @@ Examples of breaking cookie changes:
 
 # 7. JSON Response Contract
 
-Where AuthGate exposes JSON endpoints, the following rules apply.
+Where Authara exposes JSON endpoints, the following rules apply.
 
 ## 7.1 Stable field names
 
@@ -235,7 +235,7 @@ Adding optional fields is allowed in minor releases.
 
 ## 7.2 Error envelope
 
-If AuthGate returns structured JSON errors, the envelope shape is part of the contract once documented.
+If Authara returns structured JSON errors, the envelope shape is part of the contract once documented.
 
 Example stable structure:
 
@@ -269,7 +269,7 @@ The following behaviors are part of the public contract.
 
 ## 8.1 Access + refresh model
 
-AuthGate uses a short-lived access token and a refresh token/session continuation model.
+Authara uses a short-lived access token and a refresh token/session continuation model.
 
 Applications and SDKs may rely on the existence of:
 
@@ -279,15 +279,15 @@ Applications and SDKs may rely on the existence of:
 
 ## 8.2 Refresh token reuse detection
 
-If refresh token reuse detection is part of documented AuthGate behavior, weakening or removing that behavior is a breaking security change.
+If refresh token reuse detection is part of documented Authara behavior, weakening or removing that behavior is a breaking security change.
 
 ## 8.3 Audience semantics
 
-If AuthGate documents supported token audiences such as app/admin semantics, those meanings are part of the contract.
+If Authara documents supported token audiences such as app/admin semantics, those meanings are part of the contract.
 
 ## 8.4 CSRF enforcement
 
-For browser state-changing flows under AuthGate-controlled routes, CSRF protection behavior is part of the security contract.
+For browser state-changing flows under Authara-controlled routes, CSRF protection behavior is part of the security contract.
 
 Changes that remove or weaken documented CSRF guarantees are breaking security changes.
 
@@ -328,7 +328,7 @@ Patch releases must not silently remove stable public behavior.
 
 # 11. Compatibility Testing
 
-AuthGate should maintain contract tests for:
+Authara should maintain contract tests for:
 
 - stable routes
 - stable HTTP methods
@@ -336,13 +336,13 @@ AuthGate should maintain contract tests for:
 - stable JSON error envelope / codes
 - stable redirect semantics for documented flows
 
-SDKs should also maintain integration tests against supported AuthGate versions where practical.
+SDKs should also maintain integration tests against supported Authara versions where practical.
 
 ---
 
 # 12. Release Gate
 
-Before any AuthGate release, maintainers should ask:
+Before any Authara release, maintainers should ask:
 
 Could an existing integration or SDK that worked on the previous release fail without code changes after upgrading to this release?
 

@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/auth"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
-	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
-	"github.com/alexlup06-authgate/authgate/internal/ratelimiter"
-	"github.com/alexlup06-authgate/authgate/internal/session"
-	"github.com/alexlup06-authgate/authgate/internal/store"
+	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/authara-org/authara/internal/ratelimiter"
+	"github.com/authara-org/authara/internal/session"
+	"github.com/authara-org/authara/internal/store"
 )
 
 type ServerConfig struct {

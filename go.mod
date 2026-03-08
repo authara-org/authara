@@ -1,4 +1,4 @@
-module github.com/alexlup06-authgate/authgate
+module github.com/authara-org/authara
 
 go 1.25
 

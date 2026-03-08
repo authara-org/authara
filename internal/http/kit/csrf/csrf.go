@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-const CookieName = "authgate_csrf"
+const CookieName = "authara_csrf"
 
 func Generate() (string, error) {
 	b := make([]byte, 32)

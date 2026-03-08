@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alexlup06-authgate/authgate/internal/store"
-	"github.com/alexlup06-authgate/authgate/internal/store/tx"
+	"github.com/authara-org/authara/internal/store"
+	"github.com/authara-org/authara/internal/store/tx"
 )
 
 func setupAuthService(t *testing.T) (*Service, context.Context) {
@@ -17,9 +17,9 @@ func setupAuthService(t *testing.T) (*Service, context.Context) {
 	db, err := store.New(store.Config{
 		Host:     "localhost",
 		Port:     5432,
-		Username: "authgate",
-		Password: "authgate",
-		Database: "authgate_test",
+		Username: "authara",
+		Password: "authara",
+		Database: "authara_test",
 		Schema:   "public",
 		Timezone: "UTC",
 		LogSql:   false,

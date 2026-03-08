@@ -9,4 +9,4 @@ COPY . .
 
 RUN go mod download
 
-CMD ["wgo", "-file=.go", "-file=.templ", "-xfile=_templ.go", "--", "templ" ,"generate" ,"::", "go" ,"run" ,"./cmd/authgate/main.go"]
+CMD ["wgo", "-file=.go", "-file=.templ", "-xfile=_templ.go", "--", "templ" ,"generate" ,"::", "go" ,"run" ,"./cmd/authara/main.go"]

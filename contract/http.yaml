@@ -108,15 +108,15 @@ json_error_contracts:
       - internal_error
 
 cookies:
-  - name: authgate_access
+  - name: authara_access
     stability: stable
     purpose: Access token cookie.
 
-  - name: authgate_refresh
+  - name: authara_refresh
     stability: stable
     purpose: Refresh token cookie.
 
-  - name: authgate_csrf
+  - name: authara_csrf
     stability: stable
     purpose: CSRF protection cookie.
 
@@ -163,7 +163,7 @@ behavior:
   sessions:
     - name: access_and_refresh_token_model
       stability: stable
-      notes: AuthGate uses access-token plus refresh-token session semantics.
+      notes: Authara uses access-token plus refresh-token session semantics.
 
     - name: refresh_token_reuse_detection
       stability: stable

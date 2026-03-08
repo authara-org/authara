@@ -3,7 +3,7 @@ package meta
 import (
 	"net/http"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/staticfs"
+	"github.com/authara-org/authara/internal/http/kit/staticfs"
 	"github.com/go-chi/chi/v5"
 )
 

@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/response"
-	"github.com/alexlup06-authgate/authgate/internal/session"
-	"github.com/alexlup06-authgate/authgate/internal/session/token"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/response"
+	"github.com/authara-org/authara/internal/session"
+	"github.com/authara-org/authara/internal/session/token"
 )
 
 func RequireAPIAccessAuth(sessionSvc *session.Service, audience token.Audience, now func() time.Time) func(http.Handler) http.Handler {

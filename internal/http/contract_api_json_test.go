@@ -7,12 +7,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alexlup06-authgate/authgate/internal/auth"
-	"github.com/alexlup06-authgate/authgate/internal/domain"
-	authhandler "github.com/alexlup06-authgate/authgate/internal/http/handlers/auth"
-	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/api"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
-	"github.com/alexlup06-authgate/authgate/internal/testutil"
+	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/domain"
+	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
+	"github.com/authara-org/authara/internal/http/handlers/auth/api"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/testutil"
 )
 
 func TestJSONContract_UserEndpointShape(t *testing.T) {

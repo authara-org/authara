@@ -1,7 +1,7 @@
 package session
 
 import (
-	"github.com/alexlup06-authgate/authgate/internal/session/roles"
+	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/google/uuid"
 )
 

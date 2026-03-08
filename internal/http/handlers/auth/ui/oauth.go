@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/auth"
-	"github.com/alexlup06-authgate/authgate/internal/domain"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
-	"github.com/alexlup06-authgate/authgate/internal/session"
+	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/session"
 )
 
 func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {

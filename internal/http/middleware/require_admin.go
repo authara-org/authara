@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
 )
 
 func RequireAdmin(next http.Handler) http.Handler {

@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/alexlup06-authgate/authgate/internal/store"
-	"github.com/alexlup06-authgate/authgate/internal/store/tx"
+	"github.com/authara-org/authara/internal/store"
+	"github.com/authara-org/authara/internal/store/tx"
 )
 
 type TestDB struct {
@@ -21,9 +21,9 @@ func OpenTestDB(t *testing.T) *TestDB {
 	cfg := store.Config{
 		Host:     getenv("POSTGRESQL_HOST", "localhost"),
 		Port:     getenvInt("POSTGRESQL_PORT", 5432),
-		Database: getenv("POSTGRESQL_DATABASE", "authgate_test"),
-		Username: getenv("POSTGRESQL_USERNAME", "authgate"),
-		Password: getenv("POSTGRESQL_PASSWORD", "authgate"),
+		Database: getenv("POSTGRESQL_DATABASE", "authara_test"),
+		Username: getenv("POSTGRESQL_USERNAME", "authara"),
+		Password: getenv("POSTGRESQL_PASSWORD", "authara"),
 		Schema:   getenv("POSTGRESQL_SCHEMA", "public"),
 		Timezone: getenv("POSTGRESQL_TIMEZONE", "UTC"),
 		LogSql:   getenvBool("POSTGRESQL_LOG_SQL", false),

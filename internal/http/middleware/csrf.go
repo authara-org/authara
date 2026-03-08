@@ -4,7 +4,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
+	"github.com/authara-org/authara/internal/http/kit/csrf"
 )
 
 func RequireCSRF(next http.Handler) http.Handler {

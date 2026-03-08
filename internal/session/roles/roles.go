@@ -9,7 +9,7 @@ import (
 type Role string
 
 const (
-	AuthgateAdmin Role = "authgate:admin"
+	AutharaAdmin Role = "authara:admin"
 )
 
 type Roles struct {
@@ -27,13 +27,13 @@ func (r *Roles) add(role Role) {
 }
 
 func (r *Roles) AddAdmin() {
-	if !slices.Contains(r.roles, AuthgateAdmin) {
-		r.roles = append(r.roles, AuthgateAdmin)
+	if !slices.Contains(r.roles, AutharaAdmin) {
+		r.roles = append(r.roles, AutharaAdmin)
 	}
 }
 
 func (r *Roles) IsAdmin() bool {
-	return slices.Contains(r.roles, AuthgateAdmin)
+	return slices.Contains(r.roles, AutharaAdmin)
 }
 
 func FromClaims(claims []Role) (Roles, error) {
@@ -51,7 +51,7 @@ func FromClaims(claims []Role) (Roles, error) {
 }
 
 func validate(role Role) error {
-	if !strings.HasPrefix(string(role), "authgate:") {
+	if !strings.HasPrefix(string(role), "authara:") {
 		return fmt.Errorf("invalid role namespace: %s", role)
 	}
 	return nil

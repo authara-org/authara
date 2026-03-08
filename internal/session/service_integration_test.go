@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/domain"
-	"github.com/alexlup06-authgate/authgate/internal/session"
-	"github.com/alexlup06-authgate/authgate/internal/session/token"
-	"github.com/alexlup06-authgate/authgate/internal/testutil"
+	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/session"
+	"github.com/authara-org/authara/internal/session/token"
+	"github.com/authara-org/authara/internal/testutil"
 )
 
 func TestRefreshSession_ReuseDetection_WhenRotationAlways(t *testing.T) {
@@ -191,7 +191,7 @@ func newTestSessionService(
 
 	accessTokens := token.NewAccessTokenService(
 		keySet,
-		"authgate-test",
+		"authara-test",
 		accessTTL,
 	)
 

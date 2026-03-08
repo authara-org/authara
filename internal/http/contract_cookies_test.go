@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
-	"github.com/alexlup06-authgate/authgate/internal/session"
+	"github.com/authara-org/authara/internal/http/kit/csrf"
+	"github.com/authara-org/authara/internal/session"
 )
 
 func TestStableCookieNames_AccessAndRefresh(t *testing.T) {
@@ -23,18 +23,18 @@ func TestStableCookieNames_AccessAndRefresh(t *testing.T) {
 
 	for _, c := range cookies {
 		switch c.Name {
-		case "authgate_access":
+		case "authara_access":
 			foundAccess = true
-		case "authgate_refresh":
+		case "authara_refresh":
 			foundRefresh = true
 		}
 	}
 
 	if !foundAccess {
-		t.Fatal("expected cookie authgate_access to be set")
+		t.Fatal("expected cookie authara_access to be set")
 	}
 	if !foundRefresh {
-		t.Fatal("expected cookie authgate_refresh to be set")
+		t.Fatal("expected cookie authara_refresh to be set")
 	}
 }
 
@@ -51,18 +51,18 @@ func TestStableCookieNames_ClearSessionCookies(t *testing.T) {
 
 	for _, c := range cookies {
 		switch c.Name {
-		case "authgate_access":
+		case "authara_access":
 			foundAccess = true
-		case "authgate_refresh":
+		case "authara_refresh":
 			foundRefresh = true
 		}
 	}
 
 	if !foundAccess {
-		t.Fatal("expected cookie authgate_access to be cleared")
+		t.Fatal("expected cookie authara_access to be cleared")
 	}
 	if !foundRefresh {
-		t.Fatal("expected cookie authgate_refresh to be cleared")
+		t.Fatal("expected cookie authara_refresh to be cleared")
 	}
 }
 
@@ -80,13 +80,13 @@ func TestStableCookieNames_CSRF(t *testing.T) {
 
 	var foundCSRF bool
 	for _, c := range cookies {
-		if c.Name == "authgate_csrf" {
+		if c.Name == "authara_csrf" {
 			foundCSRF = true
 			break
 		}
 	}
 
 	if !foundCSRF {
-		t.Fatal("expected cookie authgate_csrf to be set")
+		t.Fatal("expected cookie authara_csrf to be set")
 	}
 }

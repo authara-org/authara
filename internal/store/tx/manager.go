@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/alexlup06-authgate/authgate/internal/store"
+	"github.com/authara-org/authara/internal/store"
 	"gorm.io/gorm"
 )
 

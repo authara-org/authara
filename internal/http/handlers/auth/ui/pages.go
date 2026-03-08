@@ -3,12 +3,12 @@ package ui
 import (
 	"net/http"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/ui/flow"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
-	authview "github.com/alexlup06-authgate/authgate/internal/http/templates/auth"
-	userview "github.com/alexlup06-authgate/authgate/internal/http/templates/user"
-	"github.com/alexlup06-authgate/authgate/internal/session"
+	"github.com/authara-org/authara/internal/http/handlers/auth/ui/flow"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
+	authview "github.com/authara-org/authara/internal/http/templates/auth"
+	userview "github.com/authara-org/authara/internal/http/templates/user"
+	"github.com/authara-org/authara/internal/session"
 )
 
 func (h *UIHandler) SignupPage(w http.ResponseWriter, r *http.Request) {

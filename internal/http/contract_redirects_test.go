@@ -5,9 +5,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
-	redir "github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
-	"github.com/alexlup06-authgate/authgate/internal/http/middleware"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	redir "github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/middleware"
 )
 
 func TestRedirectContract_ReturnTo_RegularBrowserRequest(t *testing.T) {

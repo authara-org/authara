@@ -3,20 +3,20 @@ ifneq (,$(wildcard .env))
 	export
 endif
 
-POSTGRESQL_SCHEMA ?= authgate
+POSTGRESQL_SCHEMA ?= authara
 
 DOCKER_COMPOSE_FILE = docker-compose.dev.yaml
 DOCKER_COMPOSE_DEV  = docker compose -f $(DOCKER_COMPOSE_FILE)
 DOCKER_COMPOSE_TEST = docker compose -f $(DOCKER_COMPOSE_FILE)
 
 POSTGRES_SERVICE   = postgres
-AUTHGATE_SERVICE   = authgate
+AUTHARA_SERVICE   = authara
 MIGRATIONS_SERVICE = backend-migrations
 
-TEST_DB_NAME       ?= authgate_test
+TEST_DB_NAME       ?= authara_test
 TEST_DB_HOST       ?= postgres
 TEST_DB_PORT       ?= 5432
-TEST_DB_SCHEMA     ?= authgate
+TEST_DB_SCHEMA     ?= authara
 TEST_DB_TIMEZONE   ?= UTC
 TEST_DB_LOG_SQL    ?= false
 
@@ -26,7 +26,7 @@ TEST_DB_LOG_SQL    ?= false
 dev:
 	@if command -v tmux >/dev/null 2>&1; then \
 		echo "Starting dev environment with tmux..."; \
-		tmux new-session -d -s authgate \
+		tmux new-session -d -s authara \
 			'$(DOCKER_COMPOSE_DEV) up' \; \
 			split-window -h \
 			'cd frontend && npm run dev:tailwind' \; \
@@ -143,7 +143,7 @@ test-run:
 		-e POSTGRESQL_SCHEMA=$(TEST_DB_SCHEMA) \
 		-e POSTGRESQL_TIMEZONE=$(TEST_DB_TIMEZONE) \
 		-e POSTGRESQL_LOG_SQL=$(TEST_DB_LOG_SQL) \
-		$(AUTHGATE_SERVICE) \
+		$(AUTHARA_SERVICE) \
 		go test ./... -count=1
 
 test-reset:

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/domain"
-	"github.com/alexlup06-authgate/authgate/internal/store"
-	"github.com/alexlup06-authgate/authgate/internal/store/tx"
+	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/store"
+	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/google/uuid"
 )
 

@@ -3,7 +3,7 @@ package response
 import (
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/domain"
+	"github.com/authara-org/authara/internal/domain"
 )
 
 type User struct {

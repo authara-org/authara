@@ -6,9 +6,9 @@ import (
 )
 
 type OAuth struct {
-	Providers []string `env:"AUTHGATE_OAUTH_PROVIDERS"`
+	Providers []string `env:"AUTHARA_OAUTH_PROVIDERS"`
 
-	GoogleClientID string `env:"AUTHGATE_OAUTH_GOOGLE_CLIENT_ID"`
+	GoogleClientID string `env:"AUTHARA_OAUTH_GOOGLE_CLIENT_ID"`
 }
 
 func (oa *OAuth) validate() error {
@@ -29,7 +29,7 @@ func (oa *OAuth) validate() error {
 		switch p {
 		case "google":
 			if oa.GoogleClientID == "" {
-				return fmt.Errorf("AUTHGATE_OAUTH_GOOGLE_CLIENT_ID is required")
+				return fmt.Errorf("AUTHARA_OAUTH_GOOGLE_CLIENT_ID is required")
 			}
 		default:
 			return fmt.Errorf("unsupported OAuth provider %q", p)

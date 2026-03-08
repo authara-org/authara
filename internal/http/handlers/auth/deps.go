@@ -4,11 +4,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/auth"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
-	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
-	"github.com/alexlup06-authgate/authgate/internal/ratelimiter"
-	"github.com/alexlup06-authgate/authgate/internal/session"
+	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/authara-org/authara/internal/ratelimiter"
+	"github.com/authara-org/authara/internal/session"
 )
 
 type Deps struct {

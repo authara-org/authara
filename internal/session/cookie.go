@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	accessCookieName  = "authgate_access"
-	refreshCookieName = "authgate_refresh"
+	accessCookieName  = "authara_access"
+	refreshCookieName = "authara_refresh"
 
 	cookiePath = "/"
 )

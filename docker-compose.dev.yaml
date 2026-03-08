@@ -36,18 +36,18 @@ services:
     restart: "no"
 
   gateway:
-    image: ghcr.io/authara-org/authgate-gateway:1.2.0
+    image: ghcr.io/authara-org/authara-gateway:1.2.0
     ports:
       - "3000:3000"
     environment:
       GATEWAY_BIND: :3000
-      AUTHARA_UPSTREAM: authgate:8080
+      AUTHARA_UPSTREAM: authara:8080
       APP_UPSTREAM: testapp:8080
     depends_on:
-      - authgate
+      - authara
       - testapp
 
-  authgate:
+  authara:
     build:
       context: .
       dockerfile: docker/Dockerfile.dev

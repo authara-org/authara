@@ -5,13 +5,13 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
-	"github.com/alexlup06-authgate/authgate/internal/session"
-	"github.com/alexlup06-authgate/authgate/internal/session/token"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/session"
+	"github.com/authara-org/authara/internal/session/token"
 )
 
-// RequirePageAccessAuthWithRefresh protects AuthGate-rendered pages + HTMX actions.
+// RequirePageAccessAuthWithRefresh protects Authara-rendered pages + HTMX actions.
 // It validates the access token, and if it's missing/expired it will try to refresh
 // using the refresh token cookie. If refresh fails, it redirects to login.
 func RequireAccessAuthWithRefresh(

@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/csrf"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
 )
 
 func New(a Assets) Renderer {

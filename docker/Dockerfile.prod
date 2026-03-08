@@ -42,8 +42,8 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 \
   go build \
   -ldflags "-X main.Version=${VERSION}" \
-  -o /app/authgate \
-  ./cmd/authgate
+  -o /app/authara \
+  ./cmd/authara
 
 #
 # Runtime
@@ -52,7 +52,7 @@ FROM gcr.io/distroless/base-debian12
 
 WORKDIR /app
 
-COPY --from=backend-builder /app/authgate /app/authgate
+COPY --from=backend-builder /app/authara /app/authara
 COPY --from=backend-builder /app/internal/http/static /app/internal/http/static
 COPY --from=backend-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
@@ -61,6 +61,6 @@ USER nonroot
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-  CMD ["/app/authgate", "healthcheck"]
+  CMD ["/app/authara", "healthcheck"]
 
-ENTRYPOINT ["/app/authgate"]
+ENTRYPOINT ["/app/authara"]

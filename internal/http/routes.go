@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"time"
 
-	authhandler "github.com/alexlup06-authgate/authgate/internal/http/handlers/auth"
-	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/api"
-	"github.com/alexlup06-authgate/authgate/internal/http/handlers/auth/ui"
-	"github.com/alexlup06-authgate/authgate/internal/http/handlers/meta"
-	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
+	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
+	"github.com/authara-org/authara/internal/http/handlers/auth/api"
+	"github.com/authara-org/authara/internal/http/handlers/auth/ui"
+	"github.com/authara-org/authara/internal/http/handlers/meta"
+	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )

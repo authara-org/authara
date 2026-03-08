@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/store"
+	"github.com/authara-org/authara/internal/store"
 )
 
 func CheckSchemaVersion(store *store.Store, required int) error {

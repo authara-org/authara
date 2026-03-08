@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alexlup06-authgate/authgate/internal/session/token"
+	"github.com/authara-org/authara/internal/session/token"
 )
 
 func AudienceForPath(path string) token.Audience {

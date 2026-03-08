@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/domain"
-	"github.com/alexlup06-authgate/authgate/internal/store/model"
+	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )

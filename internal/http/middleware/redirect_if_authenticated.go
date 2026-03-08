@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/redirect"
-	"github.com/alexlup06-authgate/authgate/internal/session"
+	"github.com/authara-org/authara/internal/http/kit/csrf"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/session"
 )
 
 func RedirectIfAuthenticated(sessionService *session.Service, now func() time.Time) func(http.Handler) http.Handler {

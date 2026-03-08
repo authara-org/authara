@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alexlup06-authgate/authgate/internal/testutil"
+	"github.com/authara-org/authara/internal/testutil"
 )
 
 func TestWithRollbackTx_StartsTransaction(t *testing.T) {

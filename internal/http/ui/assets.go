@@ -3,8 +3,8 @@ package ui
 import (
 	"context"
 
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/httpctx"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/render"
 )
 
 func Static(ctx context.Context, name string) string {

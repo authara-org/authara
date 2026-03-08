@@ -8,21 +8,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alexlup06-authgate/authgate/internal/auth"
-	"github.com/alexlup06-authgate/authgate/internal/bootstrap"
-	"github.com/alexlup06-authgate/authgate/internal/config"
-	httpserver "github.com/alexlup06-authgate/authgate/internal/http"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/csrf"
-	"github.com/alexlup06-authgate/authgate/internal/http/kit/render"
-	httpmiddleware "github.com/alexlup06-authgate/authgate/internal/http/middleware"
-	"github.com/alexlup06-authgate/authgate/internal/logging"
-	"github.com/alexlup06-authgate/authgate/internal/oauth/google"
-	"github.com/alexlup06-authgate/authgate/internal/ratelimiter"
-	"github.com/alexlup06-authgate/authgate/internal/session"
-	"github.com/alexlup06-authgate/authgate/internal/session/token"
-	"github.com/alexlup06-authgate/authgate/internal/store"
-	"github.com/alexlup06-authgate/authgate/internal/store/schema"
-	"github.com/alexlup06-authgate/authgate/internal/store/tx"
+	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/bootstrap"
+	"github.com/authara-org/authara/internal/config"
+	httpserver "github.com/authara-org/authara/internal/http"
+	"github.com/authara-org/authara/internal/http/kit/csrf"
+	"github.com/authara-org/authara/internal/http/kit/render"
+	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
+	"github.com/authara-org/authara/internal/logging"
+	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/authara-org/authara/internal/ratelimiter"
+	"github.com/authara-org/authara/internal/session"
+	"github.com/authara-org/authara/internal/session/token"
+	"github.com/authara-org/authara/internal/store"
+	"github.com/authara-org/authara/internal/store/schema"
+	"github.com/authara-org/authara/internal/store/tx"
 )
 
 var Version = "dev"
@@ -44,7 +44,7 @@ func main() {
 		logger.Error("invalid token key configuration", "err", err)
 		os.Exit(1)
 	}
-	logger.Info("starting authgate")
+	logger.Info("starting authara")
 
 	store, err := store.New(store.Config{
 		Host:     cfg.DB.Host,
@@ -181,7 +181,7 @@ func main() {
 
 	<-ctx.Done()
 
-	logger.Info("shutting down authgate")
+	logger.Info("shutting down authara")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -190,5 +190,5 @@ func main() {
 		logger.Error("graceful shutdown failed", "err", err)
 	}
 
-	logger.Info("authgate stopped")
+	logger.Info("authara stopped")
 }
