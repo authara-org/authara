@@ -1,0 +1,64 @@
+site_name: Authara
+site_description: Self-hosted authentication infrastructure
+site_url: https://docs.authara.org
+repo_url: https://github.com/authara-org/authara
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: white
+      accent: blue
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+    - scheme: slate
+      primary: black
+      accent: blue
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+
+  - Architecture:
+      - Overview: architecture/overview.md
+
+  - Components:
+      - Overview: components/overview.md
+
+  - Deployment:
+      - Docker: deployment/docker.md
+      - Production: deployment/production.md
+
+  - Operations:
+      - Migrations: operations/migrations.md
+      - Health Checks: operations/healthchecks.md
+
+  - HTTP:
+      - Overview: http/overview.md
+      - Browser Routes: http/browser-routes.md
+
+  - API:
+      - Overview: api/overview.md
+      - Endpoints: api/endpoints.md
+      - Cookies: api/cookies.md
+      - Errors: api/errors.md
+
+  - Integration:
+      - Protecting Routes: integration/protecting-routes.md
+      - Login Redirect: integration/login-redirect.md
+      - Reading the User: integration/reading-user.md
+
+  - Configuration:
+      - Overview: configuration/overview.md
+      - Reference: configuration/reference.md
+      - JWT: configuration/jwt.md
+      - OAuth: configuration/oauth.md
+      - Rate Limiting: configuration/rate-limiting.md

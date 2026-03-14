@@ -70,3 +70,7 @@ docker-compose.override.yml
 
 # Neovim
 .nvim/
+
+# Docs
+.venv/
+site/
