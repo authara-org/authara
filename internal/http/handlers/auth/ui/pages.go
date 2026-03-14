@@ -42,14 +42,14 @@ func (h *UIHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		redirect.Redirect(w, r, "/auth/login?return_to=/auth/user", http.StatusSeeOther)
+		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/user"), http.StatusSeeOther)
 		return
 	}
 
 	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil || user == nil {
 		session.ClearSessionCookies(w)
-		redirect.Redirect(w, r, "/auth/login?return_to=/auth/user", http.StatusSeeOther)
+		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/user"), http.StatusSeeOther)
 		return
 	}
 

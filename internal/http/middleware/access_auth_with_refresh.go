@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
@@ -76,7 +75,7 @@ func RequireAccessAuthWithRefresh(
 				returnTo = "/"
 			}
 
-			loginURL := "/auth/login?return_to=" + url.QueryEscape(returnTo)
+			loginURL := redirect.WithReturnTo("/auth/login", returnTo)
 			redirect.Redirect(w, r, loginURL, http.StatusSeeOther)
 		})
 	}

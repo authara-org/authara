@@ -3,7 +3,6 @@ package ui
 import (
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -223,7 +222,7 @@ func (h *UIHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 	refresh, ok := session.ReadRefreshToken(r)
 	if !ok {
 		session.ClearSessionCookies(w)
-		redirect.Redirect(w, r, "/auth/login?return_to="+url.QueryEscape(returnTo), http.StatusSeeOther)
+		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", returnTo), http.StatusSeeOther)
 		return
 	}
 
@@ -235,7 +234,7 @@ func (h *UIHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		session.ClearSessionCookies(w)
-		redirect.Redirect(w, r, "/auth/login?return_to="+url.QueryEscape(returnTo), http.StatusSeeOther)
+		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", returnTo), http.StatusSeeOther)
 		return
 	}
 
@@ -249,7 +248,7 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		redirect.Redirect(w, r, "/auth/login?return_to=/auth/user", http.StatusSeeOther)
+		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/user"), http.StatusSeeOther)
 		return
 	}
 
@@ -361,14 +360,9 @@ func (h *UIHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {
 func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	returnTo, ok := httpctx.ReturnTo(r.Context())
-	if !ok {
-		returnTo = "/"
-	}
-
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		redirect.Redirect(w, r, "/auth/login?return_to=/auth/account"+url.QueryEscape(returnTo), http.StatusSeeOther)
+		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/account"), http.StatusSeeOther)
 		return
 	}
 
