@@ -70,6 +70,18 @@ routes:
     kind: json
     notes: Returns current authenticated user.
 
+  - method: POST
+    path: /auth/api/v1/sessions/refresh
+    stability: stable
+    kind: json
+    notes: Refreshes current authenticated session.
+
+  - method: POST
+    path: /auth/api/v1/sessions/logout
+    stability: stable
+    kind: json
+    notes: Logs out current session.
+
 json_success_responses:
   - endpoint: GET /auth/api/v1/user
     stability: stable
@@ -79,6 +91,25 @@ json_success_responses:
       email: string
       disabled: bool
       created_at: string
+      roles: array
+
+  - endpoint: POST /auth/api/v1/sessions/refresh
+    stability: stable
+    response:
+      status: 200
+      body: none
+      cookies_set:
+        - authara_access
+        - authara_refresh
+
+  - endpoint: POST /auth/api/v1/sessions/logout
+    stability: stable
+    response:
+      status: 204
+      body: none
+      cookies_cleared:
+        - authara_access
+        - authara_refresh
 
 json_error_envelope:
   stability: stable
@@ -90,22 +121,23 @@ json_error_envelope:
 json_error_contracts:
   - endpoint: GET /auth/api/v1/user
     stability: stable
-    allowed_codes:
-      - unauthorized
-      - internal_error
+    errors:
+      - status: 401
+        code: unauthorized
 
   - endpoint: POST /auth/api/v1/sessions/refresh
     stability: stable
-    allowed_codes:
-      - unauthorized
-      - invalid_request
-      - internal_error
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 500
+        code: internal_error
 
   - endpoint: POST /auth/api/v1/sessions/logout
     stability: stable
-    allowed_codes:
-      - unauthorized
-      - internal_error
+    errors: []
 
 cookies:
   - name: authara_access
