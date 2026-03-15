@@ -1,4 +1,4 @@
-package http
+package contract
 
 import (
 	"fmt"
@@ -29,14 +29,14 @@ type apiContractError struct {
 func loadAPIContract(t *testing.T) apiContract {
 	t.Helper()
 
-	data, err := os.ReadFile("../../contract/api.yaml")
+	data, err := os.ReadFile("../../contract/http.yaml")
 	if err != nil {
-		t.Fatalf("read contract/api.yaml: %v", err)
+		t.Fatalf("read contract/http.yaml: %v", err)
 	}
 
 	var contract apiContract
 	if err := yaml.Unmarshal(data, &contract); err != nil {
-		t.Fatalf("unmarshal contract/api.yaml: %v", err)
+		t.Fatalf("unmarshal contract/http.yaml: %v", err)
 	}
 
 	return contract

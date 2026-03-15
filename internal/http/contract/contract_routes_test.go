@@ -1,10 +1,11 @@
-package http
+package contract
 
 import (
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +27,8 @@ type contractRoute struct {
 	Method    string `yaml:"method"`
 	Path      string `yaml:"path"`
 	Stability string `yaml:"stability"`
+	Kind      string `yaml:"kind"`
+	Access    string `yaml:"access"`
 }
 
 func TestStableRoutesAreRegistered(t *testing.T) {
@@ -41,17 +44,47 @@ func TestStableRoutesAreRegistered(t *testing.T) {
 
 	router := newContractTestRouter()
 	actual := collectRoutes(t, router)
+	expected := stableContractRoutes(contract)
+
+	// Contract -> router for all stable contract routes.
+	for key := range expected {
+		if !actual[key] {
+			t.Fatalf("stable route missing from router: %s", key)
+		}
+	}
+
+	// Router -> contract only for public API routes.
+	for key := range actual {
+		if !isPublicAPIRouteKey(key) {
+			continue
+		}
+		if !expected[key] {
+			t.Fatalf("public API route missing from stable contract: %s", key)
+		}
+	}
+}
+
+func stableContractRoutes(contract httpContractRoutes) map[string]bool {
+	out := make(map[string]bool)
 
 	for _, route := range contract.Routes {
 		if route.Stability != "stable" {
 			continue
 		}
-
-		key := route.Method + " " + route.Path
-		if !actual[key] {
-			t.Fatalf("stable route missing from router: %s", key)
-		}
+		out[route.Method+" "+route.Path] = true
 	}
+
+	return out
+}
+
+func isPublicAPIRouteKey(key string) bool {
+	parts := strings.SplitN(key, " ", 2)
+	if len(parts) != 2 {
+		return false
+	}
+
+	path := parts[1]
+	return strings.HasPrefix(path, "/auth/api")
 }
 
 func newContractTestRouter() chi.Router {
@@ -85,6 +118,7 @@ func newContractTestRouter() chi.Router {
 		RequireAdminAccessAuthAPI:         pass,
 		RequireAdminRole:                  pass,
 		RequireCSRF:                       pass,
+		RequireAPICSRF:                    pass,
 		ReturnTo:                          pass,
 	}
 

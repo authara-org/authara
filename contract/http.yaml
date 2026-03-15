@@ -8,12 +8,14 @@ routes:
     path: /auth/health
     stability: stable
     kind: meta
+    access: public
     notes: Health endpoint.
 
   - method: GET
     path: /auth/version
     stability: stable
     kind: meta
+    access: public
     notes: Version endpoint.
 
   # ------------------------------------------------------------
@@ -23,24 +25,28 @@ routes:
     path: /auth/login
     stability: stable
     kind: html
+    access: public
     notes: Login page.
 
   - method: GET
     path: /auth/signup
     stability: stable
     kind: html
+    access: public
     notes: Signup page.
 
   - method: POST
     path: /auth/sessions/logout
     stability: stable
     kind: action
+    access: public
     notes: Logout current session.
 
   - method: POST
     path: /auth/sessions/refresh
     stability: stable
     kind: action
+    access: public
     notes: Refresh current session.
 
   # ------------------------------------------------------------
@@ -50,6 +56,7 @@ routes:
     path: /auth/oauth/google/callback
     stability: stable
     kind: browser-callback
+    access: public
     notes: Google OAuth callback.
 
   # ------------------------------------------------------------
@@ -59,6 +66,7 @@ routes:
     path: /auth/account
     stability: stable
     kind: html
+    access: user
     notes: Authenticated user account page.
 
   # ------------------------------------------------------------
@@ -68,18 +76,21 @@ routes:
     path: /auth/api/v1/user
     stability: stable
     kind: json
+    access: user
     notes: Returns current authenticated user.
 
   - method: POST
     path: /auth/api/v1/sessions/refresh
     stability: stable
     kind: json
+    access: public
     notes: Refreshes current authenticated session.
 
   - method: POST
     path: /auth/api/v1/sessions/logout
     stability: stable
     kind: json
+    access: public
     notes: Logs out current session.
 
 json_success_responses:
@@ -139,6 +150,24 @@ json_error_contracts:
     stability: stable
     errors: []
 
+csrf_contract:
+  stability: stable
+
+  applies_to:
+    rule: every stable POST route under /auth requires CSRF
+    exceptions:
+      - /auth/oauth/google/callback
+
+  browser_error:
+    status: 403
+    response_kind: text
+
+  api_error:
+    status: 403
+    response_kind: json
+    error:
+      code: forbidden
+
 cookies:
   - name: authara_access
     stability: stable
@@ -188,9 +217,17 @@ behavior:
       notes: return_to is honored for valid internal relative paths and ignored for invalid values.
 
   csrf:
-    - name: csrf_required_for_state_changing_browser_requests
+    - name: csrf_required_for_state_changing_routes
       stability: stable
-      notes: CSRF is required on protected state-changing browser routes where middleware is applied.
+      notes: Every stable POST route under /auth requires CSRF unless explicitly excluded.
+
+    - name: csrf_failure_on_api_routes
+      stability: stable
+      notes: CSRF failure on /auth/api/v1 POST routes returns 403 with JSON error envelope.
+
+    - name: csrf_failure_on_browser_routes
+      stability: stable
+      notes: CSRF failure on non-API /auth POST routes returns 403 text response.
 
   sessions:
     - name: access_and_refresh_token_model

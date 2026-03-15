@@ -19,17 +19,6 @@ var UserGetErrors = map[response.ErrorCode]response.ErrorSpec{
 	},
 }
 
-var DisableUserPostErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeInvalidRequest: {
-		Status: http.StatusBadRequest,
-		Code:   response.CodeInvalidRequest,
-	},
-	response.CodeInternalError: {
-		Status: http.StatusInternalServerError,
-		Code:   response.CodeInternalError,
-	},
-}
-
 var RefreshPostErrors = map[response.ErrorCode]response.ErrorSpec{
 	response.CodeUnauthorized: {
 		Status: http.StatusUnauthorized,
@@ -45,6 +34,8 @@ var RefreshPostErrors = map[response.ErrorCode]response.ErrorSpec{
 	},
 }
 
+var LogoutPostErrors = map[response.ErrorCode]response.ErrorSpec{}
+
 var APIRouteSpecs = []RouteContractSpec{
 	{
 		Method: http.MethodGet,
@@ -53,12 +44,12 @@ var APIRouteSpecs = []RouteContractSpec{
 	},
 	{
 		Method: http.MethodPost,
-		Path:   "/auth/api/v1/users/{userID}/disable",
-		Errors: DisableUserPostErrors,
+		Path:   "/auth/api/v1/sessions/refresh",
+		Errors: RefreshPostErrors,
 	},
 	{
 		Method: http.MethodPost,
-		Path:   "/auth/api/v1/refresh",
-		Errors: RefreshPostErrors,
+		Path:   "/auth/api/v1/sessions/logout",
+		Errors: LogoutPostErrors,
 	},
 }

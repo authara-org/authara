@@ -113,7 +113,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			// r.Get("/csrf", apih.CSRFGet)
 
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireCSRF)
+				r.Use(mw.RequireAPICSRF)
 
 				// r.Post("/login", apih.LoginPost)
 				// r.Post("/signup", apih.SignupPost)
@@ -131,7 +131,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			})
 
 			r.Route("/admin", func(r chi.Router) {
-				r.Use(mw.RequireAppAccessAuthAPI)
+				r.Use(mw.RequireAdminAccessAuthAPI)
 
 			})
 

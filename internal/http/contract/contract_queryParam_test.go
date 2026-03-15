@@ -1,4 +1,4 @@
-package http
+package contract
 
 import (
 	"net/http"
