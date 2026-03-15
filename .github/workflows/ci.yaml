@@ -37,7 +37,7 @@ jobs:
       POSTGRESQL_DATABASE: authara_test
       POSTGRESQL_USERNAME: authara
       POSTGRESQL_PASSWORD: authara
-      POSTGRESQL_SCHEMA: public
+      POSTGRESQL_SCHEMA: authara
       POSTGRESQL_TIMEZONE: UTC
       POSTGRESQL_LOG_SQL: false
 
@@ -71,6 +71,7 @@ jobs:
             -e POSTGRESQL_DATABASE \
             -e POSTGRESQL_USERNAME \
             -e POSTGRESQL_PASSWORD \
+            -e POSTGRESQL_SCHEMA \
             authara-migrations:test \
             up \
             -env=default \
