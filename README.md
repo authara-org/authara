@@ -18,6 +18,77 @@ It is **an authentication server that runs next to your app**.
 
 ---
 
+## Quickstart
+
+The fastest way to run Authara locally is with Docker.
+
+A minimal Docker Compose setup looks like this:
+
+```yaml
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: authara
+      POSTGRES_USER: authara
+      POSTGRES_PASSWORD: authara
+
+  app:
+    image: nginx:alpine
+
+  authara-migrations:
+    image: ghcr.io/authara-org/authara-migrations:latest
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+
+  authara:
+    image: ghcr.io/authara-org/authara-core:latest
+    env_file:
+      - .env
+    depends_on:
+      authara-migrations:
+        condition: service_completed_successfully
+
+  gateway:
+    image: ghcr.io/authara-org/authara-gateway:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GATEWAY_BIND: :3000
+      AUTHARA_UPSTREAM: authara:8080
+      APP_UPSTREAM: app:80
+    depends_on:
+      - authara
+      - app
+```
+
+Create a `.env` file with your Authara configuration, then start the stack:
+
+```bash
+docker compose up
+```
+
+Once everything is running, open:
+
+```text
+http://localhost:3000/auth/login
+```
+
+Authara is typically mounted behind a gateway or reverse proxy:
+
+```text
+/auth/* → Authara
+/*      → Your application
+```
+
+For the full Quickstart, configuration reference, and deployment details, see the documentation:
+
+https://docs.authara.org/quickstart
+
+---
+
 # What Authara does
 
 Authara provides the authentication infrastructure that applications would otherwise need to implement themselves.
@@ -200,27 +271,11 @@ Authara is **self-hosted authentication infrastructure for applications**.
 
 ---
 
-# Status
-
-Authara is currently under active development.
-
-Current priorities include:
-
-- stable session infrastructure
-- clear architecture boundaries
-- predictable deployment behavior
-- explicit authentication contracts
-- contract stability
-
-See the roadmap for upcoming features.
-
----
-
 # Documentation
 
 Full documentation is available at:
 
-https://authara.org
+https://docs.authara.org
 
 ---
 
