@@ -117,7 +117,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				// r.Post("/login", apih.LoginPost)
 				// r.Post("/signup", apih.SignupPost)
-				// r.Post("/sessions/logout", apih.LogoutPost)
+				r.Post("/sessions/logout", apih.LogoutPost)
 				r.Post("/sessions/refresh", apih.RefreshPost)
 
 			})
