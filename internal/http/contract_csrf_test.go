@@ -1,4 +1,4 @@
-package contract
+package http
 
 import (
 	"encoding/json"
