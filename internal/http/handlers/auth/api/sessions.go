@@ -10,15 +10,27 @@ import (
 	"github.com/authara-org/authara/internal/session"
 )
 
+func (h *APIHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	refreshToken, exists := session.ReadRefreshToken(r)
+	if exists {
+		_ = h.Session.Logout(ctx, refreshToken)
+	}
+
+	session.ClearSessionCookies(w)
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *APIHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	refreshToken, ok := session.ReadRefreshToken(r)
 	if !ok || refreshToken == "" {
-		response.ErrorJSON(
+		response.WriteError(
 			w,
-			http.StatusUnauthorized,
-			response.CodeUnauthorized,
+			mustRouteError(RefreshPostErrors, response.CodeUnauthorized),
 			"Refresh token missing",
 		)
 		return
@@ -26,13 +38,11 @@ func (h *APIHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 
 	audience, err := redirect.AudienceFromRequest(r)
 	if err != nil {
-		response.ErrorJSON(
+		response.WriteError(
 			w,
-			http.StatusBadRequest,
-			response.CodeInvalidRequest,
+			mustRouteError(RefreshPostErrors, response.CodeInvalidRequest),
 			"Invalid audience",
 		)
-
 		return
 	}
 
@@ -42,19 +52,17 @@ func (h *APIHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, session.ErrInvalidRefreshToken),
 		errors.Is(err, session.ErrForbidden):
-		response.ErrorJSON(
+		response.WriteError(
 			w,
-			http.StatusUnauthorized,
-			response.CodeUnauthorized,
+			mustRouteError(RefreshPostErrors, response.CodeUnauthorized),
 			"Invalid refresh token",
 		)
 		return
 
 	case err != nil:
-		response.ErrorJSON(
+		response.WriteError(
 			w,
-			http.StatusInternalServerError,
-			response.CodeInternalError,
+			mustRouteError(RefreshPostErrors, response.CodeInternalError),
 			"Session error",
 		)
 		return

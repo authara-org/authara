@@ -5,6 +5,11 @@ import (
 	"net/http"
 )
 
+type ErrorSpec struct {
+	Status int
+	Code   ErrorCode
+}
+
 func JSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -21,4 +26,8 @@ func ErrorJSON(w http.ResponseWriter, status int, code ErrorCode, message string
 			Message: message,
 		},
 	})
+}
+
+func WriteError(w http.ResponseWriter, spec ErrorSpec, message string) {
+	ErrorJSON(w, spec.Status, spec.Code, message)
 }

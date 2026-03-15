@@ -14,10 +14,9 @@ func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		response.ErrorJSON(
+		response.WriteError(
 			w,
-			http.StatusUnauthorized,
-			response.CodeUnauthorized,
+			mustRouteError(UserGetErrors, response.CodeUnauthorized),
 			"Unauthorized",
 		)
 		return
@@ -25,10 +24,9 @@ func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 
 	cu, err := h.Auth.GetCurrentUser(ctx, userID)
 	if err != nil {
-		response.ErrorJSON(
+		response.WriteError(
 			w,
-			http.StatusUnauthorized,
-			response.CodeUnauthorized,
+			mustRouteError(UserGetErrors, response.CodeUnauthorized),
 			"Unauthorized",
 		)
 		return
@@ -50,10 +48,9 @@ func (h *APIHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := uuid.Parse(chi.URLParam(r, "userID"))
 	if err != nil {
-		response.ErrorJSON(
+		response.WriteError(
 			w,
-			http.StatusBadRequest,
-			response.CodeInvalidRequest,
+			mustRouteError(DisableUserPostErrors, response.CodeInvalidRequest),
 			"Invalid user ID",
 		)
 		return
@@ -61,10 +58,9 @@ func (h *APIHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {
 
 	err = h.Auth.DisableUser(ctx, userID)
 	if err != nil {
-		response.ErrorJSON(
+		response.WriteError(
 			w,
-			http.StatusInternalServerError,
-			response.CodeInternalError,
+			mustRouteError(DisableUserPostErrors, response.CodeInternalError),
 			"Server error",
 		)
 		return
