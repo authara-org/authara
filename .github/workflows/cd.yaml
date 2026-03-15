@@ -30,10 +30,10 @@ jobs:
           docker build \
             -f docker/Dockerfile.prod \
             --build-arg VERSION=${{ github.ref_name }} \
-            -t ghcr.io/alexlup06-authgate/authgate-core:${{ github.ref_name }} \
+            -t ghcr.io/authara-org/authara-core:${{ github.ref_name }} \
             .
 
       - name: Push image
         run: |
-          docker push ghcr.io/alexlup06-authgate/authgate-core:${{ github.ref_name }}
+          docker push ghcr.io/authara-org/authara-core:${{ github.ref_name }}
 

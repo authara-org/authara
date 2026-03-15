@@ -17,13 +17,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: authgate
-          POSTGRES_USER: authgate
-          POSTGRES_PASSWORD: authgate
+          POSTGRES_DB: authara
+          POSTGRES_USER: authara
+          POSTGRES_PASSWORD: authara
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U authgate"
+          --health-cmd="pg_isready -U authara"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -35,16 +35,16 @@ jobs:
         run: |
           docker build \
             -f migrations/Dockerfile \
-            -t authgate-migrations:test \
+            -t authara-migrations:test \
             ./migrations
 
       - name: Apply migrations
         env:
           POSTGRESQL_HOST: localhost
           POSTGRESQL_PORT: 5432
-          POSTGRESQL_DATABASE: authgate
-          POSTGRESQL_USERNAME: authgate
-          POSTGRESQL_PASSWORD: authgate
+          POSTGRESQL_DATABASE: authara
+          POSTGRESQL_USERNAME: authara
+          POSTGRESQL_PASSWORD: authara
         run: |
           docker run --rm \
             --network host \
@@ -53,7 +53,7 @@ jobs:
             -e POSTGRESQL_DATABASE \
             -e POSTGRESQL_USERNAME \
             -e POSTGRESQL_PASSWORD \
-            authgate-migrations:test \
+            authara-migrations:test \
             up \
             -env=default\
             -config=/migrations/dbconfig.yaml

@@ -28,9 +28,9 @@ jobs:
         run: |
           docker build \
             -f migrations/Dockerfile \
-            -t ghcr.io/alexlup06-authgate/authgate-migrations:${{ github.ref_name }} \
+            -t ghcr.io/authara-org/authara-migrations:${{ github.ref_name }} \
             ./migrations
 
       - name: Push migrations image
         run: |
-          docker push ghcr.io/alexlup06-authgate/authgate-migrations:${{ github.ref_name }}
+          docker push ghcr.io/authara-org/authara-migrations:${{ github.ref_name }}

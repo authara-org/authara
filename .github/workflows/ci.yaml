@@ -20,13 +20,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: authgate_test
-          POSTGRES_USER: authgate
-          POSTGRES_PASSWORD: authgate
+          POSTGRES_DB: authara_test
+          POSTGRES_USER: authara
+          POSTGRES_PASSWORD: authara
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U authgate"
+          --health-cmd="pg_isready -U authara"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -34,9 +34,9 @@ jobs:
     env:
       POSTGRESQL_HOST: localhost
       POSTGRESQL_PORT: 5432
-      POSTGRESQL_DATABASE: authgate_test
-      POSTGRESQL_USERNAME: authgate
-      POSTGRESQL_PASSWORD: authgate
+      POSTGRESQL_DATABASE: authara_test
+      POSTGRESQL_USERNAME: authara
+      POSTGRESQL_PASSWORD: authara
       POSTGRESQL_SCHEMA: public
       POSTGRESQL_TIMEZONE: UTC
       POSTGRESQL_LOG_SQL: false
@@ -52,7 +52,7 @@ jobs:
 
       - name: Wait for Postgres
         run: |
-          until pg_isready -h localhost -p 5432 -U authgate -d authgate_test; do
+          until pg_isready -h localhost -p 5432 -U authara -d authara_test; do
             echo "waiting for postgres..."
             sleep 2
           done
@@ -61,7 +61,7 @@ jobs:
         run: |
           docker build \
             -f migrations/Dockerfile \
-            -t authgate-migrations:test \
+            -t authara-migrations:test \
             ./migrations
 
           docker run --rm \
@@ -71,7 +71,7 @@ jobs:
             -e POSTGRESQL_DATABASE \
             -e POSTGRESQL_USERNAME \
             -e POSTGRESQL_PASSWORD \
-            authgate-migrations:test \
+            authara-migrations:test \
             up \
             -env=default \
             -config=./dbconfig.yaml
@@ -148,6 +148,6 @@ jobs:
         run: |
           docker build \
             -f docker/Dockerfile.prod \
-            -t authgate:${{ github.sha }} \
+            -t authara:${{ github.sha }} \
             .
 
