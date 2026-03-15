@@ -115,6 +115,7 @@ func main() {
 	)
 	requireAdminRole := httpmiddleware.RequireAdmin
 	requireCSRF := httpmiddleware.RequireCSRF
+	requireAPICSRF := httpmiddleware.RequireAPICSRF
 	returnTo := httpmiddleware.ReturnTo
 
 	mw := httpserver.Middlewares{
@@ -125,6 +126,7 @@ func main() {
 		RequireAdminAccessAuthWithRefresh: requireAdminAccessAuthWithRefresh,
 		RequireAdminRole:                  requireAdminRole,
 		RequireCSRF:                       requireCSRF,
+		RequireAPICSRF:                    requireAPICSRF,
 		ReturnTo:                          returnTo,
 	}
 
