@@ -5,6 +5,8 @@ repo_url: https://github.com/authara-org/authara
 
 theme:
   name: material
+  logo: assets/authara-logo-256x256.png
+  favicon: assets/authara-logo-96x96.png
   features:
     - navigation.instant
     - content.code.copy
