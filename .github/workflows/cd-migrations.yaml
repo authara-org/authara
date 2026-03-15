@@ -18,6 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Derive migrations version
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME#migrations-}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -28,9 +34,9 @@ jobs:
         run: |
           docker build \
             -f migrations/Dockerfile \
-            -t ghcr.io/authara-org/authara-migrations:${{ github.ref_name }} \
+            -t ghcr.io/authara-org/authara-migrations:${{ steps.version.outputs.tag }} \
             ./migrations
 
       - name: Push migrations image
         run: |
-          docker push ghcr.io/authara-org/authara-migrations:${{ github.ref_name }}
+          docker push ghcr.io/authara-org/authara-migrations:${{ steps.version.outputs.tag }}
