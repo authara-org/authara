@@ -1,104 +1,128 @@
 package http
 
 import (
-	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"fmt"
+	"os"
+	"sort"
 	"testing"
 
-	"github.com/authara-org/authara/internal/auth"
-	"github.com/authara-org/authara/internal/domain"
-	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/handlers/auth/api"
-	"github.com/authara-org/authara/internal/http/kit/httpctx"
-	"github.com/authara-org/authara/internal/testutil"
+	"github.com/authara-org/authara/internal/http/kit/response"
+	"gopkg.in/yaml.v3"
 )
 
-func TestJSONContract_UserEndpointShape(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		createdUser, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "contract-user@example.com",
-			Username: "contract-user",
-		})
-		if err != nil {
-			t.Fatalf("CreateUser failed: %v", err)
-		}
-
-		authSvc := auth.New(auth.Config{
-			Store: tdb.Store,
-			Tx:    tdb.Tx,
-		})
-
-		h := api.NewAPIHandler(authhandler.Deps{
-			Auth: authSvc,
-		})
-
-		req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/user", nil)
-		req = req.WithContext(httpctx.WithUserID(ctx, createdUser.ID))
-
-		rr := httptest.NewRecorder()
-		h.UserGet(rr, req)
-
-		if rr.Code != http.StatusOK {
-			t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rr.Code, rr.Body.String())
-		}
-
-		if got := rr.Header().Get("Content-Type"); got != "application/json" {
-			t.Fatalf("expected Content-Type application/json, got %q", got)
-		}
-
-		var body map[string]any
-		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
-			t.Fatalf("response is not valid JSON: %v", err)
-		}
-
-		checkStringField(t, body, "id")
-		checkStringField(t, body, "username")
-		checkStringField(t, body, "email")
-		checkBoolField(t, body, "disabled")
-		checkStringField(t, body, "created_at")
-		checkArrayField(t, body, "roles")
-	})
+type apiContract struct {
+	JSONErrorContracts []apiErrorContract `yaml:"json_error_contracts"`
 }
 
-func checkStringField(t *testing.T, body map[string]any, field string) {
-	t.Helper()
-
-	v, ok := body[field]
-	if !ok {
-		t.Fatalf("missing required field %q", field)
-	}
-
-	if _, ok := v.(string); !ok {
-		t.Fatalf("field %q must be string, got %T", field, v)
-	}
+type apiErrorContract struct {
+	Endpoint  string             `yaml:"endpoint"`
+	Stability string             `yaml:"stability"`
+	Errors    []apiContractError `yaml:"errors"`
 }
 
-func checkBoolField(t *testing.T, body map[string]any, field string) {
-	t.Helper()
-
-	v, ok := body[field]
-	if !ok {
-		t.Fatalf("missing required field %q", field)
-	}
-
-	if _, ok := v.(bool); !ok {
-		t.Fatalf("field %q must be bool, got %T", field, v)
-	}
+type apiContractError struct {
+	Status int    `yaml:"status"`
+	Code   string `yaml:"code"`
 }
 
-func checkArrayField(t *testing.T, body map[string]any, field string) {
+func loadAPIContract(t *testing.T) apiContract {
 	t.Helper()
 
-	v, ok := body[field]
-	if !ok {
-		t.Fatalf("missing required field %q", field)
+	data, err := os.ReadFile("../../contract/api.yaml")
+	if err != nil {
+		t.Fatalf("read contract/api.yaml: %v", err)
 	}
 
-	if _, ok := v.([]any); !ok {
-		t.Fatalf("field %q must be array, got %T", field, v)
+	var contract apiContract
+	if err := yaml.Unmarshal(data, &contract); err != nil {
+		t.Fatalf("unmarshal contract/api.yaml: %v", err)
+	}
+
+	return contract
+}
+
+func endpointKey(method, path string) string {
+	return method + " " + path
+}
+
+func findErrorContract(t *testing.T, contract apiContract, endpoint string) apiErrorContract {
+	t.Helper()
+
+	for _, c := range contract.JSONErrorContracts {
+		if c.Endpoint == endpoint && c.Stability == "stable" {
+			return c
+		}
+	}
+
+	t.Fatalf("stable json_error_contracts entry not found for %q", endpoint)
+	return apiErrorContract{}
+}
+
+func errorKey(status int, code string) string {
+	return fmt.Sprintf("%d:%s", status, code)
+}
+
+func contractErrorSet(errors []apiContractError) map[string]bool {
+	out := make(map[string]bool, len(errors))
+	for _, err := range errors {
+		out[errorKey(err.Status, err.Code)] = true
+	}
+	return out
+}
+
+func routeErrorSet(errors map[response.ErrorCode]response.ErrorSpec) map[string]bool {
+	out := make(map[string]bool, len(errors))
+	for _, spec := range errors {
+		out[errorKey(spec.Status, string(spec.Code))] = true
+	}
+	return out
+}
+
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func TestAPIContract_ErrorMappings(t *testing.T) {
+	contract := loadAPIContract(t)
+
+	for _, spec := range api.APIRouteSpecs {
+		endpoint := endpointKey(spec.Method, spec.Path)
+
+		t.Run(endpoint, func(t *testing.T) {
+			wantContract := findErrorContract(t, contract, endpoint)
+
+			want := contractErrorSet(wantContract.Errors)
+			got := routeErrorSet(spec.Errors)
+
+			wantKeys := sortedKeys(want)
+			gotKeys := sortedKeys(got)
+
+			if len(gotKeys) != len(wantKeys) {
+				t.Fatalf(
+					"error contract mismatch for %s\nwant: %v\ngot:  %v",
+					endpoint,
+					wantKeys,
+					gotKeys,
+				)
+			}
+
+			for _, key := range wantKeys {
+				if !got[key] {
+					t.Fatalf("missing error %q in implementation for %s", key, endpoint)
+				}
+			}
+
+			for _, key := range gotKeys {
+				if !want[key] {
+					t.Fatalf("undeclared error %q in implementation for %s", key, endpoint)
+				}
+			}
+		})
 	}
 }

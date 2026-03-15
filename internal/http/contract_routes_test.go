@@ -17,7 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type httpContract struct {
+type httpContractRoutes struct {
 	Version int             `yaml:"version"`
 	Routes  []contractRoute `yaml:"routes"`
 }
@@ -34,7 +34,7 @@ func TestStableRoutesAreRegistered(t *testing.T) {
 		t.Fatalf("read contract/http.yaml: %v", err)
 	}
 
-	var contract httpContract
+	var contract httpContractRoutes
 	if err := yaml.Unmarshal(data, &contract); err != nil {
 		t.Fatalf("unmarshal contract/http.yaml: %v", err)
 	}
