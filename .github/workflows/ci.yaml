@@ -23,6 +23,8 @@ jobs:
           POSTGRES_DB: authgate_test
           POSTGRES_USER: authgate
           POSTGRES_PASSWORD: authgate
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd="pg_isready -U authgate"
           --health-interval=10s
@@ -50,7 +52,7 @@ jobs:
 
       - name: Wait for Postgres
         run: |
-          until pg_isready -h localhost -p 5432 -U authgate; do
+          until pg_isready -h localhost -p 5432 -U authgate -d authgate_test; do
             echo "waiting for postgres..."
             sleep 2
           done
