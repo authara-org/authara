@@ -8,6 +8,8 @@ theme:
   features:
     - navigation.instant
     - content.code.copy
+    - search.highlight
+    - search.suggest
   palette:
     - scheme: default
       primary: white
