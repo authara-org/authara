@@ -20,7 +20,7 @@ func (h *UIHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		http.StatusOK,
-		authview.Signup(),
+		authview.Signup(h.OAuthProviders.Providers),
 	)
 }
 
@@ -33,7 +33,7 @@ func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		http.StatusOK,
-		authview.Login(),
+		authview.Login(h.OAuthProviders.Providers),
 	)
 }
 

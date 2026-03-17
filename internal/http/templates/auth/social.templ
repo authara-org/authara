@@ -3,9 +3,29 @@ package auth
 import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/oauth"
 )
 
-templ GoogleSignin(action string) {
+templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider) {
+	if len(oauthProviders) != 0 {
+		<div class="relative flex justify-center my-5">
+			<p class="bg-white dark:bg-grey-900 text-sm px-4 z-2 text-grey-700 dark:text-grey-300">
+				or
+			</p>
+			<div class="absolute w-full top-1/2 -translate-y-1/2 left-0 h-0.5 bg-grey-200 dark:bg-grey-800 z-1"></div>
+		</div>
+		<div class="flex flex-col gap-2">
+			for _, p := range oauthProviders {
+				switch p.Name {
+					case "google":
+						@GoogleSignin(action, p.ClientID)
+				}
+			}
+		</div>
+	}
+}
+
+templ GoogleSignin(action string, clientID string) {
 	<script src="https://accounts.google.com/gsi/client" async></script>
 	<button
 		id="google-signin-btn"
@@ -14,11 +34,15 @@ templ GoogleSignin(action string) {
 	>
 		<div
 			id="g_id_onload"
-			data-client_id="746226029362-45jlp3v84tkmt8u60knci2u7r2pckc21.apps.googleusercontent.com"
-			data-login_uri={ "http://localhost:3000/auth/oauth/google/callback?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
+			data-client_id={ clientID }
+			data-login_uri={ "/auth/oauth/google/callback?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 			data-auto_prompt="false"
 		></div>
-		<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="h-4.5 w-4.5" alt="Google logo"/>
+		<img
+			src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+			class="h-4.5 w-4.5"
+			alt="Google logo"
+		/>
 		<span>{ action } with Google</span>
 		<div class="opacity-1 absolute left-0">
 			<div

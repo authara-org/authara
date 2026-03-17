@@ -8,6 +8,7 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/session"
@@ -24,6 +25,7 @@ type ServerConfig struct {
 	Store           *store.Store
 	AuthLimiter     ratelimiter.AuthLimiter
 	Google          *google.Client
+	OAuthProviders  oauth.OAuthProviders
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
 	Render          render.Renderer

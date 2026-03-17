@@ -9,6 +9,8 @@ import (
 type Values struct {
 	AppEnv    string `env:"APP_ENV,default=dev"`
 	PublicURL string `env:"PUBLIC_URL,required"`
+
+	HttpAddr string
 }
 
 func (v *Values) validate() error {
