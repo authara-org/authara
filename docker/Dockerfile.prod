@@ -35,7 +35,8 @@ RUN apk add --no-cache brotli gzip jq coreutils
 
 COPY scripts/build-static.sh /usr/local/bin/build-static
 RUN chmod +x /usr/local/bin/build-static \
- && /usr/local/bin/build-static /app/internal/http/static
+ && /usr/local/bin/build-static /app/internal/http/static \
+ && chmod -R a+rX /app/internal/http/static
 
 ARG VERSION=dev
 
@@ -52,8 +53,8 @@ FROM gcr.io/distroless/base-debian12
 
 WORKDIR /app
 
-COPY --from=backend-builder /app/authara /app/authara
-COPY --from=backend-builder /app/internal/http/static /app/internal/http/static
+COPY --chown=65532:65532 --from=backend-builder /app/authara /app/authara
+COPY --chown=65532:65532 --from=backend-builder /app/internal/http/static /app/internal/http/static
 COPY --from=backend-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 USER nonroot
