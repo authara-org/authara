@@ -10,7 +10,6 @@ import (
 type Config struct {
 	Values    Values
 	DB        DB
-	HTTP      HTTP
 	Logging   Logging
 	OAuth     OAuth
 	Token     Token
@@ -47,7 +46,7 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	cfg.HTTP.Addr = ":8080"
+	cfg.Values.HttpAddr = ":8080"
 
 	if err := cfg.Logging.parse(cfg.Values.AppEnv); err != nil {
 		return nil, err

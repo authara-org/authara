@@ -6,9 +6,10 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/oauth"
 )
 
-templ Signup() {
+templ Signup(oauthProviders []oauth.OAuthProvider) {
 	@templates.PartialRender() {
 		@AuthLayout() {
 			@HeaderSection("Create an account", "Join to get unlimited access.")
@@ -27,15 +28,7 @@ templ Signup() {
 				</button>
 				@SignupForm()
 			</div>
-			<div class="relative flex justify-center my-5">
-				<p class="bg-white dark:bg-grey-900 text-sm px-4 z-2 text-grey-700 dark:text-grey-300">
-					or
-				</p>
-				<div class="absolute w-full top-1/2 -translate-y-1/2 left-0 h-0.5 bg-grey-200 dark:bg-grey-800 z-1"></div>
-			</div>
-			<div class="flex flex-col gap-2 mb-6">
-				@GoogleSignin("Sign up")
-			</div>
+			@OAuthProviders("Signup", oauthProviders)
 			<div class="text-center mt-6">
 				<p class="text-grey-800 dark:text-grey-200">
 					Already have an account?

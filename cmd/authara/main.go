@@ -16,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	"github.com/authara-org/authara/internal/logging"
+	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/session"
@@ -96,6 +97,19 @@ func main() {
 
 	googleClient := google.New(cfg.OAuth.GoogleClientID)
 
+	providers := []oauth.OAuthProvider{}
+	for _, p := range cfg.OAuth.Providers {
+		switch p {
+		case string(oauth.GoogleOAuth):
+			googleProvider := oauth.NewOAuthProvider(oauth.GoogleOAuth, cfg.OAuth.GoogleClientID, cfg.Values.PublicURL)
+			providers = append(providers, googleProvider)
+
+		}
+	}
+	oauthProviders := oauth.OAuthProviders{
+		Providers: providers,
+	}
+
 	redirectIfAuthenticated := httpmiddleware.RedirectIfAuthenticated(sessionService, time.Now)
 	requireAppAccessAuthAPI := httpmiddleware.RequireAPIAccessAuth(sessionService, token.AudienceApp, time.Now)
 	requireAppAccessAuthWithRefresh := httpmiddleware.RequireAccessAuthWithRefresh(
@@ -153,7 +167,7 @@ func main() {
 
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Version:         Version,
-		Addr:            cfg.HTTP.Addr,
+		Addr:            cfg.Values.HttpAddr,
 		Auth:            authService,
 		Dev:             cfg.Values.AppEnv == "dev",
 		Session:         sessionService,
@@ -161,6 +175,7 @@ func main() {
 		Store:           store,
 		AuthLimiter:     limiter,
 		Google:          googleClient,
+		OAuthProviders:  oauthProviders,
 		AccessTokenTTL:  cfg.Token.AccessTokenTTL,
 		RefreshTokenTTL: cfg.Session.RefreshTokenTTL,
 		Render:          renderer,
@@ -174,7 +189,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		logger.Info("http server listening", "addr", cfg.HTTP.Addr)
+		logger.Info("http server listening", "addr", cfg.Values.HttpAddr)
 		if err := server.Start(); err != nil {
 			logger.Error("http server stopped unexpectedly", "err", err)
 			stop()
