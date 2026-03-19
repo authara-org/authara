@@ -30,6 +30,7 @@ theme:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
+  - Examples: examples.md
 
   - Architecture:
       - Overview: architecture/overview.md

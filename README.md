@@ -279,6 +279,16 @@ https://docs.authara.org
 
 ---
 
+# Examples
+
+Example applications demonstrating how to integrate Authara with different technology stacks are available in a separate repository:
+
+https://github.com/authara-org/authara-examples
+
+These examples include minimal setups for different stacks and show how to integrate authentication end-to-end.
+
+---
+
 # Summary
 
 Authara is a **self-hosted authentication server** that provides login flows, sessions, and OAuth while keeping authentication infrastructure separate from your application.
