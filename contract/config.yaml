@@ -1,0 +1,219 @@
+version: 1
+
+variables:
+
+  # ------------------------------------------------------------
+  # App / Runtime
+  # ------------------------------------------------------------
+
+  - name: APP_ENV
+    stability: stable
+    required: false
+    type: enum
+    default: dev
+    allowed_values: [dev, prod]
+
+  - name: LOG_LEVEL
+    stability: stable
+    required: false
+    type: string
+    default:
+      dev: debug
+      prod: info
+
+  # ------------------------------------------------------------
+  # Database
+  # ------------------------------------------------------------
+
+  - name: POSTGRESQL_HOST
+    stability: stable
+    required: true
+    type: string
+
+  - name: POSTGRESQL_PORT
+    stability: stable
+    required: true
+    type: int
+
+  - name: POSTGRESQL_DATABASE
+    stability: stable
+    required: true
+    type: string
+
+  - name: POSTGRESQL_USERNAME
+    stability: stable
+    required: true
+    type: string
+
+  - name: POSTGRESQL_PASSWORD
+    stability: stable
+    required: true
+    type: string
+
+  - name: POSTGRESQL_SCHEMA
+    stability: stable
+    required: false
+    type: string
+    default: authara
+
+  - name: POSTGRESQL_TIMEZONE
+    stability: stable
+    required: false
+    type: string
+    default: UTC
+
+  - name: POSTGRESQL_LOG_SQL
+    stability: stable
+    required: false
+    type: bool
+    default: false
+
+  # ------------------------------------------------------------
+  # Public URL
+  # ------------------------------------------------------------
+
+  - name: PUBLIC_URL
+    stability: stable
+    required: true
+    type: url
+    notes: Must not include /auth
+
+  # ------------------------------------------------------------
+  # JWT / Tokens
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_JWT_ISSUER
+    stability: stable
+    required: true
+    type: string
+
+  - name: AUTHARA_JWT_ACTIVE_KEY_ID
+    stability: stable
+    required: true
+    type: string
+
+  - name: AUTHARA_JWT_KEYS
+    stability: stable
+    required: true
+    type: map[string]base64
+    format: "keyID:base64secret,keyID2:base64secret2"
+
+  - name: AUTHARA_ACCESS_TOKEN_TTL_MINUTES
+    stability: stable
+    required: false
+    type: int
+    default: 10
+
+  - name: AUTHARA_SESSION_TTL_DAYS
+    stability: stable
+    required: false
+    type: int
+    default: 60
+
+  - name: AUTHARA_REFRESH_TOKEN_TTL_DAYS
+    stability: stable
+    required: false
+    type: int
+    default: 14
+
+  - name: AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL
+    stability: stable
+    required: false
+    type: string
+    default: 24h
+    allowed_values:
+      - disabled
+      - off
+      - always
+      - duration
+
+  # ------------------------------------------------------------
+  # OAuth
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_OAUTH_PROVIDERS
+    stability: stable
+    required: false
+    type: csv
+    allowed_values:
+      - google
+
+  - name: AUTHARA_OAUTH_GOOGLE_CLIENT_ID
+    stability: stable
+    required: false
+    type: string
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: google
+
+  # ------------------------------------------------------------
+  # Rate Limiting (Login)
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 5
+
+  - name: AUTHARA_RATE_LIMIT_LOGIN_IP_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 1m
+
+  - name: AUTHARA_RATE_LIMIT_LOGIN_EMAIL_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 10
+
+  - name: AUTHARA_RATE_LIMIT_LOGIN_EMAIL_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 1h
+
+  # ------------------------------------------------------------
+  # Rate Limiting (Signup)
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_RATE_LIMIT_SIGNUP_IP_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 3
+
+  - name: AUTHARA_RATE_LIMIT_SIGNUP_IP_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 1h
+
+  - name: AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 3
+
+  - name: AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 24h
+
+  # ------------------------------------------------------------
+  # Limiter Safety
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_RATE_LIMIT_CLEANUP_EVERY
+    stability: stable
+    required: false
+    type: int
+    default: 200
+
+  - name: AUTHARA_RATE_LIMIT_MAX_ENTRIES
+    stability: stable
+    required: false
+    type: int
+    default: 50000
