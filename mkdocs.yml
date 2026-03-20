@@ -60,6 +60,7 @@ nav:
       - Protecting Routes: integration/protecting-routes.md
       - Login Redirect: integration/login-redirect.md
       - Reading the User: integration/reading-user.md
+      - Webhooks: integration/webhooks.md  
 
   - Configuration:
       - Overview: configuration/overview.md
