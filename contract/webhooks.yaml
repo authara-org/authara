@@ -1,0 +1,45 @@
+version: 1
+
+events:
+  - type: user.created
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: user.created
+      created_at: rfc3339
+      data:
+        user_id: uuid
+
+  - type: user.deleted
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: user.deleted
+      created_at: rfc3339
+      data:
+        user_id: uuid
+
+signature:
+  header: X-Authara-Signature
+  format: sha256=<hex>
+  algorithm: hmac-sha256
+
+delivery:
+  method: POST
+  content_type: application/json
+  semantics: best_effort
+  retries:
+    on:
+      - network_error
+      - http_429
+      - http_5xx
+    not_on:
+      - other_http_4xx
