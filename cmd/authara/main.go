@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,6 +25,7 @@ import (
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/schema"
 	"github.com/authara-org/authara/internal/store/tx"
+	"github.com/authara-org/authara/internal/webhook"
 )
 
 var Version = "dev"
@@ -81,9 +83,26 @@ func main() {
 		cfg.Token.AccessTokenTTL,
 	)
 
+	var webhookPublisher webhook.Publisher = webhook.NoopPublisher{}
+
+	if cfg.Webhook.Enabled() {
+		baseSender := webhook.NewSender(
+			cfg.Webhook.URL,
+			cfg.Webhook.Secret,
+			&http.Client{Timeout: cfg.Webhook.Timeout},
+		)
+
+		webhookPublisher = webhook.NewFilteringPublisher(
+			baseSender,
+			cfg.Webhook.EnabledEventSet,
+		)
+	}
+
 	authService := auth.New(auth.Config{
-		Store: store,
-		Tx:    txManager,
+		Store:            store,
+		Tx:               txManager,
+		WebhookPublisher: webhookPublisher,
+		Logger:           logger,
 	})
 
 	sessionService := session.New(session.SessionConfig{
