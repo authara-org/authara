@@ -15,6 +15,7 @@ type Config struct {
 	Token     Token
 	Session   Session
 	RateLimit RateLimit
+	Webhook   Webhook
 }
 
 func Load() (*Config, error) {
@@ -45,6 +46,9 @@ func Load() (*Config, error) {
 	if err := cfg.RateLimit.validate(); err != nil {
 		return nil, err
 	}
+	if err := cfg.Webhook.validate(); err != nil {
+		return nil, err
+	}
 
 	cfg.Values.HttpAddr = ":8080"
 
@@ -58,6 +62,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.RateLimit.parse(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Webhook.parse(); err != nil {
 		return nil, err
 	}
 

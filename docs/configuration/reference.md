@@ -177,14 +177,179 @@ Default:
 14 days
 ```
 
+## JWT
+
+### AUTHARA_JWT_ISSUER
+
+JWT issuer (`iss` claim).
+
+Required: yes
+
+---
+
+### AUTHARA_JWT_ACTIVE_KEY_ID
+
+Active signing key ID.
+
+Required: yes
+
+---
+
+### AUTHARA_JWT_KEYS
+
+Signing keys.
+
+Format:
+
+```
+keyID:base64secret,keyID2:base64secret2
+```
+
+Required: yes
+
+## OAuth
+
+### AUTHARA_OAUTH_PROVIDERS
+
+Comma-separated list of enabled OAuth providers.
+
+Type: csv  
+Default: empty
+
+---
+
+### AUTHARA_OAUTH_GOOGLE_CLIENT_ID
+
+Google OAuth client ID.
+
+Required if `google` is enabled
+
+## Rate Limiting
+
+### AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT
+Default:
+```
+5
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_LOGIN_IP_WINDOW
+Default:
+```
+1m
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_LOGIN_EMAIL_LIMIT
+Default:
+```
+10
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_LOGIN_EMAIL_WINDOW
+Default:
+```
+1h
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_SIGNUP_IP_LIMIT
+Default:
+```
+3
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_SIGNUP_IP_WINDOW
+Default:
+```
+1h
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_LIMIT
+Default:
+```
+3
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_WINDOW
+Default:
+```
+24h
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_MAX_ENTRIES
+Default:
+```
+50000
+```
+
+## Webhooks
+
+### AUTHARA_WEBHOOK_URL
+
+Webhook endpoint where Authara sends events.
+
+Type: url  
+Required: no
+
+---
+
+### AUTHARA_WEBHOOK_SECRET
+
+Shared secret used to sign webhook requests.
+
+Type: string  
+Required: no
+
+---
+
+### AUTHARA_WEBHOOK_ENABLED_EVENTS
+
+Comma-separated list of enabled events.
+
+Type: csv  
+Required: no  
+
+Default: all events enabled
+
+Allowed values:
+
+- user.created
+- user.deleted
+
+---
+
+### AUTHARA_WEBHOOK_TIMEOUT
+
+HTTP timeout for webhook delivery.
+
+Type: duration  
+Default: 5s
+
 ---
 
 ## Advanced configuration
 
-Additional configuration areas:
+Authara includes additional configuration areas such as:
 
 - JWT signing keys
 - OAuth providers
 - rate limiting
+- webhooks
 
-These are documented in their dedicated sections.
+All configuration variables are listed in this reference.
+
+Detailed behavior and concepts for these areas are documented in their dedicated sections.

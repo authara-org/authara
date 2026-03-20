@@ -18,6 +18,7 @@ Authara exposes multiple public contracts:
 
 - HTTP contract (routes, cookies, redirects, JSON behavior)
 - configuration contract (environment variables)
+- webhook contract (event types, payloads, delivery behavior)
 
 This document defines the rules and guarantees that apply to all public contracts.
 
@@ -50,6 +51,7 @@ Not allowed in a patch release:
 - changing stable JSON field names
 - changing stable error codes
 - changing redirect semantics relied upon by apps or SDKs
+- changing webhook payload shape or event names
 
 ## Minor release (`x.Y.z`)
 Minor releases may introduce **additive** features.
@@ -61,6 +63,7 @@ Allowed in a minor release:
 - new optional response fields
 - new cookies only if existing cookies remain unchanged
 - new OAuth providers
+- new webhook event types
 - new non-breaking SDK integration capabilities
 
 Not allowed in a minor release:
@@ -68,6 +71,7 @@ Not allowed in a minor release:
 - removing or renaming stable public routes
 - removing stable fields or cookies
 - changing stable semantics incompatibly
+- removing webhook event types
 
 ## Major release (`X.y.z`)
 Major releases may include breaking changes.
@@ -199,7 +203,34 @@ Security-relevant guarantees must not be weakened.
 
 ---
 
-# 9. Configuration Contract
+# 9. Webhook Contract
+
+If webhooks are configured, the following are part of the public contract:
+
+- webhook event types
+- webhook payload envelope
+- webhook header names
+- signature format
+- delivery semantics
+
+Stable webhook guarantees:
+
+- event type names must not change
+- payload fields must not be removed or renamed
+- headers must remain consistent
+- signature format must remain compatible
+
+Additive changes (e.g. new fields or events) are allowed in minor releases.
+
+The machine-readable webhook contract is defined in:
+
+```
+contract/webhooks.yaml
+```
+
+---
+
+# 10. Configuration Contract
 
 Authara exposes configuration via environment variables.
 
@@ -213,7 +244,7 @@ contract/config.yaml
 
 ---
 
-# 10. What Is Not Stable
+# 11. What Is Not Stable
 
 Not part of the contract:
 
@@ -226,7 +257,7 @@ Not part of the contract:
 
 ---
 
-# 11. Compatibility Testing
+# 12. Compatibility Testing
 
 Authara maintains contract tests for:
 
@@ -235,10 +266,12 @@ Authara maintains contract tests for:
 - JSON structure and error codes
 - redirect behavior
 - configuration surface
+- webhook event types and payload shape
+- webhook signature format
 
 ---
 
-# 12. Release Gate
+# 13. Release Gate
 
 Before releasing:
 
@@ -248,7 +281,7 @@ If yes → breaking change → must not ship as patch.
 
 ---
 
-# 13. Practical Rule
+# 14. Practical Rule
 
 If consumers can reasonably depend on a behavior, it is part of the contract.
 

@@ -217,3 +217,31 @@ variables:
     required: false
     type: int
     default: 50000
+
+  # ------------------------------------------------------------
+  # Webhook Events
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_WEBHOOK_URL
+    stability: stable
+    required: false
+    type: url
+
+  - name: AUTHARA_WEBHOOK_SECRET
+    stability: stable
+    required: false
+    type: string
+
+  - name: AUTHARA_WEBHOOK_ENABLED_EVENTS
+    stability: stable
+    required: false
+    type: csv
+    allowed_values:
+      - user.created
+      - user.deleted
+
+  - name: AUTHARA_WEBHOOK_TIMEOUT
+    stability: stable
+    required: false
+    type: duration
+    default: 5s
