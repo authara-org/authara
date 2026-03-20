@@ -63,9 +63,14 @@ services:
     build:
       context: ./integrations/testapp/
     environment:
+      AUTHARA_AUDIENCE: app
+      AUTHARA_BASE_URL: http://authara:8080
+      AUTHARA_ISSUER: ${AUTHARA_ISSUER}
+      AUTHARA_JWT_KEYS: ${AUTHARA_JWT_KEYS}
       AUTHARA_WEBHOOK_SECRET: ${AUTHARA_WEBHOOK_SECRET}
     volumes:
       - ./integrations/testapp:/app
+    restart: unless-stopped
 
 volumes:
   postgres-data:

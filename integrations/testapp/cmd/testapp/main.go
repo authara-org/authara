@@ -26,10 +26,9 @@ func main() {
 	}
 
 	// --- Webhook handler from env ---
-	webhookHandler := authara.WebhookHandlerFromEnv()
-
-	if webhookHandler.Secret == "" {
-		log.Println("warning: AUTHARA_WEBHOOK_SECRET is empty, /webhooks/authara will reject requests")
+	webhookHandler, err := authara.RequireWebhookHandlerFromEnv()
+	if err != nil {
+		log.Fatalf("webhook handler not staritng. Check AUTHARA_WEBHOOK_SECRET : %v", err)
 	}
 
 	// --- Middleware ---

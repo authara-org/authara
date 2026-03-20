@@ -3,7 +3,7 @@ module github.com/authara-org/authara-testapp
 go 1.25
 
 require (
-	github.com/authara-org/authara-go v0.6.1
+	github.com/authara-org/authara-go v0.6.2
 	github.com/go-chi/chi/v5 v5.2.3
 )
 
