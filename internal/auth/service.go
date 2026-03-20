@@ -3,29 +3,41 @@ package auth
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
+	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
 )
 
 type Config struct {
-	Store *store.Store
-	Tx    *tx.Manager
+	Store            *store.Store
+	Tx               *tx.Manager
+	WebhookPublisher webhook.Publisher
+	Logger           *slog.Logger
 }
 
 type Service struct {
-	store *store.Store
-	tx    *tx.Manager
+	store            *store.Store
+	tx               *tx.Manager
+	webhookPublisher webhook.Publisher
+	logger           *slog.Logger
 }
 
 func New(cfg Config) *Service {
+	pub := cfg.WebhookPublisher
+	if pub == nil {
+		pub = webhook.NoopPublisher{}
+	}
 	return &Service{
-		store: cfg.Store,
-		tx:    cfg.Tx,
+		store:            cfg.Store,
+		tx:               cfg.Tx,
+		webhookPublisher: pub,
+		logger:           cfg.Logger,
 	}
 }
 
@@ -57,7 +69,13 @@ func (s *Service) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*Curren
 }
 
 func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
-	return s.store.DeleteUser(ctx, userID)
+	if err := s.store.DeleteUser(ctx, userID); err != nil {
+		return err
+	}
+
+	s.publishBestEffort(ctx, webhook.NewUserDeleted(userID, time.Now()))
+
+	return nil
 }
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (*domain.User, error) {
@@ -112,7 +130,12 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (*domain.User, err
 
 	switch in.Provider {
 	case domain.ProviderPassword:
-		return s.signupWithPassword(ctx, in)
+		user, err := s.signupWithPassword(ctx, in)
+		if err != nil {
+			return nil, err
+		}
+		s.publishBestEffort(ctx, webhook.NewUserCreated(user.ID, time.Now()))
+		return user, nil
 
 	default:
 		return nil, ErrUnsupportedProvider
@@ -185,6 +208,7 @@ func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (*domain
 
 func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) (*domain.User, error) {
 	var user domain.User
+	createdUser := false
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 
@@ -221,6 +245,7 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 		if err != nil {
 			return err
 		}
+		createdUser = true
 
 		domainProvider := domain.AuthProvider{
 			UserID:         user.ID,
@@ -234,6 +259,10 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 
 	if err != nil {
 		return nil, err
+	}
+
+	if createdUser {
+		s.publishBestEffort(ctx, webhook.NewUserCreated(user.ID, time.Now()))
 	}
 
 	return &user, nil
@@ -266,4 +295,10 @@ func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username
 	}
 
 	return nil
+}
+
+func (s *Service) publishBestEffort(ctx context.Context, evt webhook.Envelope) {
+	if err := s.webhookPublisher.Publish(ctx, evt); err != nil && s.logger != nil {
+		s.logger.Error("webhook publish failed", "event", evt.Type, "event_id", evt.ID, "err", err)
+	}
 }
