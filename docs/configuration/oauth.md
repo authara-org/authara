@@ -12,6 +12,10 @@ Additional providers may be added in future versions.
 
 ---
 
+See also: [Configuration Reference](reference.md)
+
+---
+
 ## Enable providers
 
 ```

@@ -1,24 +1,28 @@
-# rate limiting
+# Rate Limiting
 
-authara includes built-in rate limiting to protect against:
+Authara includes built-in rate limiting to protect against:
 
 - brute-force login attempts
 - automated signup abuse
 
-limits are applied per:
+Limits are applied per:
 
-- ip address
+- IP address
 - email address
 
 ---
 
-## login limits
+See also: [Configuration Reference](reference.md)
 
-### authara_rate_limit_login_ip_limit
+---
 
-maximum login attempts per ip.
+## Login limits
 
-default:
+### AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT
+
+Maximum login attempts per IP.
+
+Default:
 
 ```
 5
@@ -26,11 +30,11 @@ default:
 
 ---
 
-### authara_rate_limit_login_ip_window
+### AUTHARA_RATE_LIMIT_LOGIN_IP_WINDOW
 
-time window for ip-based login attempts.
+Time window for IP-based login attempts.
 
-default:
+Default:
 
 ```
 1m
@@ -38,11 +42,11 @@ default:
 
 ---
 
-### authara_rate_limit_login_email_limit
+### AUTHARA_RATE_LIMIT_LOGIN_EMAIL_LIMIT
 
-maximum login attempts per email.
+Maximum login attempts per email.
 
-default:
+Default:
 
 ```
 10
@@ -50,37 +54,11 @@ default:
 
 ---
 
-### authara_rate_limit_login_email_window
+### AUTHARA_RATE_LIMIT_LOGIN_EMAIL_WINDOW
 
-email login attempt window.
+Time window for email-based login attempts.
 
-default:
-
-```
-1h
-```
-
----
-
-## signup limits
-
-### authara_rate_limit_signup_ip_limit
-
-maximum signup attempts per ip.
-
-default:
-
-```
-3
-```
-
----
-
-### authara_rate_limit_signup_ip_window
-
-signup ip window.
-
-default:
+Default:
 
 ```
 1h
@@ -88,11 +66,13 @@ default:
 
 ---
 
-### authara_rate_limit_signup_email_limit
+## Signup limits
 
-maximum signup attempts per email.
+### AUTHARA_RATE_LIMIT_SIGNUP_IP_LIMIT
 
-default:
+Maximum signup attempts per IP.
+
+Default:
 
 ```
 3
@@ -100,11 +80,35 @@ default:
 
 ---
 
-### authara_rate_limit_signup_email_window
+### AUTHARA_RATE_LIMIT_SIGNUP_IP_WINDOW
 
-signup email window.
+Time window for IP-based signup attempts.
 
-default:
+Default:
+
+```
+1h
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_LIMIT
+
+Maximum signup attempts per email.
+
+Default:
+
+```
+3
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_WINDOW
+
+Time window for email-based signup attempts.
+
+Default:
 
 ```
 24h
@@ -112,26 +116,26 @@ default:
 
 ---
 
-## safety limits
+## Safety limits
 
-### authara_rate_limit_max_entries
+### AUTHARA_RATE_LIMIT_MAX_ENTRIES
 
-maximum number of rate limit keys stored in memory.
+Maximum number of rate limit keys stored in memory.
 
-default:
+Default:
 
 ```
 50000
 ```
 
-this acts as a safety valve against memory exhaustion.
+This acts as a safety valve against memory exhaustion.
 
 ---
 
-## multi-instance deployments
+## Multi-instance deployments
 
-current rate limiting is **in-memory per instance**.
+Rate limiting is currently **in-memory per instance**.
 
-in multi-instance deployments limits are not shared between instances.
+In multi-instance deployments, limits are **not shared** between instances.
 
-future versions may support shared rate limiting via redis.
+Future versions may support shared rate limiting via Redis.

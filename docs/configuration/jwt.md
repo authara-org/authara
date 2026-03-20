@@ -12,6 +12,10 @@ JWT configuration controls:
 
 ---
 
+See also: [Configuration Reference](reference.md)
+
+---
+
 # Overview
 
 Authara signs access tokens using symmetric keys configured via environment variables.
