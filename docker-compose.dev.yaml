@@ -62,6 +62,8 @@ services:
   testapp:
     build:
       context: ./integrations/testapp/
+    environment:
+      AUTHARA_WEBHOOK_SECRET: ${AUTHARA_WEBHOOK_SECRET}
     volumes:
       - ./integrations/testapp:/app
 
