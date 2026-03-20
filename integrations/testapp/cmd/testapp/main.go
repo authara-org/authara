@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/base64"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -16,44 +14,44 @@ import (
 func main() {
 	r := chi.NewRouter()
 
-	appSdk, err := authara.New(authara.Config{
-		Audience: "app",
-		Issuer:   "authara",
-		Keys: map[string][]byte{
-			"key-2026-01": mustKey("VZp2u1sYz0g2nF2vY8q8dP7cZQpL5cRrXn0k7FZ0xkE="),
-			"key-2025-09": mustKey("Qk8K6E3XrV6mF4T9yZcA2p9xYbDqZpM0JwH3uZ8sL1E="),
-		},
-		AutharaBaseURL: "http://authara:8080",
-	})
+	// --- SDK config from env ---
+	cfg, err := authara.ConfigFromEnv()
 	if err != nil {
-		log.Fatalln("sdk not starting")
+		log.Fatalf("authara config failed: %v", err)
 	}
 
-	webhookSecret := os.Getenv("AUTHARA_WEBHOOK_SECRET")
-	if webhookSecret == "" {
+	appSdk, err := authara.New(cfg)
+	if err != nil {
+		log.Fatalf("sdk not starting: %v", err)
+	}
+
+	// --- Webhook handler from env ---
+	webhookHandler := authara.WebhookHandlerFromEnv()
+
+	if webhookHandler.Secret == "" {
 		log.Println("warning: AUTHARA_WEBHOOK_SECRET is empty, /webhooks/authara will reject requests")
 	}
 
+	// --- Middleware ---
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
 
+	// --- Public routes ---
 	r.Get("/", handlers.Home)
 
+	// --- Protected routes ---
 	r.Group(func(r chi.Router) {
 		r.Use(appSdk.RequireAuthWithRefresh)
 		r.Get("/private", handlers.Private)
 	})
 
+	// --- Webhook endpoint ---
 	r.Post("/webhooks/authara", func(w http.ResponseWriter, r *http.Request) {
-		handler := &authara.WebhookHandler{
-			Secret: webhookSecret,
-		}
-
-		evt, err := handler.Handle(w, r)
+		evt, err := webhookHandler.Handle(w, r)
 		if err != nil {
-			// Handle already wrote the HTTP error response.
+			// Handle already wrote HTTP response
 			log.Printf("webhook rejected: %v", err)
 			return
 		}
@@ -92,12 +90,4 @@ func main() {
 
 	log.Println("testapp listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
-}
-
-func mustKey(b64 string) []byte {
-	key, err := base64.StdEncoding.DecodeString(b64)
-	if err != nil {
-		panic(err)
-	}
-	return key
 }
