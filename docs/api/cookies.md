@@ -58,7 +58,7 @@ Properties:
 | HTTPOnly | yes |
 | Secure | yes (in production) |
 | SameSite | Lax |
-| Path | `/auth` |
+| Path | `/` |
 
 Important characteristics:
 
