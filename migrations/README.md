@@ -49,7 +49,8 @@ POSTGRESQL_PASSWORD=secret
 
 docker run --rm \
   --env-file .env \
-  ghcr.io/authara-org/authara-migrate:<version> up
+  ghcr.io/authara-org/authara-migrations:<version> \
+  up -env=default -config=dbconfig.yaml
 
 This command:
 - connects to the database
@@ -62,7 +63,8 @@ This command:
 
 docker run --rm \
   --env-file .env \
-  ghcr.io/authara-org/authara-migrate:<version> status
+  ghcr.io/authara-org/authara-migrations:<version> \
+  status -env=default -config=dbconfig.yaml
 
 ---
 
@@ -70,7 +72,8 @@ docker run --rm \
 
 docker run --rm \
   --env-file .env \
-  ghcr.io/authara-org/authara-migrate:<version> down
+  ghcr.io/authara-org/authara-migrations:<version> \
+  down -env=default -config=dbconfig.yaml
 
 ⚠️ **Warning:** Rolling back migrations may result in data loss.  
 Only perform rollbacks if you fully understand the impact.
