@@ -135,7 +135,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip := httputil.ClientIP(r)
-	allowed, err := h.Limiter.AllowSignupAttempt(ctx, ip, email)
+	allowed, err := h.Limiter.AllowLoginAttempt(ctx, ip, email)
 	if err != nil || !allowed {
 		loginform := authview.LoginForm()
 		toastMessage := toast.ToastMessage(
