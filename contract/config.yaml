@@ -68,6 +68,30 @@ variables:
     type: bool
     default: false
 
+  - name: AUTHARA_DB_MAX_OPEN_CONNS
+    stability: stable
+    required: false
+    type: int
+    default: 40
+
+  - name: AUTHARA_DB_MAX_IDLE_CONNS
+    stability: stable
+    required: false
+    type: int
+    default: 20
+
+  - name: AUTHARA_DB_CONN_MAX_LIFETIME
+    stability: stable
+    required: false
+    type: duration
+    default: 30m
+
+  - name: AUTHARA_DB_CONN_MAX_IDLE_TIME
+    stability: stable
+    required: false
+    type: duration
+    default: 5m
+
   # ------------------------------------------------------------
   # Public URL
   # ------------------------------------------------------------
