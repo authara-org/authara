@@ -37,6 +37,8 @@ jobs:
           file: docker/Dockerfile.prod
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/authara-org/authara-core:${{ github.ref_name }}
+          tags: |
+            ghcr.io/authara-org/authara-core:${{ github.ref_name }}
+            ghcr.io/authara-org/authara-core:latest
           build-args: |
             VERSION=${{ github.ref_name }}

@@ -44,4 +44,6 @@ jobs:
           file: migrations/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/authara-org/authara-migrations:${{ steps.version.outputs.tag }}
+          tags: |
+            ghcr.io/authara-org/authara-migrations:${{ steps.version.outputs.tag }}
+            ghcr.io/authara-org/authara-migrations:latest
