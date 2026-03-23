@@ -16,7 +16,7 @@ jobs:
       name: production
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Derive migrations version
         id: version
@@ -24,19 +24,24 @@ jobs:
           TAG="${GITHUB_REF_NAME#migrations-}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/login-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to container registry
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build migrations image
-        run: |
-          docker build \
-            -f migrations/Dockerfile \
-            -t ghcr.io/authara-org/authara-migrations:${{ steps.version.outputs.tag }} \
-            ./migrations
-
-      - name: Push migrations image
-        run: |
-          docker push ghcr.io/authara-org/authara-migrations:${{ steps.version.outputs.tag }}
+      - name: Build and push multi-arch migrations image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./migrations
+          file: migrations/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ghcr.io/authara-org/authara-migrations:${{ steps.version.outputs.tag }}

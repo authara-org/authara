@@ -1,7 +1,7 @@
 #
-# Frontend Builder 
+# Frontend Builder
 #
-FROM node:20-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN cd frontend && npm run build
 #
 # Backend Builder
 #
-FROM golang:1.25-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend-builder
 
 WORKDIR /app
 
@@ -39,8 +39,12 @@ RUN chmod +x /usr/local/bin/build-static \
  && chmod -R a+rX /app/internal/http/static
 
 ARG VERSION=dev
+ARG TARGETOS
+ARG TARGETARCH
 
 RUN CGO_ENABLED=0 \
+  GOOS=$TARGETOS \
+  GOARCH=$TARGETARCH \
   go build \
   -ldflags "-X main.Version=${VERSION}" \
   -o /app/authara \
