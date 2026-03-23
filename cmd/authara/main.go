@@ -50,14 +50,18 @@ func main() {
 	logger.Info("starting authara")
 
 	store, err := store.New(store.Config{
-		Host:     cfg.DB.Host,
-		Port:     cfg.DB.Port,
-		Username: cfg.DB.Username,
-		Password: cfg.DB.Password,
-		Database: cfg.DB.Database,
-		Schema:   cfg.DB.Schema,
-		Timezone: cfg.DB.Timezone,
-		LogSql:   cfg.DB.LogSQL,
+		Host:            cfg.DB.Host,
+		Port:            cfg.DB.Port,
+		Username:        cfg.DB.Username,
+		Password:        cfg.DB.Password,
+		Database:        cfg.DB.Database,
+		Schema:          cfg.DB.Schema,
+		Timezone:        cfg.DB.Timezone,
+		LogSql:          cfg.DB.LogSQL,
+		MaxOpenConns:    cfg.DB.MaxOpenConns,
+		MaxIdleConns:    cfg.DB.MaxIdleConns,
+		ConnMaxLifetime: cfg.DB.ConnMaxLifetime,
+		ConnMaxIdleTime: cfg.DB.ConnMaxIdleTime,
 	})
 	if err != nil {
 		logger.Error("failed to connect to database", "err", err)

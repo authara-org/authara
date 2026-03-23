@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type DB struct {
 	Host     string `env:"POSTGRESQL_HOST,required"`
@@ -11,6 +14,11 @@ type DB struct {
 	Schema   string `env:"POSTGRESQL_SCHEMA,default=authara"`
 	Timezone string `env:"POSTGRESQL_TIMEZONE,default=UTC"`
 	LogSQL   bool   `env:"POSTGRESQL_LOG_SQL,default=false"`
+
+	MaxOpenConns    int           `env:"POSTGRESQL_MAX_OPEN_CONNS,default=25"`
+	MaxIdleConns    int           `env:"POSTGRESQL_MAX_IDLE_CONNS,default=10"`
+	ConnMaxLifetime time.Duration `env:"POSTGRESQL_CONN_MAX_LIFETIME,default=30m"`
+	ConnMaxIdleTime time.Duration `env:"POSTGRESQL_CONN_MAX_IDLE_TIME,default=5m"`
 }
 
 func (db DB) validate() error {
@@ -29,5 +37,24 @@ func (db DB) validate() error {
 	if db.Timezone == "" {
 		return fmt.Errorf("POSTGRESQL_TIMEZONE must not be empty")
 	}
+
+	// --- connection pool validation ---
+	if db.MaxOpenConns <= 0 {
+		return fmt.Errorf("POSTGRESQL_MAX_OPEN_CONNS must be > 0")
+	}
+	if db.MaxIdleConns < 0 {
+		return fmt.Errorf("POSTGRESQL_MAX_IDLE_CONNS must be >= 0")
+	}
+	if db.MaxIdleConns > db.MaxOpenConns {
+		return fmt.Errorf("POSTGRESQL_MAX_IDLE_CONNS cannot be greater than POSTGRESQL_MAX_OPEN_CONNS")
+	}
+
+	if db.ConnMaxLifetime < 0 {
+		return fmt.Errorf("POSTGRESQL_CONN_MAX_LIFETIME must be >= 0")
+	}
+	if db.ConnMaxIdleTime < 0 {
+		return fmt.Errorf("POSTGRESQL_CONN_MAX_IDLE_TIME must be >= 0")
+	}
+
 	return nil
 }

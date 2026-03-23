@@ -341,6 +341,38 @@ Default: 5s
 
 ---
 
+## Database Connection Pool
+
+### AUTHARA_DB_MAX_OPEN_CONNS
+Default:
+```
+40
+```
+
+---
+
+### AUTHARA_DB_MAX_IDLE_CONNS
+Default:
+```
+20
+```
+
+---
+
+### AUTHARA_DB_CONN_MAX_LIFETIME
+Default:
+```
+30m
+```
+
+---
+
+### AUTHARA_DB_CONN_MAX_IDLE_TIME
+Default:
+```
+5m
+```
+
 ## Advanced configuration
 
 Authara includes additional configuration areas such as:

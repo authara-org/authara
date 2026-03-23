@@ -12,14 +12,19 @@ import (
 
 // Config is the configuration for the database.
 type Config struct {
-	Host     string `env:"POSTGRESQL_HOST, required"`
-	Port     int    `env:"POSTGRESQL_PORT, required"`
-	Username string `env:"POSTGRESQL_USERNAME, required"`
-	Password string `env:"POSTGRESQL_PASSWORD, required"`
-	Database string `env:"POSTGRESQL_DATABASE, required"`
-	Timezone string `env:"POSTGRESQL_TIMEZONE, required"`
-	Schema   string `env:"POSTGRESQL_SCHEMA, required"`
-	LogSql   bool   `env:"POSTGRESQL_LOG_SQL, required"`
+	Host     string
+	Port     int
+	Username string
+	Password string
+	Database string
+	Timezone string
+	Schema   string
+	LogSql   bool
+
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
 }
 
 type Store struct {
@@ -31,8 +36,10 @@ func (s *Store) DB() *gorm.DB {
 }
 
 func New(cfg Config) (*Store, error) {
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s TimeZone=%s search_path=%s",
-		cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database, cfg.Timezone, cfg.Schema)
+	dsn := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s TimeZone=%s search_path=%s",
+		cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database, cfg.Timezone, cfg.Schema,
+	)
 
 	var lg gormlogger.Interface
 	if cfg.LogSql {
@@ -62,7 +69,16 @@ func New(cfg Config) (*Store, error) {
 		return nil, fmt.Errorf("error connecting to database: %w", err)
 	}
 
-	c := Store{db: gormDB}
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("error getting sql db: %w", err)
+	}
 
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+
+	c := Store{db: gormDB}
 	return &c, nil
 }
