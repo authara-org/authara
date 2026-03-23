@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/webhook"
@@ -51,7 +53,7 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (*domain.User, 
 
 type CurrentUser struct {
 	User  domain.User
-	Roles []string
+	Roles []roles.Role
 }
 
 func (s *Service) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*CurrentUser, error) {
@@ -60,9 +62,14 @@ func (s *Service) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*Curren
 		return nil, err
 	}
 
+	roles, ok := httpctx.Roles(ctx)
+	if !ok {
+		return nil, ErrNoRolesInContext
+	}
+
 	cu := CurrentUser{
 		User:  user,
-		Roles: []string{},
+		Roles: roles.List(),
 	}
 
 	return &cu, nil

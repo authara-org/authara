@@ -9,4 +9,5 @@ var (
 	ErrAccountExistsMustLink = errors.New("account exists; must link provider explicitly")
 	ErrUsernameTaken         = errors.New("username already taken")
 	ErrInvalidUsername       = errors.New("invalid username")
+	ErrNoRolesInContext      = errors.New("no roles in context for user")
 )
