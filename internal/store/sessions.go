@@ -178,15 +178,35 @@ func (s *Store) DeleteRefreshTokensBySession(ctx context.Context, sessionID uuid
 }
 
 func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time) error {
-	return s.dbFromContext(ctx).
-		Where("expires_at < ? OR consumed_at IS NOT NULL", now).
+	db := s.dbFromContext(ctx)
+
+	err := db.
+		Where("expires_at < ?", now).
+		Delete(&model.RefreshToken{}).
+		Error
+	if err != nil {
+		return err
+	}
+
+	return db.
+		Where("consumed_at IS NOT NULL").
 		Delete(&model.RefreshToken{}).
 		Error
 }
 
 func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error {
-	return s.dbFromContext(ctx).
-		Where("expires_at < ? OR revoked_at IS NOT NULL", now).
+	db := s.dbFromContext(ctx)
+
+	err := db.
+		Where("expires_at < ?", now).
+		Delete(&model.Session{}).
+		Error
+	if err != nil {
+		return err
+	}
+
+	return db.
+		Where("revoked_at IS NOT NULL").
 		Delete(&model.Session{}).
 		Error
 }

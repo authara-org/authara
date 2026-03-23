@@ -58,7 +58,7 @@ func (s *Store) GetUserByID(ctx context.Context, userID uuid.UUID) (domain.User,
 	var m model.User
 
 	err := s.dbFromContext(ctx).
-		Where("id = ?", userID.String()).
+		Where("id = ?", userID).
 		First(&m).
 		Error
 
@@ -74,6 +74,8 @@ func (s *Store) GetUserByID(ctx context.Context, userID uuid.UUID) (domain.User,
 
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, error) {
 	var m model.User
+
+	email = normalizeEmail(email)
 
 	err := s.dbFromContext(ctx).
 		Where("email = ?", email).
@@ -92,6 +94,8 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, 
 
 func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
 	var count int64
+
+	email = normalizeEmail(email)
 
 	err := s.dbFromContext(ctx).
 		Model(&model.User{}).
@@ -167,4 +171,8 @@ func (s *Store) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 		Where("id = ?", userID).
 		Delete(&model.User{}).
 		Error
+}
+
+func normalizeEmail(e string) string {
+	return strings.ToLower(strings.TrimSpace(e))
 }
