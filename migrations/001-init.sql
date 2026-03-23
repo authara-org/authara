@@ -109,9 +109,6 @@ CREATE TABLE IF NOT EXISTS authara.refresh_tokens (
 	consumed_at timestamptz
 );
 
-CREATE INDEX IF NOT EXISTS idx_refresh_tokens_session_id
-ON authara.refresh_tokens(session_id);
-
 
 -- +migrate Down
 DROP SCHEMA authara CASCADE;
