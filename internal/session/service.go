@@ -125,9 +125,6 @@ func (s *Service) CreateSession(
 		return "", "", err
 	}
 
-	_ = s.store.DeleteExpiredSessions(ctx, now)
-	_ = s.store.DeleteExpiredRefreshTokens(ctx, now)
-
 	return accessToken, refreshToken, nil
 }
 
@@ -228,6 +225,19 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 	}
 
 	return newAccessToken, newRefreshToken, nil
+}
+
+func (s *Service) CleanupExpiredData(ctx context.Context, now time.Time) error {
+	err := s.store.DeleteExpiredSessions(ctx, now)
+	if err != nil {
+		return err
+	}
+
+	err = s.store.DeleteExpiredRefreshTokens(ctx, now)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Service) Logout(ctx context.Context, refreshToken string) error {

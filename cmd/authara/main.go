@@ -207,6 +207,8 @@ func main() {
 	)
 	defer stop()
 
+	sessionService.StartCleanupWorker(ctx, logger, 5*time.Minute)
+
 	go func() {
 		logger.Info("http server listening", "addr", cfg.Values.HttpAddr)
 		if err := server.Start(); err != nil {
