@@ -13,11 +13,11 @@ END;
 $func$ LANGUAGE plpgsql;
 -- +migrate StatementEnd
 
-CREATE TABLE IF NOT EXISTS public.schema_version (
+CREATE TABLE IF NOT EXISTS public.authara_schema_version (
   version INTEGER NOT NULL PRIMARY KEY
 );
 
-INSERT INTO schema_version (version)
+INSERT INTO public.authara_schema_version (version)
 VALUES (1)
 ON CONFLICT (version) DO NOTHING;
 
