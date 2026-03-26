@@ -143,12 +143,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Build Docker image
-        run: |
-          docker build \
-            -f docker/Dockerfile.prod \
-            -t authara:${{ github.sha }} \
-            .
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.prod
+          push: false
+          tags: authara:ci
 

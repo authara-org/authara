@@ -23,13 +23,30 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U authara"
+          --health-cmd="pg_isready -U authara -d authara"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Wait for Postgres
+        env:
+          POSTGRESQL_HOST: localhost
+          POSTGRESQL_PORT: 5432
+          POSTGRESQL_DATABASE: authara
+          POSTGRESQL_USERNAME: authara
+        run: |
+          until pg_isready \
+            -h "$POSTGRESQL_HOST" \
+            -p "$POSTGRESQL_PORT" \
+            -U "$POSTGRESQL_USERNAME" \
+            -d "$POSTGRESQL_DATABASE"; do
+            echo "waiting for postgres..."
+            sleep 2
+          done
 
       - name: Build migration image
         run: |
@@ -45,6 +62,7 @@ jobs:
           POSTGRESQL_DATABASE: authara
           POSTGRESQL_USERNAME: authara
           POSTGRESQL_PASSWORD: authara
+          POSTGRESQL_SCHEMA: authara
         run: |
           docker run --rm \
             --network host \
@@ -53,7 +71,8 @@ jobs:
             -e POSTGRESQL_DATABASE \
             -e POSTGRESQL_USERNAME \
             -e POSTGRESQL_PASSWORD \
+            -e POSTGRESQL_SCHEMA \
             authara-migrations:test \
             up \
-            -env=default\
+            -env=default \
             -config=/migrations/dbconfig.yaml
