@@ -1,7 +1,9 @@
 FROM golang:1.25-alpine
 
+RUN apk add --no-cache ca-certificates
+
 RUN go install github.com/a-h/templ/cmd/templ@v0.3.977
-RUN go install github.com/bokwoon95/wgo@latest
+RUN go install github.com/bokwoon95/wgo@v0.6.3
 
 WORKDIR /app
 
