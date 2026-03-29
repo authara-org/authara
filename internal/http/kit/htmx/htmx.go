@@ -14,4 +14,3 @@ func PushUrl(w http.ResponseWriter, url string) {
 func ReplaceUrl(w http.ResponseWriter, url string) {
 	w.Header().Add(HTMXReplaceUrl, url)
 }
-
