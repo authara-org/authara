@@ -10,4 +10,5 @@ var (
 	ErrUsernameTaken         = errors.New("username already taken")
 	ErrInvalidUsername       = errors.New("invalid username")
 	ErrNoRolesInContext      = errors.New("no roles in context for user")
+	ErrEmailNotAllowed       = errors.New("email is not allowed to access the application")
 )

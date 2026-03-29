@@ -269,3 +269,13 @@ variables:
     required: false
     type: duration
     default: 5s
+
+  # ------------------------------------------------------------
+  # Access Policy
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_ALLOWED_EMAIL_LIST_ENABLED
+    stability: stable
+    required: false
+    type: bool
+    default: false

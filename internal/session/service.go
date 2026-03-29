@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
@@ -23,6 +24,7 @@ type SessionConfig struct {
 	SessionTTL           time.Duration
 	RefreshTokenTTL      time.Duration
 	RefreshTokenRotation time.Duration
+	AccessPolicy         accesspolicy.EmailAccessPolicy
 }
 
 type Service struct {
@@ -32,9 +34,15 @@ type Service struct {
 	sessionTTL           time.Duration
 	refreshTokenTTL      time.Duration
 	refreshTokenRotation time.Duration
+	accessPolicy         accesspolicy.EmailAccessPolicy
 }
 
 func New(cfg SessionConfig) *Service {
+	access := cfg.AccessPolicy
+	if access == nil {
+		access = accesspolicy.NoopEmailAccessPolicy{}
+	}
+
 	return &Service{
 		store:                cfg.Store,
 		tx:                   cfg.Tx,
@@ -42,6 +50,7 @@ func New(cfg SessionConfig) *Service {
 		sessionTTL:           cfg.SessionTTL,
 		refreshTokenTTL:      cfg.RefreshTokenTTL,
 		refreshTokenRotation: cfg.RefreshTokenRotation,
+		accessPolicy:         access,
 	}
 }
 
@@ -57,6 +66,11 @@ func (s *Service) CreateSession(
 	err error,
 ) {
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		err = s.ensureUserAllowed(ctx, userID)
+		if err != nil {
+			return err
+		}
+
 		isAdmin, err := s.store.IsUserAdmin(ctx, userID)
 		if err != nil {
 			return err
@@ -150,6 +164,11 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		}
 		if session.ExpiresAt.Before(now) || session.RevokedAt != nil {
 			return ErrInvalidRefreshToken
+		}
+
+		err = s.ensureUserAllowed(ctx, session.UserID)
+		if err != nil {
+			return err
 		}
 
 		isAdmin, err := s.store.IsUserAdmin(ctx, session.UserID)
@@ -310,4 +329,20 @@ func shouldRotate(rt domain.RefreshToken, now time.Time, rotation time.Duration)
 	default:
 		return now.Sub(rt.CreatedAt) >= rotation
 	}
+}
+
+func (s *Service) ensureUserAllowed(ctx context.Context, userID uuid.UUID) error {
+	user, err := s.store.GetUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	allowed, err := s.accessPolicy.IsEmailAllowed(ctx, user.Email)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrUserNotAllowed
+	}
+	return nil
 }

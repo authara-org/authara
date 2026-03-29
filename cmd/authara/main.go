@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/bootstrap"
 	"github.com/authara-org/authara/internal/config"
@@ -88,7 +89,6 @@ func main() {
 	)
 
 	var webhookPublisher webhook.Publisher = webhook.NoopPublisher{}
-
 	if cfg.Webhook.Enabled() {
 		baseSender := webhook.NewSender(
 			cfg.Webhook.URL,
@@ -102,11 +102,20 @@ func main() {
 		)
 	}
 
+	var accessPolicy accesspolicy.EmailAccessPolicy = accesspolicy.NoopEmailAccessPolicy{}
+	if cfg.AccessPolicy.AllowedEmailEnabled {
+		accessPolicy = accesspolicy.New(accesspolicy.Config{
+			Enabled: true,
+			Store:   store,
+		})
+	}
+
 	authService := auth.New(auth.Config{
 		Store:            store,
 		Tx:               txManager,
 		WebhookPublisher: webhookPublisher,
 		Logger:           logger,
+		AccessPolicy:     accessPolicy,
 	})
 
 	sessionService := session.New(session.SessionConfig{
@@ -116,6 +125,7 @@ func main() {
 		SessionTTL:           cfg.Session.SessionTTL,
 		RefreshTokenTTL:      cfg.Session.RefreshTokenTTL,
 		RefreshTokenRotation: cfg.Session.RefreshTokenRotation,
+		AccessPolicy:         accessPolicy,
 	})
 
 	googleClient := google.New(cfg.OAuth.GoogleClientID)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/session/roles"
@@ -21,6 +22,7 @@ type Config struct {
 	Tx               *tx.Manager
 	WebhookPublisher webhook.Publisher
 	Logger           *slog.Logger
+	AccessPolicy     accesspolicy.EmailAccessPolicy
 }
 
 type Service struct {
@@ -28,6 +30,7 @@ type Service struct {
 	tx               *tx.Manager
 	webhookPublisher webhook.Publisher
 	logger           *slog.Logger
+	accessPolicy     accesspolicy.EmailAccessPolicy
 }
 
 func New(cfg Config) *Service {
@@ -35,11 +38,17 @@ func New(cfg Config) *Service {
 	if pub == nil {
 		pub = webhook.NoopPublisher{}
 	}
+	access := cfg.AccessPolicy
+	if access == nil {
+		access = accesspolicy.NoopEmailAccessPolicy{}
+	}
+
 	return &Service{
 		store:            cfg.Store,
 		tx:               cfg.Tx,
 		webhookPublisher: pub,
 		logger:           cfg.Logger,
+		accessPolicy:     access,
 	}
 }
 
@@ -104,6 +113,14 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*domain.User, error
 		in.Username = fmt.Sprintf("%s-%05d", local, suffix)
 	}
 
+	allowed, err := s.accessPolicy.IsEmailAllowed(ctx, in.Email)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, ErrEmailNotAllowed
+	}
+
 	switch in.Provider {
 	case domain.ProviderPassword:
 		return s.loginWithPassword(ctx, in)
@@ -133,6 +150,14 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (*domain.User, err
 		local = strings.ToLower(local)
 
 		in.Username = fmt.Sprintf("%s-%05d", local, suffix)
+	}
+
+	allowed, err := s.accessPolicy.IsEmailAllowed(ctx, in.Email)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, ErrEmailNotAllowed
 	}
 
 	switch in.Provider {
@@ -305,7 +330,8 @@ func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username
 }
 
 func (s *Service) publishBestEffort(ctx context.Context, evt webhook.Envelope) {
-	if err := s.webhookPublisher.Publish(ctx, evt); err != nil && s.logger != nil {
+	err := s.webhookPublisher.Publish(ctx, evt)
+	if err != nil && s.logger != nil {
 		s.logger.Error("webhook publish failed", "event", evt.Type, "event_id", evt.ID, "err", err)
 	}
 }

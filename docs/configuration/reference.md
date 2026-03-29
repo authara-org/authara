@@ -373,6 +373,20 @@ Default:
 5m
 ```
 
+## Access Policy
+
+### AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED
+
+Enables email allowlist enforcement.
+
+Type: boolean  
+Default:
+```
+false
+```
+
+When enabled, only emails present in the `allowed_emails` table may register and authenticate.
+
 ## Advanced configuration
 
 Authara includes additional configuration areas such as:
@@ -380,7 +394,8 @@ Authara includes additional configuration areas such as:
 - JWT signing keys
 - OAuth providers
 - rate limiting
-- webhooks
+- database connection pooling
+- access policy
 
 All configuration variables are listed in this reference.
 

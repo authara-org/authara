@@ -69,3 +69,4 @@ nav:
       - OAuth: configuration/oauth.md
       - Rate Limiting: configuration/rate-limiting.md
       - Database Connection: configuration/database-connection.md
+      - Access Policy: configuration/access-policy.md

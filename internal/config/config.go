@@ -8,14 +8,15 @@ import (
 )
 
 type Config struct {
-	Values    Values
-	DB        DB
-	Logging   Logging
-	OAuth     OAuth
-	Token     Token
-	Session   Session
-	RateLimit RateLimit
-	Webhook   Webhook
+	Values       Values
+	DB           DB
+	Logging      Logging
+	OAuth        OAuth
+	Token        Token
+	Session      Session
+	RateLimit    RateLimit
+	Webhook      Webhook
+	AccessPolicy AccessPolicy
 }
 
 func Load() (*Config, error) {
@@ -47,6 +48,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.Webhook.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.AccessPolicy.validate(); err != nil {
 		return nil, err
 	}
 
