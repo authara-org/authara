@@ -7,10 +7,10 @@ import (
 )
 
 type AuthProvider struct {
-	ID     *uuid.UUID `gorm:"type:uuid;primaryKey;column:id;default:gen_random_uuid()"`
-	UserID string     `gorm:"type:uuid;not null;index;column:user_id"`
+	ID *uuid.UUID `gorm:"type:uuid;primaryKey;column:id;default:gen_random_uuid()"`
 
-	Provider string `gorm:"type:varchar(50);not null;column:provider"`
+	UserID   uuid.UUID `gorm:"type:uuid;not null;column:user_id"`
+	Provider string    `gorm:"type:varchar(50);not null;column:provider"`
 
 	ProviderUserID *string `gorm:"type:varchar(255);column:provider_user_id"`
 	PasswordHash   *string `gorm:"type:varchar(255);column:password_hash"`

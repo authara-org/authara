@@ -16,7 +16,7 @@ func toDomainAuthProvider(m model.AuthProvider) domain.AuthProvider {
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,
 
-		UserID:   uuid.MustParse(m.UserID),
+		UserID:   m.UserID,
 		Provider: domain.Provider(m.Provider),
 
 		ProviderUserID: m.ProviderUserID,
@@ -27,7 +27,7 @@ func toDomainAuthProvider(m model.AuthProvider) domain.AuthProvider {
 func toModelAuthProvider(d domain.AuthProvider) model.AuthProvider {
 	return model.AuthProvider{
 		ID:       nil,
-		UserID:   d.UserID.String(),
+		UserID:   d.UserID,
 		Provider: string(d.Provider),
 
 		ProviderUserID: d.ProviderUserID,

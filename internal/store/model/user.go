@@ -15,7 +15,7 @@ type User struct {
 
 	Username           string `gorm:"type:varchar(255);not null;column:username"`
 	UsernameNormalized string `gorm:"type:varchar(255);not null;column:username_normalized"`
-	Email              string `gorm:"type:varchar(255);not null;uniqueIndex;column:email"`
+	Email              string `gorm:"type:varchar(255);not null;column:email"`
 }
 
 func (User) TableName() string {
