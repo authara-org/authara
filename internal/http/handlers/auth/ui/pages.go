@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/authara-org/authara/internal/http/handlers/auth/ui/flow"
+	"github.com/authara-org/authara/internal/http/kit/flash"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
@@ -27,6 +28,11 @@ func (h *UIHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
 func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 	if flow.TryRedirectAuthenticated(w, r, h.Session, h.AccessTTL, h.RefreshTTL) {
 		return
+	}
+
+	msg, _ := flash.Read(w, r)
+	if msg != nil {
+		r = r.WithContext(httpctx.WithFlash(r.Context(), msg))
 	}
 
 	_ = h.Render(
