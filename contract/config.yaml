@@ -274,7 +274,7 @@ variables:
   # Access Policy
   # ------------------------------------------------------------
 
-  - name: AUTHARA_ALLOWED_EMAIL_LIST_ENABLED
+  - name: AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED 
     stability: stable
     required: false
     type: bool

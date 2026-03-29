@@ -1,7 +1,7 @@
 package config
 
 type AccessPolicy struct {
-	AllowedEmailEnabled bool `env:"AUTHARA_ALLOWED_EMAIL_LIST_ENABLED,default=false"`
+	AllowedEmailEnabled bool `env:"AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED,default=false"`
 }
 
 func (a *AccessPolicy) validate() error {
