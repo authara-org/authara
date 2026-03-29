@@ -91,7 +91,7 @@ https://docs.authara.org/quickstart
 
 # What Authara does
 
-Authara provides the authentication infrastructure that applications would otherwise need to implement themselves.
+Authara provides the authentication infrastructure that your applications would otherwise need to implement themselves.
 
 Features include:
 
@@ -107,8 +107,6 @@ The goal is simple:
 
 > Run Authara next to your app, mount it under `/auth`, and keep authentication infrastructure out of your application code.
 
-More features are planned as the project evolves. See the roadmap for upcoming improvements.
-
 ---
 
 # How it works
@@ -118,8 +116,9 @@ Authara is typically deployed together with a reverse proxy that routes requests
 The system usually consists of three components:
 
 1. **Authara** — the authentication server  
-2. **Authara Gateway** — a lightweight reverse proxy  
-3. **SDKs (optional)** — thin helpers for consuming authentication state
+2. **Authara Migrations** — migrations for PostgreSQL  
+3. **Authara Gateway** — a lightweight reverse proxy  
+4. **SDKs** — thin helpers for consuming authentication state
 
 The gateway and SDKs are maintained in separate repositories.
 
@@ -136,47 +135,14 @@ The gateway and SDKs are maintained in separate repositories.
 7. The user is redirected back to the application  
 8. The application continues handling the request with the authenticated session
 
-This means the application developer:
+This means you:
 
-- does not build login pages
-- does not implement password storage
-- does not implement refresh token rotation
-- does not build authentication session infrastructure from scratch
+- do not have to build login pages
+- do not have to implement password storage
+- do not have to implement refresh token rotation
+- do not have to build authentication session infrastructure from scratch
 
 Authara handles these concerns centrally.
-
----
-
-# Deployment model
-
-A typical Authara deployment consists of:
-
-- **Authara** — the Go HTTP authentication server
-- **PostgreSQL** — persistent storage
-- **a reverse proxy or gateway** — routing requests
-
-Typical routing:
-
-```
-/auth/* → Authara
-/*      → Application
-```
-
-Authara is mounted under `/auth`, keeping authentication endpoints separate from application routes.
-
----
-
-# Core principles
-
-Authara is built around a few strict rules:
-
-- **Clear boundaries** between configuration, HTTP handling, business logic, and persistence
-- **Explicit transactions** owned by services, not HTTP handlers
-- **No hidden magic**
-- **No implicit database access**
-- **Predictable infrastructure behavior**
-
-Authara is infrastructure software. It should be understandable, operable, and safe.
 
 ---
 
@@ -224,10 +190,6 @@ Authara currently implements a minimal role model.
 - regular users are simply non-admin users
 - roles are facts carried in sessions and tokens
 
-Authorization decisions remain the responsibility of the application.
-
-Authara focuses strictly on authentication infrastructure.
-
 ---
 
 # API and contract stability
@@ -265,7 +227,6 @@ Authara is **not**:
 - an enterprise IAM platform like Keycloak
 - a hosted SaaS like Auth0 or WorkOS
 - a framework embedded deeply into your application
-- a general-purpose authorization engine
 
 Authara is **self-hosted authentication infrastructure for applications**.
 
@@ -287,8 +248,3 @@ https://github.com/authara-org/authara-examples
 
 These examples include minimal setups for different stacks and show how to integrate authentication end-to-end.
 
----
-
-# Summary
-
-Authara is a **self-hosted authentication server** that provides login flows, sessions, and OAuth while keeping authentication infrastructure separate from your application.
