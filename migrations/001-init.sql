@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS authara.users (
 	disabled_at timestamptz,
 
 	CONSTRAINT unique_user_email UNIQUE (email),
-	CONSTRAINT unuique_user_username UNIQUE (username)
+	CONSTRAINT unique_user_username UNIQUE (username)
 );
 
 DROP TRIGGER IF EXISTS trg_user_updated_at ON authara.users;
@@ -43,8 +43,10 @@ EXECUTE FUNCTION authara.set_updated_at();
 
 CREATE TABLE IF NOT EXISTS authara.roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL UNIQUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT unique_role_name UNIQUE (name)
 );
 
 INSERT INTO authara.roles (name)
@@ -69,7 +71,8 @@ CREATE TABLE IF NOT EXISTS authara.auth_providers (
 	password_hash varchar(255),
 	two_factor_authentication boolean NOT NULL DEFAULT false,
 	
-	CONSTRAINT unique_user_provider UNIQUE (user_id, provider)
+	CONSTRAINT unique_user_provider UNIQUE (user_id, provider),
+	CONSTRAINT unique_provider_user UNIQUE (provider, provider_user_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS unique_provider_user_nonnull
