@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/kit/flash"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/session"
@@ -15,7 +17,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+		h.renderError(w, r, ctx)
 		return
 	}
 
@@ -23,25 +25,29 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	gtoken := r.FormValue("g_csrf_token")
 
 	if idToken == "" || gtoken == "" {
-		http.Error(w, "tokens are empty", http.StatusBadRequest)
+		h.renderError(w, r, ctx)
 		return
+
 	}
 
 	csrfCookie, err := r.Cookie("g_csrf_token")
 	if err != nil {
-		http.Error(w, "invalid csfr cookie", http.StatusUnauthorized)
+		h.renderError(w, r, ctx)
 		return
+
 	}
 
 	if gtoken == "" || gtoken != csrfCookie.Value {
-		http.Error(w, "invalid g_csfr_token", http.StatusUnauthorized)
+		h.renderError(w, r, ctx)
 		return
+
 	}
 
 	identity, err := h.Google.VerifyIDToken(ctx, idToken)
 	if err != nil {
-		http.Error(w, "invalid id token", http.StatusUnauthorized)
+		h.renderError(w, r, ctx)
 		return
+
 	}
 
 	input := auth.LoginInput{
@@ -52,8 +58,9 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.Auth.Login(ctx, input)
 	if err != nil {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		h.renderError(w, r, ctx)
 		return
+
 	}
 
 	returnTo, ok := httpctx.ReturnTo(r.Context())
@@ -66,12 +73,22 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now)
 	if err != nil {
-		http.Error(w, "session error", http.StatusInternalServerError)
+		h.renderError(w, r, ctx)
 		return
+
 	}
 
 	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
 
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
+}
+
+func (h *UIHandler) renderError(w http.ResponseWriter, r *http.Request, ctx context.Context) {
+	_ = flash.Set(w, flash.Message{
+		Kind:    "error",
+		Message: "Google login failed. Please try again.",
+	})
+	redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/")), http.StatusSeeOther)
+	return
 }
