@@ -1,0 +1,49 @@
+package domain
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type ChallengePurpose string
+
+const (
+	ChallengePurposeSignup ChallengePurpose = "signup"
+)
+
+type Challenge struct {
+	ID uuid.UUID
+
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
+
+	Purpose      ChallengePurpose
+	Email        string
+	AttemptCount int
+	MaxAttempts  int
+}
+
+type VerificationCode struct {
+	ID          uuid.UUID
+	ChallengeID uuid.UUID
+
+	CreatedAt time.Time
+	ExpiresAt time.Time
+
+	CodeHash string
+}
+
+func (c Challenge) IsConsumed() bool {
+	return c.ConsumedAt != nil
+}
+
+func (c Challenge) IsExpired(now time.Time) bool {
+	return now.After(c.ExpiresAt)
+}
+
+func (c Challenge) HasAttemptsRemaining() bool {
+	return c.AttemptCount < c.MaxAttempts
+}
