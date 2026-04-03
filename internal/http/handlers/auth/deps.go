@@ -14,14 +14,15 @@ import (
 )
 
 type Deps struct {
-	Auth           *auth.Service
-	Session        *session.Service
-	Challange      *challenge.Service
-	Verification   *challenge.VerificationCodeService
-	Limiter        ratelimiter.AuthLimiter
-	Logger         *slog.Logger
-	Google         *google.Client
-	OAuthProviders oauth.OAuthProviders
+	Auth             *auth.Service
+	Session          *session.Service
+	Challange        *challenge.Service
+	ChallengeEnabled bool
+	Verification     *challenge.VerificationCodeService
+	Limiter          ratelimiter.AuthLimiter
+	Logger           *slog.Logger
+	Google           *google.Client
+	OAuthProviders   oauth.OAuthProviders
 
 	AccessTTL  time.Duration
 	RefreshTTL time.Duration

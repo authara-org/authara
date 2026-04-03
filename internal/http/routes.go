@@ -34,17 +34,18 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	})
 
 	deps := authhandler.Deps{
-		Auth:           cfg.Auth,
-		Session:        cfg.Session,
-		Limiter:        cfg.AuthLimiter,
-		Logger:         cfg.Logger,
-		Google:         cfg.Google,
-		OAuthProviders: cfg.OAuthProviders,
-		AccessTTL:      cfg.AccessTokenTTL,
-		RefreshTTL:     cfg.RefreshTokenTTL,
-		Render:         cfg.Render,
-		Challange:      cfg.Challange,
-		Verification:   cfg.Verification,
+		Auth:             cfg.Auth,
+		Session:          cfg.Session,
+		Limiter:          cfg.AuthLimiter,
+		Logger:           cfg.Logger,
+		Google:           cfg.Google,
+		OAuthProviders:   cfg.OAuthProviders,
+		AccessTTL:        cfg.AccessTokenTTL,
+		RefreshTTL:       cfg.RefreshTokenTTL,
+		Render:           cfg.Render,
+		Challange:        cfg.Challange,
+		ChallengeEnabled: cfg.ChallengeEnabled,
+		Verification:     cfg.Verification,
 	}
 
 	uih := ui.NewUIHandler(deps)

@@ -15,10 +15,11 @@ import (
 )
 
 type UIHandler struct {
-	Auth         *auth.Service
-	Session      *session.Service
-	Challange    *challenge.Service
-	Verification *challenge.VerificationCodeService
+	Auth             *auth.Service
+	Session          *session.Service
+	Challange        *challenge.Service
+	ChallengeEnabled bool
+	Verification     *challenge.VerificationCodeService
 
 	Limiter        ratelimiter.AuthLimiter
 	Logger         *slog.Logger
@@ -33,14 +34,15 @@ type UIHandler struct {
 
 func NewUIHandler(d authhandler.Deps) *UIHandler {
 	return &UIHandler{
-		Auth:           d.Auth,
-		Session:        d.Session,
-		Challange:      d.Challange,
-		Verification:   d.Verification,
-		Limiter:        d.Limiter,
-		Logger:         d.Logger,
-		Google:         d.Google,
-		OAuthProviders: d.OAuthProviders,
+		Auth:             d.Auth,
+		Session:          d.Session,
+		Challange:        d.Challange,
+		ChallengeEnabled: d.ChallengeEnabled,
+		Verification:     d.Verification,
+		Limiter:          d.Limiter,
+		Logger:           d.Logger,
+		Google:           d.Google,
+		OAuthProviders:   d.OAuthProviders,
 
 		AccessTTL:  d.AccessTTL,
 		RefreshTTL: d.RefreshTTL,

@@ -253,21 +253,22 @@ func main() {
 	renderer := render.New(assets)
 
 	server := httpserver.NewServer(httpserver.ServerConfig{
-		Version:         Version,
-		Addr:            cfg.Values.HttpAddr,
-		Dev:             cfg.Values.AppEnv == "dev",
-		Auth:            authService,
-		Session:         sessionService,
-		Challange:       challengeService,
-		Verification:    verificationCodeService,
-		Logger:          logger,
-		Store:           store,
-		AuthLimiter:     limiter,
-		Google:          googleClient,
-		OAuthProviders:  oauthProviders,
-		AccessTokenTTL:  cfg.Token.AccessTokenTTL,
-		RefreshTokenTTL: cfg.Session.RefreshTokenTTL,
-		Render:          renderer,
+		Version:          Version,
+		Addr:             cfg.Values.HttpAddr,
+		Dev:              cfg.Values.AppEnv == "dev",
+		Auth:             authService,
+		Session:          sessionService,
+		Challange:        challengeService,
+		ChallengeEnabled: cfg.Challenge.Enabled,
+		Verification:     verificationCodeService,
+		Logger:           logger,
+		Store:            store,
+		AuthLimiter:      limiter,
+		Google:           googleClient,
+		OAuthProviders:   oauthProviders,
+		AccessTokenTTL:   cfg.Token.AccessTokenTTL,
+		RefreshTokenTTL:  cfg.Session.RefreshTokenTTL,
+		Render:           renderer,
 	}, mw)
 
 	ctx, stop := signal.NotifyContext(
