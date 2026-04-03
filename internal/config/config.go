@@ -17,6 +17,8 @@ type Config struct {
 	RateLimit    RateLimit
 	Webhook      Webhook
 	AccessPolicy AccessPolicy
+	Challenge    Challenge
+	Email        Email
 }
 
 func Load() (*Config, error) {
@@ -53,6 +55,12 @@ func Load() (*Config, error) {
 	if err := cfg.AccessPolicy.validate(); err != nil {
 		return nil, err
 	}
+	if err := cfg.Challenge.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Email.validate(); err != nil {
+		return nil, err
+	}
 
 	cfg.Values.HttpAddr = ":8080"
 
@@ -69,6 +77,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.Webhook.parse(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Email.parse(); err != nil {
 		return nil, err
 	}
 
@@ -88,5 +99,12 @@ func (c *Config) validate() error {
 			c.Session.RefreshTokenTTL,
 		)
 	}
+
+	if c.Challenge.Enabled &&
+		c.Email.Provider == "noop" &&
+		c.Values.AppEnv == "prod" {
+		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must not be noop when AUTHARA_CHALLENGE_ENABLED=true in production")
+	}
+
 	return nil
 }
