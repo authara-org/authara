@@ -24,6 +24,10 @@ type Challenge struct {
 	Email        string
 	AttemptCount int
 	MaxAttempts  int
+
+	ResendCount int
+	MaxResends  int
+	LastSentAt  *time.Time
 }
 
 type VerificationCode struct {

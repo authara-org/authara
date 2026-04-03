@@ -6,17 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
-type PendingActionType string
-
-const (
-	PendingActionSignup        PendingActionType = "signup"
-	PendingActionPasswordReset PendingActionType = "password_reset"
-	PendingActionEmailChange   PendingActionType = "email_change"
-)
-
-type PendingAccountCreation struct {
+type PendingSignupAction struct {
 	ID          uuid.UUID
-	ChallangeID uuid.UUID
+	ChallengeID uuid.UUID
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
