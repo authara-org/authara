@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
@@ -15,6 +16,8 @@ import (
 type Deps struct {
 	Auth           *auth.Service
 	Session        *session.Service
+	Challange      *challenge.Service
+	Verification   *challenge.VerificationCodeService
 	Limiter        ratelimiter.AuthLimiter
 	Logger         *slog.Logger
 	Google         *google.Client

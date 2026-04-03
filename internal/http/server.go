@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
@@ -18,9 +19,11 @@ import (
 type ServerConfig struct {
 	Version         string
 	Addr            string
-	Auth            *auth.Service
 	Dev             bool
+	Auth            *auth.Service
 	Session         *session.Service
+	Challange       *challenge.Service
+	Verification    *challenge.VerificationCodeService
 	Logger          *slog.Logger
 	Store           *store.Store
 	AuthLimiter     ratelimiter.AuthLimiter
@@ -44,6 +47,7 @@ type Middlewares struct {
 	RequireAPICSRF func(http.Handler) http.Handler
 
 	ReturnTo func(http.Handler) http.Handler
+	HTMX     func(http.Handler) http.Handler
 }
 
 type Server struct {

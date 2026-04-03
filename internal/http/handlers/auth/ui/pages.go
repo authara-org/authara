@@ -8,6 +8,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
+	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/session"
 )
@@ -40,6 +41,15 @@ func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		r,
 		http.StatusOK,
 		authview.Login(h.OAuthProviders.Providers),
+	)
+}
+
+func (h *UIHandler) VerifyChallengePage(w http.ResponseWriter, r *http.Request) {
+	_ = h.Render(
+		w,
+		r,
+		http.StatusOK,
+		challengeview.VerifyChallange(),
 	)
 }
 

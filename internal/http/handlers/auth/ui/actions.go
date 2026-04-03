@@ -111,6 +111,12 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }
 
+func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) {
+}
+
+func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) {
+}
+
 func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

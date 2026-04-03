@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/challenge"
 	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
@@ -14,8 +15,11 @@ import (
 )
 
 type UIHandler struct {
-	Auth           *auth.Service
-	Session        *session.Service
+	Auth         *auth.Service
+	Session      *session.Service
+	Challange    *challenge.Service
+	Verification *challenge.VerificationCodeService
+
 	Limiter        ratelimiter.AuthLimiter
 	Logger         *slog.Logger
 	Google         *google.Client
@@ -31,6 +35,8 @@ func NewUIHandler(d authhandler.Deps) *UIHandler {
 	return &UIHandler{
 		Auth:           d.Auth,
 		Session:        d.Session,
+		Challange:      d.Challange,
+		Verification:   d.Verification,
 		Limiter:        d.Limiter,
 		Logger:         d.Logger,
 		Google:         d.Google,
