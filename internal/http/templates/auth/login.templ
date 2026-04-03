@@ -21,6 +21,7 @@ templ Login(oauthProviders []oauth.OAuthProvider) {
 					<a
 						hx-get={ "/auth/signup?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 						hx-target="#body"
+						hx-swap="innerHTML"
 						hx-replace-url="true"
 						class="cursor-pointer underline text-blue-800 dark:text-blue-400"
 					>
