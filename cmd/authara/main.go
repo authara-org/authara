@@ -12,7 +12,9 @@ import (
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/bootstrap"
+	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/email"
 	httpserver "github.com/authara-org/authara/internal/http"
 	"github.com/authara-org/authara/internal/http/kit/csrf"
 	"github.com/authara-org/authara/internal/http/kit/render"
@@ -128,6 +130,56 @@ func main() {
 		AccessPolicy:         accessPolicy,
 	})
 
+	// Email sender
+	var emailSender email.Sender
+	switch cfg.Email.Provider {
+	case "smtp":
+		emailSender = email.NewSMTPSender(
+			cfg.Email.SMTPHost,
+			cfg.Email.SMTPPort,
+			cfg.Email.SMTPUsername,
+			cfg.Email.SMTPPassword,
+			cfg.Email.From,
+			cfg.Email.SMTPTLS,
+			cfg.Email.SMTPTimeout,
+		)
+	default:
+		emailSender = email.NewNoopSender(email.NoopSenderConfig{
+			Logger: logger,
+		})
+	}
+
+	// Challenge services
+	verificationCodeService := challenge.NewVerificationCodeService(
+		store,
+		cfg.Challenge.VerificationCodeTTL,
+	)
+
+	challengeService := challenge.New(challenge.Config{
+		Store:             store,
+		Tx:                txManager,
+		ChallengeTTL:      cfg.Challenge.TTL,
+		MaxAttempts:       cfg.Challenge.MaxAttempts,
+		MaxResends:        cfg.Challenge.MaxResends,
+		MinResendInterval: cfg.Challenge.MinResendInterval,
+	})
+
+	emailWorker := challenge.NewWorker(
+		store,
+		verificationCodeService,
+		emailSender,
+		logger,
+		challenge.WorkerConfig{
+			WorkerCount:        cfg.Email.WorkerCount,
+			PollInterval:       cfg.Email.WorkerPollInterval,
+			JobMaxAttempts:     cfg.Email.JobMaxAttempts,
+			CleanupSentAfter:   cfg.Email.CleanupSentAfter,
+			CleanupFailedAfter: cfg.Email.CleanupFailedAfter,
+			CleanupInterval:    time.Hour,
+			SendTimeout:        cfg.Email.SMTPTimeout,
+		},
+	)
+
 	googleClient := google.New(cfg.OAuth.GoogleClientID)
 
 	providers := []oauth.OAuthProvider{}
@@ -164,6 +216,7 @@ func main() {
 	requireCSRF := httpmiddleware.RequireCSRF
 	requireAPICSRF := httpmiddleware.RequireAPICSRF
 	returnTo := httpmiddleware.ReturnTo
+	htmx := httpmiddleware.HTMXMiddleware
 
 	mw := httpserver.Middlewares{
 		RedirectIfAuthenticated:           redirectIfAuthenticated,
@@ -175,6 +228,7 @@ func main() {
 		RequireCSRF:                       requireCSRF,
 		RequireAPICSRF:                    requireAPICSRF,
 		ReturnTo:                          returnTo,
+		HTMX:                              htmx,
 	}
 
 	limiter := ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{
@@ -201,9 +255,11 @@ func main() {
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Version:         Version,
 		Addr:            cfg.Values.HttpAddr,
-		Auth:            authService,
 		Dev:             cfg.Values.AppEnv == "dev",
+		Auth:            authService,
 		Session:         sessionService,
+		Challange:       challengeService,
+		Verification:    verificationCodeService,
 		Logger:          logger,
 		Store:           store,
 		AuthLimiter:     limiter,
@@ -222,6 +278,14 @@ func main() {
 	defer stop()
 
 	sessionService.StartCleanupWorker(ctx, logger, 5*time.Minute)
+
+	if cfg.Challenge.Enabled {
+		emailWorker.Run(ctx)
+		logger.Info("challenge email workers started",
+			"worker_count", cfg.Email.WorkerCount,
+			"provider", cfg.Email.Provider,
+		)
+	}
 
 	go func() {
 		logger.Info("http server listening", "addr", cfg.Values.HttpAddr)
