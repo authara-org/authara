@@ -7,8 +7,6 @@ import (
 )
 
 type Email struct {
-	Enabled bool `env:"AUTHARA_EMAIL_ENABLED,default=false"`
-
 	Provider string `env:"AUTHARA_EMAIL_PROVIDER,default=noop"`
 	From     string `env:"AUTHARA_EMAIL_FROM"`
 
@@ -19,13 +17,11 @@ type Email struct {
 	SMTPTLS      bool          `env:"AUTHARA_EMAIL_SMTP_TLS,default=true"`
 	SMTPTimeout  time.Duration `env:"AUTHARA_EMAIL_SMTP_TIMEOUT,default=10s"`
 
-	WorkersEnabled       bool          `env:"AUTHARA_EMAIL_WORKERS_ENABLED,default=true"`
-	WorkerCount          int           `env:"AUTHARA_EMAIL_WORKER_COUNT,default=1"`
-	WorkerPollInterval   time.Duration `env:"AUTHARA_EMAIL_WORKER_POLL_INTERVAL,default=2s"`
-	JobProcessingTimeout time.Duration `env:"AUTHARA_EMAIL_JOB_PROCESSING_TIMEOUT,default=2m"`
-	JobMaxAttempts       int           `env:"AUTHARA_EMAIL_JOB_MAX_ATTEMPTS,default=10"`
-	CleanupSentAfter     time.Duration `env:"AUTHARA_EMAIL_CLEANUP_SENT_AFTER,default=720h"`    // 30d
-	CleanupFailedAfter   time.Duration `env:"AUTHARA_EMAIL_CLEANUP_FAILED_AFTER,default=2160h"` // 90d
+	WorkerCount        int           `env:"AUTHARA_EMAIL_WORKER_COUNT,default=2"`
+	WorkerPollInterval time.Duration `env:"AUTHARA_EMAIL_WORKER_POLL_INTERVAL,default=2s"`
+	JobMaxAttempts     int           `env:"AUTHARA_EMAIL_JOB_MAX_ATTEMPTS,default=10"`
+	CleanupSentAfter   time.Duration `env:"AUTHARA_EMAIL_CLEANUP_SENT_AFTER,default=720h"`    // 30d
+	CleanupFailedAfter time.Duration `env:"AUTHARA_EMAIL_CLEANUP_FAILED_AFTER,default=2160h"` // 90d
 }
 
 func (e *Email) validate() error {
@@ -34,19 +30,14 @@ func (e *Email) validate() error {
 	switch e.Provider {
 	case "noop", "smtp":
 	default:
-		return fmt.Errorf("invalid AUTHARA_EMAIL_PROVIDER %q (allowed: noop, smtp, api)", e.Provider)
-	}
-
-	if !e.Enabled {
-		return nil
-	}
-
-	if e.From == "" {
-		return fmt.Errorf("AUTHARA_EMAIL_FROM must not be empty when AUTHARA_EMAIL_ENABLED=true")
+		return fmt.Errorf("invalid AUTHARA_EMAIL_PROVIDER %q (allowed: noop, smtp)", e.Provider)
 	}
 
 	switch e.Provider {
 	case "smtp":
+		if e.From == "" {
+			return fmt.Errorf("AUTHARA_EMAIL_FROM must not be empty when AUTHARA_EMAIL_PROVIDER=smtp")
+		}
 		if e.SMTPHost == "" {
 			return fmt.Errorf("AUTHARA_EMAIL_SMTP_HOST must not be empty when AUTHARA_EMAIL_PROVIDER=smtp")
 		}
@@ -63,9 +54,6 @@ func (e *Email) validate() error {
 	}
 	if e.WorkerPollInterval <= 0 {
 		return fmt.Errorf("AUTHARA_EMAIL_WORKER_POLL_INTERVAL must be > 0")
-	}
-	if e.JobProcessingTimeout <= 0 {
-		return fmt.Errorf("AUTHARA_EMAIL_JOB_PROCESSING_TIMEOUT must be > 0")
 	}
 	if e.JobMaxAttempts <= 0 {
 		return fmt.Errorf("AUTHARA_EMAIL_JOB_MAX_ATTEMPTS must be > 0")
