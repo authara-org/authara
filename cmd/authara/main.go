@@ -258,7 +258,7 @@ func main() {
 		Dev:              cfg.Values.AppEnv == "dev",
 		Auth:             authService,
 		Session:          sessionService,
-		Challange:        challengeService,
+		Challenge:        challengeService,
 		ChallengeEnabled: cfg.Challenge.Enabled,
 		Verification:     verificationCodeService,
 		Logger:           logger,
