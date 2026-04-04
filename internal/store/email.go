@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 )
 
 func toDomainEmailJob(m model.EmailJob) domain.EmailJob {
@@ -62,7 +63,11 @@ func (s *Store) CreateEmailJob(ctx context.Context, in domain.EmailJob) (domain.
 func (s *Store) ClaimNextEmailJob(ctx context.Context, now time.Time) (domain.EmailJob, error) {
 	var row model.EmailJob
 
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := s.db.
+		Session(&gorm.Session{
+			Logger: logger.Default.LogMode(logger.Silent),
+		}).
+		WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		err := tx.
 			Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 			Where("status = ? AND next_attempt_at <= ?", string(domain.EmailJobStatusPending), now).
