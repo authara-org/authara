@@ -12,6 +12,7 @@ import (
 templ Signup(oauthProviders []oauth.OAuthProvider) {
 	@templates.PartialRender() {
 		@AuthLayout() {
+			@CardHeader()
 			@HeaderSection("Create an account", "Join to get unlimited access.")
 			<div x-data="{open:false}">
 				<button

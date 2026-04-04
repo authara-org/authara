@@ -1,45 +1,37 @@
 package auth
 
-import "github.com/authara-org/authara/internal/http/templates"
-import "github.com/authara-org/authara/internal/http/templates/components/button"
+import (
+	"github.com/authara-org/authara/internal/http/templates"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+)
 
 templ SuccessfullDeletion() {
 	@templates.PartialRender() {
-		<div class="bg-background-light min-h-screen flex flex-col items-center p-4 sm:pt-20">
-			<div class="bg-white rounded-2xl border border-gray-100 overflow-hidden" data-purpose="confirmation-card">
-				<div class="p-8 md:p-12 text-center">
-					<!-- Success Icon -->
-					<div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-50 mb-6" data-purpose="success-icon-container">
-						<svg class="h-8 w-8 text-green-500" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-							<path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-						</svg>
-					</div>
-					<!-- Heading -->
-					<h1 class="text-2xl font-bold text-gray-800 mb-4">
-						Account Deleted Successfull
-					</h1>
-					<!-- Description Text -->
-					<p class="text-gray-800 text-base leading-relaxed mb-10 max-w-sm mx-auto">
-						We're sorry to see you go. Your account and all associated data have been permanently removed from our systems.
-					</p>
-					<!-- Action Button -->
-					<div class="flex justify-center">
-						<div class="w-fit">
-							@button.LinkButton(button.LinkButtonConfig{
-								Label: "Return to Homepage",
-								Href:  "/",
-								Size:  button.Large,
-							})
-						</div>
-					</div>
-				</div>
-				<!-- Footer area of card for consistent styling with image -->
-				<div class="bg-gray-50/50 border-t border-gray-100 p-6 text-center">
-					<p class="text-xs">
-						If you believe this was an error, please <a class="text-blue-600 hover:underline" href="/">contact support</a>.
-					</p>
+		@AuthLayout() {
+			<div class="flex justify-center mb-6 mt-2">
+				<div class="w-20 h-20 rounded-full p-4 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/40 stroke-2">
+					@icons.Check()
 				</div>
 			</div>
-		</div>
+			@HeaderSection(
+				"Account Deleted Successfully",
+				"We're sorry to see you go. Your account and all associated data have been permanently removed from our systems.",
+			)
+			<div class="flex justify-center">
+				<div class="w-fit">
+					@button.LinkButton(button.LinkButtonConfig{
+						Label: "Return to Homepage",
+						Href:  "/",
+						Size:  button.Large,
+					})
+				</div>
+			</div>
+			<div class="text-center mt-6">
+				<p class="text-grey-700 dark:text-grey-400 text-sm">
+					If you believe this was an error, please <a class="text-blue-800 dark:text-blue-400 underline" href="/">contact support</a>.
+				</p>
+			</div>
+		}
 	}
 }

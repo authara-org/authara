@@ -12,6 +12,7 @@ import (
 templ Login(oauthProviders []oauth.OAuthProvider) {
 	@templates.PartialRender() {
 		@AuthLayout() {
+			@CardHeader()
 			@HeaderSection("Welcome Back!", "Enter to get unlimited access.")
 			@LoginForm()
 			@OAuthProviders("Login", oauthProviders)

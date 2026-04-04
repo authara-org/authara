@@ -11,6 +11,7 @@ import (
 templ VerifyChallenge(challengeID string, header string) {
 	@templates.PartialRender() {
 		@auth.AuthLayout() {
+			@auth.CardHeader()
 			@auth.HeaderSection(header, "Enter the 6-digit code we sent to your email address.")
 			@VerifyChallengeForm(challengeID, false)
 			<div class="text-center mt-6">
