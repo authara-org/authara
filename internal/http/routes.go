@@ -43,7 +43,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 		AccessTTL:        cfg.AccessTokenTTL,
 		RefreshTTL:       cfg.RefreshTokenTTL,
 		Render:           cfg.Render,
-		Challange:        cfg.Challange,
+		Challenge:        cfg.Challenge,
 		ChallengeEnabled: cfg.ChallengeEnabled,
 		Verification:     cfg.Verification,
 	}
@@ -59,7 +59,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Use(mw.HTMX)
 
 			// authara internals
-			r.Get("/verify-challange", uih.VerifyChallengePage)
+			r.Get("/verify-challenge", uih.VerifyChallengePage)
 			r.Get("/successfull-deletion", uih.SuccessfullDeletionPage)
 
 			r.Group(func(r chi.Router) {
@@ -74,8 +74,8 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Post("/signup", uih.SignupPost)
 				r.Post("/login", uih.LoginPost)
-				r.Post("/verify-challange", uih.VerifyChallengePost)
-				r.Post("/resend-challange", uih.ResendChallengePost)
+				r.Post("/verify-challenge", uih.VerifyChallengePost)
+				r.Post("/resend-challenge", uih.ResendChallengePost)
 				r.Post("/sessions/logout", uih.LogoutPost)
 				r.Post("/sessions/refresh", uih.RefreshPost)
 			})
