@@ -3,12 +3,14 @@ package redirect
 import "github.com/authara-org/authara/internal/http/templates/components/animation"
 
 templ RedirectOverlay() {
-	<div class="redirect-overlay fixed inset-0 z-[9999] hidden items-center justify-center bg-white/60 backdrop-blur">
-		<div class="rounded-2xl bg-white shadow-xl px-6 py-4 flex items-center gap-3">
-			<span class="h-5 w-5">
+	<div class="redirect-overlay fixed inset-0 z-[9999] hidden items-center justify-center bg-white/60 dark:bg-black/60 backdrop-blur">
+		<div class="rounded-2xl bg-white dark:bg-grey-900 border border-grey-100 dark:border-grey-800 shadow-xl px-6 py-4 flex items-center gap-3">
+			<span class="h-5 w-5 text-grey-700 dark:text-grey-300">
 				@animation.SpinningSVG()
 			</span>
-			<span class="text-sm font-semibold text-gray-700">Redirecting…</span>
+			<span class="text-sm font-semibold text-grey-800 dark:text-grey-200">
+				Redirecting…
+			</span>
 		</div>
 	</div>
 }
