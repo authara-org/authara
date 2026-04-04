@@ -31,10 +31,10 @@ func TestSignup_EmitsUserCreated(t *testing.T) {
 		})
 
 		user, err := svc.Signup(ctx, SignupInput{
-			Email:    "webhook-signup@example.com",
-			Username: "webhook-signup",
-			Password: "very-secure-password",
-			Provider: domain.ProviderPassword,
+			Email:        "webhook-signup@example.com",
+			Username:     "webhook-signup",
+			PasswordHash: "very-secure-password-hash",
+			Provider:     domain.ProviderPassword,
 		})
 		if err != nil {
 			t.Fatalf("Signup failed: %v", err)
