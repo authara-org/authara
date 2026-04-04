@@ -23,6 +23,9 @@ func toDomainChallenge(m model.Challenge) domain.Challenge {
 		Email:        m.Email,
 		AttemptCount: m.AttemptCount,
 		MaxAttempts:  m.MaxAttempts,
+		ResendCount:  m.ResendCount,
+		MaxResends:   m.MaxResends,
+		LastSentAt:   m.LastSentAt,
 	}
 }
 
@@ -34,6 +37,9 @@ func toModelChallenge(d domain.Challenge) model.Challenge {
 		ConsumedAt:   d.ConsumedAt,
 		AttemptCount: d.AttemptCount,
 		MaxAttempts:  d.MaxAttempts,
+		ResendCount:  d.ResendCount,
+		MaxResends:   d.MaxResends,
+		LastSentAt:   d.LastSentAt,
 	}
 }
 
