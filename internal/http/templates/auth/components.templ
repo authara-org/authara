@@ -8,13 +8,16 @@ templ AuthLayout() {
 		<div class="mt-4 sm:mt-14 px-4 sm:px-6 w-full">
 			@card.FullPageCard(card.FullPageCardConfig{Size: card.Small}) {
 				<div class="w-full p-8 sm:p-14 pt-8 sm:pt-10">
-					<div class="mb-6 sm:mb-10">
-						@button.Back()
-					</div>
 					{ children... }
 				</div>
 			}
 		</div>
+	</div>
+}
+
+templ CardHeader() {
+	<div class="mb-6 sm:mb-10">
+		@button.Back()
 	</div>
 }
 

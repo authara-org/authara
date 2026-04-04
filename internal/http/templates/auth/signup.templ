@@ -12,6 +12,7 @@ import (
 templ Signup(oauthProviders []oauth.OAuthProvider) {
 	@templates.PartialRender() {
 		@AuthLayout() {
+			@CardHeader()
 			@HeaderSection("Create an account", "Join to get unlimited access.")
 			<div x-data="{open:false}">
 				<button
@@ -35,6 +36,7 @@ templ Signup(oauthProviders []oauth.OAuthProvider) {
 					<a
 						hx-get={ "/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 						hx-target="#body"
+						hx-swap="innerHTML"
 						hx-replace-url="true"
 						class="cursor-pointer underline text-blue-800 dark:text-blue-400"
 					>
@@ -165,67 +167,4 @@ templ SignupForm() {
 			})
 		</div>
 	</form>
-}
-
-templ VerifySignUp() {
-	@templates.PartialRender() {
-		@AuthLayout() {
-			@HeaderSection("Verify your Account", "Please type in the code you have received from the email.")
-			@VerifySignupForm()
-		}
-	}
-}
-
-templ VerifySignupForm() {
-	<form hx-post="/auth/verify-signup" hx-targer="this" id="verification-code-input-form" hx-trigger="submit">
-		<div id="code-container" class="flex justify-center space-x-3 mb-6">
-			for  i:=0;i<6;i++ {
-				<input
-					type="text"
-					maxlength="1"
-					class={
-						"code-input appearance-none w-12 h-14 text-2xl text-center rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-blue-500",
-						templ.KV("border-gray-300", ctx.Value("incorrect-code") != "false"),
-						templ.KV("border-red-700", ctx.Value("incorrect-code") == "false"),
-					}
-				/>
-			}
-		</div>
-		<input id="hidden-code-input" hidden name="code"/>
-		<button type="submit" class="bg-blue-600 w-full rounded-xl px-4 py-3 text-white cursor-pointer">
-			<div class="flex items-center justify-center gap-2">
-				<div class="h-6 w-6">
-					@icons.Signup()
-				</div>
-				Verifiy Account
-			</div>
-		</button>
-	</form>
-}
-
-templ SuccessfullSignup() {
-	@templates.PartialRender() {
-		@AuthLayout() {
-			<div class="flex justify-center mb-6 mt-2">
-				<div class="w-20 h-20 rounded-full p-4 text-teal-700 bg-teal-100 stroke-2">
-					@icons.Check()
-				</div>
-			</div>
-			@HeaderSection("You’re all set!",
-				"Congratulations you have successfully created an account. You are now able to use the app.")
-			<button
-				hx-get="/private"
-				hx-target="body"
-				hx-push-url="true"
-				class="bg-blue-600 w-full rounded-xl px-4 py-3 text-white cursor-pointer"
-			>
-				<div class="flex items-center justify-center gap-2">
-					Go to Dashboard	
-					<div class="h-6 w-6">
-						@icons.ArrowRight()
-					</div>
-				</div>
-			</button>
-		}
-	}
 }

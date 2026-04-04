@@ -1,0 +1,74 @@
+package challenge
+
+import (
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/templates"
+	"github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+)
+
+templ VerifyChallenge(challengeID string, header string) {
+	@templates.PartialRender() {
+		@auth.AuthLayout() {
+			@auth.CardHeader()
+			@auth.HeaderSection(header, "Enter the 6-digit code we sent to your email address.")
+			@VerifyChallengeForm(challengeID, false)
+			<div class="text-center mt-6">
+				<form
+					hx-post="/auth/resend-challenge"
+					hx-swap="none"
+				>
+					<p class="text-grey-800 dark:text-grey-200">
+						Didn't get a code?
+						@csrf.CSRFInput()
+						<input type="hidden" name="challenge_id" value={ challengeID }/>
+						<button
+							type="submit"
+							class="cursor-pointer underline text-blue-800 dark:text-blue-400"
+						>
+							Resend code
+						</button>
+					</p>
+				</form>
+			</div>
+		}
+	}
+}
+
+templ VerifyChallengeForm(challengeID string, incorrect bool) {
+	<form
+		id="verification-code-input-form"
+		hx-post={ "/auth/verify-challenge?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
+		hx-target="this"
+		hx-swap="outerHTML"
+		autocomplete="one-time-code"
+	>
+		@csrf.CSRFInput()
+		<input type="hidden" name="challenge_id" value={ challengeID }/>
+		<input id="hidden-code-input" type="hidden" name="code"/>
+		<div id="code-container" class="flex justify-center gap-2 sm:gap-3 mb-4">
+			for i := 0; i < 6; i++ {
+				<input
+					id={ "code-" + string(rune('0'+i)) }
+					type="text"
+					inputmode="numeric"
+					pattern="[0-9]*"
+					maxlength="1"
+					autocomplete="one-time-code"
+					class={
+						"code-input appearance-none w-11 h-13 sm:w-12 sm:h-14 text-2xl text-center rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-grey-900 text-grey-900 dark:text-grey-100",
+						templ.KV("border-grey-100 dark:border-grey-800", !incorrect),
+						templ.KV("border-red-700", incorrect),
+					}
+				/>
+			}
+		</div>
+		<p class="text-sm text-grey-600 dark:text-grey-400 mb-4 text-center">
+			The code expires after a short time. You can request a new one if needed.
+		</p>
+		@button.Button(button.ButtonConfig{
+			Label: "Confirm",
+		})
+	</form>
+}

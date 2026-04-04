@@ -34,15 +34,18 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	})
 
 	deps := authhandler.Deps{
-		Auth:           cfg.Auth,
-		Session:        cfg.Session,
-		Limiter:        cfg.AuthLimiter,
-		Logger:         cfg.Logger,
-		Google:         cfg.Google,
-		OAuthProviders: cfg.OAuthProviders,
-		AccessTTL:      cfg.AccessTokenTTL,
-		RefreshTTL:     cfg.RefreshTokenTTL,
-		Render:         cfg.Render,
+		Auth:             cfg.Auth,
+		Session:          cfg.Session,
+		Limiter:          cfg.AuthLimiter,
+		Logger:           cfg.Logger,
+		Google:           cfg.Google,
+		OAuthProviders:   cfg.OAuthProviders,
+		AccessTTL:        cfg.AccessTokenTTL,
+		RefreshTTL:       cfg.RefreshTokenTTL,
+		Render:           cfg.Render,
+		Challenge:        cfg.Challenge,
+		ChallengeEnabled: cfg.ChallengeEnabled,
+		Verification:     cfg.Verification,
 	}
 
 	uih := ui.NewUIHandler(deps)
@@ -53,6 +56,11 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 		// Auth
 		r.Group(func(r chi.Router) {
+			r.Use(mw.HTMX)
+
+			// authara internals
+			r.Get("/verify-challenge", uih.VerifyChallengePage)
+			r.Get("/successfull-deletion", uih.SuccessfullDeletionPage)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RedirectIfAuthenticated)
@@ -61,13 +69,13 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/signup", uih.SignupPage)
 			})
 
-			r.Get("/successfull-deletion", uih.SuccessfullDeletionPage)
-
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireCSRF)
 
 				r.Post("/signup", uih.SignupPost)
 				r.Post("/login", uih.LoginPost)
+				r.Post("/verify-challenge", uih.VerifyChallengePost)
+				r.Post("/resend-challenge", uih.ResendChallengePost)
 				r.Post("/sessions/logout", uih.LogoutPost)
 				r.Post("/sessions/refresh", uih.RefreshPost)
 			})
@@ -75,37 +83,37 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Route("/oauth", func(r chi.Router) {
 				r.Post("/google/callback", uih.GoogleCallback)
 			})
-		})
 
-		// regular user
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireAppAccessAuthWithRefresh)
-
-			r.Get("/account", uih.AccountGet)
-
+			// regular user
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireCSRF)
+				r.Use(mw.RequireAppAccessAuthWithRefresh)
 
-				r.Post("/user/username", uih.ChangeUsernamePost)
-				r.Post("/user/delete", uih.DeleteUser)
-			})
-		})
+				r.Get("/account", uih.AccountGet)
 
-		// admin
-		r.Route("/admin", func(r chi.Router) {
-			r.Use(mw.RequireAdminAccessAuthWithRefresh)
-			r.Use(mw.RequireAdminRole)
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireCSRF)
 
-			// UI
-			r.Group(func(r chi.Router) {
-
+					r.Post("/user/username", uih.ChangeUsernamePost)
+					r.Post("/user/delete", uih.DeleteUser)
+				})
 			})
 
-			// API
-			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireCSRF)
+			// admin
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(mw.RequireAdminAccessAuthWithRefresh)
+				r.Use(mw.RequireAdminRole)
 
-				r.Post("/users/{userID}/disable", uih.DisableUserPost)
+				// UI
+				r.Group(func(r chi.Router) {
+
+				})
+
+				// API
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireCSRF)
+
+					r.Post("/users/{userID}/disable", uih.DisableUserPost)
+				})
 			})
 		})
 

@@ -93,6 +93,7 @@ func newCSRFFocusedContractTestRouter() http.Handler {
 		RequireAdminAccessAuthWithRefresh: pass,
 		RequireAdminRole:                  pass,
 		ReturnTo:                          pass,
+		HTMX:                              pass,
 
 		// real CSRF middlewares
 		RequireCSRF:    middleware.RequireCSRF,
@@ -126,6 +127,7 @@ func newCSRFWiringContractTestRouter() http.Handler {
 		RequireAdminAccessAuthWithRefresh: pass,
 		RequireAdminRole:                  pass,
 		ReturnTo:                          pass,
+		HTMX:                              pass,
 
 		RequireCSRF:    marker(markerBrowserCSRF, "browser-csrf"),
 		RequireAPICSRF: marker(markerAPICSRF, "api-csrf"),

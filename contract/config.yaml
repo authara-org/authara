@@ -279,3 +279,137 @@ variables:
     required: false
     type: bool
     default: false
+
+  # ------------------------------------------------------------
+  # Challenge / Verification
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_CHALLENGE_ENABLED
+    stability: stable
+    required: false
+    type: bool
+    default: false
+
+  - name: AUTHARA_CHALLENGE_TTL
+    stability: stable
+    required: false
+    type: duration
+    default: 30m
+
+  - name: AUTHARA_CHALLENGE_VERIFICATION_CODE_TTL
+    stability: stable
+    required: false
+    type: duration
+    default: 10m
+    notes: Must be less than or equal to AUTHARA_CHALLENGE_TTL
+
+  - name: AUTHARA_CHALLENGE_MAX_ATTEMPTS
+    stability: stable
+    required: false
+    type: int
+    default: 5
+
+  - name: AUTHARA_CHALLENGE_MAX_RESENDS
+    stability: stable
+    required: false
+    type: int
+    default: 3
+
+  - name: AUTHARA_CHALLENGE_MIN_RESEND_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 30s
+
+  # ------------------------------------------------------------
+  # Email
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_EMAIL_PROVIDER
+    stability: stable
+    required: false
+    type: enum
+    default: noop
+    allowed_values:
+      - noop
+      - smtp
+
+  - name: AUTHARA_EMAIL_FROM
+    stability: stable
+    required: false
+    type: string
+    notes: Required when AUTHARA_EMAIL_PROVIDER=smtp
+
+  - name: AUTHARA_EMAIL_SMTP_HOST
+    stability: stable
+    required: false
+    type: string
+    notes: Required when AUTHARA_EMAIL_PROVIDER=smtp
+
+  - name: AUTHARA_EMAIL_SMTP_PORT
+    stability: stable
+    required: false
+    type: int
+    default: 587
+
+  - name: AUTHARA_EMAIL_SMTP_USERNAME
+    stability: stable
+    required: false
+    type: string
+
+  - name: AUTHARA_EMAIL_SMTP_PASSWORD
+    stability: stable
+    required: false
+    type: string
+
+  - name: AUTHARA_EMAIL_SMTP_TLS
+    stability: stable
+    required: false
+    type: bool
+    default: true
+
+  - name: AUTHARA_EMAIL_SMTP_TIMEOUT
+    stability: stable
+    required: false
+    type: duration
+    default: 10s
+
+  # ------------------------------------------------------------
+  # Email Worker
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_EMAIL_WORKER_COUNT
+    stability: stable
+    required: false
+    type: int
+    default: 2
+
+  - name: AUTHARA_EMAIL_WORKER_POLL_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 2s
+
+  - name: AUTHARA_EMAIL_JOB_MAX_ATTEMPTS
+    stability: stable
+    required: false
+    type: int
+    default: 10
+
+  # ------------------------------------------------------------
+  # Email Cleanup
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_EMAIL_CLEANUP_SENT_AFTER
+    stability: stable
+    required: false
+    type: duration
+    default: 720h
+    notes: Delete sent emails after duration (30 days)
+
+  - name: AUTHARA_EMAIL_CLEANUP_FAILED_AFTER
+    stability: stable
+    required: false
+    type: duration
+    default: 2160h
+    notes: Delete failed emails after duration (90 days)

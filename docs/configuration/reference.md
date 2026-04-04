@@ -1,402 +1,232 @@
-# Configuration Reference
+# Configuration Overview
 
-The following environment variables control Authara behavior.
+Authara is configured entirely through **environment variables**.
 
----
+Configuration is typically provided via:
 
-## Runtime
+- `.env` files
+- container environments
+- orchestration platforms (Kubernetes, ECS, etc.)
 
-### APP_ENV
-
-Runtime environment.
-
-```
-APP_ENV=dev
-```
-
-Allowed values:
-
-```
-dev
-prod
-```
+Authara does **not load configuration files directly**.
 
 ---
 
-### LOG_LEVEL
+## Configuration categories
 
-Overrides the default log level.
+Authara configuration is organized into the following areas:
 
-Defaults:
+### Runtime
+
+Controls environment and logging behavior.
+
+Examples:
 
 ```
-dev  → debug
-prod → info
+APP_ENV
+LOG_LEVEL
 ```
 
 ---
 
-## Database
+### Database
 
-### POSTGRESQL_HOST
+Defines the PostgreSQL connection.
 
-PostgreSQL host.
+Examples:
+
+```
+POSTGRESQL_HOST
+POSTGRESQL_DATABASE
+POSTGRESQL_USERNAME
+POSTGRESQL_PASSWORD
+```
+
+---
+
+### Public URL
+
+Defines the externally accessible base URL.
+
+Used for:
+
+- redirects
+- OAuth callbacks
 
 Example:
 
 ```
-POSTGRESQL_HOST=postgres
+PUBLIC_URL
 ```
 
 ---
 
-### POSTGRESQL_PORT
+### Token lifetimes
 
-PostgreSQL port.
+Controls expiration of access, refresh, and session tokens.
 
-Default:
-
-```
-5432
-```
-
----
-
-### POSTGRESQL_DATABASE
-
-Database name.
+Examples:
 
 ```
-POSTGRESQL_DATABASE=authara
+AUTHARA_ACCESS_TOKEN_TTL_MINUTES
+AUTHARA_SESSION_TTL_DAYS
+AUTHARA_REFRESH_TOKEN_TTL_DAYS
 ```
 
 ---
 
-### POSTGRESQL_USERNAME
+### JWT
 
-Database user.
+Controls token signing and verification.
 
----
+→ See: `configuration/jwt.md`
 
-### POSTGRESQL_PASSWORD
-
-Database password.
-
----
-
-### POSTGRESQL_SCHEMA
-
-Optional schema name.
-
-Default:
+Examples:
 
 ```
-authara
+AUTHARA_JWT_ISSUER
+AUTHARA_JWT_KEYS
+AUTHARA_JWT_ACTIVE_KEY_ID
 ```
 
 ---
 
-### POSTGRESQL_TIMEZONE
+### OAuth
 
-Database timezone.
+Configures external identity providers.
 
-Default:
+→ See: `configuration/oauth.md`
 
-```
-UTC
-```
-
----
-
-### POSTGRESQL_LOG_SQL
-
-Enables SQL query logging.
-
-Default:
+Examples:
 
 ```
-false
-```
-
-Recommended only for development.
-
----
-
-## Public URL
-
-### PUBLIC_URL
-
-Externally visible base URL of the application.
-
-Important:
-
-- must **not** include `/auth`
-- used for OAuth callbacks and redirects
-
-Example:
-
-```
-PUBLIC_URL=http://localhost:3000
+AUTHARA_OAUTH_PROVIDERS
+AUTHARA_OAUTH_GOOGLE_CLIENT_ID
 ```
 
 ---
 
-## Token lifetimes
+### Challenge & verification
 
-### AUTHARA_ACCESS_TOKEN_TTL_MINUTES
+Controls email verification and challenge flows.
 
-Access token lifetime.
+→ See: `configuration/challenge.md`
 
-Default:
-
-```
-10 minutes
-```
-
----
-
-### AUTHARA_SESSION_TTL_DAYS
-
-Absolute session lifetime.
-
-Default:
+Examples:
 
 ```
-60 days
+AUTHARA_CHALLENGE_ENABLED
+AUTHARA_CHALLENGE_TTL
+AUTHARA_CHALLENGE_MAX_ATTEMPTS
 ```
 
 ---
 
-### AUTHARA_REFRESH_TOKEN_TTL_DAYS
+### Email
 
-Refresh token lifetime.
+Controls email delivery via SMTP or other providers.
 
-Default:
+→ See: `configuration/email.md`
 
-```
-14 days
-```
-
-## JWT
-
-### AUTHARA_JWT_ISSUER
-
-JWT issuer (`iss` claim).
-
-Required: yes
-
----
-
-### AUTHARA_JWT_ACTIVE_KEY_ID
-
-Active signing key ID.
-
-Required: yes
-
----
-
-### AUTHARA_JWT_KEYS
-
-Signing keys.
-
-Format:
+Examples:
 
 ```
-keyID:base64secret,keyID2:base64secret2
-```
-
-Required: yes
-
-## OAuth
-
-### AUTHARA_OAUTH_PROVIDERS
-
-Comma-separated list of enabled OAuth providers.
-
-Type: csv  
-Default: empty
-
----
-
-### AUTHARA_OAUTH_GOOGLE_CLIENT_ID
-
-Google OAuth client ID.
-
-Required if `google` is enabled
-
-## Rate Limiting
-
-### AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT
-Default:
-```
-5
+AUTHARA_EMAIL_PROVIDER
+AUTHARA_EMAIL_FROM
+AUTHARA_EMAIL_SMTP_HOST
 ```
 
 ---
 
-### AUTHARA_RATE_LIMIT_LOGIN_IP_WINDOW
-Default:
-```
-1m
-```
+### Email worker
 
----
+Controls background processing of email jobs.
 
-### AUTHARA_RATE_LIMIT_LOGIN_EMAIL_LIMIT
-Default:
-```
-10
-```
+→ See: `configuration/email.md`
 
----
+Examples:
 
-### AUTHARA_RATE_LIMIT_LOGIN_EMAIL_WINDOW
-Default:
 ```
-1h
+AUTHARA_EMAIL_WORKER_COUNT
+AUTHARA_EMAIL_WORKER_POLL_INTERVAL
 ```
 
 ---
 
-### AUTHARA_RATE_LIMIT_SIGNUP_IP_LIMIT
-Default:
-```
-3
-```
+### Email cleanup
 
----
+Controls retention of email job records.
 
-### AUTHARA_RATE_LIMIT_SIGNUP_IP_WINDOW
-Default:
-```
-1h
-```
+→ See: `configuration/email.md`
 
----
+Examples:
 
-### AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_LIMIT
-Default:
 ```
-3
+AUTHARA_EMAIL_CLEANUP_SENT_AFTER
+AUTHARA_EMAIL_CLEANUP_FAILED_AFTER
 ```
 
 ---
 
-### AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_WINDOW
-Default:
+### Rate limiting
+
+Protects login and signup endpoints.
+
+→ See: `configuration/rate-limiting.md`
+
+Examples:
+
 ```
-24h
-```
-
----
-
-### AUTHARA_RATE_LIMIT_MAX_ENTRIES
-Default:
-```
-50000
-```
-
-## Webhooks
-
-### AUTHARA_WEBHOOK_URL
-
-Webhook endpoint where Authara sends events.
-
-Type: url  
-Required: no
-
----
-
-### AUTHARA_WEBHOOK_SECRET
-
-Shared secret used to sign webhook requests.
-
-Type: string  
-Required: no
-
----
-
-### AUTHARA_WEBHOOK_ENABLED_EVENTS
-
-Comma-separated list of enabled events.
-
-Type: csv  
-Required: no  
-
-Default: all events enabled
-
-Allowed values:
-
-- user.created
-- user.deleted
-
----
-
-### AUTHARA_WEBHOOK_TIMEOUT
-
-HTTP timeout for webhook delivery.
-
-Type: duration  
-Default: 5s
-
----
-
-## Database Connection Pool
-
-### AUTHARA_DB_MAX_OPEN_CONNS
-Default:
-```
-40
+AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT
+AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_LIMIT
 ```
 
 ---
 
-### AUTHARA_DB_MAX_IDLE_CONNS
-Default:
-```
-20
-```
+### Webhooks
 
----
+Configures event delivery to external systems.
 
-### AUTHARA_DB_CONN_MAX_LIFETIME
-Default:
+Examples:
+
 ```
-30m
+AUTHARA_WEBHOOK_URL
+AUTHARA_WEBHOOK_SECRET
 ```
 
 ---
 
-### AUTHARA_DB_CONN_MAX_IDLE_TIME
-Default:
+### Database connection pooling
+
+Controls database performance and concurrency.
+
+→ See: `configuration/database-connection.md`
+
+Examples:
+
 ```
-5m
-```
-
-## Access Policy
-
-### AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED
-
-Enables email allowlist enforcement.
-
-Type: boolean  
-Default:
-```
-false
+AUTHARA_DB_MAX_OPEN_CONNS
+AUTHARA_DB_MAX_IDLE_CONNS
 ```
 
-When enabled, only emails present in the `allowed_emails` table may register and authenticate.
+---
 
-## Advanced configuration
+### Access policy
 
-Authara includes additional configuration areas such as:
+Restricts access via email allowlists.
 
-- JWT signing keys
-- OAuth providers
-- rate limiting
-- database connection pooling
-- access policy
+→ See: `configuration/access-policy.md`
 
-All configuration variables are listed in this reference.
+Examples:
 
-Detailed behavior and concepts for these areas are documented in their dedicated sections.
+```
+AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED
+```
+
+---
+
+## Configuration reference
+
+For the complete list of variables:
+
+→ `configuration/reference.md`
