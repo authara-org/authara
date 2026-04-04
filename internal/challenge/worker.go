@@ -2,7 +2,6 @@ package challenge
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"time"
@@ -153,15 +152,10 @@ func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.T
 			return err
 		}
 
-		msg = email.BuildSignupCodeMessage(code)
-
-	case domain.EmailTemplateLoginAlert:
-		var payload email.LoginAlertPayload
-		if err := json.Unmarshal(job.TemplateData, &payload); err != nil {
+		msg, err = email.BuildSignupCodeMessage(code)
+		if err != nil {
 			return err
 		}
-
-		msg = email.BuildLoginAlertMessage(payload)
 
 	default:
 		return errors.New("unsupported email template")
