@@ -39,6 +39,36 @@ func New(cfg Config) *Service {
 	}
 }
 
+func (s *Service) CreateOpaqueChallenge(
+	ctx context.Context,
+	now time.Time,
+	purpose domain.ChallengePurpose,
+	email string,
+) (uuid.UUID, error) {
+	var challengeID uuid.UUID
+
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		challenge, err := s.store.CreateChallenge(txCtx, domain.Challenge{
+			Purpose:      purpose,
+			Email:        email,
+			ExpiresAt:    now.Add(s.challengeTTL),
+			AttemptCount: 0,
+			MaxAttempts:  s.maxAttempts,
+			ResendCount:  0,
+			MaxResends:   s.maxResends,
+		})
+
+		challengeID = challenge.ID
+
+		return err
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	return challengeID, nil
+}
+
 func (s *Service) createChallenge(
 	ctx context.Context,
 	purpose domain.ChallengePurpose,
@@ -82,7 +112,7 @@ func (s *Service) createChallenge(
 	return challengeID, nil
 }
 
-func (s *Service) resendChallenge(
+func (s *Service) ResendChallenge(
 	ctx context.Context,
 	challengeID uuid.UUID,
 	now time.Time,
@@ -110,14 +140,6 @@ func (s *Service) resendChallenge(
 	}
 
 	return s.enqueueChallengeEmail(ctx, challengeID, challenge.Email, template, now)
-}
-
-func (s *Service) ResendChallenge(
-	ctx context.Context,
-	challengeID uuid.UUID,
-	now time.Time,
-) error {
-	return s.resendChallenge(ctx, challengeID, now)
 }
 
 func (s *Service) verifyChallenge(
