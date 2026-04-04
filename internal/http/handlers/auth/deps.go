@@ -16,7 +16,7 @@ import (
 type Deps struct {
 	Auth             *auth.Service
 	Session          *session.Service
-	Challange        *challenge.Service
+	Challenge        *challenge.Service
 	ChallengeEnabled bool
 	Verification     *challenge.VerificationCodeService
 	Limiter          ratelimiter.AuthLimiter
