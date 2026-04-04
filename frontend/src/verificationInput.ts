@@ -1,19 +1,23 @@
 export function initVerificationCodeForm(root: ParentNode = document): void {
-  const form = root.querySelector('#verification-code-input-form') as HTMLFormElement | null;
+  const form = root.querySelector(
+    "#verification-code-input-form",
+  ) as HTMLFormElement | null;
   if (!form) return;
 
-  if (form.dataset.bound === 'true') return;
-  form.dataset.bound = 'true';
+  if (form.dataset.bound === "true") return;
+  form.dataset.bound = "true";
 
-  const hiddenInput = form.querySelector('#hidden-code-input') as HTMLInputElement | null;
+  const hiddenInput = form.querySelector(
+    "#hidden-code-input",
+  ) as HTMLInputElement | null;
   const inputs = Array.from(
-    form.querySelectorAll('.code-input'),
+    form.querySelectorAll(".code-input"),
   ) as HTMLInputElement[];
 
   if (!hiddenInput || inputs.length === 0) return;
 
   const syncHidden = () => {
-    hiddenInput.value = inputs.map(input => input.value).join('');
+    hiddenInput.value = inputs.map((input) => input.value).join("");
   };
 
   const focusInput = (index: number) => {
@@ -23,7 +27,7 @@ export function initVerificationCodeForm(root: ParentNode = document): void {
   };
 
   form.addEventListener(
-    'submit',
+    "submit",
     () => {
       syncHidden();
     },
@@ -31,8 +35,8 @@ export function initVerificationCodeForm(root: ParentNode = document): void {
   );
 
   inputs.forEach((input, index) => {
-    input.addEventListener('input', () => {
-      const value = input.value.replace(/\D/g, '').slice(0, 1);
+    input.addEventListener("input", () => {
+      const value = input.value.replace(/\D/g, "").slice(0, 1);
       input.value = value;
       syncHidden();
 
@@ -41,10 +45,10 @@ export function initVerificationCodeForm(root: ParentNode = document): void {
       }
     });
 
-    input.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Backspace') {
-        if (input.value !== '') {
-          input.value = '';
+    input.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Backspace") {
+        if (input.value !== "") {
+          input.value = "";
           syncHidden();
           e.preventDefault();
           return;
@@ -56,34 +60,34 @@ export function initVerificationCodeForm(root: ParentNode = document): void {
         }
       }
 
-      if (e.key === 'Delete') {
-        input.value = '';
+      if (e.key === "Delete") {
+        input.value = "";
         syncHidden();
         e.preventDefault();
       }
 
-      if (e.key === 'ArrowLeft' && index > 0) {
+      if (e.key === "ArrowLeft" && index > 0) {
         focusInput(index - 1);
         e.preventDefault();
       }
 
-      if (e.key === 'ArrowRight' && index < inputs.length - 1) {
+      if (e.key === "ArrowRight" && index < inputs.length - 1) {
         focusInput(index + 1);
         e.preventDefault();
       }
     });
 
-    input.addEventListener('paste', (e: ClipboardEvent) => {
+    input.addEventListener("paste", (e: ClipboardEvent) => {
       e.preventDefault();
 
-      const pasted = (e.clipboardData?.getData('text') || '')
-        .replace(/\D/g, '')
+      const pasted = (e.clipboardData?.getData("text") || "")
+        .replace(/\D/g, "")
         .slice(0, inputs.length);
 
       if (!pasted) return;
 
       for (let i = 0; i < inputs.length; i++) {
-        inputs[i].value = pasted[i] || '';
+        inputs[i].value = pasted[i] || "";
       }
 
       syncHidden();
