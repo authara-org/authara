@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -58,6 +59,17 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (*domain.User, 
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (s *Service) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
+	_, err := s.store.GetUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 type CurrentUser struct {
@@ -178,11 +190,6 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (*doma
 	var user domain.User
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		hash, err := Hash(in.Password)
-		if err != nil {
-			return err
-		}
-
 		user = domain.User{
 			Email:    in.Email,
 			Username: in.Username,
@@ -200,7 +207,7 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (*doma
 		provider := domain.AuthProvider{
 			UserID:         user.ID,
 			Provider:       domain.ProviderPassword,
-			PasswordHash:   &hash,
+			PasswordHash:   &in.PasswordHash,
 			ProviderUserID: nil,
 		}
 
