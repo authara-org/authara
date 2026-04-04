@@ -22,7 +22,7 @@ type ServerConfig struct {
 	Dev              bool
 	Auth             *auth.Service
 	Session          *session.Service
-	Challange        *challenge.Service
+	Challenge        *challenge.Service
 	ChallengeEnabled bool
 	Verification     *challenge.VerificationCodeService
 	Logger           *slog.Logger
