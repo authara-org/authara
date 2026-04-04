@@ -67,6 +67,8 @@ nav:
       - Reference: configuration/reference.md
       - JWT: configuration/jwt.md
       - OAuth: configuration/oauth.md
+      - Challenge: configuration/challenge.md
+      - Email: configuration/email.md
       - Rate Limiting: configuration/rate-limiting.md
       - Database Connection: configuration/database-connection.md
       - Access Policy: configuration/access-policy.md
