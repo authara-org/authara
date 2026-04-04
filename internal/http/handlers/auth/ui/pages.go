@@ -45,11 +45,12 @@ func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UIHandler) VerifyChallengePage(w http.ResponseWriter, r *http.Request) {
+	challengeIDStr := r.URL.Query().Get("challenge_id")
 	_ = h.Render(
 		w,
 		r,
 		http.StatusOK,
-		challengeview.VerifyChallange(),
+		challengeview.VerifyChallenge(challengeIDStr, "Verify your Email"),
 	)
 }
 

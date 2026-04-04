@@ -17,7 +17,7 @@ import (
 type UIHandler struct {
 	Auth             *auth.Service
 	Session          *session.Service
-	Challange        *challenge.Service
+	Challenge        *challenge.Service
 	ChallengeEnabled bool
 	Verification     *challenge.VerificationCodeService
 
@@ -36,7 +36,7 @@ func NewUIHandler(d authhandler.Deps) *UIHandler {
 	return &UIHandler{
 		Auth:             d.Auth,
 		Session:          d.Session,
-		Challange:        d.Challange,
+		Challenge:        d.Challenge,
 		ChallengeEnabled: d.ChallengeEnabled,
 		Verification:     d.Verification,
 		Limiter:          d.Limiter,
