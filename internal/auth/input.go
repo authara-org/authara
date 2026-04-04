@@ -5,9 +5,9 @@ import "github.com/authara-org/authara/internal/domain"
 type SignupInput struct {
 	Provider domain.Provider
 
-	Username string
-	Email    string
-	Password string
+	Username     string
+	Email        string
+	PasswordHash string
 
 	OAuthID string
 }
