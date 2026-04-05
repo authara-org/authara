@@ -61,7 +61,7 @@ func SanitizeUsername(s string) string {
 	prevDash := false
 	for _, r := range s {
 		// keep ASCII letters/digits/_/-
-		if isLetter(r) || isDigit(r) || r == '-' || r == '_' {
+		if isLetter(r) || isDigit(r) || r == '_' {
 			b.WriteRune(r)
 			prevDash = false
 			continue
