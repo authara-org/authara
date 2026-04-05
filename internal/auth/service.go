@@ -10,7 +10,6 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
-	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -77,23 +76,13 @@ type CurrentUser struct {
 	Roles []roles.Role
 }
 
-func (s *Service) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*CurrentUser, error) {
+func (s *Service) GetCurrentUser(ctx context.Context, userID uuid.UUID) (domain.User, error) {
 	user, err := s.store.GetUserByID(ctx, userID)
 	if err != nil {
-		return nil, err
+		return domain.User{}, err
 	}
 
-	roles, ok := httpctx.Roles(ctx)
-	if !ok {
-		return nil, ErrNoRolesInContext
-	}
-
-	cu := CurrentUser{
-		User:  user,
-		Roles: roles.List(),
-	}
-
-	return &cu, nil
+	return user, nil
 }
 
 func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
