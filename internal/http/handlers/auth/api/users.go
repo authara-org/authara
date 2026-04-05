@@ -20,7 +20,17 @@ func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cu, err := h.Auth.GetCurrentUser(ctx, userID)
+	roles, ok := httpctx.Roles(ctx)
+	if !ok {
+		response.WriteError(
+			w,
+			mustRouteError(UserGetErrors, response.CodeUnauthorized),
+			"Unauthorized",
+		)
+		return
+	}
+
+	user, err := h.Auth.GetCurrentUser(ctx, userID)
 	if err != nil {
 		response.WriteError(
 			w,
@@ -30,7 +40,7 @@ func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.JSON(w, http.StatusOK, response.UserWithRoles(cu.User, cu.Roles))
+	response.JSON(w, http.StatusOK, response.UserWithRoles(user, roles.List()))
 }
 
 func (h *APIHandler) ChangeUsername(w http.ResponseWriter, r *http.Request) {
