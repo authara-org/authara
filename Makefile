@@ -21,7 +21,8 @@ TEST_DB_TIMEZONE   ?= UTC
 TEST_DB_LOG_SQL    ?= false
 
 .PHONY: dev dev-tailwind connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email \
-	test test-up test-db-create test-migrate test-run test-down test-reset
+	test test-up test-db-create test-migrate test-run test-down test-reset \
+	test-coverage test-coverage-profile test-coverage-html
 
 dev:
 	@if command -v tmux >/dev/null 2>&1; then \
@@ -154,3 +155,33 @@ test-reset:
 
 test-down:
 	$(DOCKER_COMPOSE_TEST) down
+
+test-coverage: test-up test-db-create test-migrate
+	$(DOCKER_COMPOSE_TEST) run --rm \
+		-e POSTGRESQL_HOST=$(TEST_DB_HOST) \
+		-e POSTGRESQL_PORT=$(TEST_DB_PORT) \
+		-e POSTGRESQL_DATABASE=$(TEST_DB_NAME) \
+		-e POSTGRESQL_USERNAME=$(POSTGRESQL_USERNAME) \
+		-e POSTGRESQL_PASSWORD=$(POSTGRESQL_PASSWORD) \
+		-e POSTGRESQL_SCHEMA=$(TEST_DB_SCHEMA) \
+		-e POSTGRESQL_TIMEZONE=$(TEST_DB_TIMEZONE) \
+		-e POSTGRESQL_LOG_SQL=$(TEST_DB_LOG_SQL) \
+		$(AUTHARA_SERVICE) \
+		go test ./... -count=1 -cover
+
+test-coverage-profile: test-up test-db-create test-migrate
+	$(DOCKER_COMPOSE_TEST) run --rm \
+		-v $(PWD):/app \
+		-e POSTGRESQL_HOST=$(TEST_DB_HOST) \
+		-e POSTGRESQL_PORT=$(TEST_DB_PORT) \
+		-e POSTGRESQL_DATABASE=$(TEST_DB_NAME) \
+		-e POSTGRESQL_USERNAME=$(POSTGRESQL_USERNAME) \
+		-e POSTGRESQL_PASSWORD=$(POSTGRESQL_PASSWORD) \
+		-e POSTGRESQL_SCHEMA=$(TEST_DB_SCHEMA) \
+		-e POSTGRESQL_TIMEZONE=$(TEST_DB_TIMEZONE) \
+		-e POSTGRESQL_LOG_SQL=$(TEST_DB_LOG_SQL) \
+		$(AUTHARA_SERVICE) \
+		sh -c 'go test ./... -count=1 -coverprofile=coverage.out && go tool cover -func=coverage.out'
+
+test-coverage-html: test-coverage-profile
+	go tool cover -html=coverage.out
