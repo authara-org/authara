@@ -159,6 +159,10 @@ func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username s
 		Where("id = ?", userID).
 		Update("username", username)
 
+	if res.Error != nil {
+		return res.Error
+	}
+
 	if res.RowsAffected == 0 {
 		return ErrUserNotFound
 	}
