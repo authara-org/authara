@@ -30,7 +30,7 @@ func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.Auth.GetCurrentUser(ctx, userID)
+	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil {
 		response.WriteError(
 			w,

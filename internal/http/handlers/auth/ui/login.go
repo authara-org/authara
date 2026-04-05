@@ -65,7 +65,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.Auth.Login(ctx, input)
-	if err != nil || user == nil {
+	if err != nil {
 		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid email or password.", authview.LoginForm())
 		return
 	}

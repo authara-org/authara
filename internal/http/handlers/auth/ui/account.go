@@ -25,7 +25,7 @@ func (h *UIHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.Auth.GetUser(ctx, userID)
-	if err != nil || user == nil {
+	if err != nil {
 		session.ClearSessionCookies(w)
 		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/user"), http.StatusSeeOther)
 		return
