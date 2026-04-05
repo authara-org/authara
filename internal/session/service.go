@@ -71,11 +71,17 @@ func (s *Service) CreateSession(
 			return err
 		}
 
-		isAdmin, err := s.store.IsUserAdmin(ctx, userID)
+		roleNames, err := s.store.GetUserPlatformRoleNames(ctx, userID)
 		if err != nil {
 			return err
 		}
-		if audience == token.AudienceAdmin && !isAdmin {
+
+		platformRoles, err := roles.FromDBRoleNames(roleNames)
+		if err != nil {
+			return err
+		}
+
+		if !canAccessAudience(platformRoles, audience) {
 			return ErrForbidden
 		}
 
@@ -116,16 +122,11 @@ func (s *Service) CreateSession(
 			return err
 		}
 
-		var roles roles.Roles
-		if isAdmin {
-			roles.AddAdmin()
-		}
-
 		accessToken, err = s.accessTokens.Generate(
 			userID,
 			createdSession.ID,
 			audience,
-			roles,
+			platformRoles,
 			now,
 		)
 		if err != nil {
@@ -171,11 +172,17 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return err
 		}
 
-		isAdmin, err := s.store.IsUserAdmin(ctx, session.UserID)
+		roleNames, err := s.store.GetUserPlatformRoleNames(ctx, session.UserID)
 		if err != nil {
 			return err
 		}
-		if audience == token.AudienceAdmin && !isAdmin {
+
+		platformRoles, err := roles.FromDBRoleNames(roleNames)
+		if err != nil {
+			return err
+		}
+
+		if !canAccessAudience(platformRoles, audience) {
 			return ErrForbidden
 		}
 
@@ -220,16 +227,11 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			newRefreshToken = refreshToken
 		}
 
-		var roles roles.Roles
-		if isAdmin {
-			roles.AddAdmin()
-		}
-
 		newAccessToken, err = s.accessTokens.Generate(
 			session.UserID,
 			rt.SessionID,
 			audience,
-			roles,
+			platformRoles,
 			now,
 		)
 		if err != nil {
@@ -345,4 +347,20 @@ func (s *Service) ensureUserAllowed(ctx context.Context, userID uuid.UUID) error
 		return ErrUserNotAllowed
 	}
 	return nil
+}
+
+var audienceAccess = map[token.Audience][]roles.Role{
+	token.AudienceAdmin: {
+		roles.AutharaAdmin,
+		roles.AutharaAuditor,
+		roles.AutharaMonitor,
+	},
+}
+
+func canAccessAudience(rs roles.Roles, audience token.Audience) bool {
+	allowed, ok := audienceAccess[audience]
+	if !ok {
+		return true
+	}
+	return rs.HasAny(allowed...)
 }
