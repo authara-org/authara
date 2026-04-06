@@ -285,13 +285,34 @@ func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error
 	return err
 }
 
-func (s *Service) ValidateAccessToken(ctx context.Context, accessToken string, now time.Time) (*AccessIdentity, error) {
-
-	claims, err := s.accessTokens.Parse(accessToken, now)
+func (s *Service) ValidateAccessToken(
+	ctx context.Context,
+	accessToken string,
+	expectedAudience token.Audience,
+	now time.Time,
+) (*AccessIdentity, error) {
+	claims, err := s.accessTokens.Parse(accessToken, expectedAudience, now)
 	if err != nil {
 		return nil, err
 	}
 
+	return s.identityFromClaims(claims)
+}
+
+func (s *Service) ValidateAnyAccessToken(
+	ctx context.Context,
+	accessToken string,
+	now time.Time,
+) (*AccessIdentity, error) {
+	claims, err := s.accessTokens.ParseAny(accessToken, now)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.identityFromClaims(claims)
+}
+
+func (s *Service) identityFromClaims(claims *token.AccessClaims) (*AccessIdentity, error) {
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil || userID == uuid.Nil {
 		return nil, token.ErrInvalidToken

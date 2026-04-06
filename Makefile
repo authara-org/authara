@@ -95,9 +95,9 @@ endif
 	WITH u AS ( \
 		SELECT id FROM $(POSTGRESQL_SCHEMA).users WHERE email = '$(EMAIL)' \
 	), r AS ( \
-		SELECT id FROM $(POSTGRESQL_SCHEMA).roles WHERE name = 'admin' \
+		SELECT id FROM $(POSTGRESQL_SCHEMA).platform_roles WHERE name = 'admin' \
 	) \
-	INSERT INTO $(POSTGRESQL_SCHEMA).user_roles (user_id, role_id) \
+	INSERT INTO $(POSTGRESQL_SCHEMA).user_platform_roles (user_id, role_id) \
 	SELECT u.id, r.id FROM u, r \
 	ON CONFLICT DO NOTHING; \
 	"

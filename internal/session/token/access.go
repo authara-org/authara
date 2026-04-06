@@ -66,47 +66,72 @@ func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, aud
 	return signed, nil
 }
 
-func (s *AccessTokenService) Parse(tokenString string, now time.Time) (*AccessClaims, error) {
+func (s *AccessTokenService) Parse(tokenString string, expectedAudience Audience, now time.Time) (*AccessClaims, error) {
+	return s.parse(tokenString, now, jwt.WithAudience(string(expectedAudience)))
+}
+
+func (s *AccessTokenService) ParseAny(tokenString string, now time.Time) (*AccessClaims, error) {
+	return s.parse(
+		tokenString,
+		now,
+		jwt.WithAudience(string(AudienceApp), string(AudienceAdmin)),
+	)
+}
+
+func (s *AccessTokenService) parse(
+	tokenString string,
+	now time.Time,
+	audienceOption jwt.ParserOption,
+) (*AccessClaims, error) {
 	parser := jwt.NewParser(
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
-		jwt.WithAudience("app", "admin"),
+		audienceOption,
 		jwt.WithIssuer(s.issuer),
 	)
 
-	token, err := parser.ParseWithClaims(
+	tok, err := parser.ParseWithClaims(
 		tokenString,
 		&AccessClaims{},
-		func(t *jwt.Token) (any, error) {
-			kid, ok := t.Header["kid"].(string)
-			if !ok {
-				return nil, ErrUnknownKey
-			}
-
-			key, ok := s.keys.VerificationKey(kid)
-			if !ok {
-				return nil, ErrUnknownKey
-			}
-
-			return key, nil
-		},
+		s.keyFunc,
 	)
-
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
 
-	claims, ok := token.Claims.(*AccessClaims)
-	if !ok || !token.Valid {
+	claims, ok := tok.Claims.(*AccessClaims)
+	if !ok || !tok.Valid {
 		return nil, ErrInvalidClaims
 	}
 
-	if claims.ExpiresAt == nil || claims.ExpiresAt.Time.Before(now) {
-		return nil, ErrExpiredToken
-	}
-
-	if claims.Subject == "" || claims.SessionID == uuid.Nil {
-		return nil, ErrInvalidClaims
+	if err := validateAccessClaims(claims, now); err != nil {
+		return nil, err
 	}
 
 	return claims, nil
+}
+
+func (s *AccessTokenService) keyFunc(t *jwt.Token) (any, error) {
+	kid, ok := t.Header["kid"].(string)
+	if !ok {
+		return nil, ErrUnknownKey
+	}
+
+	key, ok := s.keys.VerificationKey(kid)
+	if !ok {
+		return nil, ErrUnknownKey
+	}
+
+	return key, nil
+}
+
+func validateAccessClaims(claims *AccessClaims, now time.Time) error {
+	if claims.ExpiresAt == nil || claims.ExpiresAt.Time.Before(now) {
+		return ErrExpiredToken
+	}
+
+	if claims.Subject == "" || claims.SessionID == uuid.Nil {
+		return ErrInvalidClaims
+	}
+
+	return nil
 }

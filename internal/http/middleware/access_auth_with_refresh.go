@@ -27,7 +27,7 @@ func RequireAccessAuthWithRefresh(
 
 			// Try access token first
 			if accessToken, ok := session.ReadAccessToken(r); ok && accessToken != "" {
-				identity, err := sessionSvc.ValidateAccessToken(ctx, accessToken, now())
+				identity, err := sessionSvc.ValidateAccessToken(ctx, accessToken, audience, now())
 				if err == nil {
 					ctx = httpctx.WithUserID(ctx, identity.UserID)
 					ctx = httpctx.WithRoles(ctx, identity.Roles)
@@ -52,7 +52,7 @@ func RequireAccessAuthWithRefresh(
 					session.SetRefreshToken(w, newRefresh, int(refreshTTL.Seconds()))
 
 					// populate context from new access token
-					identity, err := sessionSvc.ValidateAccessToken(ctx, newAccess, now())
+					identity, err := sessionSvc.ValidateAccessToken(ctx, newAccess, audience, now())
 					if err == nil {
 						ctx = httpctx.WithUserID(ctx, identity.UserID)
 						ctx = httpctx.WithRoles(ctx, identity.Roles)
