@@ -4,9 +4,19 @@ import (
 	"net/http"
 
 	"github.com/authara-org/authara/internal/http/kit/response"
+	adminview "github.com/authara-org/authara/internal/http/templates/admin"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+func (h *UIHandler) AdminPage(w http.ResponseWriter, r *http.Request) {
+	h.Render(
+		w,
+		r,
+		http.StatusOK,
+		adminview.Admin(),
+	)
+}
 
 func (h *UIHandler) DisableUserPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

@@ -105,7 +105,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				// UI
 				r.Group(func(r chi.Router) {
-
+					r.Get("/", uih.AdminPage)
 				})
 
 				// API
