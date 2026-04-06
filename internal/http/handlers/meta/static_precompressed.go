@@ -1,7 +1,6 @@
 package meta
 
 import (
-	"fmt"
 	"mime"
 	"net/http"
 	"path"
@@ -106,8 +105,6 @@ func buildPrecompressedIndex(fs http.FileSystem) map[string]uint8 {
 				walk(p)
 				continue
 			}
-
-			fmt.Println(p)
 
 			switch {
 			case strings.HasSuffix(p, ".br"):
