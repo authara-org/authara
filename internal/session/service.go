@@ -286,7 +286,6 @@ func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error
 }
 
 func (s *Service) ValidateAccessToken(
-	ctx context.Context,
 	accessToken string,
 	expectedAudience token.Audience,
 	now time.Time,
@@ -300,7 +299,6 @@ func (s *Service) ValidateAccessToken(
 }
 
 func (s *Service) ValidateAnyAccessToken(
-	ctx context.Context,
 	accessToken string,
 	now time.Time,
 ) (*AccessIdentity, error) {

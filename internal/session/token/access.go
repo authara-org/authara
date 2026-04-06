@@ -87,6 +87,7 @@ func (s *AccessTokenService) parse(
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
 		audienceOption,
 		jwt.WithIssuer(s.issuer),
+		jwt.WithTimeFunc(func() time.Time { return now }),
 	)
 
 	tok, err := parser.ParseWithClaims(
