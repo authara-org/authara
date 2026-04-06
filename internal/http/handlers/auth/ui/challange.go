@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -111,7 +110,6 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 	}
 
 	challengeIDStr := strings.TrimSpace(r.FormValue("challenge_id"))
-	fmt.Println(challengeIDStr)
 	challengeID, err := uuid.Parse(challengeIDStr)
 	if err != nil {
 		http.Error(w, "invalid challenge", http.StatusBadRequest)
