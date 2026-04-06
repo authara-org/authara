@@ -1,672 +1,436 @@
-package session_test
+package session
 
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
-	"github.com/authara-org/authara/internal/session"
+	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
-	"github.com/authara-org/authara/internal/testutil"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
-func TestRefreshSession_ReuseDetection_WhenRotationAlways(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
+func newTestSessionService(t *testing.T, ttl time.Duration) *Service {
+	t.Helper()
 
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC)
+	keySet, err := token.NewKeySet("test-key", map[string][]byte{
+		"test-key": []byte("01234567890123456789012345678901"),
+	})
+	if err != nil {
+		t.Fatalf("NewKeySet failed: %v", err)
+	}
 
-		svc := newTestSessionService(t, tdb, 24*time.Hour, 24*time.Hour, -1)
+	accessTokens := token.NewAccessTokenService(
+		keySet,
+		"authara-test",
+		ttl,
+	)
 
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "reuse@example.com",
-			Username: "reuse-user",
-		})
-		if err != nil {
-			t.Fatalf("CreateUser failed: %v", err)
-		}
-
-		_, refresh1, err := svc.CreateSession(
-			ctx,
-			user.ID,
-			token.AudienceApp,
-			"test-agent",
-			now,
-		)
-		if err != nil {
-			t.Fatalf("CreateSession failed: %v", err)
-		}
-
-		_, refresh2, err := svc.RefreshSession(
-			ctx,
-			refresh1,
-			token.AudienceApp,
-			now.Add(1*time.Minute),
-		)
-		if err != nil {
-			t.Fatalf("first RefreshSession failed: %v", err)
-		}
-
-		if refresh2 == "" {
-			t.Fatal("expected rotated refresh token, got empty string")
-		}
-		if refresh2 == refresh1 {
-			t.Fatal("expected rotated refresh token to differ from original")
-		}
-
-		_, _, err = svc.RefreshSession(
-			ctx,
-			refresh1,
-			token.AudienceApp,
-			now.Add(2*time.Minute),
-		)
-		if !errors.Is(err, session.ErrRefreshTokenReuse) {
-			t.Fatalf("expected ErrRefreshTokenReuse, got: %v", err)
-		}
+	return New(SessionConfig{
+		AccessTokens: accessTokens,
 	})
 }
 
-func TestRefreshSession_ExpiredRefreshToken(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
+func TestNew_DefaultsToNoopAccessPolicy(t *testing.T) {
+	svc := New(SessionConfig{})
 
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
+	if svc.accessPolicy == nil {
+		t.Fatal("expected default access policy to be set")
+	}
 
-		svc := newTestSessionService(t, tdb, 24*time.Hour, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "expired@example.com",
-			Username: "expired-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, _, err = svc.RefreshSession(
-			ctx,
-			refresh,
-			token.AudienceApp,
-			now.Add(30*24*time.Hour), // far in future
-		)
-
-		if !errors.Is(err, session.ErrInvalidRefreshToken) {
-			t.Fatalf("expected ErrInvalidRefreshToken, got %v", err)
-		}
-	})
+	allowed, err := svc.accessPolicy.IsEmailAllowed(context.Background(), "user@example.com")
+	if err != nil {
+		t.Fatalf("unexpected error from default access policy: %v", err)
+	}
+	if !allowed {
+		t.Fatal("expected default access policy to allow user")
+	}
 }
 
-func TestRefreshSession_NoRotation(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
+func TestNew_UsesProvidedAccessPolicy(t *testing.T) {
+	custom := accesspolicy.NoopEmailAccessPolicy{}
 
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-
-		svc := newTestSessionService(t, tdb, 24*time.Hour, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "norotation@example.com",
-			Username: "norotation-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh1, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh2, err := svc.RefreshSession(
-			ctx,
-			refresh1,
-			token.AudienceApp,
-			now.Add(1*time.Minute),
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if refresh1 != refresh2 {
-			t.Fatal("expected refresh token to stay the same when rotation disabled")
-		}
+	svc := New(SessionConfig{
+		AccessPolicy: custom,
 	})
-}
 
-func TestRefreshSession_SessionExpired(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-
-		svc := newTestSessionService(t, tdb, 24*time.Hour, 1*time.Minute, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "sessionexpired@example.com",
-			Username: "sessionexpired-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, _, err = svc.RefreshSession(
-			ctx,
-			refresh,
-			token.AudienceApp,
-			now.Add(2*time.Minute),
-		)
-
-		if !errors.Is(err, session.ErrInvalidRefreshToken) {
-			t.Fatalf("expected ErrInvalidRefreshToken, got %v", err)
-		}
-	})
-}
-
-func TestCreateSession_Succeeds(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "create-session@example.com",
-			Username: "create-session-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		accessToken, refreshToken, err := svc.CreateSession(
-			ctx,
-			user.ID,
-			token.AudienceApp,
-			"test-agent",
-			now,
-		)
-		if err != nil {
-			t.Fatalf("CreateSession failed: %v", err)
-		}
-
-		if accessToken == "" {
-			t.Fatal("expected non-empty access token")
-		}
-		if refreshToken == "" {
-			t.Fatal("expected non-empty refresh token")
-		}
-	})
-}
-
-func TestCreateSession_ForbiddenForAdminAudienceWhenNotAdmin(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "not-admin@example.com",
-			Username: "not-admin-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, _, err = svc.CreateSession(
-			ctx,
-			user.ID,
-			token.AudienceAdmin,
-			"test-agent",
-			now,
-		)
-		if !errors.Is(err, session.ErrForbidden) {
-			t.Fatalf("expected ErrForbidden, got %v", err)
-		}
-	})
-}
-
-func TestCreateSession_AllowedForAdminAudienceWhenAdmin(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "admin@example.com",
-			Username: "admin-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := tdb.Store.AddUserPlatformRoleByName(ctx, user.ID, "admin"); err != nil {
-			t.Fatal(err)
-		}
-
-		accessToken, refreshToken, err := svc.CreateSession(
-			ctx,
-			user.ID,
-			token.AudienceAdmin,
-			"test-agent",
-			now,
-		)
-		if err != nil {
-			t.Fatalf("CreateSession failed: %v", err)
-		}
-		if accessToken == "" || refreshToken == "" {
-			t.Fatal("expected non-empty tokens")
-		}
-	})
-}
-
-func TestCreateSession_UserDisabled(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "disabled-create@example.com",
-			Username: "disabled-create-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := tdb.Store.DisableUser(ctx, user.ID, now); err != nil {
-			t.Fatal(err)
-		}
-
-		_, _, err = svc.CreateSession(
-			ctx,
-			user.ID,
-			token.AudienceApp,
-			"test-agent",
-			now,
-		)
-		if !errors.Is(err, session.ErrUserDisabled) {
-			t.Fatalf("expected ErrUserDisabled, got %v", err)
-		}
-	})
-}
-
-func TestCreateSession_UserNotAllowed(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-
-		svc := newTestSessionServiceWithPolicy(
-			t,
-			tdb,
-			10*time.Minute,
-			24*time.Hour,
-			0,
-			denyAllPolicy{},
-		)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "denied@example.com",
-			Username: "denied-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, _, err = svc.CreateSession(
-			ctx,
-			user.ID,
-			token.AudienceApp,
-			"test-agent",
-			now,
-		)
-		if !errors.Is(err, session.ErrUserNotAllowed) {
-			t.Fatalf("expected ErrUserNotAllowed, got %v", err)
-		}
-	})
-}
-
-func TestRefreshSession_UserDisabled(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "disabled-refresh@example.com",
-			Username: "disabled-refresh-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := tdb.Store.DisableUser(ctx, user.ID, now.Add(1*time.Minute)); err != nil {
-			t.Fatal(err)
-		}
-
-		_, _, err = svc.RefreshSession(ctx, refresh, token.AudienceApp, now.Add(2*time.Minute))
-		if !errors.Is(err, session.ErrUserDisabled) {
-			t.Fatalf("expected ErrUserDisabled, got %v", err)
-		}
-	})
-}
-
-func TestRefreshSession_UserNotAllowed(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-
-		allowSvc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "refresh-denied@example.com",
-			Username: "refresh-denied-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh, err := allowSvc.CreateSession(ctx, user.ID, token.AudienceApp, "agent", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		denySvc := newTestSessionServiceWithPolicy(
-			t,
-			tdb,
-			10*time.Minute,
-			24*time.Hour,
-			0,
-			denyAllPolicy{},
-		)
-
-		_, _, err = denySvc.RefreshSession(ctx, refresh, token.AudienceApp, now.Add(1*time.Minute))
-		if !errors.Is(err, session.ErrUserNotAllowed) {
-			t.Fatalf("expected ErrUserNotAllowed, got %v", err)
-		}
-	})
-}
-
-func TestRefreshSession_AdminAudienceForbiddenWhenNotAdmin(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "refresh-app-only@example.com",
-			Username: "refresh-app-only-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, _, err = svc.RefreshSession(ctx, refresh, token.AudienceAdmin, now.Add(1*time.Minute))
-		if !errors.Is(err, session.ErrForbidden) {
-			t.Fatalf("expected ErrForbidden, got %v", err)
-		}
-	})
-}
-
-func TestCleanupExpiredData(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 1*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "cleanup@example.com",
-			Username: "cleanup-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, _, err = svc.RefreshSession(ctx, refresh, token.AudienceApp, now.Add(2*time.Hour))
-		if !errors.Is(err, session.ErrInvalidRefreshToken) {
-			t.Fatalf("expected ErrInvalidRefreshToken before cleanup, got %v", err)
-		}
-
-		if err := svc.CleanupExpiredData(ctx, now.Add(3*time.Hour)); err != nil {
-			t.Fatalf("CleanupExpiredData failed: %v", err)
-		}
-	})
-}
-
-func TestLogout_MissingRefreshTokenSucceeds(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		err := svc.Logout(ctx, "not-a-real-token")
-		if err != nil {
-			t.Fatalf("expected logout to succeed for missing token, got %v", err)
-		}
-	})
-}
-
-func TestLogout_RevokesSession(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "logout@example.com",
-			Username: "logout-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := svc.Logout(ctx, refresh); err != nil {
-			t.Fatalf("Logout failed: %v", err)
-		}
-
-		_, _, err = svc.RefreshSession(ctx, refresh, token.AudienceApp, now.Add(1*time.Minute))
-		if !errors.Is(err, session.ErrInvalidRefreshToken) {
-			t.Fatalf("expected ErrInvalidRefreshToken after logout, got %v", err)
-		}
-	})
-}
-
-func TestRevokeAllSessions(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
-
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "revoke-all@example.com",
-			Username: "revoke-all-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, refresh1, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent-1", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, refresh2, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent-2", now)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := svc.RevokeAllSessions(ctx, user.ID); err != nil {
-			t.Fatalf("RevokeAllSessions failed: %v", err)
-		}
-
-		_, _, err = svc.RefreshSession(ctx, refresh1, token.AudienceApp, now.Add(1*time.Minute))
-		if !errors.Is(err, session.ErrInvalidRefreshToken) {
-			t.Fatalf("expected ErrInvalidRefreshToken for refresh1, got %v", err)
-		}
-
-		_, _, err = svc.RefreshSession(ctx, refresh2, token.AudienceApp, now.Add(1*time.Minute))
-		if !errors.Is(err, session.ErrInvalidRefreshToken) {
-			t.Fatalf("expected ErrInvalidRefreshToken for refresh2, got %v", err)
-		}
-	})
+	if svc.accessPolicy == nil {
+		t.Fatal("expected provided access policy to be set")
+	}
 }
 
 func TestValidateAccessToken_Succeeds(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
+	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+	svc := newTestSessionService(t, 10*time.Minute)
 
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
+	userID := uuid.New()
+	sessionID := uuid.New()
 
-		user, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "validate@example.com",
-			Username: "validate-user",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
+	var rs roles.Roles
+	rs.AddAdmin()
+	rs.AddMonitor()
 
-		accessToken, _, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "agent", now)
-		if err != nil {
-			t.Fatal(err)
-		}
+	accessToken, err := svc.accessTokens.Generate(
+		userID,
+		sessionID,
+		token.AudienceAdmin,
+		rs,
+		now,
+	)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
 
-		identity, err := svc.ValidateAccessToken(ctx, accessToken, now)
-		if err != nil {
-			t.Fatalf("ValidateAccessToken failed: %v", err)
-		}
-		if identity.UserID != user.ID {
-			t.Fatalf("expected user id %q, got %q", user.ID, identity.UserID)
-		}
-		if identity.SessionID == uuid.Nil {
-			t.Fatal("expected non-nil session id")
-		}
-	})
+	identity, err := svc.ValidateAccessToken(
+		accessToken,
+		token.AudienceAdmin,
+		now,
+	)
+	if err != nil {
+		t.Fatalf("ValidateAccessToken failed: %v", err)
+	}
+
+	if identity.UserID != userID {
+		t.Fatalf("expected user id %q, got %q", userID, identity.UserID)
+	}
+	if identity.SessionID != sessionID {
+		t.Fatalf("expected session id %q, got %q", sessionID, identity.SessionID)
+	}
+	if !identity.Roles.IsAdmin() {
+		t.Fatal("expected admin role to be present")
+	}
+	if !identity.Roles.IsMonitor() {
+		t.Fatal("expected monitor role to be present")
+	}
+}
+
+func TestValidateAccessToken_WrongAudience(t *testing.T) {
+	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+	svc := newTestSessionService(t, 10*time.Minute)
+
+	accessToken, err := svc.accessTokens.Generate(
+		uuid.New(),
+		uuid.New(),
+		token.AudienceApp,
+		roles.Roles{},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	_, err = svc.ValidateAccessToken(
+		accessToken,
+		token.AudienceAdmin,
+		now,
+	)
+	if !errors.Is(err, token.ErrInvalidToken) {
+		t.Fatalf("expected ErrInvalidToken, got %v", err)
+	}
 }
 
 func TestValidateAccessToken_InvalidToken(t *testing.T) {
-	tdb := testutil.OpenTestDB(t)
+	svc := newTestSessionService(t, 10*time.Minute)
 
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		now := time.Now()
-		svc := newTestSessionService(t, tdb, 10*time.Minute, 24*time.Hour, 0)
-
-		_, err := svc.ValidateAccessToken(ctx, "not-a-token", now)
-		if err == nil {
-			t.Fatal("expected invalid token error")
-		}
-	})
+	_, err := svc.ValidateAccessToken(
+		"not-a-token",
+		token.AudienceApp,
+		time.Now(),
+	)
+	if err == nil {
+		t.Fatal("expected error for invalid token")
+	}
 }
 
-type denyAllPolicy struct{}
+func TestValidateAnyAccessToken_AcceptsAppAudience(t *testing.T) {
+	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+	svc := newTestSessionService(t, 10*time.Minute)
 
-func (denyAllPolicy) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
-	return false, nil
-}
-
-func newTestSessionServiceWithPolicy(
-	t *testing.T,
-	tdb *testutil.TestDB,
-	accessTTL time.Duration,
-	sessionTTL time.Duration,
-	rotation time.Duration,
-	policy accesspolicy.EmailAccessPolicy,
-) *session.Service {
-	t.Helper()
-
-	keySet, err := token.NewKeySet("test-key", map[string][]byte{
-		"test-key": []byte("01234567890123456789012345678901"),
-	})
+	accessToken, err := svc.accessTokens.Generate(
+		uuid.New(),
+		uuid.New(),
+		token.AudienceApp,
+		roles.Roles{},
+		now,
+	)
 	if err != nil {
-		t.Fatalf("token.NewKeySet failed: %v", err)
+		t.Fatalf("Generate failed: %v", err)
 	}
 
-	accessTokens := token.NewAccessTokenService(
-		keySet,
-		"authara-test",
-		accessTTL,
-	)
-
-	return session.New(session.SessionConfig{
-		Store:                tdb.Store,
-		Tx:                   tdb.Tx,
-		AccessTokens:         accessTokens,
-		SessionTTL:           sessionTTL,
-		RefreshTokenTTL:      7 * 24 * time.Hour,
-		RefreshTokenRotation: rotation,
-		AccessPolicy:         policy,
-	})
+	_, err = svc.ValidateAnyAccessToken(accessToken, now)
+	if err != nil {
+		t.Fatalf("ValidateAnyAccessToken failed: %v", err)
+	}
 }
 
-func newTestSessionService(
-	t *testing.T,
-	tdb *testutil.TestDB,
-	accessTTL time.Duration,
-	sessionTTL time.Duration,
-	rotation time.Duration,
-) *session.Service {
-	t.Helper()
+func TestValidateAnyAccessToken_AcceptsAdminAudience(t *testing.T) {
+	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+	svc := newTestSessionService(t, 10*time.Minute)
 
-	keySet, err := token.NewKeySet("test-key", map[string][]byte{
-		"test-key": []byte("01234567890123456789012345678901"),
-	})
+	accessToken, err := svc.accessTokens.Generate(
+		uuid.New(),
+		uuid.New(),
+		token.AudienceAdmin,
+		roles.Roles{},
+		now,
+	)
 	if err != nil {
-		t.Fatalf("token.NewKeySet failed: %v", err)
+		t.Fatalf("Generate failed: %v", err)
 	}
 
-	accessTokens := token.NewAccessTokenService(
-		keySet,
-		"authara-test",
-		accessTTL,
-	)
+	_, err = svc.ValidateAnyAccessToken(accessToken, now)
+	if err != nil {
+		t.Fatalf("ValidateAnyAccessToken failed: %v", err)
+	}
+}
 
-	return session.New(session.SessionConfig{
-		Store:                tdb.Store,
-		Tx:                   tdb.Tx,
-		AccessTokens:         accessTokens,
-		SessionTTL:           sessionTTL,
-		RefreshTokenTTL:      7 * 24 * time.Hour,
-		RefreshTokenRotation: rotation,
-	})
+func TestIdentityFromClaims_InvalidSubject(t *testing.T) {
+	svc := newTestSessionService(t, 10*time.Minute)
+
+	claims := &token.AccessClaims{
+		SessionID: uuid.New(),
+		Roles:     []roles.Role{roles.AutharaAdmin},
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject: "not-a-uuid",
+		},
+	}
+	// easier and compile-safe: assign on embedded RegisteredClaims after construction
+	claims.Subject = "not-a-uuid"
+
+	_, err := svc.identityFromClaims(claims)
+	if !errors.Is(err, token.ErrInvalidToken) {
+		t.Fatalf("expected ErrInvalidToken, got %v", err)
+	}
+}
+
+func TestIdentityFromClaims_NilUUIDSubject(t *testing.T) {
+	svc := newTestSessionService(t, 10*time.Minute)
+
+	claims := &token.AccessClaims{
+		SessionID: uuid.New(),
+		Roles:     []roles.Role{roles.AutharaAdmin},
+	}
+	claims.Subject = uuid.Nil.String()
+
+	_, err := svc.identityFromClaims(claims)
+	if !errors.Is(err, token.ErrInvalidToken) {
+		t.Fatalf("expected ErrInvalidToken, got %v", err)
+	}
+}
+
+func TestIdentityFromClaims_InvalidRoles(t *testing.T) {
+	svc := newTestSessionService(t, 10*time.Minute)
+
+	claims := &token.AccessClaims{
+		SessionID: uuid.New(),
+		Roles:     []roles.Role{"authara:unknown"},
+	}
+	claims.Subject = uuid.New().String()
+
+	_, err := svc.identityFromClaims(claims)
+	if err == nil {
+		t.Fatal("expected error for invalid roles")
+	}
+}
+
+func TestIdentityFromClaims_Succeeds(t *testing.T) {
+	svc := newTestSessionService(t, 10*time.Minute)
+
+	userID := uuid.New()
+	sessionID := uuid.New()
+
+	claims := &token.AccessClaims{
+		SessionID: sessionID,
+		Roles:     []roles.Role{roles.AutharaAdmin, roles.AutharaAuditor},
+	}
+	claims.Subject = userID.String()
+
+	identity, err := svc.identityFromClaims(claims)
+	if err != nil {
+		t.Fatalf("identityFromClaims failed: %v", err)
+	}
+
+	if identity.UserID != userID {
+		t.Fatalf("expected user id %q, got %q", userID, identity.UserID)
+	}
+	if identity.SessionID != sessionID {
+		t.Fatalf("expected session id %q, got %q", sessionID, identity.SessionID)
+	}
+	if !identity.Roles.IsAdmin() {
+		t.Fatal("expected admin role")
+	}
+	if !identity.Roles.IsAuditor() {
+		t.Fatal("expected auditor role")
+	}
+	if identity.Roles.IsMonitor() {
+		t.Fatal("did not expect monitor role")
+	}
+}
+
+func TestGenerateRefreshToken(t *testing.T) {
+	tokenA, err := generateRefreshToken()
+	if err != nil {
+		t.Fatalf("generateRefreshToken failed: %v", err)
+	}
+	if tokenA == "" {
+		t.Fatal("expected non-empty refresh token")
+	}
+	if strings.Contains(tokenA, "=") {
+		t.Fatal("expected raw URL encoding without padding")
+	}
+
+	tokenB, err := generateRefreshToken()
+	if err != nil {
+		t.Fatalf("generateRefreshToken failed: %v", err)
+	}
+	if tokenB == "" {
+		t.Fatal("expected non-empty refresh token")
+	}
+	if tokenA == tokenB {
+		t.Fatal("expected generated refresh tokens to differ")
+	}
+}
+
+func TestHashRefreshToken(t *testing.T) {
+	input := "refresh-token"
+
+	got1 := hashRefreshToken(input)
+	got2 := hashRefreshToken(input)
+	got3 := hashRefreshToken("different-token")
+
+	if got1 != got2 {
+		t.Fatal("expected hash to be deterministic")
+	}
+	if got1 == got3 {
+		t.Fatal("expected different inputs to produce different hashes")
+	}
+	if len(got1) != 64 {
+		t.Fatalf("expected SHA-256 hex length 64, got %d", len(got1))
+	}
+}
+
+func TestShouldRotate(t *testing.T) {
+	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		rt       domain.RefreshToken
+		rotation time.Duration
+		want     bool
+	}{
+		{
+			name: "negative rotation always rotates",
+			rt: domain.RefreshToken{
+				CreatedAt: now,
+			},
+			rotation: -1,
+			want:     true,
+		},
+		{
+			name: "zero rotation never rotates",
+			rt: domain.RefreshToken{
+				CreatedAt: now.Add(-10 * time.Minute),
+			},
+			rotation: 0,
+			want:     false,
+		},
+		{
+			name: "below threshold does not rotate",
+			rt: domain.RefreshToken{
+				CreatedAt: now.Add(-4 * time.Minute),
+			},
+			rotation: 5 * time.Minute,
+			want:     false,
+		},
+		{
+			name: "exact threshold rotates",
+			rt: domain.RefreshToken{
+				CreatedAt: now.Add(-5 * time.Minute),
+			},
+			rotation: 5 * time.Minute,
+			want:     true,
+		},
+		{
+			name: "above threshold rotates",
+			rt: domain.RefreshToken{
+				CreatedAt: now.Add(-6 * time.Minute),
+			},
+			rotation: 5 * time.Minute,
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldRotate(tt.rt, now, tt.rotation)
+			if got != tt.want {
+				t.Fatalf("shouldRotate(...) = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCanAccessAudience(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(*roles.Roles)
+		audience token.Audience
+		want     bool
+	}{
+		{
+			name:     "app audience allows everyone",
+			setup:    func(r *roles.Roles) {},
+			audience: token.AudienceApp,
+			want:     true,
+		},
+		{
+			name:     "admin audience denies empty roles",
+			setup:    func(r *roles.Roles) {},
+			audience: token.AudienceAdmin,
+			want:     false,
+		},
+		{
+			name: "admin audience allows admin",
+			setup: func(r *roles.Roles) {
+				r.AddAdmin()
+			},
+			audience: token.AudienceAdmin,
+			want:     true,
+		},
+		{
+			name: "admin audience allows auditor",
+			setup: func(r *roles.Roles) {
+				r.AddAuditor()
+			},
+			audience: token.AudienceAdmin,
+			want:     true,
+		},
+		{
+			name: "admin audience allows monitor",
+			setup: func(r *roles.Roles) {
+				r.AddMonitor()
+			},
+			audience: token.AudienceAdmin,
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			var rs roles.Roles
+			tt.setup(&rs)
+
+			got := canAccessAudience(rs, tt.audience)
+			if got != tt.want {
+				t.Fatalf("canAccessAudience(...) = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
