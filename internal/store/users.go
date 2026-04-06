@@ -110,28 +110,6 @@ func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, erro
 	return count > 0, nil
 }
 
-func (s *Store) IsUserAdmin(ctx context.Context, userID uuid.UUID) (bool, error) {
-	var exists bool
-
-	err := s.dbFromContext(ctx).
-		Raw(`
-			SELECT EXISTS (
-				SELECT 1
-				FROM user_roles ur
-				JOIN roles r ON r.ID = ur.role_id
-				WHERE ur.user_id = ? AND r.name = 'admin'
-			)
-		`, userID).
-		Scan(&exists).
-		Error
-
-	if err != nil {
-		return false, err
-	}
-
-	return exists, nil
-}
-
 func (s *Store) DisableUser(ctx context.Context, userID uuid.UUID, disabledAt time.Time) error {
 	return s.dbFromContext(ctx).
 		Model(&model.User{}).
@@ -158,6 +136,10 @@ func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username s
 		Model(&model.User{}).
 		Where("id = ?", userID).
 		Update("username", username)
+
+	if res.Error != nil {
+		return res.Error
+	}
 
 	if res.RowsAffected == 0 {
 		return ErrUserNotFound

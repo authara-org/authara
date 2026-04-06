@@ -41,22 +41,26 @@ FOR EACH ROW
 EXECUTE FUNCTION authara.set_updated_at();
 
 
-CREATE TABLE IF NOT EXISTS authara.roles (
+CREATE TABLE IF NOT EXISTS authara.platform_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    CONSTRAINT unique_role_name UNIQUE (name)
+    CONSTRAINT unique_platform_role_name UNIQUE (name)
 );
 
-INSERT INTO authara.roles (name)
-VALUES ('admin')
+INSERT INTO authara.platform_roles (name)
+VALUES 
+  ('admin'),
+  ('auditor'),
+  ('monitor')
 ON CONFLICT (name) DO NOTHING;
 
 
-CREATE TABLE IF NOT EXISTS authara.user_roles (
+CREATE TABLE IF NOT EXISTS authara.user_platform_roles (
 	user_id UUID NOT NULL REFERENCES authara.users(id) ON DELETE CASCADE,
-	role_id UUID NOT NULL REFERENCES authara.roles(id) ON DELETE CASCADE,
+	role_id UUID NOT NULL REFERENCES authara.platform_roles(id) ON DELETE CASCADE,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 	PRIMARY KEY (user_id, role_id)
 );
 

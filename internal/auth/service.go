@@ -3,15 +3,11 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
-	"github.com/authara-org/authara/internal/http/kit/httpctx"
-	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/webhook"
@@ -53,12 +49,12 @@ func New(cfg Config) *Service {
 	}
 }
 
-func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
+func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (domain.User, error) {
 	user, err := s.store.GetUserByID(ctx, userID)
 	if err != nil {
-		return nil, err
+		return domain.User{}, err
 	}
-	return &user, nil
+	return user, nil
 }
 
 func (s *Service) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
@@ -72,30 +68,6 @@ func (s *Service) UserExistsByEmail(ctx context.Context, email string) (bool, er
 	return true, nil
 }
 
-type CurrentUser struct {
-	User  domain.User
-	Roles []roles.Role
-}
-
-func (s *Service) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*CurrentUser, error) {
-	user, err := s.store.GetUserByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	roles, ok := httpctx.Roles(ctx)
-	if !ok {
-		return nil, ErrNoRolesInContext
-	}
-
-	cu := CurrentUser{
-		User:  user,
-		Roles: roles.List(),
-	}
-
-	return &cu, nil
-}
-
 func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 	if err := s.store.DeleteUser(ctx, userID); err != nil {
 		return err
@@ -106,31 +78,14 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 	return nil
 }
 
-func (s *Service) Login(ctx context.Context, in LoginInput) (*domain.User, error) {
-	if in.Username == "" {
-		local := strings.SplitN(in.Email, "@", 2)[0]
-		local = SanitizeUsername(local) // you can choose whether this lowercases or not
-		if local == "" {
-			local = "user"
-		}
-
-		suffix, err := SecureFiveDigits()
-		if err != nil {
-			return nil, err
-		}
-
-		// If you want generated usernames always lowercase:
-		local = strings.ToLower(local)
-
-		in.Username = fmt.Sprintf("%s-%05d", local, suffix)
-	}
+func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error) {
 
 	allowed, err := s.accessPolicy.IsEmailAllowed(ctx, in.Email)
 	if err != nil {
-		return nil, err
+		return domain.User{}, err
 	}
 	if !allowed {
-		return nil, ErrEmailNotAllowed
+		return domain.User{}, ErrEmailNotAllowed
 	}
 
 	switch in.Provider {
@@ -141,52 +96,40 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*domain.User, error
 		return s.loginWithExternalIdentity(ctx, in)
 
 	default:
-		return nil, ErrUnsupportedProvider
+		return domain.User{}, ErrUnsupportedProvider
 	}
 }
 
-func (s *Service) Signup(ctx context.Context, in SignupInput) (*domain.User, error) {
-	if in.Username == "" {
-		local := strings.SplitN(in.Email, "@", 2)[0]
-		local = SanitizeUsername(local) // you can choose whether this lowercases or not
-		if local == "" {
-			local = "user"
-		}
-
-		suffix, err := SecureFiveDigits()
-		if err != nil {
-			return nil, err
-		}
-
-		// If you want generated usernames always lowercase:
-		local = strings.ToLower(local)
-
-		in.Username = fmt.Sprintf("%s-%05d", local, suffix)
+func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, error) {
+	uname, err := EnsureUsername(in.Username, in.Email)
+	if err != nil {
+		return domain.User{}, err
 	}
+	in.Username = uname
 
 	allowed, err := s.accessPolicy.IsEmailAllowed(ctx, in.Email)
 	if err != nil {
-		return nil, err
+		return domain.User{}, err
 	}
 	if !allowed {
-		return nil, ErrEmailNotAllowed
+		return domain.User{}, ErrEmailNotAllowed
 	}
 
 	switch in.Provider {
 	case domain.ProviderPassword:
 		user, err := s.signupWithPassword(ctx, in)
 		if err != nil {
-			return nil, err
+			return domain.User{}, err
 		}
 		s.publishBestEffort(ctx, webhook.NewUserCreated(user.ID, time.Now()))
 		return user, nil
 
 	default:
-		return nil, ErrUnsupportedProvider
+		return domain.User{}, ErrUnsupportedProvider
 	}
 }
 
-func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (*domain.User, error) {
+func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domain.User, error) {
 	var user domain.User
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -220,36 +163,45 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (*doma
 	})
 
 	if err != nil {
-		return nil, err
+		return domain.User{}, err
 	}
 
-	return &user, nil
+	return user, nil
 }
 
-func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (*domain.User, error) {
+func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (domain.User, error) {
 	user, err := s.store.GetUserByEmail(ctx, in.Email)
 	if err != nil {
-		return nil, err
+		return domain.User{}, err
 	}
 
-	authPovider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+	authProvider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
 	if err != nil {
-		return nil, err
+		return domain.User{}, err
 	}
 
-	verified, err := Verify(in.Password, *authPovider.PasswordHash)
-	if err != nil || !verified {
-		return nil, err
+	verified, err := Verify(in.Password, *authProvider.PasswordHash)
+	if err != nil {
+		return domain.User{}, err
+	}
+	if !verified {
+		return domain.User{}, ErrInvalidCredentials
 	}
 
-	return &user, nil
+	return user, nil
 }
 
-func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) (*domain.User, error) {
+func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) (domain.User, error) {
 	var user domain.User
 	createdUser := false
 
-	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	uname, err := EnsureUsername(in.Username, in.Email)
+	if err != nil {
+		return domain.User{}, err
+	}
+	in.Username = uname
+
+	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 
 		providerRecord, err := s.store.GetAuthProviderByProviderAndProviderUserID(txCtx, in.Provider, in.OAuthID)
 		if err == nil {
@@ -297,14 +249,14 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 	})
 
 	if err != nil {
-		return nil, err
+		return domain.User{}, err
 	}
 
 	if createdUser {
 		s.publishBestEffort(ctx, webhook.NewUserCreated(user.ID, time.Now()))
 	}
 
-	return &user, nil
+	return user, nil
 }
 
 func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {

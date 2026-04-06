@@ -15,6 +15,7 @@ var (
 	ErrorVerificationCodeNotFound    = errors.New("verification code not found")
 	ErrorEmailJobNotFound            = errors.New("email job not found")
 	ErrorPendingSignupActionNotFound = errors.New("pending signup action not found")
+	ErrorRoleNotFound                = errors.New("role not found")
 )
 
 const (

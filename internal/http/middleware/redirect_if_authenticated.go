@@ -25,8 +25,7 @@ func RedirectIfAuthenticated(sessionService *session.Service, now func() time.Ti
 				return
 			}
 
-			_, err := sessionService.ValidateAccessToken(
-				r.Context(),
+			_, err := sessionService.ValidateAnyAccessToken(
 				access,
 				now(),
 			)

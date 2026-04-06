@@ -10,8 +10,8 @@ CREATE INDEX IF NOT EXISTS idx_auth_providers_user_provider
 ON authara.auth_providers (user_id, provider);
 
 -- USER ROLES
-CREATE INDEX IF NOT EXISTS idx_user_roles_user_id
-ON authara.user_roles (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_platform_roles_user_id
+ON authara.user_platform_roles (user_id);
 
 -- REFRESH TOKENS (critical path)
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash
@@ -38,7 +38,7 @@ ON authara.refresh_tokens(session_id);
 DROP INDEX IF EXISTS authara.idx_refresh_tokens_expires_at;
 DROP INDEX IF EXISTS authara.idx_sessions_expires_at;
 DROP INDEX IF EXISTS authara.idx_refresh_tokens_token_hash;
-DROP INDEX IF EXISTS authara.idx_user_roles_user_id;
+DROP INDEX IF EXISTS authara.idx_user_platform_roles_user_id;
 DROP INDEX IF EXISTS authara.idx_auth_providers_user_provider;
 DROP INDEX IF EXISTS authara.idx_users_email;
 DROP INDEX IF EXISTS authara.idx_refresh_tokens_session_id;

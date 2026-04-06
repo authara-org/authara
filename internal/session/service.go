@@ -71,11 +71,17 @@ func (s *Service) CreateSession(
 			return err
 		}
 
-		isAdmin, err := s.store.IsUserAdmin(ctx, userID)
+		roleNames, err := s.store.GetUserPlatformRoleNames(ctx, userID)
 		if err != nil {
 			return err
 		}
-		if audience == token.AudienceAdmin && !isAdmin {
+
+		platformRoles, err := roles.FromDBRoleNames(roleNames)
+		if err != nil {
+			return err
+		}
+
+		if !canAccessAudience(platformRoles, audience) {
 			return ErrForbidden
 		}
 
@@ -116,16 +122,11 @@ func (s *Service) CreateSession(
 			return err
 		}
 
-		var roles roles.Roles
-		if isAdmin {
-			roles.AddAdmin()
-		}
-
 		accessToken, err = s.accessTokens.Generate(
 			userID,
 			createdSession.ID,
 			audience,
-			roles,
+			platformRoles,
 			now,
 		)
 		if err != nil {
@@ -171,11 +172,17 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return err
 		}
 
-		isAdmin, err := s.store.IsUserAdmin(ctx, session.UserID)
+		roleNames, err := s.store.GetUserPlatformRoleNames(ctx, session.UserID)
 		if err != nil {
 			return err
 		}
-		if audience == token.AudienceAdmin && !isAdmin {
+
+		platformRoles, err := roles.FromDBRoleNames(roleNames)
+		if err != nil {
+			return err
+		}
+
+		if !canAccessAudience(platformRoles, audience) {
 			return ErrForbidden
 		}
 
@@ -220,16 +227,11 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			newRefreshToken = refreshToken
 		}
 
-		var roles roles.Roles
-		if isAdmin {
-			roles.AddAdmin()
-		}
-
 		newAccessToken, err = s.accessTokens.Generate(
 			session.UserID,
 			rt.SessionID,
 			audience,
-			roles,
+			platformRoles,
 			now,
 		)
 		if err != nil {
@@ -283,13 +285,32 @@ func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error
 	return err
 }
 
-func (s *Service) ValidateAccessToken(ctx context.Context, accessToken string, now time.Time) (*AccessIdentity, error) {
-
-	claims, err := s.accessTokens.Parse(accessToken, now)
+func (s *Service) ValidateAccessToken(
+	accessToken string,
+	expectedAudience token.Audience,
+	now time.Time,
+) (*AccessIdentity, error) {
+	claims, err := s.accessTokens.Parse(accessToken, expectedAudience, now)
 	if err != nil {
 		return nil, err
 	}
 
+	return s.identityFromClaims(claims)
+}
+
+func (s *Service) ValidateAnyAccessToken(
+	accessToken string,
+	now time.Time,
+) (*AccessIdentity, error) {
+	claims, err := s.accessTokens.ParseAny(accessToken, now)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.identityFromClaims(claims)
+}
+
+func (s *Service) identityFromClaims(claims *token.AccessClaims) (*AccessIdentity, error) {
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil || userID == uuid.Nil {
 		return nil, token.ErrInvalidToken
@@ -345,4 +366,20 @@ func (s *Service) ensureUserAllowed(ctx context.Context, userID uuid.UUID) error
 		return ErrUserNotAllowed
 	}
 	return nil
+}
+
+var audienceAccess = map[token.Audience][]roles.Role{
+	token.AudienceAdmin: {
+		roles.AutharaAdmin,
+		roles.AutharaAuditor,
+		roles.AutharaMonitor,
+	},
+}
+
+func canAccessAudience(rs roles.Roles, audience token.Audience) bool {
+	allowed, ok := audienceAccess[audience]
+	if !ok {
+		return true
+	}
+	return rs.HasAny(allowed...)
 }

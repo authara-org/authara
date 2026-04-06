@@ -26,7 +26,7 @@ func RequireAPIAccessAuth(sessionSvc *session.Service, audience token.Audience, 
 				return
 			}
 
-			identity, err := sessionSvc.ValidateAccessToken(ctx, accessToken, now())
+			identity, err := sessionSvc.ValidateAccessToken(accessToken, audience, now())
 			if err != nil {
 				response.ErrorJSON(
 					w,

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math/big"
 	"strings"
 	"unicode"
@@ -61,7 +62,7 @@ func SanitizeUsername(s string) string {
 	prevDash := false
 	for _, r := range s {
 		// keep ASCII letters/digits/_/-
-		if isLetter(r) || isDigit(r) || r == '-' || r == '_' {
+		if isLetter(r) || isDigit(r) || r == '_' {
 			b.WriteRune(r)
 			prevDash = false
 			continue
@@ -89,4 +90,26 @@ func SanitizeUsername(s string) string {
 		out = strings.Trim(out[:maxLen], "-_")
 	}
 	return out
+}
+
+func EnsureUsername(username, email string) (string, error) {
+	if username != "" {
+		return username, nil
+	}
+
+	local := strings.SplitN(email, "@", 2)[0]
+	local = SanitizeUsername(local)
+
+	if local == "" {
+		local = "user"
+	}
+
+	suffix, err := SecureFiveDigits()
+	if err != nil {
+		return "", err
+	}
+
+	local = strings.ToLower(local)
+
+	return fmt.Sprintf("%s-%05d", local, suffix), nil
 }
