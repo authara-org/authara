@@ -121,6 +121,7 @@ func newContractTestRouter() chi.Router {
 		RequireAPICSRF:                    pass,
 		ReturnTo:                          pass,
 		HTMX:                              pass,
+		RequireChallengeEnabled:           pass,
 	}
 
 	r := chi.NewRouter()
