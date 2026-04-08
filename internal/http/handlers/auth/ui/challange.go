@@ -5,29 +5,98 @@ import (
 	"strings"
 	"time"
 
-	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
-	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/kit/htmx"
 	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
+type VerifyChallengeAction string
+
+const (
+	VerifyChallengeActionSignup        VerifyChallengeAction = "signup"
+	VerifyChallengeActionPasswordReset VerifyChallengeAction = "password-reset"
+)
+
+func parseVerifyChallengeAction(raw string) (VerifyChallengeAction, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case string(VerifyChallengeActionSignup):
+		return VerifyChallengeActionSignup, true
+	case string(VerifyChallengeActionPasswordReset):
+		return VerifyChallengeActionPasswordReset, true
+	default:
+		return "", false
+	}
+}
+
+func (a VerifyChallengeAction) Path() string {
+	return string(a)
+}
+
+func (a VerifyChallengeAction) Header() string {
+	switch a {
+	case VerifyChallengeActionSignup:
+		return "Verify your Email"
+	case VerifyChallengeActionPasswordReset:
+		return "Verify your Password Reset"
+	default:
+		return "Verify your Request"
+	}
+}
+
 func (h *UIHandler) VerifyChallengePage(w http.ResponseWriter, r *http.Request) {
-	challengeIDStr := r.URL.Query().Get("challenge_id")
+	challengeIDStr := strings.TrimSpace(r.URL.Query().Get("challenge_id"))
+
+	action, ok := parseVerifyChallengeAction(chi.URLParam(r, "action"))
+	if !ok {
+		http.Error(w, "invalid verification action", http.StatusBadRequest)
+		return
+	}
+
 	_ = h.Render(
 		w,
 		r,
 		http.StatusOK,
-		challengeview.VerifyChallenge(challengeIDStr, "Verify your Email"),
+		challengeview.VerifyChallenge(challengeIDStr, action.Path(), action.Header()),
+	)
+}
+
+func (h *UIHandler) renderVerifyChallengeRedirect(
+	w http.ResponseWriter,
+	r *http.Request,
+	action VerifyChallengeAction,
+	challengeID string,
+	returnTo string,
+) error {
+	htmx.ReTarget(w, "#body")
+	htmx.ReSwap(w, "innerHTML")
+
+	url := "/auth/verify-challenge/" + action.Path() + "?challenge_id=" + challengeID
+	if returnTo != "" {
+		url += "&return_to=" + returnTo
+	}
+
+	htmx.PushUrl(w, url)
+
+	return h.Render(
+		w,
+		r,
+		http.StatusOK,
+		challengeview.VerifyChallenge(challengeID, action.Path(), action.Header()),
 	)
 }
 
 func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+
+	action, ok := parseVerifyChallengeAction(chi.URLParam(r, "action"))
+	if !ok {
+		http.Error(w, "invalid verification action", http.StatusBadRequest)
 		return
 	}
 
@@ -36,69 +105,43 @@ func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) 
 
 	challengeID, err := uuid.Parse(challengeIDStr)
 	if err != nil {
-		h.renderFormError(
+		h.renderVerifyChallengeError(
 			w,
 			r,
-			http.StatusUnprocessableEntity,
+			action,
+			challengeIDStr,
 			"Invalid verification request.",
-			challengeview.VerifyChallengeForm(challengeIDStr, true),
 		)
 		return
 	}
 
 	if len(code) != 6 {
-		h.renderFormError(
+		h.renderVerifyChallengeError(
 			w,
 			r,
-			http.StatusUnprocessableEntity,
+			action,
+			challengeIDStr,
 			"Please enter the 6-digit verification code.",
-			challengeview.VerifyChallengeForm(challengeIDStr, true),
 		)
 		return
 	}
 
-	result, err := h.Challenge.VerifySignupChallenge(
-		ctx,
-		challengeID,
-		code,
-		h.Verification,
-		time.Now().UTC(),
-	)
-	if err != nil {
-		msg := "Invalid or expired verification code."
+	switch action {
+	case VerifyChallengeActionSignup:
+		h.verifySignupChallengePost(w, r, challengeIDStr, challengeID, code)
 
-		switch err {
-		case challenge.ErrChallengeExpired:
-			msg = "This verification code has expired."
-		case challenge.ErrChallengeConsumed:
-			msg = "This verification code has already been used."
-		case challenge.ErrTooManyAttempts:
-			msg = "Too many incorrect attempts. Please start again."
-		case challenge.ErrInvalidVerificationCode:
-			msg = "The verification code is incorrect."
-		}
+	case VerifyChallengeActionPasswordReset:
+		h.verifyPasswordResetChallengePost(w, r, challengeIDStr, challengeID, code)
 
-		h.renderFormError(
+	default:
+		h.renderVerifyChallengeError(
 			w,
 			r,
-			http.StatusUnprocessableEntity,
-			msg,
-			challengeview.VerifyChallengeForm(challengeIDStr, true),
+			action,
+			challengeIDStr,
+			"Unsupported verification request.",
 		)
-		return
 	}
-
-	h.finishSignup(
-		w,
-		r,
-		auth.SignupInput{
-			Provider:     domain.ProviderPassword,
-			Username:     result.Action.Username,
-			Email:        result.Action.Email,
-			PasswordHash: result.Action.PasswordHash,
-		},
-		challengeview.VerifyChallengeForm(challengeIDStr, true),
-	)
 }
 
 func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) {
@@ -146,4 +189,35 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 		http.StatusOK,
 		toast.ToastMessage(toast.Success, "A new verification code has been sent."),
 	)
+}
+
+func (h *UIHandler) renderVerifyChallengeError(
+	w http.ResponseWriter,
+	r *http.Request,
+	action VerifyChallengeAction,
+	challengeIDStr string,
+	msg string,
+) {
+	h.renderFormError(
+		w,
+		r,
+		http.StatusUnprocessableEntity,
+		msg,
+		challengeview.VerifyChallengeForm(challengeIDStr, action.Path(), true),
+	)
+}
+
+func (h *UIHandler) verifyChallengeErrorMessage(err error) string {
+	switch err {
+	case challenge.ErrChallengeExpired:
+		return "This verification code has expired."
+	case challenge.ErrChallengeConsumed:
+		return "This verification code has already been used."
+	case challenge.ErrTooManyAttempts:
+		return "Too many incorrect attempts. Please start again."
+	case challenge.ErrInvalidVerificationCode:
+		return "The verification code is incorrect."
+	default:
+		return "Invalid or expired verification code."
+	}
 }
