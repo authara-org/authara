@@ -15,3 +15,12 @@ func RenderSignupCodeHTML(code string) (string, error) {
 	}
 	return buf.String(), nil
 }
+
+func RenderPasswordResetCodeHTML(code string) (string, error) {
+	var buf bytes.Buffer
+	err := emailtemplates.PasswordResetCodeEmail(code).Render(context.Background(), &buf)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}

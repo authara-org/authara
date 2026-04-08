@@ -7,15 +7,16 @@ import (
 )
 
 var (
-	ErrUserNotFound                  = errors.New("user not found")
-	ErrSessionNotFound               = errors.New("session not found")
-	ErrorAuthProviderNotFound        = errors.New("auth_provider not found")
-	ErrRefreshTokenNotFound          = errors.New("refresh_token not found")
-	ErrorChallengeNotFound           = errors.New("challenge not found")
-	ErrorVerificationCodeNotFound    = errors.New("verification code not found")
-	ErrorEmailJobNotFound            = errors.New("email job not found")
-	ErrorPendingSignupActionNotFound = errors.New("pending signup action not found")
-	ErrorRoleNotFound                = errors.New("role not found")
+	ErrUserNotFound                   = errors.New("user not found")
+	ErrSessionNotFound                = errors.New("session not found")
+	ErrorAuthProviderNotFound         = errors.New("auth_provider not found")
+	ErrRefreshTokenNotFound           = errors.New("refresh_token not found")
+	ErrorChallengeNotFound            = errors.New("challenge not found")
+	ErrorVerificationCodeNotFound     = errors.New("verification code not found")
+	ErrorEmailJobNotFound             = errors.New("email job not found")
+	ErrorPendingSignupActionNotFound  = errors.New("pending signup action not found")
+	ErrorPendingPasswordResetNotFound = errors.New("pending password reset not found")
+	ErrorRoleNotFound                 = errors.New("role not found")
 )
 
 const (

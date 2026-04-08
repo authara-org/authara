@@ -8,7 +8,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 )
 
-func New(a Assets) Renderer {
+func New(a Assets, challengeEnabled bool) Renderer {
 	return func(w http.ResponseWriter, r *http.Request, status int, component templ.Component) error {
 		_, ok := httpctx.CSRFToken(r.Context())
 		if !ok {
@@ -20,10 +20,9 @@ func New(a Assets) Renderer {
 			r = r.WithContext(httpctx.WithCSRF(r.Context(), tok))
 		}
 
-		// Make assets available to templ via context:
 		r = r.WithContext(httpctx.WithAssets(r.Context(), a))
+		r = r.WithContext(httpctx.WithChallengeEnabled(r.Context(), challengeEnabled))
 
-		// (Optional but good) Ensure HTML content type
 		if w.Header().Get("Content-Type") == "" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		}

@@ -57,6 +57,10 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (domain.User, e
 	return user, nil
 }
 
+func (s *Service) GetUserByEmail(ctx context.Context, email string) (domain.User, error) {
+	return s.store.GetUserByEmail(ctx, email)
+}
+
 func (s *Service) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
 	_, err := s.store.GetUserByEmail(ctx, email)
 	if err != nil {

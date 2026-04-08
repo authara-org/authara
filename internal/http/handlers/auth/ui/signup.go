@@ -18,6 +18,7 @@ import (
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
 	"github.com/authara-org/authara/internal/session"
+	"github.com/google/uuid"
 )
 
 func (h *UIHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
@@ -132,17 +133,15 @@ func (h *UIHandler) startSignupChallenge(
 			return
 		}
 
-		htmx.ReTarget(w, "#body")
-		htmx.ReSwap(w, "innerHTML")
-		htmx.PushUrl(w, "/auth/verify-challenge?challenge_id="+challengeID.String()+"&return_to="+httpctx.ReturnToOrDefault(ctx, "/"))
-
-		_ = h.Render(
+		_ = h.renderVerifyChallengeRedirect(
 			w,
 			r,
-			http.StatusOK,
-			challengeview.VerifyChallenge(challengeID.String(), "Verify your Email"),
+			VerifyChallengeActionSignup,
+			challengeID.String(),
+			httpctx.ReturnToOrDefault(ctx, "/"),
 		)
 		return
+
 	}
 
 	challengeID, err := h.Challenge.CreateSignupChallenge(ctx, challenge.CreateSignupChallengeInput{
@@ -159,11 +158,12 @@ func (h *UIHandler) startSignupChallenge(
 	htmx.ReSwap(w, "innerHTML")
 	htmx.PushUrl(w, "/auth/verify-challenge?challenge_id="+challengeID.String()+"&return_to="+httpctx.ReturnToOrDefault(ctx, "/"))
 
-	_ = h.Render(
+	_ = h.renderVerifyChallengeRedirect(
 		w,
 		r,
-		http.StatusOK,
-		challengeview.VerifyChallenge(challengeID.String(), "Verify your Email"),
+		VerifyChallengeActionSignup,
+		challengeID.String(),
+		httpctx.ReturnToOrDefault(ctx, "/"),
 	)
 }
 
@@ -212,4 +212,48 @@ func (h *UIHandler) finishSignup(
 	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
 
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
+}
+
+func (h *UIHandler) verifySignupChallengePost(
+	w http.ResponseWriter,
+	r *http.Request,
+	challengeIDStr string,
+	challengeID uuid.UUID,
+	code string,
+) {
+	ctx := r.Context()
+
+	result, err := h.Challenge.VerifySignupChallenge(
+		ctx,
+		challengeID,
+		code,
+		h.Verification,
+		time.Now().UTC(),
+	)
+	if err != nil {
+		h.renderVerifyChallengeError(
+			w,
+			r,
+			VerifyChallengeActionSignup,
+			challengeIDStr,
+			h.verifyChallengeErrorMessage(err),
+		)
+		return
+	}
+
+	h.finishSignup(
+		w,
+		r,
+		auth.SignupInput{
+			Provider:     domain.ProviderPassword,
+			Username:     result.Action.Username,
+			Email:        result.Action.Email,
+			PasswordHash: result.Action.PasswordHash,
+		},
+		challengeview.VerifyChallengeForm(
+			challengeIDStr,
+			VerifyChallengeActionSignup.Path(),
+			true,
+		),
+	)
 }

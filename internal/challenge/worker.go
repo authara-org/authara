@@ -50,7 +50,7 @@ func NewWorker(
 }
 
 func (w *Worker) Run(ctx context.Context) {
-	for i := 0; i < w.cfg.WorkerCount; i++ {
+	for i := range w.cfg.WorkerCount {
 		go w.runWorker(ctx, i+1)
 	}
 
@@ -153,6 +153,25 @@ func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.T
 		}
 
 		msg, err = email.BuildSignupCodeMessage(code)
+		if err != nil {
+			return err
+		}
+	case domain.EmailTemplatePasswordResetCode:
+		if job.ChallengeID == nil {
+			return errors.New("password_reset_code email job missing challenge_id")
+		}
+
+		challenge, err := w.store.GetChallengeByID(ctx, *job.ChallengeID)
+		if err != nil {
+			return err
+		}
+
+		code, err := w.codeSvc.GenerateCode(ctx, challenge, now)
+		if err != nil {
+			return err
+		}
+
+		msg, err = email.BuildPasswordResetCodeMessage(code)
 		if err != nil {
 			return err
 		}

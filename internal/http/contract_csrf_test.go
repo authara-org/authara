@@ -83,7 +83,7 @@ func newCSRFFocusedContractTestRouter() http.Handler {
 	cfg := ServerConfig{
 		Version: "test",
 		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Render:  render.New(render.Assets{}),
+		Render:  render.New(render.Assets{}, false),
 	}
 
 	mw := Middlewares{
@@ -117,7 +117,7 @@ func newCSRFWiringContractTestRouter() http.Handler {
 	cfg := ServerConfig{
 		Version: "test",
 		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Render:  render.New(render.Assets{}),
+		Render:  render.New(render.Assets{}, false),
 	}
 
 	mw := Middlewares{

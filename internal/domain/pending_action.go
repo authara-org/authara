@@ -17,3 +17,11 @@ type PendingSignupAction struct {
 	Username     string
 	PasswordHash string
 }
+
+type PendingPasswordReset struct {
+	ID           uuid.UUID
+	CreatedAt    time.Time
+	ChallengeID  uuid.UUID
+	UserID       uuid.UUID
+	PasswordHash string
+}
