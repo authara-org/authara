@@ -59,7 +59,6 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Use(mw.HTMX)
 
 			// authara internals
-			r.Get("/verify-challenge", uih.VerifyChallengePage)
 			r.Get("/successfull-deletion", uih.SuccessfullDeletionPage)
 
 			r.Group(func(r chi.Router) {
@@ -74,10 +73,23 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Post("/signup", uih.SignupPost)
 				r.Post("/login", uih.LoginPost)
-				r.Post("/verify-challenge", uih.VerifyChallengePost)
-				r.Post("/resend-challenge", uih.ResendChallengePost)
 				r.Post("/sessions/logout", uih.LogoutPost)
 				r.Post("/sessions/refresh", uih.RefreshPost)
+			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireChallengeEnabled)
+
+				r.Get("/password-reset", uih.PasswordResetPage)
+				r.Get("/verify-challenge/{action}", uih.VerifyChallengePage)
+
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireCSRF)
+
+					r.Post("/password-reset", uih.PasswordResetRequestPost)
+					r.Post("/verify-challenge/{action}", uih.VerifyChallengePost)
+					r.Post("/resend-challenge", uih.ResendChallengePost)
+				})
 			})
 
 			r.Route("/oauth", func(r chi.Router) {

@@ -60,3 +60,62 @@ func (s *Store) GetPendingSignupActionByChallengeID(ctx context.Context, challen
 
 	return toDomainPendingSignupAction(row), nil
 }
+
+// ============================
+// pending password reset
+// ============================
+
+func toDomainPendingPasswordReset(m model.PendingPasswordReset) domain.PendingPasswordReset {
+	return domain.PendingPasswordReset{
+		ID:           *m.ID,
+		CreatedAt:    m.CreatedAt,
+		ChallengeID:  m.ChallengeID,
+		UserID:       m.UserID,
+		PasswordHash: m.PasswordHash,
+	}
+}
+
+func toModelPendingPasswordReset(d domain.PendingPasswordReset) model.PendingPasswordReset {
+	return model.PendingPasswordReset{
+		ChallengeID:  d.ChallengeID,
+		UserID:       d.UserID,
+		PasswordHash: d.PasswordHash,
+	}
+}
+
+func (s *Store) CreatePendingPasswordReset(ctx context.Context, in domain.PendingPasswordReset) (domain.PendingPasswordReset, error) {
+	row := toModelPendingPasswordReset(in)
+
+	err := s.dbFromContext(ctx).
+		Create(&row).
+		Error
+	if err != nil {
+		return domain.PendingPasswordReset{}, err
+	}
+
+	return toDomainPendingPasswordReset(row), nil
+}
+
+func (s *Store) GetPendingPasswordResetByChallengeID(ctx context.Context, challengeID uuid.UUID) (domain.PendingPasswordReset, error) {
+	var row model.PendingPasswordReset
+
+	err := s.dbFromContext(ctx).
+		Where("challenge_id = ?", challengeID).
+		First(&row).
+		Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.PendingPasswordReset{}, ErrorPendingPasswordResetNotFound
+		}
+		return domain.PendingPasswordReset{}, err
+	}
+
+	return toDomainPendingPasswordReset(row), nil
+}
+
+func (s *Store) DeletePendingPasswordResetByChallengeID(ctx context.Context, challengeID uuid.UUID) error {
+	return s.dbFromContext(ctx).
+		Where("challenge_id = ?", challengeID).
+		Delete(&model.PendingPasswordReset{}).
+		Error
+}

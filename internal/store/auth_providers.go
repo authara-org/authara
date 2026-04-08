@@ -84,3 +84,19 @@ func (s *Store) GetAuthProviderByProviderAndProviderUserID(ctx context.Context, 
 
 	return toDomainAuthProvider(m), nil
 }
+
+func (s *Store) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	res := s.dbFromContext(ctx).
+		Model(&model.AuthProvider{}).
+		Where("user_id = ? AND provider = ?", userID, "password").
+		Update("password_hash", passwordHash)
+
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrorAuthProviderNotFound
+	}
+
+	return nil
+}

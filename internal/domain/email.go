@@ -18,8 +18,8 @@ const (
 type EmailTemplate string
 
 const (
-	EmailTemplateSignupCode EmailTemplate = "signup_code"
-	EmailTemplateLoginAlert EmailTemplate = "login_alert"
+	EmailTemplateSignupCode        EmailTemplate = "signup_code"
+	EmailTemplatePasswordResetCode EmailTemplate = "password_reset_code"
 )
 
 type EmailJob struct {
