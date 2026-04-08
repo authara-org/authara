@@ -8,12 +8,12 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
 )
 
-templ VerifyChallenge(challengeID string, header string) {
+templ VerifyChallenge(challengeID string, action string, header string) {
 	@templates.PartialRender() {
 		@auth.AuthLayout() {
 			@auth.CardHeader()
 			@auth.HeaderSection(header, "Enter the 6-digit code we sent to your email address.")
-			@VerifyChallengeForm(challengeID, false)
+			@VerifyChallengeForm(challengeID, action, false)
 			<div class="text-center mt-6">
 				<form
 					hx-post="/auth/resend-challenge"
@@ -36,10 +36,10 @@ templ VerifyChallenge(challengeID string, header string) {
 	}
 }
 
-templ VerifyChallengeForm(challengeID string, incorrect bool) {
+templ VerifyChallengeForm(challengeID string, action string, incorrect bool) {
 	<form
 		id="verification-code-input-form"
-		hx-post={ "/auth/verify-challenge?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
+		hx-post={ "/auth/verify-challenge/" + action + "?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
 		hx-target="this"
 		hx-swap="outerHTML"
 		autocomplete="one-time-code"

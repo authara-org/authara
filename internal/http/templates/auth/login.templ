@@ -103,6 +103,17 @@ templ LoginForm() {
 				</div>
 				<span class="text-blue-800 dark:text-blue-400 text-sm">Remember me</span>
 			</label>
+			if httpctx.ChallengeEnabledOrDefault(ctx, false) {
+				<a
+					hx-get={ "/auth/password-reset?return_to=/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
+					hx-target="#body"
+					hx-swap="innerHTML"
+					hx-replace-url="true"
+					class="cursor-pointer text-blue-800 dark:text-blue-400 text-sm"
+				>
+					Reset Password
+				</a>
+			}
 		</div>
 		@button.Button(button.ButtonConfig{
 			Label: "Login",
