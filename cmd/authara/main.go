@@ -217,6 +217,7 @@ func main() {
 	requireAPICSRF := httpmiddleware.RequireAPICSRF
 	returnTo := httpmiddleware.ReturnTo
 	htmx := httpmiddleware.HTMXMiddleware
+	requireChallengeEnabled := httpmiddleware.RequireChallengeEnabled(cfg.Challenge.Enabled)
 
 	mw := httpserver.Middlewares{
 		RedirectIfAuthenticated:           redirectIfAuthenticated,
@@ -229,6 +230,7 @@ func main() {
 		RequireAPICSRF:                    requireAPICSRF,
 		ReturnTo:                          returnTo,
 		HTMX:                              htmx,
+		RequireChallengeEnabled:           requireChallengeEnabled,
 	}
 
 	limiter := ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{
@@ -250,7 +252,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	renderer := render.New(assets)
+	renderer := render.New(assets, cfg.Challenge.Enabled)
 
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Version:          Version,
