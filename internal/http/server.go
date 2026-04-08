@@ -47,8 +47,9 @@ type Middlewares struct {
 	RequireCSRF    func(http.Handler) http.Handler
 	RequireAPICSRF func(http.Handler) http.Handler
 
-	ReturnTo func(http.Handler) http.Handler
-	HTMX     func(http.Handler) http.Handler
+	ReturnTo                func(http.Handler) http.Handler
+	HTMX                    func(http.Handler) http.Handler
+	RequireChallengeEnabled func(http.Handler) http.Handler
 }
 
 type Server struct {
