@@ -231,6 +231,8 @@ func (s *Service) emailTemplateForPurpose(
 	switch purpose {
 	case domain.ChallengePurposeSignup:
 		return domain.EmailTemplateSignupCode, nil
+	case domain.ChallengePurposePasswordReset:
+		return domain.EmailTemplatePasswordResetCode, nil
 	default:
 		return "", ErrUnsupportedChallengePurpose
 	}
