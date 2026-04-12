@@ -86,9 +86,16 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireCSRF)
 
-					r.Post("/password-reset", uih.PasswordResetRequestPost)
 					r.Post("/verify-challenge/{action}", uih.VerifyChallengePost)
 					r.Post("/resend-challenge", uih.ResendChallengePost)
+
+					r.Post("/password-reset", uih.PasswordResetRequestPost)
+
+					r.Group(func(r chi.Router) {
+						r.Use(mw.RequireAppAccessAuthWithRefresh)
+
+						r.Post("/email-change", uih.EmailChangeRequestPost)
+					})
 				})
 			})
 
