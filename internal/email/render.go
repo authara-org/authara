@@ -24,3 +24,12 @@ func RenderPasswordResetCodeHTML(code string) (string, error) {
 	}
 	return buf.String(), nil
 }
+
+func RenderEmailChangeCodeHTML(code string) (string, error) {
+	var buf bytes.Buffer
+	err := emailtemplates.EmailChangeCodeEmail(code).Render(context.Background(), &buf)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}

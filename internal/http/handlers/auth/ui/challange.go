@@ -18,6 +18,7 @@ type VerifyChallengeAction string
 const (
 	VerifyChallengeActionSignup        VerifyChallengeAction = "signup"
 	VerifyChallengeActionPasswordReset VerifyChallengeAction = "password-reset"
+	VerifyChallengeActionEmailChange   VerifyChallengeAction = "email-change"
 )
 
 func parseVerifyChallengeAction(raw string) (VerifyChallengeAction, bool) {
@@ -26,6 +27,8 @@ func parseVerifyChallengeAction(raw string) (VerifyChallengeAction, bool) {
 		return VerifyChallengeActionSignup, true
 	case string(VerifyChallengeActionPasswordReset):
 		return VerifyChallengeActionPasswordReset, true
+	case string(VerifyChallengeActionEmailChange):
+		return VerifyChallengeActionEmailChange, true
 	default:
 		return "", false
 	}
@@ -41,6 +44,8 @@ func (a VerifyChallengeAction) Header() string {
 		return "Verify your Email"
 	case VerifyChallengeActionPasswordReset:
 		return "Verify your Password Reset"
+	case VerifyChallengeActionEmailChange:
+		return "Verify your new Email"
 	default:
 		return "Verify your Request"
 	}
@@ -132,6 +137,9 @@ func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) 
 
 	case VerifyChallengeActionPasswordReset:
 		h.verifyPasswordResetChallengePost(w, r, challengeIDStr, challengeID, code)
+
+	case VerifyChallengeActionEmailChange:
+		h.verifyEmailChangeChallengePost(w, r, challengeIDStr, challengeID, code)
 
 	default:
 		h.renderVerifyChallengeError(

@@ -16,6 +16,7 @@ var (
 	ErrorEmailJobNotFound             = errors.New("email job not found")
 	ErrorPendingSignupActionNotFound  = errors.New("pending signup action not found")
 	ErrorPendingPasswordResetNotFound = errors.New("pending password reset not found")
+	ErrorPendingEmailChangeNotFound   = errors.New("pending email change not found")
 	ErrorRoleNotFound                 = errors.New("role not found")
 )
 

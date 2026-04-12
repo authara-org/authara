@@ -25,3 +25,12 @@ type PendingPasswordReset struct {
 	UserID       uuid.UUID
 	PasswordHash string
 }
+
+type PendingEmailChange struct {
+	ID          uuid.UUID
+	CreatedAt   time.Time
+	ChallengeID uuid.UUID
+	UserID      uuid.UUID
+	OldEmail    string
+	NewEmail    string
+}
