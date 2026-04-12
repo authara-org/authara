@@ -1,4 +1,3 @@
--- migrations/005-password-reset.sql
 -- +migrate Up
 
 CREATE TABLE IF NOT EXISTS authara.pending_password_resets (
