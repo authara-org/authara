@@ -65,17 +65,17 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil {
-		changeUsernameForm := userview.ChangeUsernameForm(user.Username)
 		toastMessage := toast.ToastMessage(
 			toast.Error,
 			"Failed to load user",
 		)
 
+		htmx.ReSwap(w, "none")
 		_ = h.Render(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
-			templ.Join(changeUsernameForm, toastMessage),
+			toastMessage,
 		)
 		return
 	}
@@ -87,6 +87,7 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 			"Failed to read new username",
 		)
 
+		htmx.ReSwap(w, "none")
 		_ = h.Render(
 			w,
 			r,
@@ -115,13 +116,11 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 			msg = "Something went wrong"
 		}
 
+		htmx.ReSwap(w, "none")
 		_ = h.Render(
 			w, r,
 			status,
-			templ.Join(
-				userview.ChangeUsernameForm(user.Username),
-				toast.ToastMessage(toast.Error, msg),
-			),
+			toast.ToastMessage(toast.Error, msg),
 		)
 		return
 	}
@@ -130,7 +129,7 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 		w, r,
 		http.StatusOK,
 		templ.Join(
-			userview.ChangeUsernameForm(username),
+			userview.ChangeUsernameSection(username),
 			toast.ToastMessage(toast.Success, "Username updated"),
 			userview.DisplayUsername(username, true),
 		),
