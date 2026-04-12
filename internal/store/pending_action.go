@@ -119,3 +119,88 @@ func (s *Store) DeletePendingPasswordResetByChallengeID(ctx context.Context, cha
 		Delete(&model.PendingPasswordReset{}).
 		Error
 }
+
+// ============================
+// pending email change
+// ============================
+
+func toDomainPendingEmailChange(m model.PendingEmailChange) domain.PendingEmailChange {
+	return domain.PendingEmailChange{
+		ID:          *m.ID,
+		CreatedAt:   m.CreatedAt,
+		ChallengeID: m.ChallengeID,
+		UserID:      m.UserID,
+		OldEmail:    m.OldEmail,
+		NewEmail:    m.NewEmail,
+	}
+}
+
+func toModelPendingEmailChange(d domain.PendingEmailChange) model.PendingEmailChange {
+	return model.PendingEmailChange{
+		ChallengeID: d.ChallengeID,
+		UserID:      d.UserID,
+		OldEmail:    d.OldEmail,
+		NewEmail:    d.NewEmail,
+	}
+}
+
+func (s *Store) CreatePendingEmailChange(ctx context.Context, in domain.PendingEmailChange) (domain.PendingEmailChange, error) {
+	row := toModelPendingEmailChange(in)
+
+	err := s.dbFromContext(ctx).
+		WithContext(ctx).
+		Create(&row).
+		Error
+	if err != nil {
+		return domain.PendingEmailChange{}, err
+	}
+
+	return toDomainPendingEmailChange(row), nil
+}
+
+func (s *Store) GetPendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID) (domain.PendingEmailChange, error) {
+	var row model.PendingEmailChange
+
+	err := s.dbFromContext(ctx).
+		WithContext(ctx).
+		Where("challenge_id = ?", challengeID).
+		First(&row).
+		Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.PendingEmailChange{}, ErrorPendingEmailChangeNotFound
+		}
+		return domain.PendingEmailChange{}, err
+	}
+
+	return toDomainPendingEmailChange(row), nil
+}
+
+func (s *Store) DeletePendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID) error {
+	res := s.dbFromContext(ctx).
+		WithContext(ctx).
+		Where("challenge_id = ?", challengeID).
+		Delete(&model.PendingEmailChange{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrorPendingEmailChangeNotFound
+	}
+	return nil
+}
+
+func (s *Store) UpdateUserEmail(ctx context.Context, userID uuid.UUID, email string) error {
+	res := s.dbFromContext(ctx).
+		WithContext(ctx).
+		Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("email", email)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}

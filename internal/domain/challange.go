@@ -11,6 +11,7 @@ type ChallengePurpose string
 const (
 	ChallengePurposeSignup        ChallengePurpose = "signup"
 	ChallengePurposePasswordReset ChallengePurpose = "password_reset"
+	ChallengePurposeEmailChange   ChallengePurpose = "email_change"
 )
 
 type Challenge struct {

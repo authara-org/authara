@@ -31,3 +31,17 @@ func BuildPasswordResetCodeMessage(code string) (Message, error) {
 	}
 	return msg, nil
 }
+
+func BuildEmailChangeCodeMessage(code string) (Message, error) {
+	htmlBody, err := RenderEmailChangeCodeHTML(code)
+	if err != nil {
+		return Message{}, err
+	}
+
+	msg := Message{
+		Subject: "Verify your new email address",
+		Text:    templates.EmailChangeCodeText(code),
+		HTML:    htmlBody,
+	}
+	return msg, nil
+}

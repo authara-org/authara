@@ -15,7 +15,7 @@ templ AccountProfileHeader(username, email string) {
 			</div>
 		</div>
 		<div class="flex-1">
-			@DisplayUsername(displayName(username, email))
+			@DisplayUsername(displayName(username, email), false)
 			<p class="mt-1 text-sm text-grey-700 dark:text-grey-300">
 				{ email }
 			</p>

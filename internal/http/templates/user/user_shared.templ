@@ -2,11 +2,19 @@ package user
 
 import "github.com/authara-org/authara/internal/http/kit/httpctx"
 
-templ DisplayUsername(name string) {
+templ OOBSwap(enabled bool) {
+	if enabled {
+		hx-swap-oob="outerHTML"
+	}
+}
+
+templ DisplayUsername(name string, oob bool) {
 	<h1
 		id="display-username"
 		class="text-3xl font-semibold text-grey-900 dark:text-grey-100"
-		hx-swap-oob="true"
+		if oob {
+			hx-swap-oob="true"
+		}
 	>
 		{ name }
 	</h1>

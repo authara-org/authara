@@ -6,8 +6,8 @@ declare global {
   }
 }
 
-window.htmx.config.allowNestedOobSwaps = false; // Disable nested OOB swaps
-window.htmx.config.defaultSwapStyle = "outerHTML"; // Disable nested OOB swaps
+window.htmx.config.allowNestedOobSwaps = false;
+window.htmx.config.defaultSwapStyle = "outerHTML";
 
 document.body.addEventListener("htmx:beforeSwap", function (evt: any) {
   // Allow 422 and 400 responses to swap

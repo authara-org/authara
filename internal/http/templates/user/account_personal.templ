@@ -1,6 +1,12 @@
 package user
 
-import "github.com/authara-org/authara/internal/http/templates/components/icons"
+import (
+	"encoding/json"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+)
 
 templ AccountPersonalInfo(username, email string) {
 	<div>
@@ -28,36 +34,182 @@ templ AccountPersonalInfo(username, email string) {
 			</h2>
 		</div>
 		<div class="space-y-6">
-			@ChangeUsernameForm(username)
-			<div>
-				<label for="email" class="block text-sm text-grey-800 dark:text-grey-200">
-					<div class="pb-1.5 font-medium">Email</div>
-				</label>
-				<div class="relative">
-					<div class="absolute inset-y-0 left-0 pl-4 flex items-center text-grey-600 dark:text-grey-400">
-						<span class="h-5 aspect-square stroke-2">
-							@icons.Email()
-						</span>
-					</div>
-					<input
-						id="email"
-						name="email"
-						type="email"
-						value={ email }
-						disabled
-						class="border-2 border-grey-100 dark:border-grey-800
-				w-full rounded-xl px-4 py-3 pl-12 text-sm
-				bg-grey-50 dark:bg-grey-800
-				text-grey-600 dark:text-grey-300
-				placeholder:text-grey-400 dark:placeholder:text-grey-500
-				opacity-90 dark:opacity-100
-				cursor-not-allowed"
-					/>
-				</div>
-				<p class="mt-2 text-xs text-grey-600 dark:text-grey-400">
-					Contact support to change your primary email address.
-				</p>
-			</div>
+			@ChangeUsernameSection(username)
+			@ChangeEmailSection(email)
 		</div>
 	</div>
+}
+
+templ ChangeUsernameSection(username string) {
+	<div id="change-username-section" x-data="{ editing: false }">
+		<label class="block text-sm text-grey-800 dark:text-grey-200">
+			<div class="pb-1.5 font-medium">Username</div>
+		</label>
+		<div class="relative mb-1 opacity-90">
+			<div class="absolute inset-y-0 left-0 pl-4 flex items-center text-grey-600 dark:text-grey-400">
+				<span class="text-sm h-5 aspect-square stroke-2 z-10">
+					@icons.At()
+				</span>
+			</div>
+			<input
+				type="text"
+				value={ username }
+				disabled
+				class="border-2 border-grey-100 dark:border-grey-800
+				w-full rounded-xl px-4 py-3 pl-12 text-sm
+				bg-grey-50 dark:bg-grey-800
+				text-grey-600 dark:text-grey-300"
+			/>
+		</div>
+		<div x-show="!editing">
+			<button
+				type="button"
+				@click="editing = true"
+				class="text-sm text-blue-800 dark:text-blue-400 hover:underline cursor-pointer"
+			>
+				Change username
+			</button>
+		</div>
+		<div x-cloak x-show="editing" class="mt-3">
+			@ChangeUsernameForm(username)
+		</div>
+	</div>
+}
+
+func usernameFormState(username string) string {
+	u, _ := json.Marshal(username)
+
+	return `(() => {
+		  const u = ` + string(u) + `;
+		  return {
+		    username: u,
+		    initialUsername: u,
+		    get unchanged() { return this.username === this.initialUsername },
+		    cancel() { this.username = this.initialUsername },
+		  };
+		})()`
+}
+
+templ ChangeUsernameForm(username string) {
+	<form
+		autocomplete="on"
+		hx-post="/auth/user/username"
+		hx-target="#change-username-section"
+		hx-swap="outerHTML"
+	>
+		@csrf.CSRFInput()
+		<input
+			type="text"
+			name="username"
+			value={ username }
+			required
+			placeholder="Enter new username"
+			class="border-2 border-grey-100 dark:border-grey-800
+			w-full rounded-xl px-4 py-3 text-sm mb-3
+			bg-white dark:bg-grey-900
+			text-grey-900 dark:text-grey-100
+			placeholder:text-grey-400 dark:placeholder:text-grey-500"
+		/>
+		<div class="flex gap-2">
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Label: "Confirm change",
+				})
+			</div>
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Label:   "Cancel",
+					Type:    button.RegularButton,
+					OnClick: "editing = false",
+					Color:   button.Light,
+					Variant: button.Outline,
+				})
+			</div>
+		</div>
+		<p class="mt-2 text-xs text-grey-600 dark:text-grey-400">
+			Allowed: letters, digits, <span class="font-mono">-</span> and <span class="font-mono">_</span>
+		</p>
+	</form>
+}
+
+templ ChangeEmailSection(email string) {
+	<div x-data="{ editing: false }">
+		<label class="block text-sm text-grey-800 dark:text-grey-200">
+			<div class="pb-1.5 font-medium">Email</div>
+		</label>
+		<div class="relative mb-1 opacity-90">
+			<div class="absolute inset-y-0 left-0 pl-4 flex items-center text-grey-600 dark:text-grey-400">
+				<span class="h-5 aspect-square stroke-2">
+					@icons.Email()
+				</span>
+			</div>
+			<input
+				type="email"
+				value={ email }
+				disabled
+				class="border-2 border-grey-100 dark:border-grey-800
+				w-full rounded-xl px-4 py-3 pl-12 text-sm
+				bg-grey-50 dark:bg-grey-800
+				text-grey-600 dark:text-grey-300"
+			/>
+		</div>
+		if httpctx.ChallengeEnabledOrDefault(ctx,false) {
+			<div x-show="!editing">
+				<button
+					type="button"
+					@click="editing = true"
+					class="text-sm text-blue-800 dark:text-blue-400 hover:underline cursor-pointer"
+				>
+					Change email
+				</button>
+			</div>
+			<div x-cloak x-show="editing" class="mt-3">
+				@ChangeEmailForm()
+			</div>
+		} else {
+			<p class="text-sm text-grey-600 dark:text-grey-400 mt-2">
+				Please contact the site owner to change your email address.
+			</p>
+		}
+	</div>
+}
+
+templ ChangeEmailForm() {
+	<form
+		hx-post="/auth/email-change?return_to=/auth/account"
+		hx-target="#body"
+		hx-swap="innerHTML"
+	>
+		@csrf.CSRFInput()
+		<input
+			type="email"
+			name="new_email"
+			required
+			placeholder="Enter new email address"
+			class="border-2 border-grey-100 dark:border-grey-800
+			w-full rounded-xl px-4 py-3 text-sm mb-3
+			bg-white dark:bg-grey-900
+			text-grey-900 dark:text-grey-100
+			placeholder:text-grey-400 dark:placeholder:text-grey-500"
+		/>
+		<div class="flex gap-2">
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Label: "Confirm change",
+				})
+			</div>
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Label:   "Cancel",
+					Type:    button.RegularButton,
+					OnClick: "editing = false",
+					Color:   button.Light,
+					Variant: button.Outline,
+				})
+			</div>
+		</div>
+		<p class="mt-2 text-xs text-grey-600 dark:text-grey-400">
+			You will receive a verification code at the new email address.
+		</p>
+	</form>
 }
