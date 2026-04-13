@@ -80,22 +80,27 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireChallengeEnabled)
 
-				r.Get("/password-reset", uih.PasswordResetPage)
-				r.Get("/verify-challenge/{action}", uih.VerifyChallengePage)
-
+				// Public challenge pages/actions
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireCSRF)
-
-					r.Post("/verify-challenge/{action}", uih.VerifyChallengePost)
-					r.Post("/resend-challenge", uih.ResendChallengePost)
-
-					r.Post("/password-reset", uih.PasswordResetRequestPost)
+					r.Use(mw.OptionalAppAccessIdentity)
+					r.Get("/password-reset", uih.PasswordResetPage)
+					r.Get("/verify-challenge/{action}", uih.VerifyChallengePage)
 
 					r.Group(func(r chi.Router) {
-						r.Use(mw.RequireAppAccessAuthWithRefresh)
+						r.Use(mw.RequireCSRF)
 
-						r.Post("/email-change", uih.EmailChangeRequestPost)
+						r.Post("/password-reset", uih.PasswordResetRequestPost)
+						r.Post("/verify-challenge/{action}", uih.VerifyChallengePost)
+						r.Post("/resend-challenge", uih.ResendChallengePost)
 					})
+				})
+
+				// Authenticated challenge-starting actions
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireAppAccessAuthWithRefresh)
+					r.Use(mw.RequireCSRF)
+
+					r.Post("/email-change", uih.EmailChangeRequestPost)
 				})
 			})
 
@@ -114,6 +119,9 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 					r.Post("/user/username", uih.ChangeUsernamePost)
 					r.Post("/user/delete", uih.DeleteUser)
+
+					r.Post("/sessions/{sessionID}/revoke", uih.RevokeSessionPost)
+					r.Post("/sessions/revoke-other", uih.RevokeOtherSessionsPost)
 				})
 			})
 

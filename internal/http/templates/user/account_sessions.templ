@@ -1,0 +1,152 @@
+package user
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/google/uuid"
+)
+
+templ SessionSection(sessions []viewmodel.Session, currentSessionID uuid.UUID) {
+	<div id="sessions-section">
+		<div class="flex items-center gap-2 mb-6">
+			<div
+				class="h-8 w-8 p-1.5 rounded-xl
+				bg-blue-50 dark:bg-blue-900/30
+				text-blue-800 dark:text-blue-300
+				flex items-center justify-center stroke-2"
+			>
+				@icons.Desktop()
+			</div>
+			<h2 class="text-lg font-semibold text-grey-900 dark:text-grey-100">
+				Sessions
+			</h2>
+		</div>
+		if len(sessions) == 0 {
+			<div
+				class="border-2 border-grey-100 dark:border-grey-800
+				rounded-xl px-4 py-3
+				bg-grey-50 dark:bg-grey-800"
+			>
+				<p class="text-sm text-grey-700 dark:text-grey-300">
+					No active sessions found.
+				</p>
+			</div>
+		} else {
+			<div class="space-y-4">
+				for _, session := range sessions {
+					@SessionRow(session)
+				}
+			</div>
+		}
+		if hasOtherSessions(sessions, currentSessionID) {
+			<div class="mt-4">
+				<form
+					hx-post="/auth/sessions/revoke-other"
+					hx-target="#sessions-section"
+					hx-swap="outerHTML"
+				>
+					@csrf.CSRFInput()
+					<div class="w-fit">
+						@button.Button(button.ButtonConfig{
+							Label: "Log out all other sessions",
+							Type:  button.Submit,
+							Color: button.Main,
+						})
+					</div>
+				</form>
+			</div>
+		}
+		<p class="mt-2 text-xs text-grey-600 dark:text-grey-400">
+			Manage where you’re signed in. You can revoke sessions you don’t recognize.
+		</p>
+	</div>
+}
+
+templ SessionRow(session viewmodel.Session) {
+	<div class="flex items-center justify-between border-2 border-grey-100 dark:border-grey-800 rounded-xl px-4 py-3 bg-white dark:bg-grey-900">
+		<div class="flex items-start gap-3 min-w-0">
+			<div class="h-10 w-10 shrink-0 rounded-xl bg-grey-50 dark:bg-grey-800 text-grey-700 dark:text-grey-300 p-2 stroke-2">
+				@SessionDeviceIcon(session.DeviceKind)
+			</div>
+			<div class="flex flex-col min-w-0">
+				<span class="text-sm font-medium text-grey-900 dark:text-grey-100">
+					{ session.Title }
+				</span>
+				<span class="text-xs text-grey-600 dark:text-grey-400 truncate">
+					{ session.Subtitle }
+				</span>
+			</div>
+		</div>
+		if session.IsCurrent {
+			<span class="text-xs px-2 py-1 rounded-lg bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
+				Active
+			</span>
+		} else {
+			<form
+				hx-post={ "/auth/sessions/" + session.ID.String() + "/revoke" }
+				hx-target={ "#sessions-section" }
+				hx-swap="outerHTML"
+			>
+				@csrf.CSRFInput()
+				<div class="w-fit">
+					@button.Button(button.ButtonConfig{
+						Label: "Revoke",
+						Type:  button.Submit,
+						Color: button.Main,
+					})
+				</div>
+			</form>
+		}
+	</div>
+}
+
+templ SessionDeviceIcon(kind viewmodel.DeviceKind) {
+	switch kind {
+		case viewmodel.DevicePhone:
+			@icons.Phone()
+		case viewmodel.DeviceTablet:
+			@icons.Tablet()
+		case viewmodel.DeviceDesktop:
+			@icons.Desktop()
+		default:
+			@icons.Desktop()
+	}
+}
+
+func hasOtherSessions(sessions []viewmodel.Session, currentSessionID uuid.UUID) bool {
+	for _, session := range sessions {
+		if session.ID != currentSessionID {
+			return true
+		}
+	}
+	return false
+}
+
+func sessionTitle(session domain.Session, currentSessionID uuid.UUID) string {
+	if session.ID == currentSessionID {
+		return "Current session"
+	}
+	if session.UserAgent != "" {
+		label := viewmodel.Label(session.UserAgent)
+		return label
+	}
+	return "Other session"
+}
+
+func sessionSubtitle(session domain.Session) string {
+	if session.UserAgent == "" {
+		return "Created " + formatSessionTime(session.CreatedAt)
+	}
+	label := viewmodel.Label(session.UserAgent)
+	return fmt.Sprintf("%s · Created %s", label, formatSessionTime(session.CreatedAt))
+}
+
+func formatSessionTime(t time.Time) string {
+	return t.UTC().Format("2006-01-02 15:04 UTC")
+}

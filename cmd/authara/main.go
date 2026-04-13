@@ -218,6 +218,7 @@ func main() {
 	returnTo := httpmiddleware.ReturnTo
 	htmx := httpmiddleware.HTMXMiddleware
 	requireChallengeEnabled := httpmiddleware.RequireChallengeEnabled(cfg.Challenge.Enabled)
+	optionalAppAccessIdentity := httpmiddleware.OptionalAccessIdentity(sessionService, token.AudienceApp, time.Now)
 
 	mw := httpserver.Middlewares{
 		RedirectIfAuthenticated:           redirectIfAuthenticated,
@@ -231,6 +232,7 @@ func main() {
 		ReturnTo:                          returnTo,
 		HTMX:                              htmx,
 		RequireChallengeEnabled:           requireChallengeEnabled,
+		OptionalAppAccessIdentity:         optionalAppAccessIdentity,
 	}
 
 	limiter := ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{

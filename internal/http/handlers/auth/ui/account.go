@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -24,13 +25,7 @@ import (
 func (h *UIHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := httpctx.UserID(ctx)
-	if !ok {
-		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/account"), http.StatusSeeOther)
-		return
-	}
-
-	user, err := h.Auth.GetUser(ctx, userID)
+	accountCfg, err := h.accountConfig(ctx)
 	if err != nil {
 		session.ClearSessionCookies(w)
 		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/account"), http.StatusSeeOther)
@@ -41,7 +36,7 @@ func (h *UIHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		http.StatusOK,
-		userview.Account(user.Username, user.Email, true),
+		userview.Account(accountCfg),
 	)
 }
 
@@ -65,40 +60,31 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil {
-		toastMessage := toast.ToastMessage(
-			toast.Error,
-			"Failed to load user",
-		)
-
 		htmx.ReSwap(w, "none")
 		_ = h.Render(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
-			toastMessage,
+			toast.ToastMessage(toast.Error, "Failed to load user"),
 		)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		changeUsernameForm := userview.ChangeUsernameForm(user.Username)
-		toastMessage := toast.ToastMessage(
-			toast.Error,
-			"Failed to read new username",
-		)
-
 		htmx.ReSwap(w, "none")
 		_ = h.Render(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
-			templ.Join(changeUsernameForm, toastMessage),
+			templ.Join(
+				userview.ChangeUsernameSection(user.Username),
+				toast.ToastMessage(toast.Error, "Failed to read new username"),
+			),
 		)
 		return
 	}
 
-	username := r.FormValue("username")
-	username = strings.TrimSpace(username)
+	username := strings.TrimSpace(r.FormValue("username"))
 
 	err = h.Auth.ChangeUsername(ctx, userID, username)
 	if err != nil {
@@ -118,7 +104,8 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 
 		htmx.ReSwap(w, "none")
 		_ = h.Render(
-			w, r,
+			w,
+			r,
 			status,
 			toast.ToastMessage(toast.Error, msg),
 		)
@@ -126,7 +113,8 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = h.Render(
-		w, r,
+		w,
+		r,
 		http.StatusOK,
 		templ.Join(
 			userview.ChangeUsernameSection(username),
@@ -254,7 +242,7 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 		return
 	}
 
-	user, err := h.Auth.GetUser(ctx, result.Action.UserID)
+	accountCfg, err := h.accountConfig(ctx)
 	if err != nil {
 		session.ClearSessionCookies(w)
 		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/account"), http.StatusSeeOther)
@@ -262,7 +250,7 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 	}
 
 	c := templ.Join(
-		userview.Account(user.Username, user.Email, true),
+		userview.Account(accountCfg),
 		toast.ToastMessage(toast.Success, "Your email has been changed."),
 	)
 
@@ -287,20 +275,42 @@ func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	err := h.Auth.DeleteUser(ctx, userID)
 	if err != nil {
-		toastMessage := toast.ToastMessage(
-			toast.Error,
-			"Error deleting Account",
-		)
-
 		_ = h.Render(
 			w,
 			r,
 			http.StatusTooManyRequests,
-			toastMessage,
+			toast.ToastMessage(toast.Error, "Error deleting Account"),
 		)
 		return
 	}
 
 	session.ClearSessionCookies(w)
 	redirect.Redirect(w, r, "/auth/successfull-deletion", http.StatusSeeOther)
+}
+
+func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, error) {
+	userID, ok := httpctx.UserID(ctx)
+	if !ok {
+		return userview.AccountConfig{}, errors.New("missing user id")
+	}
+
+	user, err := h.Auth.GetUser(ctx, userID)
+	if err != nil {
+		return userview.AccountConfig{}, err
+	}
+
+	currentSessionID, _ := httpctx.SessionID(ctx)
+
+	sessions, err := h.Session.ListUserSessions(ctx, userID, currentSessionID, time.Now().UTC())
+	if err != nil {
+		return userview.AccountConfig{}, err
+	}
+
+	return userview.AccountConfig{
+		Username:         user.Username,
+		Email:            user.Email,
+		GoogleConnected:  true,
+		Sessions:         toSessionViewModels(sessions, currentSessionID),
+		CurrentSessionID: currentSessionID,
+	}, nil
 }

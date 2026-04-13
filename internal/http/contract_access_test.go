@@ -135,12 +135,13 @@ func newAccessContractTestRouter() chi.Router {
 	}
 
 	mw := Middlewares{
-		RedirectIfAuthenticated: pass,
-		ReturnTo:                pass,
-		RequireChallengeEnabled: pass,
-		HTMX:                    pass,
-		RequireCSRF:             pass,
-		RequireAPICSRF:          pass,
+		RedirectIfAuthenticated:   pass,
+		ReturnTo:                  pass,
+		RequireChallengeEnabled:   pass,
+		HTMX:                      pass,
+		RequireCSRF:               pass,
+		RequireAPICSRF:            pass,
+		OptionalAppAccessIdentity: pass,
 
 		RequireAppAccessAuthWithRefresh:   marker(markerUserUIAuth, "user-ui-auth"),
 		RequireAppAccessAuthAPI:           marker(markerUserAPIAuth, "user-api-auth"),

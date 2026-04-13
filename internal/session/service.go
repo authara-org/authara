@@ -383,3 +383,80 @@ func canAccessAudience(rs roles.Roles, audience token.Audience) bool {
 	}
 	return rs.HasAny(allowed...)
 }
+
+func (s *Service) ListUserSessions(
+	ctx context.Context,
+	userID uuid.UUID,
+	currentSessionID uuid.UUID,
+	now time.Time,
+) ([]domain.Session, error) {
+	sessions, err := s.store.ListActiveSessionsByUserID(ctx, userID, now)
+	if err != nil {
+		return nil, err
+	}
+
+	if currentSessionID == uuid.Nil {
+		return sessions, nil
+	}
+
+	// Put current session first
+	for i := range sessions {
+		if sessions[i].ID == currentSessionID {
+			if i == 0 {
+				return sessions, nil
+			}
+			current := sessions[i]
+			out := make([]domain.Session, 0, len(sessions))
+			out = append(out, current)
+			out = append(out, sessions[:i]...)
+			out = append(out, sessions[i+1:]...)
+			return out, nil
+		}
+	}
+
+	return sessions, nil
+}
+
+func (s *Service) RevokeUserSession(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	now time.Time,
+) error {
+	session, err := s.store.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+
+	// Ownership check is the important security boundary
+	if session.UserID != userID {
+		return ErrForbidden
+	}
+
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.RevokeSession(txCtx, sessionID, now); err != nil {
+			return err
+		}
+		if err := s.store.DeleteRefreshTokensBySession(txCtx, sessionID); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func (s *Service) RevokeOtherUserSessions(
+	ctx context.Context,
+	userID uuid.UUID,
+	currentSessionID uuid.UUID,
+	now time.Time,
+) error {
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.RevokeOtherSessionsByUserID(txCtx, userID, currentSessionID, now); err != nil {
+			return err
+		}
+		if err := s.store.DeleteRefreshTokensForOtherSessions(txCtx, userID, currentSessionID); err != nil {
+			return err
+		}
+		return nil
+	})
+}
