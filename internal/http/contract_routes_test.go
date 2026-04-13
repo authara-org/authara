@@ -122,6 +122,7 @@ func newContractTestRouter() chi.Router {
 		ReturnTo:                          pass,
 		HTMX:                              pass,
 		RequireChallengeEnabled:           pass,
+		OptionalAppAccessIdentity:         pass,
 	}
 
 	r := chi.NewRouter()
