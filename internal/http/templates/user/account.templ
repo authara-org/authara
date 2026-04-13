@@ -13,6 +13,7 @@ type AccountConfig struct {
 	GoogleConnected  bool
 	Sessions         []viewmodel.Session
 	CurrentSessionID uuid.UUID
+	AuthProviders    []viewmodel.AuthProvider
 }
 
 templ Account(cfg AccountConfig) {
@@ -31,12 +32,17 @@ templ Account(cfg AccountConfig) {
 								</div>
 								@AccountProfileHeader(cfg.Username, cfg.Email)
 							</div>
-							<div class="p-8 sm:p-10 border-b border-grey-200 dark:border-grey-800">
+							@CollapsibleSection(true) {
 								@AccountPersonalInfo(cfg.Username, cfg.Email)
-							</div>
-							<div class="p-8 sm:p-10">
+							}
+							@CollapsibleSection(true) {
 								@SessionSection(cfg.Sessions, cfg.CurrentSessionID)
-							</div>
+								,
+							}
+							@CollapsibleSection(false) {
+								@LinkedProvidersSection(cfg.AuthProviders)
+								,
+							}
 							//@AccountLinkedAccounts(cfg.GoogleConnected)
 						</div>
 					</div>
@@ -47,4 +53,30 @@ templ Account(cfg AccountConfig) {
 			@DeleteAccountModal()
 		</div>
 	}
+}
+
+templ CollapsibleSection(bordered bool) {
+	<div
+		x-data="{ open: true }"
+		:class="open ? 'h-auto' : 'h-22'"
+		class={ sectionClass(bordered) + " overflow-hidden h-22" }
+	>
+		<button
+			type="button"
+			@click="open = !open"
+			class="absolute top-8 right-8 text-xs text-grey-600 dark:text-grey-400 hover:text-grey-900 dark:hover:text-grey-100 cursor-pointer"
+		>
+			<span x-cloak x-show="!open">Expand</span>
+			<span x-cloak x-show="open">Collapse</span>
+		</button>
+		{ children... }
+	</div>
+}
+
+func sectionClass(bordered bool) string {
+	base := "relative p-8 sm:p-8 transition-all"
+	if bordered {
+		return base + " border-b border-grey-200 dark:border-grey-800"
+	}
+	return base
 }
