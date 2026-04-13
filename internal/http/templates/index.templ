@@ -58,6 +58,15 @@ func criticalCSS(ctx context.Context) string {
 				  font-display: swap;
 				}
 				body{ font-family: "FunnelSans", Arial, sans-serif; }
+
+				input, textarea, select, button {
+				  font: inherit;
+				}
+
+				html {
+				  -webkit-text-size-adjust: 100%;
+				  text-size-adjust: 100%;
+				}
 			</style>
 		`, fontURL)
 }
