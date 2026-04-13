@@ -210,3 +210,65 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error 
 		Delete(&model.Session{}).
 		Error
 }
+
+func (s *Store) ListActiveSessionsByUserID(ctx context.Context, userID uuid.UUID, now time.Time) ([]domain.Session, error) {
+	var rows []model.Session
+
+	err := s.dbFromContext(ctx).
+		Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, now).
+		Order("created_at DESC").
+		Find(&rows).
+		Error
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.Session, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toDomainSession(row))
+	}
+
+	return out, nil
+}
+
+func (s *Store) GetActiveSessionByID(ctx context.Context, sessionID uuid.UUID, now time.Time) (domain.Session, error) {
+	var m model.Session
+
+	err := s.dbFromContext(ctx).
+		Where("id = ? AND revoked_at IS NULL AND expires_at > ?", sessionID, now).
+		First(&m).
+		Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.Session{}, ErrSessionNotFound
+		}
+		return domain.Session{}, err
+	}
+
+	return toDomainSession(m), nil
+}
+
+func (s *Store) RevokeOtherSessionsByUserID(ctx context.Context, userID uuid.UUID, keepSessionID uuid.UUID, revokedAt time.Time) error {
+	res := s.dbFromContext(ctx).
+		Model(&model.Session{}).
+		Where("user_id = ? AND id <> ? AND revoked_at IS NULL", userID, keepSessionID).
+		Update("revoked_at", revokedAt)
+
+	if res.Error != nil {
+		return res.Error
+	}
+
+	return nil
+}
+
+func (s *Store) DeleteRefreshTokensForOtherSessions(ctx context.Context, userID uuid.UUID, keepSessionID uuid.UUID) error {
+	sub := s.dbFromContext(ctx).
+		Model(&model.Session{}).
+		Select("id").
+		Where("user_id = ? AND id <> ?", userID, keepSessionID)
+
+	return s.dbFromContext(ctx).
+		Where("session_id IN (?)", sub).
+		Delete(&model.RefreshToken{}).
+		Error
+}
