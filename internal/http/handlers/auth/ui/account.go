@@ -10,6 +10,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/domain"
 	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/kit/htmx"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
@@ -175,15 +176,9 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	challengeID, err := h.Challenge.CreateEmailChangeChallenge(
-		ctx,
-		challenge.CreateEmailChangeChallengeInput{
-			UserID:   user.ID,
-			OldEmail: user.Email,
-			NewEmail: newEmail,
-		},
-		time.Now().UTC(),
-	)
+	var challengeID uuid.UUID
+
+	exists, err := h.Auth.UserExistsByEmail(ctx, newEmail)
 	if err != nil {
 		htmx.ReSwap(w, "none")
 		_ = h.Render(
@@ -193,6 +188,46 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 			toast.ToastMessage(toast.Error, "Could not start email change. Please try again."),
 		)
 		return
+	}
+
+	if exists {
+		// Opaque challenge to avoid revealing whether the email already exists.
+		challengeID, err = h.Challenge.CreateOpaqueChallenge(
+			ctx,
+			time.Now().UTC(),
+			domain.ChallengePurposeEmailChange,
+			newEmail,
+		)
+		if err != nil {
+			htmx.ReSwap(w, "none")
+			_ = h.Render(
+				w,
+				r,
+				http.StatusUnprocessableEntity,
+				toast.ToastMessage(toast.Error, "Could not start email change. Please try again."),
+			)
+			return
+		}
+	} else {
+		challengeID, err = h.Challenge.CreateEmailChangeChallenge(
+			ctx,
+			challenge.CreateEmailChangeChallengeInput{
+				UserID:   user.ID,
+				OldEmail: user.Email,
+				NewEmail: newEmail,
+			},
+			time.Now().UTC(),
+		)
+		if err != nil {
+			htmx.ReSwap(w, "none")
+			_ = h.Render(
+				w,
+				r,
+				http.StatusUnprocessableEntity,
+				toast.ToastMessage(toast.Error, "Could not start email change. Please try again."),
+			)
+			return
+		}
 	}
 
 	_ = h.renderVerifyChallengeRedirect(
