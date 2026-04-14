@@ -55,19 +55,9 @@ migrate-up:
 db-clean:
 	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
 	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
-	-c "\
-	DO $$ \
-	DECLARE r RECORD; \
-	BEGIN \
-	  FOR r IN ( \
-	    SELECT tablename \
-	    FROM pg_tables \
-	    WHERE schemaname = '$(POSTGRESQL_SCHEMA)' \
-	  ) LOOP \
-	    EXECUTE 'TRUNCATE TABLE $(POSTGRESQL_SCHEMA).' || quote_ident(r.tablename) || ' RESTART IDENTITY CASCADE'; \
-	  END LOOP; \
-	END $$; \
-	"
+	-Atc "SELECT 'TRUNCATE TABLE $(POSTGRESQL_SCHEMA).' || string_agg(quote_ident(tablename), ', ') || ' RESTART IDENTITY CASCADE;' FROM pg_tables WHERE schemaname = '$(POSTGRESQL_SCHEMA)'" \
+	| $(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
+	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE)
 
 db-truncate-table:
 ifndef TABLE
