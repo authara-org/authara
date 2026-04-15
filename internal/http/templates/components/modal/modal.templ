@@ -1,0 +1,123 @@
+package modal
+
+type Theme string
+
+const (
+	ThemeNeutral Theme = "neutral"
+	ThemeDanger  Theme = "danger"
+)
+
+type ConfirmModalConfig struct {
+	ID       string
+	Headline string
+	Body     string
+	Icon     templ.Component
+	Actions  templ.Component
+	Theme    Theme
+	MaxWidth string
+}
+
+type TwoActionModalConfig struct {
+	ID        string
+	Headline  string
+	Body      string
+	Icon      templ.Component
+	Primary   templ.Component
+	Secondary templ.Component
+	Theme     Theme
+	MaxWidth  string
+}
+
+templ ConfirmModal(cfg ConfirmModalConfig) {
+	if cfg.Theme == "" {
+		cfg.Theme = ThemeNeutral
+	}
+	if cfg.MaxWidth == "" {
+		cfg.MaxWidth = "max-w-md"
+	}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop-blur"
+		data-purpose="confirmation-modal"
+		id={ cfg.ID }
+		x-show={ "activeModal === '" + cfg.ID + "'" }
+		x-cloak
+		x-transition.opacity
+		@keydown.escape.window="activeModal = ''"
+		aria-hidden="true"
+	>
+		<div
+			class="absolute inset-0 bg-black/40 dark:bg-black/60"
+			@click="activeModal = ''"
+		></div>
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby={ cfg.ID + "-headline" }
+			class={ "relative bg-white dark:bg-grey-900 border border-grey-200 dark:border-grey-800 rounded-2xl shadow-2xl w-full overflow-hidden transform transition-all " + cfg.MaxWidth }
+			x-show={ "activeModal === '" + cfg.ID + "'" }
+			x-transition.scale.origin.center
+			@click.stop
+		>
+			<div class="px-6 pt-8 pb-4 text-center">
+				<div class={ modalIconWrapperClass(cfg.Theme) }>
+					<div class={ modalIconClass(cfg.Theme) }>
+						@cfg.Icon
+					</div>
+				</div>
+				<h3
+					class="text-xl font-bold text-grey-900 dark:text-grey-100"
+					id={ cfg.ID + "-headline" }
+				>
+					{ cfg.Headline }
+				</h3>
+			</div>
+			<div class="px-8 pb-8">
+				<p class="text-sm text-grey-600 dark:text-grey-300 text-center leading-relaxed">
+					{ cfg.Body }
+				</p>
+			</div>
+			<div class="px-6 py-4 bg-grey-50 dark:bg-grey-950 flex flex-col sm:flex-row-reverse gap-3">
+				@cfg.Actions
+			</div>
+		</div>
+	</div>
+}
+
+templ TwoActionModal(cfg TwoActionModalConfig) {
+	@ConfirmModal(ConfirmModalConfig{
+		ID:       cfg.ID,
+		Headline: cfg.Headline,
+		Body:     cfg.Body,
+		Icon:     cfg.Icon,
+		Theme:    cfg.Theme,
+		MaxWidth: cfg.MaxWidth,
+		Actions:  ModalTwoActions(cfg.Primary, cfg.Secondary),
+	})
+}
+
+templ ModalTwoActions(primary templ.Component, secondary templ.Component) {
+	<div class="w-full sm:flex-1">
+		@primary
+	</div>
+	<div class="w-full sm:flex-1">
+		@secondary
+	</div>
+}
+
+func modalIconWrapperClass(theme Theme) string {
+	switch theme {
+	case ThemeDanger:
+		return "mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-950/40 mb-4"
+	default:
+		return "mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-50 dark:bg-blue-900/30 mb-4"
+	}
+}
+
+func modalIconClass(theme Theme) string {
+	switch theme {
+	case ThemeDanger:
+		return "h-6 w-6 stroke-2 text-red-600 dark:text-red-400"
+	default:
+		return "h-6 w-6 stroke-2 text-blue-800 dark:text-blue-300"
+	}
+}
