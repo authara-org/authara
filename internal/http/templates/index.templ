@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/templates/components/redirect"
+	"github.com/authara-org/authara/internal/http/templates/components/theme"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	"github.com/authara-org/authara/internal/http/ui"
 )
@@ -18,6 +19,22 @@ templ Layout() {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<meta name="description" content="This helps you to quickly get going."/>
 			<meta property="og:site_name" content="Go Starter"/>
+			<script>
+			(function () {
+			 const key = "app_theme";
+			 const stored = localStorage.getItem(key);
+			 const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+			 const theme =
+			 stored === "light" || stored === "dark" || stored === "system"
+			 ? stored
+			 : "system";
+
+			 const isDark = theme === "dark" || (theme === "system" && systemDark);
+
+			 document.documentElement.classList.toggle("dark", isDark);
+			 })();
+			</script>
 			<link rel="preload" href={ ui.Static(ctx, "FunnelSans-VariableFont_wght.ttf") } as="font" type="font/ttf" crossorigin="anonymous"/>
 			<link rel="stylesheet" href={ ui.Static(ctx, "app.css") }/>
 			@CriticalStyles()
@@ -33,10 +50,16 @@ templ Layout() {
 			<script src={ ui.Static(ctx, "alpine.min.js") } defer></script>
 			<script src={ ui.Static(ctx, "app.js") } defer></script>
 		</head>
-		<body class="m-0 bg-background-light dark:bg-background-dark">
+		<body
+			x-data="{ activeModal: '' }"
+			class="m-0 bg-background-light dark:bg-background-dark"
+		>
 			<main id="body">
 				{ children... }
 			</main>
+			<div class="hidden sm:block absolute top-4 right-4">
+				@theme.ThemeToggle()
+			</div>
 			@toast.ToastWrapper()
 			@redirect.RedirectOverlay()
 		</body>
@@ -59,7 +82,7 @@ func criticalCSS(ctx context.Context) string {
 				}
 				body{ font-family: "FunnelSans", Arial, sans-serif; }
 
-				input, textarea, select, button {
+				input {
 				  font: inherit;
 				}
 
