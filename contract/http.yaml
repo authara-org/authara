@@ -192,6 +192,7 @@ query_parameters:
     applies_to:
       - /auth/login
       - /auth/signup
+      - /auth/account
     semantics:
       - must be a relative path starting with /
       - values starting with // are rejected
