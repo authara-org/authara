@@ -18,6 +18,7 @@ var (
 	ErrorPendingPasswordResetNotFound = errors.New("pending password reset not found")
 	ErrorPendingEmailChangeNotFound   = errors.New("pending email change not found")
 	ErrorRoleNotFound                 = errors.New("role not found")
+	ErrorPendingProviderLinkNotFound  = errors.New("pending provider link not found")
 )
 
 const (

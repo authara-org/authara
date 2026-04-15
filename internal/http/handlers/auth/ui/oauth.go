@@ -22,22 +22,10 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	idToken := r.FormValue("credential")
-	gtoken := r.FormValue("g_csrf_token")
+	flow := r.FormValue("flow")
+	linkID := r.FormValue("link_id")
 
-	if idToken == "" || gtoken == "" {
-		h.renderError(w, r, ctx)
-		return
-
-	}
-
-	csrfCookie, err := r.Cookie("g_csrf_token")
-	if err != nil {
-		h.renderError(w, r, ctx)
-		return
-
-	}
-
-	if gtoken == "" || gtoken != csrfCookie.Value {
+	if idToken == "" {
 		h.renderError(w, r, ctx)
 		return
 
@@ -47,7 +35,25 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.renderError(w, r, ctx)
 		return
+	}
 
+	if flow == "link" {
+		if err := h.CompleteProviderLink(ctx, linkID, domain.ProviderGoogle, identity.OAuthID); err != nil {
+			_ = flash.Set(w, flash.Message{
+				Kind:    "error",
+				Message: "Google login failed. Please try again.",
+			})
+			redirect.Redirect(w, r, redirect.WithReturnTo("/auth/account", httpctx.ReturnToOrDefault(ctx, "/")), http.StatusSeeOther)
+			return
+		}
+
+		_ = flash.Set(w, flash.Message{
+			Kind:    "success",
+			Message: "Google account linked.",
+		})
+
+		redirect.Redirect(w, r, "/auth/account", http.StatusSeeOther)
+		return
 	}
 
 	input := auth.LoginInput{
