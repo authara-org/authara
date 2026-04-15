@@ -1,4 +1,17 @@
 package user
 
-templ Comp() {
+templ SectionHeader(title string, icon templ.Component) {
+	<div class="flex items-center gap-2 mb-6">
+		<div
+			class="h-8 w-8 p-1.5 rounded-xl
+			bg-blue-50 dark:bg-blue-900/30
+			text-blue-800 dark:text-blue-300
+			flex items-center justify-center stroke-2"
+		>
+			@icon
+		</div>
+		<h2 class="text-base font-medium text-grey-900 dark:text-grey-100">
+			{ title }
+		</h2>
+	</div>
 }

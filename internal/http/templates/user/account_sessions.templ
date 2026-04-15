@@ -14,19 +14,7 @@ import (
 
 templ SessionSection(sessions []viewmodel.Session, currentSessionID uuid.UUID) {
 	<div id="sessions-section">
-		<div class="flex items-center gap-2 mb-6">
-			<div
-				class="h-8 w-8 p-1.5 rounded-xl
-				bg-blue-50 dark:bg-blue-900/30
-				text-blue-800 dark:text-blue-300
-				flex items-center justify-center stroke-2"
-			>
-				@icons.Desktop()
-			</div>
-			<h2 class="text-lg font-semibold text-grey-900 dark:text-grey-100">
-				Sessions
-			</h2>
-		</div>
+		@SectionHeader("Sessions", icons.Desktop())
 		if len(sessions) == 0 {
 			<div
 				class="border-2 border-grey-100 dark:border-grey-800
