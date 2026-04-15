@@ -105,6 +105,8 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			})
 
 			r.Route("/oauth", func(r chi.Router) {
+				r.Use(mw.OptionalAppAccessIdentity)
+
 				r.Post("/google/callback", uih.GoogleCallback)
 			})
 
@@ -114,6 +116,10 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Get("/account", uih.AccountGet)
 
+				// password pages
+				r.Get("/providers/password/add", uih.AddPasswordPage)
+				r.Get("/providers/password/change", uih.ChangePasswordPage)
+
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireCSRF)
 
@@ -122,6 +128,11 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 					r.Post("/sessions/{sessionID}/revoke", uih.RevokeSessionPost)
 					r.Post("/sessions/revoke-other", uih.RevokeOtherSessionsPost)
+
+					r.Post("/providers/{provider}/unlink", uih.UnlinkProviderPost)
+					r.Post("/providers/password/link", uih.PasswordLinkPost)
+					r.Post("/providers/password/change", uih.PasswordChangePost)
+					r.Post("/providers/{provider}/link/start", uih.ProviderLinkStartPost)
 				})
 			})
 
