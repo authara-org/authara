@@ -1,0 +1,41 @@
+package theme
+
+import "github.com/authara-org/authara/internal/http/templates/components/icons"
+
+templ ThemeToggle() {
+	<div
+		x-data="{
+			    theme: localStorage.getItem('app_theme') || 'system',
+			    toggle() {
+			      this.theme = this.theme === 'dark' ? 'light' : 'dark';
+			      setTheme(this.theme);
+			    }
+			  }"
+		class="flex items-center"
+	>
+		<button
+			@click="toggle()"
+			class="relative w-16 h-8 rounded-full transition
+			   bg-white dark:bg-grey-700
+			   outline outline-grey-100 dark:outline-none
+			   cursor-pointer"
+		>
+			<!-- knob -->
+			<div
+				class="absolute top-1 left-1 w-6 h-6 rounded-full bg-grey-100 dark:bg-white transition-transform"
+				:class="{
+					'translate-x-8': theme === 'dark'
+				      }"
+			></div>
+			<!-- icons -->
+			<div class="absolute inset-0 flex items-center justify-between py-1 px-1.5 text-xs">
+				<div class="h-5 w-5 fill-yellow-500 dark:fill-none text-yellow-500 flex items-center justify-center stroke-2">
+					@icons.Sun()
+				</div>
+				<div class="h-5 w-5 fill-none dark:fill-grey-400 text-grey-400 flex items-center justify-center stroke-2">
+					@icons.Moon()
+				</div>
+			</div>
+		</button>
+	</div>
+}
