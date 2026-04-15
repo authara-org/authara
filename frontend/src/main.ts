@@ -1,5 +1,5 @@
 import { initVerificationCodeForm } from "./verificationInput";
-import "./oauth"
+import "./oauth";
 import { initTheme, setTheme } from "./theme";
 
 declare global {
@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initTheme();
 });
 
-document.body.addEventListener("htmx:beforeSwap", function(evt: any) {
+document.body.addEventListener("htmx:beforeSwap", function (evt: any) {
   if (
     evt.detail.xhr.status === 422 ||
     evt.detail.xhr.status === 400 ||

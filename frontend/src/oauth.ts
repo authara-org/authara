@@ -40,7 +40,7 @@ window.autharaGoogleCallback = async (response: { credential?: string }) => {
         return;
       }
 
-      const data = await startRes.json() as { link_id?: string };
+      const data = (await startRes.json()) as { link_id?: string };
       if (!data.link_id) {
         window.location.href = "/auth/account";
         return;
