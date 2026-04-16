@@ -76,10 +76,6 @@ func TestRedirectContract_ReturnTo_AppliesToPaths(t *testing.T) {
 			if got := rr.Header().Get("Location"); got != "/private" {
 				t.Fatalf("expected Location=/private, got %q", got)
 			}
-
-			if got := rr.Header().Get("HX-Redirect"); got != "/private" {
-				t.Fatalf("expected HX-Redirect=/private, got %q", got)
-			}
 		})
 	}
 }
@@ -102,10 +98,6 @@ func TestRedirectContract_ReturnTo_InvalidValueFallsBackToDefault(t *testing.T) 
 			if got := rr.Header().Get("Location"); got != "/" {
 				t.Fatalf("expected Location=/, got %q", got)
 			}
-
-			if got := rr.Header().Get("HX-Redirect"); got != "/" {
-				t.Fatalf("expected HX-Redirect=/, got %q", got)
-			}
 		})
 	}
 }
@@ -127,10 +119,6 @@ func TestRedirectContract_ReturnTo_NoValueFallsBackToDefault(t *testing.T) {
 
 			if got := rr.Header().Get("Location"); got != "/" {
 				t.Fatalf("expected Location=/, got %q", got)
-			}
-
-			if got := rr.Header().Get("HX-Redirect"); got != "/" {
-				t.Fatalf("expected HX-Redirect=/, got %q", got)
 			}
 		})
 	}

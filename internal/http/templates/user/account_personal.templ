@@ -10,29 +10,7 @@ import (
 
 templ AccountPersonalInfo(username, email string) {
 	<div>
-		<div class="flex items-center gap-2 mb-6">
-			<div
-				class="h-8 w-8 p-1.5 rounded-xl
-				bg-blue-50 dark:bg-blue-900/30
-				text-blue-800 dark:text-blue-300
-				flex items-center justify-center stroke-2"
-			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					fill="none"
-					class="h-full w-full"
-					stroke="currentColor"
-					stroke-width="inherit"
-				>
-					<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-					<circle cx="12" cy="7" r="4"></circle>
-				</svg>
-			</div>
-			<h2 class="text-lg font-semibold text-grey-900 dark:text-grey-100">
-				Personal information
-			</h2>
-		</div>
+		@SectionHeader("Personal Information", icons.Account())
 		<div class="space-y-6">
 			@ChangeUsernameSection(username)
 			@ChangeEmailSection(email)

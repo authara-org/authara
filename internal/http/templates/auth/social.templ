@@ -18,24 +18,28 @@ templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider) {
 			for _, p := range oauthProviders {
 				switch p.Name {
 					case "google":
-						@GoogleSignin(action, p.ClientID)
+						@GoogleSignin(action, p.ClientID, "login")
 				}
 			}
 		</div>
 	}
 }
 
-templ GoogleSignin(action string, clientID string) {
+templ GoogleSignin(action string, clientID string, flow string) {
 	<script src="https://accounts.google.com/gsi/client" async></script>
 	<button
 		id="google-signin-btn"
+		type="button"
+		data-provider="google"
+		data-google-flow={ flow }
+		data-return-to={ httpctx.ReturnToOrDefault(ctx, "/") }
 		class="relative w-full flex items-center cursor-pointer justify-center gap-3 h-12 px-4 border-2 border-gray-100 dark:border-grey-800 rounded-xl
-			 bg-white dark:bg-grey-900 hover:bg-gray-50 dark:hover:bg-grey-800 transition text-gray-700 dark:text-white"
+			 bg-white dark:bg-grey-900 hover:bg-gray-50 dark:hover:bg-grey-800 transition text-gray-700 dark:text-white overflow-hidden"
 	>
 		<div
 			id="g_id_onload"
 			data-client_id={ clientID }
-			data-login_uri={ "/auth/oauth/google/callback?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
+			data-callback="autharaGoogleCallback"
 			data-auto_prompt="false"
 		></div>
 		<img
@@ -44,7 +48,7 @@ templ GoogleSignin(action string, clientID string) {
 			alt="Google logo"
 		/>
 		<span>{ action } with Google</span>
-		<div class="opacity-1 absolute left-0">
+		<div class="opacity-[0.00001%] absolute left-0">
 			<div
 				class="g_id_signin"
 				data-type="standard"
@@ -55,7 +59,7 @@ templ GoogleSignin(action string, clientID string) {
 				data-logo_alignment="left"
 			></div>
 		</div>
-		<div class="opacity-1 absolute right-0">
+		<div class="opacity-[0.00001%] absolute right-0">
 			<div
 				class="g_id_signin"
 				data-type="standard"

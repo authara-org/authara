@@ -2,7 +2,8 @@ package user
 
 import (
 	"github.com/authara-org/authara/internal/http/templates"
-	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 	"github.com/google/uuid"
 )
@@ -10,9 +11,10 @@ import (
 type AccountConfig struct {
 	Username         string
 	Email            string
-	GoogleConnected  bool
+	GoogleClientID   string
 	Sessions         []viewmodel.Session
 	CurrentSessionID uuid.UUID
+	AuthProviders    []viewmodel.AuthProvider
 }
 
 templ Account(cfg AccountConfig) {
@@ -25,19 +27,19 @@ templ Account(cfg AccountConfig) {
 				<div class="rounded-2xl max-w-2xl border border-grey-200 dark:border-grey-800 bg-white dark:bg-grey-900 overflow-hidden">
 					<div class="border-b border-grey-100 dark:border-grey-800">
 						<div>
-							<div class="p-8 sm:p-10 border-b border-grey-200 dark:border-grey-800">
-								<div class="mb-6 sm:mb-6">
-									@button.Back()
-								</div>
+							<div class="p-6 sm:p-8 border-b border-grey-200 dark:border-grey-800">
+								@auth.CardHeader()
 								@AccountProfileHeader(cfg.Username, cfg.Email)
 							</div>
-							<div class="p-8 sm:p-10 border-b border-grey-200 dark:border-grey-800">
+							@CollapsibleSection(true) {
 								@AccountPersonalInfo(cfg.Username, cfg.Email)
-							</div>
-							<div class="p-8 sm:p-10">
+							}
+							@CollapsibleSection(true) {
 								@SessionSection(cfg.Sessions, cfg.CurrentSessionID)
-							</div>
-							//@AccountLinkedAccounts(cfg.GoogleConnected)
+							}
+							@CollapsibleSection(false) {
+								@LinkedProvidersSection(cfg.AuthProviders, cfg.GoogleClientID)
+							}
 						</div>
 					</div>
 					@AccountFooterActions()
@@ -45,6 +47,38 @@ templ Account(cfg AccountConfig) {
 				@AccountDangerZone()
 			</div>
 			@DeleteAccountModal()
+			@RemovePasswordModal()
+			@RemoveGoogleModal()
 		</div>
 	}
+}
+
+templ CollapsibleSection(bordered bool) {
+	<div
+		x-data="{ open: false }"
+		:class="open ? 'h-auto sm:h-auto' : 'h-16 sm:h-22'"
+		class={ sectionClass(bordered) + " overflow-hidden h-16 sm:h-22" }
+	>
+		<button
+			type="button"
+			@click="open = !open"
+			class="absolute top-5 right-4 sm:top-8 sm:right-8 text-grey-600 dark:text-grey-400 hover:text-grey-900 dark:hover:text-grey-100 cursor-pointer h-6 w-6"
+		>
+			<span
+				:class="open ? 'rotate-180' : ''"
+				class="block transition-transform duration-300 ease-in-out stroke-2"
+			>
+				@icons.ChevronDown()
+			</span>
+		</button>
+		{ children... }
+	</div>
+}
+
+func sectionClass(bordered bool) string {
+	base := "relative p-4 sm:p-8"
+	if bordered {
+		return base + " border-b border-grey-200 dark:border-grey-800"
+	}
+	return base
 }

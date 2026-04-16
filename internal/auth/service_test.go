@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
 )
@@ -178,6 +179,11 @@ func TestSignup_UnsupportedProvider(t *testing.T) {
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{allowed: true},
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
 		})
 
 		_, err := svc.Signup(ctx, SignupInput{
@@ -299,6 +305,11 @@ func TestLoginWithExternalIdentity_CreatesUserWhenMissing(t *testing.T) {
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{allowed: true},
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
 		})
 
 		user, err := svc.Login(ctx, LoginInput{
@@ -352,6 +363,11 @@ func TestLoginWithExternalIdentity_ExistingEmailMustLink(t *testing.T) {
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{allowed: true},
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
 		})
 
 		_, err = svc.Login(ctx, LoginInput{
@@ -392,6 +408,11 @@ func TestLoginWithExternalIdentity_ReturnsExistingProviderUser(t *testing.T) {
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{allowed: true},
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
 		})
 
 		user, err := svc.Login(ctx, LoginInput{
@@ -737,6 +758,11 @@ func TestLoginWithExternalIdentity_CreatesUserWhenMissing_PersistsUserAndProvide
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{allowed: true},
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
 		})
 
 		user, err := svc.Login(ctx, LoginInput{
@@ -779,6 +805,11 @@ func TestLoginWithExternalIdentity_GeneratesUsernameWhenEmpty(t *testing.T) {
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{allowed: true},
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
 		})
 
 		user, err := svc.Login(ctx, LoginInput{
@@ -812,6 +843,11 @@ func TestLoginWithExternalIdentity_BlockedByAccessPolicy(t *testing.T) {
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{allowed: false},
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
 		})
 
 		_, err := svc.Login(ctx, LoginInput{

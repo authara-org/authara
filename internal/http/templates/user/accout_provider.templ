@@ -1,0 +1,379 @@
+package user
+
+import (
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/http/templates/components/modal"
+	"github.com/authara-org/authara/internal/http/viewmodel"
+)
+
+templ LinkedProvidersSection(providers []viewmodel.AuthProvider, googleClientID string) {
+	<div id="linked-providers-section">
+		@SectionHeader("Sign-in Methods", icons.Key())
+		if len(providers) == 0 {
+			<div class="border-2 border-grey-100 dark:border-grey-800 rounded-xl px-4 py-3 bg-grey-50 dark:bg-grey-800">
+				<p class="text-sm text-grey-700 dark:text-grey-300">
+					No sign-in methods configured.
+				</p>
+			</div>
+		} else {
+			<div class="space-y-4">
+				for _, provider := range providers {
+					@AuthProviderRow(provider, googleClientID)
+				}
+			</div>
+		}
+		<p class="mt-2 text-xs text-grey-600 dark:text-grey-400">
+			Manage how you sign in to your account. You can link multiple providers to the same user.
+		</p>
+	</div>
+}
+
+templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
+	<div
+		id={ "auth-provider-" + provider.ID }
+		class="flex items-center justify-between gap-3 border-2 border-grey-100 dark:border-grey-800 rounded-xl px-4 py-3 bg-white dark:bg-grey-900"
+	>
+		<div class="flex items-start gap-3 min-w-0 flex-1">
+			<div class="h-10 w-10 shrink-0 rounded-xl bg-grey-50 dark:bg-grey-800 text-grey-700 dark:text-grey-300 p-2 stroke-2">
+				@AuthProviderIcon(provider.Kind)
+			</div>
+			<div class="flex my-auto sm:my-0 flex-col min-w-0">
+				<div class="flex items-center gap-2 flex-wrap">
+					<span class="text-sm font-medium text-grey-900 dark:text-grey-100">
+						{ provider.Title }
+					</span>
+					if provider.Linked {
+						<span class="text-xs px-2 py-1 rounded-lg bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
+							Linked
+						</span>
+					}
+				</div>
+				<span class="text-xs text-grey-600 dark:text-grey-400 hidden sm:block">
+					{ provider.Subtitle }
+				</span>
+			</div>
+		</div>
+		if provider.Kind == viewmodel.AuthProviderPassword {
+			@PasswordProviderActions(provider)
+		} else if provider.Kind == viewmodel.AuthProviderGoogle && !provider.Linked {
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Type:    button.RegularButton,
+					Color:   button.Light,
+					Variant: button.Outline,
+				}) {
+					@GoogleLinkButton(googleClientID)
+				}
+			</div>
+		} else if provider.Linked {
+			if provider.Kind == viewmodel.AuthProviderGoogle {
+				<div class="hidden sm:block">
+					@button.Button(button.ButtonConfig{
+						Label:   "Unlink",
+						Type:    button.RegularButton,
+						Color:   button.Light,
+						Variant: button.Outline,
+						OnClick: "activeModal = 'remove-google'",
+					})
+				</div>
+				<div class="sm:hidden">
+					@ActionMenu() {
+						<button
+							type="button"
+							@click="activeModal = 'remove-google'; open = false"
+							class="block w-full text-left px-4 py-3 text-sm
+						text-red-700 dark:text-red-400
+						hover:bg-grey-50 dark:hover:bg-grey-800
+						cursor-pointer transition-colors"
+						>
+							Unlink Google
+						</button>
+					}
+				</div>
+			} else {
+				<form
+					hx-post={ provider.ActionURL }
+					hx-target="#linked-providers-section"
+					hx-swap="outerHTML"
+					class="hidden sm:block"
+				>
+					@csrf.CSRFInput()
+					<div class="w-fit">
+						@button.Button(button.ButtonConfig{
+							Label:   provider.ActionLabel,
+							Type:    button.Submit,
+							Color:   button.Light,
+							Variant: button.Outline,
+						})
+					</div>
+				</form>
+				<div class="sm:hidden">
+					@ActionMenu() {
+						<form
+							hx-post={ provider.ActionURL }
+							hx-target="#linked-providers-section"
+							hx-swap="outerHTML"
+						>
+							@csrf.CSRFInput()
+							@ActionMenuSubmitItem(provider.ActionLabel)
+						</form>
+					}
+				</div>
+			}
+		}
+	</div>
+}
+
+templ PasswordProviderActions(provider viewmodel.AuthProvider) {
+	if provider.Linked {
+		<div class="hidden sm:flex gap-2">
+			<a
+				hx-get="/auth/providers/password/change?return_to=/auth/account"
+				hx-target="#body"
+				hx-swap="innerHTML"
+				hx-replace-url="true"
+				class="block"
+			>
+				<div class="w-fit">
+					@button.Button(button.ButtonConfig{
+						Label:   "Change",
+						Type:    button.RegularButton,
+						Color:   button.Light,
+						Variant: button.Outline,
+					})
+				</div>
+			</a>
+			@button.Button(button.ButtonConfig{
+				Label:   "Remove",
+				Type:    button.RegularButton,
+				Color:   button.Light,
+				Variant: button.Outline,
+				OnClick: "activeModal = 'remove-password'",
+			})
+		</div>
+		<div class="sm:hidden">
+			@ActionMenu() {
+				<a
+					hx-get="/auth/providers/password/change?return_to=/auth/account"
+					hx-target="#body"
+					hx-swap="innerHTML"
+					hx-replace-url="true"
+					class="block"
+				>
+					@ActionMenuItem("Change password")
+				</a>
+				<div class="w-full h-px bg-grey-100 dark:bg-grey-800"></div>
+				<button
+					type="button"
+					@click="activeModal = 'remove-password'; open = false"
+					class="flex justify-center w-full text-left px-4 py-3 text-sm
+						text-red-700 dark:text-red-400
+						hover:bg-grey-50 dark:hover:bg-grey-800
+						cursor-pointer transition-colors"
+				>
+					Remove password
+				</button>
+			}
+		</div>
+	} else {
+		<a
+			hx-get="/auth/providers/password/add?return_to=/auth/account"
+			hx-target="#body"
+			hx-swap="innerHTML"
+			hx-replace-url="true"
+			class="block"
+		>
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Label: "Add Password",
+					Type:  button.RegularButton,
+					Color: button.Main,
+				})
+			</div>
+		</a>
+	}
+}
+
+templ ActionMenu() {
+	<div x-data="{ open: false }" class="relative">
+		<button
+			type="button"
+			@click="open = !open"
+			class="h-10 w-10 rounded-xl border-2 border-grey-100 dark:border-grey-800
+				bg-white dark:bg-grey-900 text-grey-700 dark:text-grey-300
+				hover:bg-grey-50 dark:hover:bg-grey-800
+				flex items-center justify-center cursor-pointer transition-colors"
+			aria-label="Open actions"
+		>
+			<span class="h-5 w-5 stroke-2">
+				@icons.EllipsisHorizontal()
+			</span>
+		</button>
+		<div
+			x-cloak
+			x-show="open"
+			x-transition.opacity
+			@click.outside="open = false"
+			class="absolute right-0 mt-2 min-w-48 rounded-xl border border-grey-200 dark:border-grey-800 bg-white dark:bg-grey-900 shadow-lg z-30 overflow-hidden"
+		>
+			{ children... }
+		</div>
+	</div>
+}
+
+templ ActionMenuItem(label string) {
+	<div
+		class="flex justify-center w-full text-left px-4 py-3 text-sm
+			text-grey-900 dark:text-grey-100
+			hover:bg-grey-50 dark:hover:bg-grey-800
+			cursor-pointer transition-colors"
+	>
+		{ label }
+	</div>
+}
+
+templ ActionMenuSubmitItem(label string) {
+	<button
+		type="submit"
+		class="flex justify-center  w-full text-left px-4 py-3 text-sm
+			text-grey-900 dark:text-grey-100
+			hover:bg-grey-50 dark:hover:bg-grey-800
+			cursor-pointer transition-colors"
+	>
+		{ label }
+	</button>
+}
+
+templ ActionMenuSubmitItemDanger(label string) {
+	<button
+		type="submit"
+		class="flex justify-center w-full text-left px-4 py-3 text-sm
+			text-red-700 dark:text-red-400
+			hover:bg-grey-50 dark:hover:bg-grey-800
+			cursor-pointer transition-colors"
+	>
+		{ label }
+	</button>
+}
+
+templ GoogleLinkButton(clientID string) {
+	<script src="https://accounts.google.com/gsi/client" async></script>
+	<div
+		data-provider="google"
+		data-google-flow="link"
+		data-return-to="/auth/account"
+		class="relative flex items-center gap-2 cursor-pointer
+			rounded-lg text text-grey-800 dark:text-grey-200 overflow-hidden"
+	>
+		<div
+			id="g_id_onload"
+			data-client_id={ clientID }
+			data-callback="autharaGoogleCallback"
+			data-auto_prompt="false"
+		></div>
+		<img
+			src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+			class="h-4 w-4"
+			alt="Google logo"
+		/>
+		<span>Link Google</span>
+		<div class="opacity-[0.00001%] absolute inset-0">
+			<div
+				class="g_id_signin"
+				data-type="standard"
+				data-size="large"
+				data-theme="outline"
+				data-text="sign_in_with"
+				data-shape="rectangular"
+				data-logo_alignment="left"
+			></div>
+		</div>
+	</div>
+}
+
+templ AuthProviderIcon(kind viewmodel.AuthProviderKind) {
+	switch kind {
+		case viewmodel.AuthProviderPassword:
+			@icons.Lock()
+		case viewmodel.AuthProviderGoogle:
+			@icons.Google()
+		default:
+			@icons.Key()
+	}
+}
+
+templ RemovePasswordModal() {
+	@modal.TwoActionModal(modal.TwoActionModalConfig{
+		ID:       "remove-password",
+		Headline: "Remove password?",
+		Body:     "You will no longer be able to sign in with your password. Make sure you still have another sign-in method linked to this account.",
+		Icon:     icons.Attention(),
+		Theme:    modal.ThemeNeutral,
+		MaxWidth: "max-w-md",
+		Primary:  RemovePasswordPrimaryAction(),
+		Secondary: button.Button(button.ButtonConfig{
+			Label:   "Cancel",
+			Color:   button.Light,
+			OnClick: "activeModal = ''",
+			Variant: button.Outline,
+			Type:    button.RegularButton,
+		}),
+	})
+}
+
+templ RemoveGoogleModal() {
+	@modal.TwoActionModal(modal.TwoActionModalConfig{
+		ID:       "remove-google",
+		Headline: "Unlink Google?",
+		Body: `You will no longer be able to sign in with Google unless 
+			you link it again later. Make sure you still have 
+			another sign-in method linked to this account.`,
+		Icon:     icons.Attention(),
+		Theme:    modal.ThemeNeutral,
+		Primary:  RemoveGooglePrimaryAction(),
+		MaxWidth: "max-w-md",
+		Secondary: button.Button(button.ButtonConfig{
+			Label:   "Cancel",
+			Color:   button.Light,
+			OnClick: "activeModal = ''",
+			Variant: button.Outline,
+			Type:    button.RegularButton,
+		}),
+	})
+}
+
+templ RemovePasswordPrimaryAction() {
+	<form
+		hx-post="/auth/providers/password/unlink"
+		hx-target="#linked-providers-section"
+		hx-swap="outerHTML"
+		class="w-full"
+	>
+		@csrf.CSRFInput()
+		@button.Button(button.ButtonConfig{
+			Label:   "Remove password",
+			Type:    button.Submit,
+			Color:   button.Main,
+			OnClick: "activeModal = ''",
+		})
+	</form>
+}
+
+templ RemoveGooglePrimaryAction() {
+	<form
+		hx-post="/auth/providers/google/unlink"
+		hx-target="#linked-providers-section"
+		hx-swap="outerHTML"
+		class="w-full"
+	>
+		@csrf.CSRFInput()
+		@button.Button(button.ButtonConfig{
+			Label:   "Unlink Google",
+			Type:    button.Submit,
+			Color:   button.Main,
+			OnClick: "activeModal = ''",
+		})
+	</form>
+}

@@ -7,7 +7,7 @@ import (
 )
 
 templ AccountFooterActions() {
-	<div class="p-6 sm:p-8 bg-grey-50 dark:bg-grey-950 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+	<div class="p-4 sm:p-6 bg-grey-50 dark:bg-grey-950 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
 		<form
 			hx-post={ templ.SafeURL("/auth/sessions/logout?return_to=" + httpctx.ReturnToOrDefault(ctx, "/")) }
 			class="w-full sm:w-auto"

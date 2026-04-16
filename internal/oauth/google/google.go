@@ -14,12 +14,12 @@ type Identity struct {
 }
 
 type Client struct {
-	clientID string
+	ClientID string
 }
 
 func New(clientID string) *Client {
 	return &Client{
-		clientID: clientID,
+		ClientID: clientID,
 	}
 }
 
@@ -28,7 +28,7 @@ func (c *Client) VerifyIDToken(ctx context.Context, rawIDToken string) (*Identit
 		return nil, errors.New("google id token is empty")
 	}
 
-	payload, err := idtoken.Validate(ctx, rawIDToken, c.clientID)
+	payload, err := idtoken.Validate(ctx, rawIDToken, c.ClientID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid google id token: %w", err)
 	}

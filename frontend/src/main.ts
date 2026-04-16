@@ -1,17 +1,25 @@
 import { initVerificationCodeForm } from "./verificationInput";
+import { showRedirecting, hideRedirecting } from "./ui";
+import "./oauth";
+import { initTheme, setTheme } from "./theme";
 
 declare global {
   interface Window {
     htmx: any;
+    autharaGoogleCallback: (response: { credential?: string }) => Promise<void>;
   }
 }
 
 window.htmx.config.allowNestedOobSwaps = false;
 window.htmx.config.defaultSwapStyle = "outerHTML";
+(window as any).setTheme = setTheme;
+
+document.addEventListener("DOMContentLoaded", () => {
+  initVerificationCodeForm(document);
+  initTheme();
+});
 
 document.body.addEventListener("htmx:beforeSwap", function (evt: any) {
-  // Allow 422 and 400 responses to swap
-  // We treat these as form validation errors
   if (
     evt.detail.xhr.status === 422 ||
     evt.detail.xhr.status === 400 ||
@@ -21,14 +29,6 @@ document.body.addEventListener("htmx:beforeSwap", function (evt: any) {
     evt.detail.isError = false;
   }
 });
-
-function showRedirecting() {
-  document.documentElement.classList.add("is-redirecting");
-}
-
-function hideRedirecting() {
-  document.documentElement.classList.remove("is-redirecting");
-}
 
 document.body.addEventListener("htmx:afterRequest", (e: Event) => {
   const evt = e as CustomEvent<any>;
@@ -40,10 +40,6 @@ document.body.addEventListener("htmx:afterRequest", (e: Event) => {
 });
 
 window.addEventListener("pageshow", hideRedirecting);
-
-document.addEventListener("DOMContentLoaded", () => {
-  initVerificationCodeForm(document);
-});
 
 document.body.addEventListener("htmx:afterSwap", () => {
   initVerificationCodeForm(document);

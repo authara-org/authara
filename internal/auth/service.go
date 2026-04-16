@@ -8,6 +8,7 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/webhook"
@@ -20,6 +21,7 @@ type Config struct {
 	WebhookPublisher webhook.Publisher
 	Logger           *slog.Logger
 	AccessPolicy     accesspolicy.EmailAccessPolicy
+	OAuthProviders   oauth.OAuthProviders
 }
 
 type Service struct {
@@ -28,6 +30,7 @@ type Service struct {
 	webhookPublisher webhook.Publisher
 	logger           *slog.Logger
 	accessPolicy     accesspolicy.EmailAccessPolicy
+	oauthProviders   oauth.OAuthProviders
 }
 
 func New(cfg Config) *Service {
@@ -46,6 +49,7 @@ func New(cfg Config) *Service {
 		webhookPublisher: pub,
 		logger:           cfg.Logger,
 		accessPolicy:     access,
+		oauthProviders:   cfg.OAuthProviders,
 	}
 }
 
@@ -55,6 +59,15 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (domain.User, e
 		return domain.User{}, err
 	}
 	return user, nil
+}
+
+func (s *Service) ListUserAuthProviders(ctx context.Context, userID uuid.UUID) ([]domain.AuthProvider, error) {
+	providers, err := s.store.ListAuthProvidersByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return providers, nil
 }
 
 func (s *Service) GetUserByEmail(ctx context.Context, email string) (domain.User, error) {
@@ -196,6 +209,10 @@ func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (domain.
 }
 
 func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) (domain.User, error) {
+	if !s.IsProviderEnabled(in.Provider) {
+		return domain.User{}, ErrProviderDisabled
+	}
+
 	var user domain.User
 	createdUser := false
 
@@ -263,6 +280,171 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 	return user, nil
 }
 
+func (s *Service) StartProviderLink(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	provider domain.Provider,
+	now time.Time,
+) (uuid.UUID, error) {
+	if !s.IsProviderEnabled(provider) {
+		return uuid.Nil, ErrProviderDisabled
+	}
+
+	link, err := s.store.CreatePendingProviderLink(ctx, domain.PendingProviderLink{
+		UserID:    userID,
+		SessionID: sessionID,
+		Provider:  provider,
+		ExpiresAt: now.Add(5 * time.Minute),
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	return link.ID, nil
+}
+
+func (s *Service) CompleteProviderLink(
+	ctx context.Context,
+	linkID uuid.UUID,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	provider domain.Provider,
+	providerUserID string,
+	now time.Time,
+) error {
+	if !s.IsProviderEnabled(provider) {
+		return ErrProviderDisabled
+	}
+
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		link, err := s.store.GetPendingProviderLinkByID(txCtx, linkID)
+		if err != nil {
+			if errors.Is(err, store.ErrorPendingProviderLinkNotFound) {
+				return ErrPendingProviderLinkInvalid
+			}
+			return err
+		}
+
+		if link.ConsumedAt != nil || !link.ExpiresAt.After(now) {
+			return ErrPendingProviderLinkExpired
+		}
+
+		if link.UserID != userID || link.SessionID != sessionID || link.Provider != provider {
+			return ErrPendingProviderLinkInvalid
+		}
+
+		if err := s.store.ConsumePendingProviderLink(txCtx, linkID, now); err != nil {
+			if errors.Is(err, store.ErrorPendingProviderLinkNotFound) {
+				return ErrPendingProviderLinkInvalid
+			}
+			return err
+		}
+
+		return s.linkExternalIdentityToUser(txCtx, userID, provider, providerUserID)
+	})
+}
+
+func (s *Service) linkExternalIdentityToUser(
+	ctx context.Context,
+	userID uuid.UUID,
+	provider domain.Provider,
+	providerUserID string,
+) error {
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		existing, err := s.store.GetAuthProviderByProviderAndProviderUserID(
+			txCtx,
+			provider,
+			providerUserID,
+		)
+		if err == nil {
+			if existing.UserID == userID {
+				return nil
+			}
+			return ErrAuthProviderAlreadyLinked
+		}
+		if err != store.ErrorAuthProviderNotFound {
+			return err
+		}
+
+		_, err = s.store.GetAuthProviderByMethodAndUserID(txCtx, provider, userID)
+		if err == nil {
+			return ErrAuthProviderAlreadyLinkedToUser
+		}
+		if err != store.ErrorAuthProviderNotFound {
+			return err
+		}
+
+		_, err = s.store.CreateAuthProvider(txCtx, domain.AuthProvider{
+			UserID:         userID,
+			Provider:       provider,
+			ProviderUserID: &providerUserID,
+		})
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (s *Service) UnlinkAuthProvider(ctx context.Context, userID uuid.UUID, provider domain.Provider) error {
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		providers, err := s.store.ListAuthProvidersByUserID(txCtx, userID)
+		if err != nil {
+			return err
+		}
+
+		if len(providers) <= 1 {
+			return ErrCannotRemoveLastAuthProvider
+		}
+
+		err = s.store.DeleteAuthProviderByMethodAndUserID(txCtx, provider, userID)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (s *Service) AddPassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		_, err := s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
+		if err == nil {
+			return ErrPasswordAlreadyExists
+		}
+		if err != store.ErrorAuthProviderNotFound {
+			return err
+		}
+
+		_, err = s.store.CreateAuthProvider(txCtx, domain.AuthProvider{
+			UserID:       userID,
+			Provider:     domain.ProviderPassword,
+			PasswordHash: &passwordHash,
+		})
+
+		return err
+	})
+}
+
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword string, newPasswordHash string) error {
+	provider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, userID)
+	if err != nil {
+		return err
+	}
+
+	ok, err := Verify(currentPassword, *provider.PasswordHash)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrInvalidCredentials
+	}
+
+	return s.store.UpdatePasswordHash(ctx, userID, newPasswordHash)
+}
+
 func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 	now := time.Now()
 
@@ -297,4 +479,18 @@ func (s *Service) publishBestEffort(ctx context.Context, evt webhook.Envelope) {
 	if err != nil && s.logger != nil {
 		s.logger.Error("webhook publish failed", "event", evt.Type, "event_id", evt.ID, "err", err)
 	}
+}
+
+func (s *Service) IsProviderEnabled(provider domain.Provider) bool {
+	if provider == domain.ProviderPassword {
+		return true
+	}
+
+	for _, p := range s.oauthProviders.Providers {
+		if domain.Provider(p.Name) == provider {
+			return true
+		}
+	}
+
+	return false
 }

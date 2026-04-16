@@ -1,19 +1,15 @@
 package oauth
 
+import "github.com/authara-org/authara/internal/domain"
+
 type CallbackURI string
 
-type Provider string
-
-const (
-	GoogleOAuth Provider = "google"
-)
-
 type OAuthProvider struct {
-	Name     Provider
+	Name     domain.Provider
 	ClientID string
 }
 
-func NewOAuthProvider(providerName Provider, clientID, appURL string) OAuthProvider {
+func NewOAuthProvider(providerName domain.Provider, clientID, appURL string) OAuthProvider {
 	return OAuthProvider{
 		Name:     providerName,
 		ClientID: clientID,

@@ -9,7 +9,6 @@ func Redirect(w http.ResponseWriter, r *http.Request, location string, status in
 		return
 	}
 
-	w.Header().Set("HX-Redirect", location)
 	http.Redirect(w, r, location, status)
 }
 
