@@ -1,4 +1,5 @@
 import { initVerificationCodeForm } from "./verificationInput";
+import { showRedirecting, hideRedirecting } from "./ui";
 import "./oauth";
 import { initTheme, setTheme } from "./theme";
 
@@ -28,14 +29,6 @@ document.body.addEventListener("htmx:beforeSwap", function (evt: any) {
     evt.detail.isError = false;
   }
 });
-
-function showRedirecting() {
-  document.documentElement.classList.add("is-redirecting");
-}
-
-function hideRedirecting() {
-  document.documentElement.classList.remove("is-redirecting");
-}
 
 document.body.addEventListener("htmx:afterRequest", (e: Event) => {
   const evt = e as CustomEvent<any>;

@@ -8,6 +8,7 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/webhook"
@@ -20,6 +21,7 @@ type Config struct {
 	WebhookPublisher webhook.Publisher
 	Logger           *slog.Logger
 	AccessPolicy     accesspolicy.EmailAccessPolicy
+	OAuthProviders   oauth.OAuthProviders
 }
 
 type Service struct {
@@ -28,6 +30,7 @@ type Service struct {
 	webhookPublisher webhook.Publisher
 	logger           *slog.Logger
 	accessPolicy     accesspolicy.EmailAccessPolicy
+	oauthProviders   oauth.OAuthProviders
 }
 
 func New(cfg Config) *Service {
@@ -46,6 +49,7 @@ func New(cfg Config) *Service {
 		webhookPublisher: pub,
 		logger:           cfg.Logger,
 		accessPolicy:     access,
+		oauthProviders:   cfg.OAuthProviders,
 	}
 }
 
@@ -205,6 +209,10 @@ func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (domain.
 }
 
 func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) (domain.User, error) {
+	if !s.IsProviderEnabled(in.Provider) {
+		return domain.User{}, ErrProviderDisabled
+	}
+
 	var user domain.User
 	createdUser := false
 
@@ -279,6 +287,10 @@ func (s *Service) StartProviderLink(
 	provider domain.Provider,
 	now time.Time,
 ) (uuid.UUID, error) {
+	if !s.IsProviderEnabled(provider) {
+		return uuid.Nil, ErrProviderDisabled
+	}
+
 	link, err := s.store.CreatePendingProviderLink(ctx, domain.PendingProviderLink{
 		UserID:    userID,
 		SessionID: sessionID,
@@ -301,6 +313,10 @@ func (s *Service) CompleteProviderLink(
 	providerUserID string,
 	now time.Time,
 ) error {
+	if !s.IsProviderEnabled(provider) {
+		return ErrProviderDisabled
+	}
+
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		link, err := s.store.GetPendingProviderLinkByID(txCtx, linkID)
 		if err != nil {
@@ -325,11 +341,11 @@ func (s *Service) CompleteProviderLink(
 			return err
 		}
 
-		return s.LinkExternalIdentityToUser(txCtx, userID, provider, providerUserID)
+		return s.linkExternalIdentityToUser(txCtx, userID, provider, providerUserID)
 	})
 }
 
-func (s *Service) LinkExternalIdentityToUser(
+func (s *Service) linkExternalIdentityToUser(
 	ctx context.Context,
 	userID uuid.UUID,
 	provider domain.Provider,
@@ -463,4 +479,18 @@ func (s *Service) publishBestEffort(ctx context.Context, evt webhook.Envelope) {
 	if err != nil && s.logger != nil {
 		s.logger.Error("webhook publish failed", "event", evt.Type, "event_id", evt.ID, "err", err)
 	}
+}
+
+func (s *Service) IsProviderEnabled(provider domain.Provider) bool {
+	if provider == domain.ProviderPassword {
+		return true
+	}
+
+	for _, p := range s.oauthProviders.Providers {
+		if domain.Provider(p.Name) == provider {
+			return true
+		}
+	}
+
+	return false
 }

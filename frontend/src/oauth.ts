@@ -1,3 +1,5 @@
+import { showRedirecting } from "./ui";
+
 function getGoogleFlowButton(): HTMLElement | null {
   return document.querySelector("[data-google-flow]");
 }

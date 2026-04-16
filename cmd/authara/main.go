@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/bootstrap"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	httpserver "github.com/authara-org/authara/internal/http"
 	"github.com/authara-org/authara/internal/http/kit/csrf"
@@ -112,9 +113,23 @@ func main() {
 		})
 	}
 
+	providers := []oauth.OAuthProvider{}
+	for _, p := range cfg.OAuth.Providers {
+		switch p {
+		case string(domain.ProviderGoogle):
+			googleProvider := oauth.NewOAuthProvider(domain.ProviderGoogle, cfg.OAuth.GoogleClientID, cfg.Values.PublicURL)
+			providers = append(providers, googleProvider)
+
+		}
+	}
+	oauthProviders := oauth.OAuthProviders{
+		Providers: providers,
+	}
+
 	authService := auth.New(auth.Config{
 		Store:            store,
 		Tx:               txManager,
+		OAuthProviders:   oauthProviders,
 		WebhookPublisher: webhookPublisher,
 		Logger:           logger,
 		AccessPolicy:     accessPolicy,
@@ -181,19 +196,6 @@ func main() {
 	)
 
 	googleClient := google.New(cfg.OAuth.GoogleClientID)
-
-	providers := []oauth.OAuthProvider{}
-	for _, p := range cfg.OAuth.Providers {
-		switch p {
-		case string(oauth.GoogleOAuth):
-			googleProvider := oauth.NewOAuthProvider(oauth.GoogleOAuth, cfg.OAuth.GoogleClientID, cfg.Values.PublicURL)
-			providers = append(providers, googleProvider)
-
-		}
-	}
-	oauthProviders := oauth.OAuthProviders{
-		Providers: providers,
-	}
 
 	redirectIfAuthenticated := httpmiddleware.RedirectIfAuthenticated(sessionService, time.Now)
 	requireAppAccessAuthAPI := httpmiddleware.RequireAPIAccessAuth(sessionService, token.AudienceApp, time.Now)

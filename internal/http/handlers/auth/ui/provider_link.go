@@ -172,7 +172,7 @@ func (h *UIHandler) UnlinkProviderPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vm := viewmodel.AuthProvidersFromDomain(providers)
+	vm := viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers)
 
 	_ = h.Render(
 		w,

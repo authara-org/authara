@@ -411,7 +411,7 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 		GoogleClientID:   h.Google.ClientID,
 		Sessions:         toSessionViewModels(sessions, currentSessionID),
 		CurrentSessionID: currentSessionID,
-		AuthProviders:    viewmodel.AuthProvidersFromDomain(providers),
+		AuthProviders:    viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers),
 	}, nil
 }
 
