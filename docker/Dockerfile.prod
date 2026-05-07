@@ -16,7 +16,7 @@ RUN cd frontend && npm run build
 #
 # Backend Builder
 #
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.25.9-alpine AS backend-builder
 
 WORKDIR /app
 

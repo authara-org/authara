@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/mail"
 	"strings"
 	"time"
 )
@@ -37,6 +38,12 @@ func (e *Email) validate() error {
 	case "smtp":
 		if e.From == "" {
 			return fmt.Errorf("AUTHARA_EMAIL_FROM must not be empty when AUTHARA_EMAIL_PROVIDER=smtp")
+		}
+		if strings.ContainsAny(e.From, "\r\n") {
+			return fmt.Errorf("AUTHARA_EMAIL_FROM must not contain line breaks")
+		}
+		if _, err := mail.ParseAddress(e.From); err != nil {
+			return fmt.Errorf("invalid AUTHARA_EMAIL_FROM: %w", err)
 		}
 		if e.SMTPHost == "" {
 			return fmt.Errorf("AUTHARA_EMAIL_SMTP_HOST must not be empty when AUTHARA_EMAIL_PROVIDER=smtp")

@@ -66,6 +66,9 @@ func (t *Token) parse() error {
 		if err != nil {
 			return fmt.Errorf("AUTHARA_JWT_KEYS[%q] is not valid base64", id)
 		}
+		if len(key) < 32 {
+			return fmt.Errorf("AUTHARA_JWT_KEYS[%q] must decode to at least 32 bytes", id)
+		}
 		decoded[id] = key
 	}
 

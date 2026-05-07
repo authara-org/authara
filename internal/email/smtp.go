@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"strings"
 	"time"
@@ -45,6 +46,15 @@ func NewSMTPSender(
 }
 
 func (s *SMTPSender) Send(ctx context.Context, to string, msg Message) error {
+	fromAddr, err := parseEnvelopeAddress("from", s.from)
+	if err != nil {
+		return err
+	}
+	toAddr, err := parseEnvelopeAddress("to", to)
+	if err != nil {
+		return err
+	}
+
 	raw, err := buildMIMEMessage(s.from, to, msg)
 	if err != nil {
 		return fmt.Errorf("smtp: build message: %w", err)
@@ -93,10 +103,10 @@ func (s *SMTPSender) Send(ctx context.Context, to string, msg Message) error {
 		}
 	}
 
-	if err := client.Mail(s.from); err != nil {
+	if err := client.Mail(fromAddr); err != nil {
 		return fmt.Errorf("smtp: mail: %w", err)
 	}
-	if err := client.Rcpt(to); err != nil {
+	if err := client.Rcpt(toAddr); err != nil {
 		return fmt.Errorf("smtp: rcpt: %w", err)
 	}
 
@@ -124,19 +134,31 @@ func buildMIMEMessage(from, to string, msg Message) ([]byte, error) {
 	if msg.Text == "" && msg.HTML == "" {
 		return nil, fmt.Errorf("smtp: email message must contain text or html body")
 	}
+	fromAddr, err := parseHeaderAddress("From", from)
+	if err != nil {
+		return nil, err
+	}
+	toAddr, err := parseHeaderAddress("To", to)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateHeaderValue("Subject", msg.Subject); err != nil {
+		return nil, err
+	}
+
 	boundary := fmt.Sprintf("authara-%d", time.Now().UnixNano())
 
 	var b strings.Builder
 
-	writeHeader(&b, "From", from)
-	writeHeader(&b, "To", to)
+	writeHeader(&b, "From", fromAddr)
+	writeHeader(&b, "To", toAddr)
 	writeHeader(&b, "Subject", msg.Subject)
 	writeHeader(&b, "MIME-Version", "1.0")
 	writeHeader(&b, "Content-Type", fmt.Sprintf(`multipart/alternative; boundary="%s"`, boundary))
 	b.WriteString("\r\n")
 
 	if msg.Text != "" {
-		b.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+		fmt.Fprintf(&b, "--%s\r\n", boundary)
 		writeHeader(&b, "Content-Type", `text/plain; charset="UTF-8"`)
 		writeHeader(&b, "Content-Transfer-Encoding", "8bit")
 		b.WriteString("\r\n")
@@ -145,7 +167,7 @@ func buildMIMEMessage(from, to string, msg Message) ([]byte, error) {
 	}
 
 	if msg.HTML != "" {
-		b.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+		fmt.Fprintf(&b, "--%s\r\n", boundary)
 		writeHeader(&b, "Content-Type", `text/html; charset="UTF-8"`)
 		writeHeader(&b, "Content-Transfer-Encoding", "8bit")
 		b.WriteString("\r\n")
@@ -163,6 +185,32 @@ func writeHeader(b *strings.Builder, key, value string) {
 	b.WriteString(": ")
 	b.WriteString(value)
 	b.WriteString("\r\n")
+}
+
+func parseEnvelopeAddress(label string, raw string) (string, error) {
+	addr, err := mail.ParseAddress(raw)
+	if err != nil {
+		return "", fmt.Errorf("smtp: invalid %s address: %w", label, err)
+	}
+	return addr.Address, nil
+}
+
+func parseHeaderAddress(key string, raw string) (string, error) {
+	if err := validateHeaderValue(key, raw); err != nil {
+		return "", err
+	}
+	addr, err := mail.ParseAddress(raw)
+	if err != nil {
+		return "", fmt.Errorf("smtp: invalid %s address: %w", strings.ToLower(key), err)
+	}
+	return addr.String(), nil
+}
+
+func validateHeaderValue(key string, value string) error {
+	if strings.ContainsAny(value, "\r\n") {
+		return fmt.Errorf("smtp: %s header contains line breaks", key)
+	}
+	return nil
 }
 
 func normalizeSMTPBody(s string) string {

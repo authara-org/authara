@@ -106,5 +106,19 @@ func (c *Config) validate() error {
 		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must not be noop when AUTHARA_CHALLENGE_ENABLED=true in production")
 	}
 
+	if c.Values.AppEnv == "prod" && c.DB.LogSQL {
+		return fmt.Errorf("POSTGRESQL_LOG_SQL must be false when APP_ENV=prod")
+	}
+
+	if c.Values.AppEnv == "prod" && c.Email.Provider == "smtp" && !c.Email.SMTPTLS {
+		return fmt.Errorf("AUTHARA_EMAIL_SMTP_TLS must be true when APP_ENV=prod and AUTHARA_EMAIL_PROVIDER=smtp")
+	}
+
+	if c.Values.AppEnv == "prod" && c.Webhook.Enabled() {
+		if len(c.Webhook.Secret) < 32 {
+			return fmt.Errorf("AUTHARA_WEBHOOK_SECRET must be at least 32 characters when APP_ENV=prod")
+		}
+	}
+
 	return nil
 }

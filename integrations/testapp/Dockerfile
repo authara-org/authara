@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine
+FROM golang:1.25.9-alpine
 
 RUN go install github.com/bokwoon95/wgo@latest
 
