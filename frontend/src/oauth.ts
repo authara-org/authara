@@ -22,6 +22,7 @@ window.autharaGoogleCallback = async (response: { credential?: string }) => {
   const flow = btn?.dataset.googleFlow || "login";
   const returnTo = btn?.dataset.returnTo || "/";
   const provider = btn?.dataset.provider || "google";
+  const linkID = btn?.dataset.linkId || "";
 
   const form = new URLSearchParams();
   form.set("credential", credential);
@@ -29,6 +30,14 @@ window.autharaGoogleCallback = async (response: { credential?: string }) => {
   form.set("nonce", getGoogleNonce());
 
   try {
+    if (flow === "proof") {
+      if (!linkID) {
+        window.location.href = `/auth/login?return_to=${encodeURIComponent(returnTo)}`;
+        return;
+      }
+      form.set("link_id", linkID);
+    }
+
     if (flow === "link") {
       const startRes = await fetch(
         `/auth/providers/${encodeURIComponent(provider)}/link/start`,
@@ -81,7 +90,9 @@ window.autharaGoogleCallback = async (response: { credential?: string }) => {
     }
 
     if (res.ok) {
-      window.location.href = flow === "link" ? "/auth/account" : returnTo;
+      const autharaRedirect = res.headers.get("X-Authara-Redirect");
+      window.location.href =
+        autharaRedirect || (flow === "link" ? "/auth/account" : returnTo);
       return;
     }
 

@@ -1,0 +1,81 @@
+package auth
+
+import (
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/templates"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/http/viewmodel"
+)
+
+type AccountCollisionProofOption struct {
+	Provider string
+	Label    string
+	ClientID string
+	Password bool
+}
+
+templ AccountCollision(linkID string, email string, provider string, proofOptions []AccountCollisionProofOption) {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@CardHeader()
+			@HeaderSection("Connect Account", "An account already exists with this email.")
+			<p class="mb-6 text-center text-sm leading-6 text-grey-700 dark:text-grey-300">
+				Connect <span class="font-semibold text-grey-900 dark:text-grey-100">{ provider }</span> to
+				<span class="font-semibold text-grey-900 dark:text-grey-100">{ email }</span> to continue.
+			</p>
+			<div class="flex flex-col gap-4">
+				for _, option := range proofOptions {
+					if option.Password {
+						@AccountCollisionForm(linkID, email, provider)
+					} else if option.Provider == "google" {
+						@GoogleSignin("Continue", option.ClientID, viewmodel.AuthProviderFlowProof, linkID)
+					}
+				}
+			</div>
+			<div class="text-center mt-6">
+				<a
+					hx-get={ redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/")) }
+					hx-target="#body"
+					hx-swap="innerHTML"
+					hx-replace-url="true"
+					class="cursor-pointer underline text-blue-800 dark:text-blue-400"
+				>
+					Sign in another way
+				</a>
+			</div>
+		}
+	}
+}
+
+templ AccountCollisionForm(linkID string, email string, provider string) {
+	<form
+		x-data
+		autocomplete="on"
+		hx-post={ redirect.WithReturnTo("/auth/provider-links/confirm", httpctx.ReturnToOrDefault(ctx, "/")) }
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		@csrf.CSRFInput()
+		<input type="hidden" name="link_id" value={ linkID }/>
+		<input type="hidden" name="username" autocomplete="username" value={ email }/>
+		<label for="existing-password" class="text-grey-800 dark:text-grey-200">
+			<div class="pb-1.5">Password <span class="text-red-600">*</span></div>
+		</label>
+		<input
+			type="password"
+			id="existing-password"
+			name="password"
+			autocomplete="current-password"
+			placeholder="Enter your existing password"
+			required
+			class="w-full px-4 py-3 mb-4 text-base sm:text-sm placeholder:text-base sm:placeholder:text-sm border-2 border-grey-100 dark:border-grey-800 bg-white dark:bg-grey-900 text-grey-900 dark:text-grey-100 placeholder:text-grey-400 dark:placeholder:text-grey-500 rounded-xl"
+		/>
+		@button.Button(button.ButtonConfig{
+			Label: "Connect account",
+			Icon:  icons.Login(),
+		})
+	</form>
+}

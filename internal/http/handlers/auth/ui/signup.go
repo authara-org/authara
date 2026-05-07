@@ -64,6 +64,10 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.renderExternalOnlySignupCollision(w, r, form.Email, authview.SignupForm()) {
+		return
+	}
+
 	passwordHash, err := auth.Hash(form.Password)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -120,7 +124,12 @@ func (h *UIHandler) startSignupChallenge(
 		return
 	}
 	if exists {
-		// opaque challenge — no pending action, no email job
+		if h.renderExternalOnlySignupCollision(w, r, email, authview.SignupForm()) {
+			return
+		}
+
+		// Keep signup opaque for existing emails: render the same verification flow
+		// for password-backed accounts without creating a pending action or code.
 		challengeID, err := h.Challenge.CreateOpaqueChallenge(ctx, time.Now().UTC(), domain.ChallengePurposeSignup, email)
 		if err != nil {
 			h.renderFormError(
@@ -140,7 +149,6 @@ func (h *UIHandler) startSignupChallenge(
 			httpctx.ReturnToOrDefault(ctx, "/"),
 		)
 		return
-
 	}
 
 	challengeID, err := h.Challenge.CreateSignupChallenge(ctx, challenge.CreateSignupChallengeInput{
@@ -160,6 +168,46 @@ func (h *UIHandler) startSignupChallenge(
 		challengeID.String(),
 		httpctx.ReturnToOrDefault(ctx, "/"),
 	)
+}
+
+func (h *UIHandler) renderExternalOnlySignupCollision(
+	w http.ResponseWriter,
+	r *http.Request,
+	email string,
+	errorRenderForm templ.Component,
+) bool {
+	user, err := h.Auth.GetUserByEmail(r.Context(), email)
+	if err != nil {
+		return false
+	}
+
+	providers, err := h.Auth.ListUserAuthProviders(r.Context(), user.ID)
+	if err != nil {
+		return false
+	}
+
+	hasPassword := false
+	hasExternalProvider := false
+	for _, provider := range providers {
+		if provider.Provider == domain.ProviderPassword {
+			hasPassword = true
+			continue
+		}
+		hasExternalProvider = true
+	}
+
+	if hasPassword || !hasExternalProvider {
+		return false
+	}
+
+	h.renderFormError(
+		w,
+		r,
+		http.StatusUnprocessableEntity,
+		"An account already exists with this email using a social sign-in provider. Sign in with that provider first to add a password.",
+		errorRenderForm,
+	)
+	return true
 }
 
 func (h *UIHandler) finishSignup(

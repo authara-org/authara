@@ -16,9 +16,15 @@ func toDomainPendingProviderLink(m model.PendingProviderLink) domain.PendingProv
 		ID:        *m.ID,
 		CreatedAt: m.CreatedAt,
 
-		UserID:    m.UserID,
-		SessionID: m.SessionID,
-		Provider:  domain.Provider(m.Provider),
+		UserID:      m.UserID,
+		SessionID:   m.SessionID,
+		ChallengeID: m.ChallengeID,
+		Provider:    domain.Provider(m.Provider),
+
+		ProviderUserID:        m.ProviderUserID,
+		ProviderEmail:         m.ProviderEmail,
+		ProviderEmailVerified: m.ProviderEmailVerified,
+		Purpose:               domain.PendingProviderLinkPurpose(m.Purpose),
 
 		ExpiresAt:  m.ExpiresAt,
 		ConsumedAt: m.ConsumedAt,
@@ -27,12 +33,17 @@ func toDomainPendingProviderLink(m model.PendingProviderLink) domain.PendingProv
 
 func toModelPendingProviderLink(d domain.PendingProviderLink) model.PendingProviderLink {
 	return model.PendingProviderLink{
-		ID:         nil,
-		UserID:     d.UserID,
-		SessionID:  d.SessionID,
-		Provider:   string(d.Provider),
-		ExpiresAt:  d.ExpiresAt,
-		ConsumedAt: d.ConsumedAt,
+		ID:                    nil,
+		UserID:                d.UserID,
+		SessionID:             d.SessionID,
+		ChallengeID:           d.ChallengeID,
+		Provider:              string(d.Provider),
+		ProviderUserID:        d.ProviderUserID,
+		ProviderEmail:         d.ProviderEmail,
+		ProviderEmailVerified: d.ProviderEmailVerified,
+		Purpose:               string(d.Purpose),
+		ExpiresAt:             d.ExpiresAt,
+		ConsumedAt:            d.ConsumedAt,
 	}
 }
 
@@ -71,6 +82,32 @@ func (s *Store) ConsumePendingProviderLink(ctx context.Context, id uuid.UUID, no
 		Model(&model.PendingProviderLink{}).
 		Where("id = ? AND consumed_at IS NULL AND expires_at > ?", id, now).
 		Update("consumed_at", now)
+
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrorPendingProviderLinkNotFound
+	}
+
+	return nil
+}
+
+func (s *Store) UpdatePendingProviderLinkOAuthIdentity(
+	ctx context.Context,
+	id uuid.UUID,
+	providerUserID string,
+	providerEmail string,
+	providerEmailVerified bool,
+) error {
+	res := s.query(ctx).
+		Model(&model.PendingProviderLink{}).
+		Where("id = ? AND consumed_at IS NULL", id).
+		Updates(map[string]any{
+			"provider_user_id":        providerUserID,
+			"provider_email":          providerEmail,
+			"provider_email_verified": providerEmailVerified,
+		})
 
 	if res.Error != nil {
 		return res.Error

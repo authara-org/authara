@@ -263,7 +263,7 @@ templ GoogleLinkButton(clientID string) {
 	<script src="https://accounts.google.com/gsi/client" async></script>
 	<div
 		data-provider="google"
-		data-google-flow="link"
+		data-google-flow={ viewmodel.AuthProviderFlowLink }
 		data-return-to="/auth/account"
 		class="relative flex items-center gap-2 cursor-pointer
 			rounded-lg text text-grey-800 dark:text-grey-200 overflow-hidden"

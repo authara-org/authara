@@ -66,6 +66,8 @@ func (h *UIHandler) CompleteProviderLink(
 	linkIDStr string,
 	provider domain.Provider,
 	providerUserID string,
+	providerEmail string,
+	providerEmailVerified bool,
 ) error {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
@@ -89,6 +91,8 @@ func (h *UIHandler) CompleteProviderLink(
 		sessionID,
 		provider,
 		providerUserID,
+		providerEmail,
+		providerEmailVerified,
 		time.Now().UTC(),
 	)
 }

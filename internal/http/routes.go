@@ -68,6 +68,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Get("/login", uih.LoginPage)
 				r.Get("/signup", uih.SignupPage)
+				r.Get("/provider-links/confirm", uih.ProviderLinkConfirmPage)
 			})
 
 			r.Group(func(r chi.Router) {
@@ -75,6 +76,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Post("/signup", uih.SignupPost)
 				r.Post("/login", uih.LoginPost)
+				r.Post("/provider-links/confirm", uih.ProviderLinkConfirmPost)
 				r.Post("/sessions/logout", uih.LogoutPost)
 				r.Post("/sessions/refresh", uih.RefreshPost)
 			})

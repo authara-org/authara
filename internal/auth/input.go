@@ -21,3 +21,12 @@ type LoginInput struct {
 
 	OAuthID string
 }
+
+type OAuthIdentityInput struct {
+	Provider domain.Provider
+
+	Username              string
+	Email                 string
+	ProviderUserID        string
+	ProviderEmailVerified bool
+}

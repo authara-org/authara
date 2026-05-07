@@ -3,6 +3,7 @@ package auth
 import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/http/viewmodel"
 	"github.com/authara-org/authara/internal/oauth"
 )
 
@@ -18,20 +19,21 @@ templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider) {
 			for _, p := range oauthProviders {
 				switch p.Name {
 					case "google":
-						@GoogleSignin(action, p.ClientID, "login")
+						@GoogleSignin(action, p.ClientID, viewmodel.AuthProviderFlowLogin, "")
 				}
 			}
 		</div>
 	}
 }
 
-templ GoogleSignin(action string, clientID string, flow string) {
+templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFlow, linkID string) {
 	<script src="https://accounts.google.com/gsi/client" async></script>
 	<button
 		id="google-signin-btn"
 		type="button"
 		data-provider="google"
 		data-google-flow={ flow }
+		data-link-id={ linkID }
 		data-return-to={ httpctx.ReturnToOrDefault(ctx, "/") }
 		class="relative w-full flex items-center cursor-pointer justify-center gap-3 h-12 px-4 border-2 border-gray-100 dark:border-grey-800 rounded-xl
 			 bg-white dark:bg-grey-900 hover:bg-gray-50 dark:hover:bg-grey-800 transition text-gray-700 dark:text-white overflow-hidden"

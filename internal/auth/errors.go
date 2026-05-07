@@ -17,5 +17,8 @@ var (
 	ErrPasswordAlreadyExists           = errors.New("password provider already exists")
 	ErrPendingProviderLinkExpired      = errors.New("pending provider link expired")
 	ErrPendingProviderLinkInvalid      = errors.New("pending provider link invalid")
+	ErrPendingProviderLinkNeedsProof   = errors.New("pending provider link requires proof")
+	ErrProviderEmailNotVerified        = errors.New("provider email is not verified")
 	ErrProviderDisabled                = errors.New("provider disabled")
+	ErrPasswordProviderMissing         = errors.New("password provider missing")
 )

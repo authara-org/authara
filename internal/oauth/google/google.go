@@ -9,8 +9,9 @@ import (
 )
 
 type Identity struct {
-	OAuthID string
-	Email   string
+	OAuthID       string
+	Email         string
+	EmailVerified bool
 }
 
 type Client struct {
@@ -56,7 +57,8 @@ func (c *Client) VerifyIDToken(ctx context.Context, rawIDToken string, expectedN
 	}
 
 	return &Identity{
-		OAuthID: sub,
-		Email:   email,
+		OAuthID:       sub,
+		Email:         email,
+		EmailVerified: emailVerified,
 	}, nil
 }

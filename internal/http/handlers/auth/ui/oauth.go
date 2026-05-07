@@ -3,7 +3,10 @@ package ui
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
@@ -12,7 +15,9 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/viewmodel"
 	"github.com/authara-org/authara/internal/session"
+	"github.com/google/uuid"
 )
 
 func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
@@ -43,8 +48,8 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	oauthstate.ClearNonce(w)
 
-	if flow == "link" {
-		if err := h.CompleteProviderLink(ctx, linkID, domain.ProviderGoogle, identity.OAuthID); err != nil {
+	if flow == string(viewmodel.AuthProviderFlowLink) {
+		if err := h.CompleteProviderLink(ctx, linkID, domain.ProviderGoogle, identity.OAuthID, identity.Email, identity.EmailVerified); err != nil {
 			_ = flash.Set(w, flash.Message{
 				Kind:    "error",
 				Message: "Google login failed. Please try again.",
@@ -62,6 +67,50 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if flow == string(viewmodel.AuthProviderFlowProof) {
+		parsedLinkID, err := uuid.Parse(strings.TrimSpace(linkID))
+		if err != nil {
+			h.renderError(w, r, ctx)
+			return
+		}
+
+		user, err := h.Auth.CompleteAccountRecoveryProviderLinkWithProviderProof(
+			ctx,
+			parsedLinkID,
+			domain.ProviderGoogle,
+			identity.OAuthID,
+			time.Now().UTC(),
+		)
+		if err != nil {
+			h.renderError(w, r, ctx)
+			return
+		}
+
+		returnTo := httpctx.ReturnToOrDefault(ctx, "/")
+		audience := redirect.AudienceForPath(returnTo)
+		now := time.Now()
+		accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)
+		if err != nil {
+			h.renderError(w, r, ctx)
+			return
+		}
+
+		session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
+		session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
+
+		if h.Logger != nil {
+			h.Logger.Info("provider linked after account collision", "user_id", user.ID, "provider", domain.ProviderGoogle)
+		}
+		_ = flash.Set(w, flash.Message{
+			Kind:    "success",
+			Message: "Sign-in provider was connected to your account.",
+		})
+
+		w.Header().Set("X-Authara-Redirect", returnTo)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	input := auth.LoginInput{
 		Provider: domain.ProviderGoogle,
 		Email:    identity.Email,
@@ -70,6 +119,29 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.Auth.Login(ctx, input)
 	if err != nil {
+		if errors.Is(err, auth.ErrAccountExistsMustLink) {
+			link, linkErr := h.Auth.StartAccountRecoveryProviderLink(ctx, auth.OAuthIdentityInput{
+				Provider:              domain.ProviderGoogle,
+				Email:                 identity.Email,
+				ProviderUserID:        identity.OAuthID,
+				ProviderEmailVerified: identity.EmailVerified,
+			}, time.Now().UTC())
+			if linkErr != nil {
+				h.renderError(w, r, ctx)
+				return
+			}
+
+			u := url.URL{Path: "/auth/provider-links/confirm"}
+			q := u.Query()
+			q.Set("link_id", link.ID.String())
+			if returnTo := httpctx.ReturnToOrDefault(ctx, "/"); returnTo != "" {
+				q.Set("return_to", returnTo)
+			}
+			u.RawQuery = q.Encode()
+			w.Header().Set("X-Authara-Redirect", u.String())
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		h.renderError(w, r, ctx)
 		return
 

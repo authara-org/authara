@@ -9,9 +9,15 @@ import (
 type PendingProviderLink struct {
 	ID *uuid.UUID `gorm:"type:uuid;primaryKey;column:id;default:gen_random_uuid()"`
 
-	UserID    uuid.UUID `gorm:"type:uuid;not null;column:user_id"`
-	SessionID uuid.UUID `gorm:"type:uuid;not null;column:session_id"`
-	Provider  string    `gorm:"type:varchar(50);not null;column:provider"`
+	UserID      uuid.UUID  `gorm:"type:uuid;not null;column:user_id"`
+	SessionID   *uuid.UUID `gorm:"type:uuid;column:session_id"`
+	ChallengeID *uuid.UUID `gorm:"type:uuid;column:challenge_id"`
+	Provider    string     `gorm:"type:varchar(50);not null;column:provider"`
+
+	ProviderUserID        *string `gorm:"type:varchar(255);column:provider_user_id"`
+	ProviderEmail         *string `gorm:"type:varchar(255);column:provider_email"`
+	ProviderEmailVerified bool    `gorm:"not null;column:provider_email_verified"`
+	Purpose               string  `gorm:"type:varchar(64);not null;column:purpose"`
 
 	ExpiresAt  time.Time  `gorm:"not null;column:expires_at"`
 	ConsumedAt *time.Time `gorm:"column:consumed_at"`

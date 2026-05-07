@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/oauth"
@@ -746,6 +747,105 @@ func TestLogin_PasswordProviderMissing(t *testing.T) {
 		})
 		if err == nil {
 			t.Fatal("expected error when password auth provider is missing")
+		}
+	})
+}
+
+func TestStartAccountRecoveryProviderLink_CreatesPendingLinkForExistingEmail(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		passwordHash, err := Hash("correct-password")
+		if err != nil {
+			t.Fatalf("Hash failed: %v", err)
+		}
+		user := createPasswordUser(t, ctx, tdb, "collision@example.com", "collision-user", passwordHash)
+
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
+		})
+
+		link, err := svc.StartAccountRecoveryProviderLink(ctx, OAuthIdentityInput{
+			Provider:              domain.ProviderGoogle,
+			Email:                 "collision@example.com",
+			ProviderUserID:        "google-collision-sub",
+			ProviderEmailVerified: true,
+		}, time.Date(2026, 5, 7, 8, 0, 0, 0, time.UTC))
+		if err != nil {
+			t.Fatalf("StartAccountRecoveryProviderLink failed: %v", err)
+		}
+
+		if link.UserID != user.ID {
+			t.Fatalf("expected link user %q, got %q", user.ID, link.UserID)
+		}
+		if link.SessionID != nil {
+			t.Fatal("expected unauthenticated collision link to have nil session")
+		}
+		if link.Purpose != domain.PendingProviderLinkPurposeAccountRecovery {
+			t.Fatalf("expected account recovery purpose, got %q", link.Purpose)
+		}
+		if link.ProviderUserID == nil || *link.ProviderUserID != "google-collision-sub" {
+			t.Fatalf("expected pending provider user id to be stored")
+		}
+	})
+}
+
+func TestCompleteAccountRecoveryProviderLinkWithPassword_LinksProvider(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		passwordHash, err := Hash("correct-password")
+		if err != nil {
+			t.Fatalf("Hash failed: %v", err)
+		}
+		user := createPasswordUser(t, ctx, tdb, "complete-collision@example.com", "complete-collision-user", passwordHash)
+
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
+		})
+
+		now := time.Date(2026, 5, 7, 8, 0, 0, 0, time.UTC)
+		link, err := svc.StartAccountRecoveryProviderLink(ctx, OAuthIdentityInput{
+			Provider:              domain.ProviderGoogle,
+			Email:                 "complete-collision@example.com",
+			ProviderUserID:        "google-complete-collision-sub",
+			ProviderEmailVerified: true,
+		}, now)
+		if err != nil {
+			t.Fatalf("StartAccountRecoveryProviderLink failed: %v", err)
+		}
+
+		got, err := svc.CompleteAccountRecoveryProviderLinkWithPassword(ctx, link.ID, "correct-password", now)
+		if err != nil {
+			t.Fatalf("CompleteAccountRecoveryProviderLinkWithPassword failed: %v", err)
+		}
+		if got.ID != user.ID {
+			t.Fatalf("expected signed-in user %q, got %q", user.ID, got.ID)
+		}
+
+		provider, err := tdb.Store.GetAuthProviderByProviderAndProviderUserID(ctx, domain.ProviderGoogle, "google-complete-collision-sub")
+		if err != nil {
+			t.Fatalf("GetAuthProviderByProviderAndProviderUserID failed: %v", err)
+		}
+		if provider.UserID != user.ID {
+			t.Fatalf("expected provider linked to %q, got %q", user.ID, provider.UserID)
+		}
+
+		_, err = svc.CompleteAccountRecoveryProviderLinkWithPassword(ctx, link.ID, "correct-password", now)
+		if !errors.Is(err, ErrPendingProviderLinkExpired) && !errors.Is(err, ErrPendingProviderLinkInvalid) {
+			t.Fatalf("expected consumed pending link to be rejected, got %v", err)
 		}
 	})
 }

@@ -74,6 +74,17 @@ func (s *Service) GetUserByEmail(ctx context.Context, email string) (domain.User
 	return s.store.GetUserByEmail(ctx, email)
 }
 
+func (s *Service) GetPendingProviderLink(ctx context.Context, linkID uuid.UUID) (domain.PendingProviderLink, error) {
+	link, err := s.store.GetPendingProviderLinkByID(ctx, linkID)
+	if err != nil {
+		if errors.Is(err, store.ErrorPendingProviderLinkNotFound) {
+			return domain.PendingProviderLink{}, ErrPendingProviderLinkInvalid
+		}
+		return domain.PendingProviderLink{}, err
+	}
+	return link, nil
+}
+
 func (s *Service) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
 	_, err := s.store.GetUserByEmail(ctx, email)
 	if err != nil {
@@ -293,8 +304,9 @@ func (s *Service) StartProviderLink(
 
 	link, err := s.store.CreatePendingProviderLink(ctx, domain.PendingProviderLink{
 		UserID:    userID,
-		SessionID: sessionID,
+		SessionID: &sessionID,
 		Provider:  provider,
+		Purpose:   domain.PendingProviderLinkPurposeAuthenticatedLink,
 		ExpiresAt: now.Add(5 * time.Minute),
 	})
 	if err != nil {
@@ -304,6 +316,58 @@ func (s *Service) StartProviderLink(
 	return link.ID, nil
 }
 
+func (s *Service) StartAccountRecoveryProviderLink(
+	ctx context.Context,
+	in OAuthIdentityInput,
+	now time.Time,
+) (domain.PendingProviderLink, error) {
+	if !s.IsProviderEnabled(in.Provider) {
+		return domain.PendingProviderLink{}, ErrProviderDisabled
+	}
+	if !in.ProviderEmailVerified {
+		return domain.PendingProviderLink{}, ErrProviderEmailNotVerified
+	}
+	if in.ProviderUserID == "" || in.Email == "" {
+		return domain.PendingProviderLink{}, ErrPendingProviderLinkInvalid
+	}
+
+	var link domain.PendingProviderLink
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if _, err := s.store.GetAuthProviderByProviderAndProviderUserID(txCtx, in.Provider, in.ProviderUserID); err == nil {
+			return ErrAuthProviderAlreadyLinked
+		} else if err != store.ErrorAuthProviderNotFound {
+			return err
+		}
+
+		user, err := s.store.GetUserByEmail(txCtx, in.Email)
+		if err != nil {
+			return err
+		}
+
+		providerUserID := in.ProviderUserID
+		providerEmail := in.Email
+		created, err := s.store.CreatePendingProviderLink(txCtx, domain.PendingProviderLink{
+			UserID:                user.ID,
+			Provider:              in.Provider,
+			ProviderUserID:        &providerUserID,
+			ProviderEmail:         &providerEmail,
+			ProviderEmailVerified: true,
+			Purpose:               domain.PendingProviderLinkPurposeAccountRecovery,
+			ExpiresAt:             now.Add(10 * time.Minute),
+		})
+		if err != nil {
+			return err
+		}
+		link = created
+		return nil
+	})
+	if err != nil {
+		return domain.PendingProviderLink{}, err
+	}
+
+	return link, nil
+}
+
 func (s *Service) CompleteProviderLink(
 	ctx context.Context,
 	linkID uuid.UUID,
@@ -311,6 +375,8 @@ func (s *Service) CompleteProviderLink(
 	sessionID uuid.UUID,
 	provider domain.Provider,
 	providerUserID string,
+	providerEmail string,
+	providerEmailVerified bool,
 	now time.Time,
 ) error {
 	if !s.IsProviderEnabled(provider) {
@@ -330,8 +396,23 @@ func (s *Service) CompleteProviderLink(
 			return ErrPendingProviderLinkExpired
 		}
 
-		if link.UserID != userID || link.SessionID != sessionID || link.Provider != provider {
+		if link.SessionID == nil || *link.SessionID != sessionID {
 			return ErrPendingProviderLinkInvalid
+		}
+
+		if link.UserID != userID || link.Provider != provider || link.Purpose != domain.PendingProviderLinkPurposeAuthenticatedLink {
+			return ErrPendingProviderLinkInvalid
+		}
+
+		if providerUserID == "" || providerEmail == "" || !providerEmailVerified {
+			return ErrPendingProviderLinkInvalid
+		}
+
+		if err := s.store.UpdatePendingProviderLinkOAuthIdentity(txCtx, linkID, providerUserID, providerEmail, providerEmailVerified); err != nil {
+			if errors.Is(err, store.ErrorPendingProviderLinkNotFound) {
+				return ErrPendingProviderLinkInvalid
+			}
+			return err
 		}
 
 		if err := s.store.ConsumePendingProviderLink(txCtx, linkID, now); err != nil {
@@ -343,6 +424,158 @@ func (s *Service) CompleteProviderLink(
 
 		return s.linkExternalIdentityToUser(txCtx, userID, provider, providerUserID)
 	})
+}
+
+func (s *Service) CompleteAccountRecoveryProviderLinkWithPassword(
+	ctx context.Context,
+	linkID uuid.UUID,
+	password string,
+	now time.Time,
+) (domain.User, error) {
+	var user domain.User
+
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		link, err := s.store.GetPendingProviderLinkByID(txCtx, linkID)
+		if err != nil {
+			if errors.Is(err, store.ErrorPendingProviderLinkNotFound) {
+				return ErrPendingProviderLinkInvalid
+			}
+			return err
+		}
+
+		if link.ConsumedAt != nil || !link.ExpiresAt.After(now) {
+			return ErrPendingProviderLinkExpired
+		}
+		if link.Purpose != domain.PendingProviderLinkPurposeAccountRecovery {
+			return ErrPendingProviderLinkInvalid
+		}
+		if link.ProviderUserID == nil || *link.ProviderUserID == "" || link.ProviderEmail == nil || *link.ProviderEmail == "" || !link.ProviderEmailVerified {
+			return ErrPendingProviderLinkInvalid
+		}
+
+		user, err = s.store.GetUserByID(txCtx, link.UserID)
+		if err != nil {
+			return err
+		}
+		if user.Email != *link.ProviderEmail {
+			return ErrPendingProviderLinkInvalid
+		}
+
+		passwordProvider, err := s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, user.ID)
+		if err != nil {
+			if errors.Is(err, store.ErrorAuthProviderNotFound) {
+				return ErrPasswordProviderMissing
+			}
+			return err
+		}
+		if passwordProvider.PasswordHash == nil {
+			return ErrPasswordProviderMissing
+		}
+
+		ok, err := Verify(password, *passwordProvider.PasswordHash)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return ErrInvalidCredentials
+		}
+
+		if _, err := s.store.GetAuthProviderByProviderAndProviderUserID(txCtx, link.Provider, *link.ProviderUserID); err == nil {
+			return ErrAuthProviderAlreadyLinked
+		} else if err != store.ErrorAuthProviderNotFound {
+			return err
+		}
+
+		if err := s.store.ConsumePendingProviderLink(txCtx, linkID, now); err != nil {
+			if errors.Is(err, store.ErrorPendingProviderLinkNotFound) {
+				return ErrPendingProviderLinkInvalid
+			}
+			return err
+		}
+
+		return s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID)
+	})
+	if err != nil {
+		return domain.User{}, err
+	}
+
+	return user, nil
+}
+
+func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
+	ctx context.Context,
+	linkID uuid.UUID,
+	proofProvider domain.Provider,
+	proofProviderUserID string,
+	now time.Time,
+) (domain.User, error) {
+	if !s.IsProviderEnabled(proofProvider) {
+		return domain.User{}, ErrProviderDisabled
+	}
+	if proofProviderUserID == "" {
+		return domain.User{}, ErrPendingProviderLinkInvalid
+	}
+
+	var user domain.User
+
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		link, err := s.store.GetPendingProviderLinkByID(txCtx, linkID)
+		if err != nil {
+			if errors.Is(err, store.ErrorPendingProviderLinkNotFound) {
+				return ErrPendingProviderLinkInvalid
+			}
+			return err
+		}
+
+		if link.ConsumedAt != nil || !link.ExpiresAt.After(now) {
+			return ErrPendingProviderLinkExpired
+		}
+		if link.Purpose != domain.PendingProviderLinkPurposeAccountRecovery {
+			return ErrPendingProviderLinkInvalid
+		}
+		if link.ProviderUserID == nil || *link.ProviderUserID == "" || link.ProviderEmail == nil || *link.ProviderEmail == "" || !link.ProviderEmailVerified {
+			return ErrPendingProviderLinkInvalid
+		}
+
+		user, err = s.store.GetUserByID(txCtx, link.UserID)
+		if err != nil {
+			return err
+		}
+		if user.Email != *link.ProviderEmail {
+			return ErrPendingProviderLinkInvalid
+		}
+
+		proof, err := s.store.GetAuthProviderByProviderAndProviderUserID(txCtx, proofProvider, proofProviderUserID)
+		if err != nil {
+			if errors.Is(err, store.ErrorAuthProviderNotFound) {
+				return ErrInvalidCredentials
+			}
+			return err
+		}
+		if proof.UserID != user.ID {
+			return ErrInvalidCredentials
+		}
+
+		if _, err := s.store.GetAuthProviderByProviderAndProviderUserID(txCtx, link.Provider, *link.ProviderUserID); err == nil {
+			return ErrAuthProviderAlreadyLinked
+		} else if err != store.ErrorAuthProviderNotFound {
+			return err
+		}
+
+		if err := s.store.ConsumePendingProviderLink(txCtx, linkID, now); err != nil {
+			if errors.Is(err, store.ErrorPendingProviderLinkNotFound) {
+				return ErrPendingProviderLinkInvalid
+			}
+			return err
+		}
+
+		return s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID)
+	})
+	if err != nil {
+		return domain.User{}, err
+	}
+
+	return user, nil
 }
 
 func (s *Service) linkExternalIdentityToUser(

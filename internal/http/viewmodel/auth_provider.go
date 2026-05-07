@@ -12,6 +12,14 @@ const (
 	AuthProviderGoogle   AuthProviderKind = "google"
 )
 
+type AuthProviderFlow string
+
+const (
+	AuthProviderFlowLogin AuthProviderFlow = "login"
+	AuthProviderFlowLink  AuthProviderFlow = "link"
+	AuthProviderFlowProof AuthProviderFlow = "proof"
+)
+
 type AuthProvider struct {
 	ID          string
 	Kind        AuthProviderKind
