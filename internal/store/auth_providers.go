@@ -38,7 +38,7 @@ func toModelAuthProvider(d domain.AuthProvider) model.AuthProvider {
 func (s *Store) ListAuthProvidersByUserID(ctx context.Context, userID uuid.UUID) ([]domain.AuthProvider, error) {
 	var rows []model.AuthProvider
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("user_id = ?", userID).
 		Order("created_at ASC").
 		Find(&rows).
@@ -58,7 +58,7 @@ func (s *Store) ListAuthProvidersByUserID(ctx context.Context, userID uuid.UUID)
 func (s *Store) CreateAuthProvider(ctx context.Context, provider domain.AuthProvider) (domain.AuthProvider, error) {
 	m := toModelAuthProvider(provider)
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Create(&m).
 		Error
 	if err != nil {
@@ -71,7 +71,7 @@ func (s *Store) CreateAuthProvider(ctx context.Context, provider domain.AuthProv
 func (s *Store) GetAuthProviderByMethodAndUserID(ctx context.Context, provider domain.Provider, userID uuid.UUID) (domain.AuthProvider, error) {
 	var m model.AuthProvider
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("user_id = ? AND provider = ?", userID, string(provider)).
 		First(&m).
 		Error
@@ -88,7 +88,7 @@ func (s *Store) GetAuthProviderByMethodAndUserID(ctx context.Context, provider d
 func (s *Store) GetAuthProviderByProviderAndProviderUserID(ctx context.Context, provider domain.Provider, providerUserID string) (domain.AuthProvider, error) {
 	var m model.AuthProvider
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("provider_user_id = ? AND provider = ?", providerUserID, string(provider)).
 		First(&m).
 		Error
@@ -103,7 +103,7 @@ func (s *Store) GetAuthProviderByProviderAndProviderUserID(ctx context.Context, 
 }
 
 func (s *Store) DeleteAuthProviderByMethodAndUserID(ctx context.Context, provider domain.Provider, userID uuid.UUID) error {
-	res := s.dbFromContext(ctx).
+	res := s.query(ctx).
 		Where("user_id = ? AND provider = ?", userID, string(provider)).
 		Delete(&model.AuthProvider{})
 
@@ -118,7 +118,7 @@ func (s *Store) DeleteAuthProviderByMethodAndUserID(ctx context.Context, provide
 }
 
 func (s *Store) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, passwordHash string) error {
-	res := s.dbFromContext(ctx).
+	res := s.query(ctx).
 		Model(&model.AuthProvider{}).
 		Where("user_id = ? AND provider = ?", userID, "password").
 		Update("password_hash", passwordHash)

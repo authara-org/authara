@@ -26,7 +26,7 @@ func toModelAllowedEmail(d domain.AllowedEmail) model.AllowedEmail {
 func (s *Store) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
 	var count int64
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Model(&model.AllowedEmail{}).
 		Where("email = ?", email).
 		Count(&count).
@@ -41,11 +41,11 @@ func (s *Store) IsEmailAllowed(ctx context.Context, email string) (bool, error) 
 func (s *Store) CreateAllowedEmail(ctx context.Context, allowedEmail domain.AllowedEmail) error {
 	m := toModelAllowedEmail(allowedEmail)
 
-	return s.dbFromContext(ctx).Create(&m).Error
+	return s.query(ctx).Create(&m).Error
 }
 
 func (s *Store) DeleteAllowedEmail(ctx context.Context, email string) error {
-	result := s.dbFromContext(ctx).
+	result := s.query(ctx).
 		Where("email = ?", email).
 		Delete(&model.AllowedEmail{})
 
@@ -59,7 +59,7 @@ func (s *Store) DeleteAllowedEmail(ctx context.Context, email string) error {
 func (s *Store) ListAllowedEmails(ctx context.Context) ([]domain.AllowedEmail, error) {
 	var rows []model.AllowedEmail
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Order("email ASC").
 		Find(&rows).
 		Error

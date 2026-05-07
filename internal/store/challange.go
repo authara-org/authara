@@ -65,7 +65,7 @@ func toModelVerificationCode(d domain.VerificationCode) model.VerificationCode {
 func (s *Store) CreateChallenge(ctx context.Context, in domain.Challenge) (domain.Challenge, error) {
 	row := toModelChallenge(in)
 
-	err := s.db.WithContext(ctx).
+	err := s.query(ctx).
 		Create(&row).
 		Error
 
@@ -77,11 +77,24 @@ func (s *Store) CreateChallenge(ctx context.Context, in domain.Challenge) (domai
 }
 
 func (s *Store) GetChallengeByID(ctx context.Context, challengeID uuid.UUID) (domain.Challenge, error) {
+	return s.getChallengeByID(ctx, challengeID, false)
+}
+
+func (s *Store) GetChallengeByIDForUpdate(ctx context.Context, challengeID uuid.UUID) (domain.Challenge, error) {
+	return s.getChallengeByID(ctx, challengeID, true)
+}
+
+func (s *Store) getChallengeByID(ctx context.Context, challengeID uuid.UUID, forUpdate bool) (domain.Challenge, error) {
 	var row model.Challenge
 
-	err := s.db.WithContext(ctx).
-		Where("id = ?", challengeID).
-		First(&row).Error
+	db := s.query(ctx)
+	if forUpdate {
+		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+
+	err := db.Where("id = ?", challengeID).
+		First(&row).
+		Error
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -94,21 +107,29 @@ func (s *Store) GetChallengeByID(ctx context.Context, challengeID uuid.UUID) (do
 }
 
 func (s *Store) ConsumeChallenge(ctx context.Context, challengeID uuid.UUID, now time.Time) error {
-	return s.db.WithContext(ctx).
+	res := s.query(ctx).
 		Model(&model.Challenge{}).
 		Where("id = ? AND consumed_at IS NULL", challengeID).
-		Update("consumed_at", now).Error
+		Update("consumed_at", now)
+
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrorChallengeAlreadyConsumed
+	}
+	return nil
 }
 
 func (s *Store) IncrementChallengeAttemptCount(ctx context.Context, challengeID uuid.UUID) error {
-	return s.db.WithContext(ctx).
+	return s.query(ctx).
 		Model(&model.Challenge{}).
 		Where("id = ?", challengeID).
 		UpdateColumn("attempt_count", gorm.Expr("attempt_count + 1")).Error
 }
 
 func (s *Store) IncrementChallengeResendCount(ctx context.Context, challengeID uuid.UUID, now time.Time) (bool, error) {
-	result := s.db.WithContext(ctx).
+	result := s.query(ctx).
 		Model(&model.Challenge{}).
 		Where("id = ? AND resend_count < max_resends", challengeID).
 		Updates(map[string]any{
@@ -125,7 +146,7 @@ func (s *Store) IncrementChallengeResendCount(ctx context.Context, challengeID u
 }
 
 func (s *Store) SetChallengeLastSentAt(ctx context.Context, challengeID uuid.UUID, now time.Time) error {
-	return s.db.WithContext(ctx).
+	return s.query(ctx).
 		Model(&model.Challenge{}).
 		Where("id = ?", challengeID).
 		Update("last_sent_at", now).
@@ -133,23 +154,30 @@ func (s *Store) SetChallengeLastSentAt(ctx context.Context, challengeID uuid.UUI
 }
 
 func (s *Store) DeleteSentEmailJobsBefore(ctx context.Context, t time.Time) error {
-	return s.db.WithContext(ctx).
+	return s.query(ctx).
 		Where("status = ? AND sent_at < ?", string(domain.EmailJobStatusSent), t).
 		Delete(&model.EmailJob{}).
 		Error
 }
 
 func (s *Store) DeleteFailedEmailJobsBefore(ctx context.Context, t time.Time) error {
-	return s.db.WithContext(ctx).
+	return s.query(ctx).
 		Where("status = ? AND created_at < ?", string(domain.EmailJobStatusFailed), t).
 		Delete(&model.EmailJob{}).
+		Error
+}
+
+func (s *Store) DeleteExpiredChallenges(ctx context.Context, now time.Time) error {
+	return s.query(ctx).
+		Where("expires_at < ?", now).
+		Delete(&model.Challenge{}).
 		Error
 }
 
 func (s *Store) UpsertVerificationCode(ctx context.Context, in domain.VerificationCode) error {
 	row := toModelVerificationCode(in)
 
-	return s.db.WithContext(ctx).
+	return s.query(ctx).
 		Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "challenge_id"}},
 			DoUpdates: clause.Assignments(map[string]any{
@@ -164,7 +192,7 @@ func (s *Store) UpsertVerificationCode(ctx context.Context, in domain.Verificati
 func (s *Store) GetVerificationCodeByChallengeID(ctx context.Context, challengeID uuid.UUID) (domain.VerificationCode, error) {
 	var row model.VerificationCode
 
-	err := s.db.WithContext(ctx).
+	err := s.query(ctx).
 		Where("challenge_id = ?", challengeID).
 		First(&row).Error
 	if err != nil {

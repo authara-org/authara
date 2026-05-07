@@ -33,7 +33,7 @@ func toModelPendingSignupAction(d domain.PendingSignupAction) model.PendingSignu
 func (s *Store) CreatePendingSignupAction(ctx context.Context, in domain.PendingSignupAction) (domain.PendingSignupAction, error) {
 	row := toModelPendingSignupAction(in)
 
-	err := s.db.WithContext(ctx).
+	err := s.query(ctx).
 		Create(&row).
 		Error
 
@@ -47,7 +47,7 @@ func (s *Store) CreatePendingSignupAction(ctx context.Context, in domain.Pending
 func (s *Store) GetPendingSignupActionByChallengeID(ctx context.Context, challengeID uuid.UUID) (domain.PendingSignupAction, error) {
 	var row model.PendingSignupAction
 
-	err := s.db.WithContext(ctx).
+	err := s.query(ctx).
 		Where("challenge_id = ?", challengeID).
 		First(&row).Error
 
@@ -86,7 +86,7 @@ func toModelPendingPasswordReset(d domain.PendingPasswordReset) model.PendingPas
 func (s *Store) CreatePendingPasswordReset(ctx context.Context, in domain.PendingPasswordReset) (domain.PendingPasswordReset, error) {
 	row := toModelPendingPasswordReset(in)
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Create(&row).
 		Error
 	if err != nil {
@@ -99,7 +99,7 @@ func (s *Store) CreatePendingPasswordReset(ctx context.Context, in domain.Pendin
 func (s *Store) GetPendingPasswordResetByChallengeID(ctx context.Context, challengeID uuid.UUID) (domain.PendingPasswordReset, error) {
 	var row model.PendingPasswordReset
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("challenge_id = ?", challengeID).
 		First(&row).
 		Error
@@ -114,7 +114,7 @@ func (s *Store) GetPendingPasswordResetByChallengeID(ctx context.Context, challe
 }
 
 func (s *Store) DeletePendingPasswordResetByChallengeID(ctx context.Context, challengeID uuid.UUID) error {
-	return s.dbFromContext(ctx).
+	return s.query(ctx).
 		Where("challenge_id = ?", challengeID).
 		Delete(&model.PendingPasswordReset{}).
 		Error
@@ -147,8 +147,7 @@ func toModelPendingEmailChange(d domain.PendingEmailChange) model.PendingEmailCh
 func (s *Store) CreatePendingEmailChange(ctx context.Context, in domain.PendingEmailChange) (domain.PendingEmailChange, error) {
 	row := toModelPendingEmailChange(in)
 
-	err := s.dbFromContext(ctx).
-		WithContext(ctx).
+	err := s.query(ctx).
 		Create(&row).
 		Error
 	if err != nil {
@@ -161,8 +160,7 @@ func (s *Store) CreatePendingEmailChange(ctx context.Context, in domain.PendingE
 func (s *Store) GetPendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID) (domain.PendingEmailChange, error) {
 	var row model.PendingEmailChange
 
-	err := s.dbFromContext(ctx).
-		WithContext(ctx).
+	err := s.query(ctx).
 		Where("challenge_id = ?", challengeID).
 		First(&row).
 		Error
@@ -177,8 +175,7 @@ func (s *Store) GetPendingEmailChangeByChallengeID(ctx context.Context, challeng
 }
 
 func (s *Store) DeletePendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID) error {
-	res := s.dbFromContext(ctx).
-		WithContext(ctx).
+	res := s.query(ctx).
 		Where("challenge_id = ?", challengeID).
 		Delete(&model.PendingEmailChange{})
 	if res.Error != nil {
@@ -191,8 +188,7 @@ func (s *Store) DeletePendingEmailChangeByChallengeID(ctx context.Context, chall
 }
 
 func (s *Store) UpdateUserEmail(ctx context.Context, userID uuid.UUID, email string) error {
-	res := s.dbFromContext(ctx).
-		WithContext(ctx).
+	res := s.query(ctx).
 		Model(&model.User{}).
 		Where("id = ?", userID).
 		Update("email", email)

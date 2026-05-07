@@ -70,7 +70,7 @@ func toModelRefreshToken(d domain.RefreshToken) model.RefreshToken {
 func (s *Store) CreateSession(ctx context.Context, session domain.Session) (domain.Session, error) {
 	m := toModelSession(session)
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Create(&m).
 		Error
 
@@ -83,7 +83,7 @@ func (s *Store) CreateSession(ctx context.Context, session domain.Session) (doma
 func (s *Store) GetSessionByID(ctx context.Context, sessionID uuid.UUID) (domain.Session, error) {
 	var m model.Session
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("id = ?", sessionID).
 		First(&m).
 		Error
@@ -99,7 +99,7 @@ func (s *Store) GetSessionByID(ctx context.Context, sessionID uuid.UUID) (domain
 }
 
 func (s *Store) RevokeSession(ctx context.Context, sessionID uuid.UUID, revokedAt time.Time) error {
-	res := s.dbFromContext(ctx).
+	res := s.query(ctx).
 		Model(&model.Session{}).
 		Where("id = ?", sessionID).
 		Update("revoked_at", revokedAt)
@@ -112,7 +112,7 @@ func (s *Store) RevokeSession(ctx context.Context, sessionID uuid.UUID, revokedA
 }
 
 func (s *Store) RevokeAllSessionsForUser(ctx context.Context, userID uuid.UUID, revokedAt time.Time) error {
-	res := s.dbFromContext(ctx).
+	res := s.query(ctx).
 		Model(&model.Session{}).
 		Where("user_id = ? AND revoked_at IS NULL", userID).
 		Update("revoked_at", revokedAt)
@@ -126,7 +126,7 @@ func (s *Store) RevokeAllSessionsForUser(ctx context.Context, userID uuid.UUID, 
 
 func (s *Store) CreateRefreshToken(ctx context.Context, token domain.RefreshToken) error {
 	m := toModelRefreshToken(token)
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Create(&m).
 		Error
 
@@ -139,7 +139,7 @@ func (s *Store) CreateRefreshToken(ctx context.Context, token domain.RefreshToke
 func (s *Store) GetRefreshTokenByHash(ctx context.Context, hash string) (domain.RefreshToken, error) {
 	var m model.RefreshToken
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("token_hash = ?", hash).
 		First(&m).
 		Error
@@ -154,7 +154,7 @@ func (s *Store) GetRefreshTokenByHash(ctx context.Context, hash string) (domain.
 }
 
 func (s *Store) ConsumeRefreshToken(ctx context.Context, tokenID uuid.UUID, consumedAt time.Time) error {
-	res := s.dbFromContext(ctx).
+	res := s.query(ctx).
 		Model(&model.RefreshToken{}).
 		Where("id = ? AND consumed_at IS NULL", tokenID).
 		Update("consumed_at", consumedAt)
@@ -171,14 +171,14 @@ func (s *Store) ConsumeRefreshToken(ctx context.Context, tokenID uuid.UUID, cons
 }
 
 func (s *Store) DeleteRefreshTokensBySession(ctx context.Context, sessionID uuid.UUID) error {
-	return s.dbFromContext(ctx).
+	return s.query(ctx).
 		Where("session_id = ?", sessionID.String()).
 		Delete(&model.RefreshToken{}).
 		Error
 }
 
 func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time) error {
-	db := s.dbFromContext(ctx)
+	db := s.query(ctx)
 
 	err := db.
 		Where("expires_at < ?", now).
@@ -195,7 +195,7 @@ func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time) e
 }
 
 func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error {
-	db := s.dbFromContext(ctx)
+	db := s.query(ctx)
 
 	err := db.
 		Where("expires_at < ?", now).
@@ -214,7 +214,7 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error 
 func (s *Store) ListActiveSessionsByUserID(ctx context.Context, userID uuid.UUID, now time.Time) ([]domain.Session, error) {
 	var rows []model.Session
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, now).
 		Order("created_at DESC").
 		Find(&rows).
@@ -234,7 +234,7 @@ func (s *Store) ListActiveSessionsByUserID(ctx context.Context, userID uuid.UUID
 func (s *Store) GetActiveSessionByID(ctx context.Context, sessionID uuid.UUID, now time.Time) (domain.Session, error) {
 	var m model.Session
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("id = ? AND revoked_at IS NULL AND expires_at > ?", sessionID, now).
 		First(&m).
 		Error
@@ -249,7 +249,7 @@ func (s *Store) GetActiveSessionByID(ctx context.Context, sessionID uuid.UUID, n
 }
 
 func (s *Store) RevokeOtherSessionsByUserID(ctx context.Context, userID uuid.UUID, keepSessionID uuid.UUID, revokedAt time.Time) error {
-	res := s.dbFromContext(ctx).
+	res := s.query(ctx).
 		Model(&model.Session{}).
 		Where("user_id = ? AND id <> ? AND revoked_at IS NULL", userID, keepSessionID).
 		Update("revoked_at", revokedAt)
@@ -262,12 +262,24 @@ func (s *Store) RevokeOtherSessionsByUserID(ctx context.Context, userID uuid.UUI
 }
 
 func (s *Store) DeleteRefreshTokensForOtherSessions(ctx context.Context, userID uuid.UUID, keepSessionID uuid.UUID) error {
-	sub := s.dbFromContext(ctx).
+	sub := s.query(ctx).
 		Model(&model.Session{}).
 		Select("id").
 		Where("user_id = ? AND id <> ?", userID, keepSessionID)
 
-	return s.dbFromContext(ctx).
+	return s.query(ctx).
+		Where("session_id IN (?)", sub).
+		Delete(&model.RefreshToken{}).
+		Error
+}
+
+func (s *Store) DeleteRefreshTokensByUserID(ctx context.Context, userID uuid.UUID) error {
+	sub := s.query(ctx).
+		Model(&model.Session{}).
+		Select("id").
+		Where("user_id = ?", userID)
+
+	return s.query(ctx).
 		Where("session_id IN (?)", sub).
 		Delete(&model.RefreshToken{}).
 		Error

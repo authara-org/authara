@@ -117,29 +117,39 @@ func (s *Service) ResendChallenge(
 	challengeID uuid.UUID,
 	now time.Time,
 ) error {
-	challenge, err := s.store.GetChallengeByID(ctx, challengeID)
+	var resultErr error
+
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		challenge, err := s.store.GetChallengeByIDForUpdate(txCtx, challengeID)
+		if err != nil {
+			return err
+		}
+
+		if err := s.validateChallengeForResend(challenge, now); err != nil {
+			resultErr = err
+			return nil
+		}
+
+		ok, err := s.store.IncrementChallengeResendCount(txCtx, challengeID, now)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			resultErr = ErrTooManyResends
+			return nil
+		}
+
+		template, err := s.emailTemplateForPurpose(challenge.Purpose)
+		if err != nil {
+			return err
+		}
+
+		return s.enqueueChallengeEmail(txCtx, challengeID, challenge.Email, template, now)
+	})
 	if err != nil {
 		return err
 	}
-
-	if err := s.validateChallengeForResend(challenge, now); err != nil {
-		return err
-	}
-
-	ok, err := s.store.IncrementChallengeResendCount(ctx, challengeID, now)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return ErrTooManyResends
-	}
-
-	template, err := s.emailTemplateForPurpose(challenge.Purpose)
-	if err != nil {
-		return err
-	}
-
-	return s.enqueueChallengeEmail(ctx, challengeID, challenge.Email, template, now)
+	return resultErr
 }
 
 func (s *Service) verifyChallenge(
@@ -149,22 +159,45 @@ func (s *Service) verifyChallenge(
 	verifier *VerificationCodeService,
 	now time.Time,
 ) (*domain.Challenge, error) {
-	challenge, err := s.store.GetChallengeByID(ctx, challengeID)
+	var challenge domain.Challenge
+	var resultErr error
+
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		row, err := s.store.GetChallengeByIDForUpdate(txCtx, challengeID)
+		if err != nil {
+			return err
+		}
+		challenge = row
+
+		if err := s.validateChallengeForVerify(challenge, now); err != nil {
+			resultErr = err
+			return nil
+		}
+
+		if err := verifier.VerifyCode(txCtx, challengeID, code, now); err != nil {
+			if incErr := s.store.IncrementChallengeAttemptCount(txCtx, challengeID); incErr != nil {
+				return incErr
+			}
+			resultErr = err
+			return nil
+		}
+
+		if err := s.store.ConsumeChallenge(txCtx, challengeID, now); err != nil {
+			if err == store.ErrorChallengeAlreadyConsumed {
+				resultErr = ErrChallengeConsumed
+				return nil
+			}
+			return err
+		}
+
+		challenge.ConsumedAt = &now
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if err := s.validateChallengeForVerify(challenge, now); err != nil {
-		return nil, err
-	}
-
-	if err := verifier.VerifyCode(ctx, challengeID, code, now); err != nil {
-		_ = s.store.IncrementChallengeAttemptCount(ctx, challengeID)
-		return nil, err
-	}
-
-	if err := s.store.ConsumeChallenge(ctx, challengeID, now); err != nil {
-		return nil, err
+	if resultErr != nil {
+		return nil, resultErr
 	}
 
 	return &challenge, nil

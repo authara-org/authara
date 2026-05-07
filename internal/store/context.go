@@ -19,3 +19,7 @@ func (s *Store) dbFromContext(ctx context.Context) *gorm.DB {
 	}
 	return s.db
 }
+
+func (s *Store) query(ctx context.Context) *gorm.DB {
+	return s.dbFromContext(ctx).WithContext(ctx)
+}

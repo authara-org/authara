@@ -11,4 +11,4 @@ CREATE TABLE IF NOT EXISTS authara.allowed_emails (
 
 -- +migrate Down
 
-DROP TABLE IF EXISTS authara.allowed_email;
+DROP TABLE IF EXISTS authara.allowed_emails;

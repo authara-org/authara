@@ -232,4 +232,8 @@ func (w *Worker) cleanup(ctx context.Context, now time.Time) {
 			w.logger.ErrorContext(ctx, "failed to cleanup failed email jobs", "error", err)
 		}
 	}
+
+	if err := w.store.DeleteExpiredChallenges(ctx, now); err != nil {
+		w.logger.ErrorContext(ctx, "failed to cleanup expired challenges", "error", err)
+	}
 }

@@ -41,7 +41,7 @@ func (s *Store) CreateUser(ctx context.Context, user domain.User) (domain.User, 
 	m := toModelUser(user)
 	m.UsernameNormalized = NormalizeUsername(user.Username)
 
-	db := s.dbFromContext(ctx)
+	db := s.query(ctx)
 
 	err := db.
 		Create(&m).
@@ -57,7 +57,7 @@ func (s *Store) CreateUser(ctx context.Context, user domain.User) (domain.User, 
 func (s *Store) GetUserByID(ctx context.Context, userID uuid.UUID) (domain.User, error) {
 	var m model.User
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("id = ?", userID).
 		First(&m).
 		Error
@@ -77,7 +77,7 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, 
 
 	email = normalizeEmail(email)
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("email = ?", email).
 		First(&m).
 		Error
@@ -97,7 +97,7 @@ func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, erro
 
 	email = normalizeEmail(email)
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Model(&model.User{}).
 		Where("email = ?", email).
 		Count(&count).
@@ -111,7 +111,7 @@ func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, erro
 }
 
 func (s *Store) DisableUser(ctx context.Context, userID uuid.UUID, disabledAt time.Time) error {
-	return s.dbFromContext(ctx).
+	return s.query(ctx).
 		Model(&model.User{}).
 		Where("id = ?", userID).
 		Update("disabled_at", disabledAt).
@@ -121,7 +121,7 @@ func (s *Store) DisableUser(ctx context.Context, userID uuid.UUID, disabledAt ti
 func (s *Store) IsUserDisabled(ctx context.Context, userID uuid.UUID) (bool, error) {
 	var exists bool
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Model(&model.User{}).
 		Select("count(1) > 0").
 		Where("id = ? AND disabled_at IS NOT NULL", userID).
@@ -132,7 +132,7 @@ func (s *Store) IsUserDisabled(ctx context.Context, userID uuid.UUID) (bool, err
 }
 
 func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username string) error {
-	res := s.dbFromContext(ctx).
+	res := s.query(ctx).
 		Model(&model.User{}).
 		Where("id = ?", userID).
 		Update("username", username)
@@ -149,7 +149,7 @@ func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username s
 }
 
 func (s *Store) DeleteUser(ctx context.Context, userID uuid.UUID) error {
-	return s.dbFromContext(ctx).
+	return s.query(ctx).
 		Where("id = ?", userID).
 		Delete(&model.User{}).
 		Error

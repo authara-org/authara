@@ -39,7 +39,7 @@ func toModelPendingProviderLink(d domain.PendingProviderLink) model.PendingProvi
 func (s *Store) CreatePendingProviderLink(ctx context.Context, link domain.PendingProviderLink) (domain.PendingProviderLink, error) {
 	m := toModelPendingProviderLink(link)
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Create(&m).
 		Error
 	if err != nil {
@@ -52,7 +52,7 @@ func (s *Store) CreatePendingProviderLink(ctx context.Context, link domain.Pendi
 func (s *Store) GetPendingProviderLinkByID(ctx context.Context, id uuid.UUID) (domain.PendingProviderLink, error) {
 	var m model.PendingProviderLink
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("id = ?", id).
 		First(&m).
 		Error
@@ -67,7 +67,7 @@ func (s *Store) GetPendingProviderLinkByID(ctx context.Context, id uuid.UUID) (d
 }
 
 func (s *Store) ConsumePendingProviderLink(ctx context.Context, id uuid.UUID, now time.Time) error {
-	res := s.dbFromContext(ctx).
+	res := s.query(ctx).
 		Model(&model.PendingProviderLink{}).
 		Where("id = ? AND consumed_at IS NULL AND expires_at > ?", id, now).
 		Update("consumed_at", now)

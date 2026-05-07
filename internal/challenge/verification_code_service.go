@@ -2,10 +2,12 @@ package challenge
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -16,14 +18,16 @@ import (
 )
 
 type VerificationCodeService struct {
-	store *store.Store
-	ttl   time.Duration
+	store   *store.Store
+	ttl     time.Duration
+	secrets [][]byte
 }
 
-func NewVerificationCodeService(store *store.Store, ttl time.Duration) *VerificationCodeService {
+func NewVerificationCodeService(store *store.Store, ttl time.Duration, secrets ...[]byte) *VerificationCodeService {
 	return &VerificationCodeService{
-		store: store,
-		ttl:   ttl,
+		store:   store,
+		ttl:     ttl,
+		secrets: cloneSecrets(secrets),
 	}
 }
 
@@ -32,6 +36,10 @@ func (s *VerificationCodeService) GenerateCode(
 	challenge domain.Challenge,
 	now time.Time,
 ) (string, error) {
+	if len(s.secrets) == 0 {
+		return "", errors.New("verification code secret is not configured")
+	}
+
 	code, err := generateSixDigitCode()
 	if err != nil {
 		return "", err
@@ -44,7 +52,7 @@ func (s *VerificationCodeService) GenerateCode(
 
 	err = s.store.UpsertVerificationCode(ctx, domain.VerificationCode{
 		ChallengeID: challenge.ID,
-		CodeHash:    hashVerificationCode(code),
+		CodeHash:    hashVerificationCode(code, s.secrets[0]),
 		ExpiresAt:   expiresAt,
 	})
 	if err != nil {
@@ -69,8 +77,11 @@ func (s *VerificationCodeService) VerifyCode(
 		return ErrChallengeExpired
 	}
 
-	got := hashVerificationCode(code)
-	if subtle.ConstantTimeCompare([]byte(got), []byte(row.CodeHash)) != 1 {
+	if len(s.secrets) == 0 {
+		return errors.New("verification code secret is not configured")
+	}
+
+	if !s.matchesVerificationCodeHash(code, row.CodeHash) {
 		return ErrInvalidVerificationCode
 	}
 
@@ -86,7 +97,30 @@ func generateSixDigitCode() (string, error) {
 	return fmt.Sprintf("%06d", n.Int64()), nil
 }
 
-func hashVerificationCode(code string) string {
-	sum := sha256.Sum256([]byte(code))
-	return hex.EncodeToString(sum[:])
+func (s *VerificationCodeService) matchesVerificationCodeHash(code string, storedHash string) bool {
+	for _, secret := range s.secrets {
+		got := hashVerificationCode(code, secret)
+		if subtle.ConstantTimeCompare([]byte(got), []byte(storedHash)) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
+func hashVerificationCode(code string, secret []byte) string {
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte(code))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func cloneSecrets(secrets [][]byte) [][]byte {
+	out := make([][]byte, 0, len(secrets))
+	for _, secret := range secrets {
+		if len(secret) == 0 {
+			continue
+		}
+		cloned := append([]byte(nil), secret...)
+		out = append(out, cloned)
+	}
+	return out
 }

@@ -49,7 +49,7 @@ func toModelEmailJob(d domain.EmailJob) model.EmailJob {
 func (s *Store) CreateEmailJob(ctx context.Context, in domain.EmailJob) (domain.EmailJob, error) {
 	row := toModelEmailJob(in)
 
-	err := s.db.WithContext(ctx).
+	err := s.query(ctx).
 		Create(&row).
 		Error
 
@@ -99,7 +99,7 @@ func (s *Store) ClaimNextEmailJob(ctx context.Context, now time.Time) (domain.Em
 }
 
 func (s *Store) MarkEmailJobSent(ctx context.Context, jobID uuid.UUID, now time.Time) error {
-	return s.db.WithContext(ctx).
+	return s.query(ctx).
 		Model(&model.EmailJob{}).
 		Where("id = ?", jobID).
 		Updates(map[string]any{
@@ -110,7 +110,7 @@ func (s *Store) MarkEmailJobSent(ctx context.Context, jobID uuid.UUID, now time.
 }
 
 func (s *Store) RequeueEmailJob(ctx context.Context, jobID uuid.UUID, lastError string, nextAttemptAt time.Time) error {
-	return s.db.WithContext(ctx).
+	return s.query(ctx).
 		Model(&model.EmailJob{}).
 		Where("id = ?", jobID).
 		Updates(map[string]any{
@@ -123,7 +123,7 @@ func (s *Store) RequeueEmailJob(ctx context.Context, jobID uuid.UUID, lastError 
 }
 
 func (s *Store) MarkEmailJobFailed(ctx context.Context, jobID uuid.UUID, lastError string) error {
-	return s.db.WithContext(ctx).
+	return s.query(ctx).
 		Model(&model.EmailJob{}).
 		Where("id = ?", jobID).
 		Updates(map[string]any{

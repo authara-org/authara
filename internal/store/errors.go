@@ -12,6 +12,7 @@ var (
 	ErrorAuthProviderNotFound         = errors.New("auth_provider not found")
 	ErrRefreshTokenNotFound           = errors.New("refresh_token not found")
 	ErrorChallengeNotFound            = errors.New("challenge not found")
+	ErrorChallengeAlreadyConsumed     = errors.New("challenge already consumed")
 	ErrorVerificationCodeNotFound     = errors.New("verification code not found")
 	ErrorEmailJobNotFound             = errors.New("email job not found")
 	ErrorPendingSignupActionNotFound  = errors.New("pending signup action not found")

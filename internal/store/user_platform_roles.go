@@ -10,7 +10,7 @@ import (
 func (s *Store) GetUserPlatformRoleNames(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	var names []string
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Table("user_platform_roles upr").
 		Select("pr.name").
 		Joins("JOIN platform_roles pr ON pr.id = upr.role_id").
@@ -30,7 +30,7 @@ func (s *Store) AddUserPlatformRoleByName(ctx context.Context, userID uuid.UUID,
 		return err
 	}
 
-	return s.dbFromContext(ctx).
+	return s.query(ctx).
 		Exec(`
 			INSERT INTO user_platform_roles (user_id, role_id)
 			VALUES (?, ?)
@@ -45,7 +45,7 @@ func (s *Store) RemoveUserPlatformRoleByName(ctx context.Context, userID uuid.UU
 		return err
 	}
 
-	return s.dbFromContext(ctx).
+	return s.query(ctx).
 		Exec(`
 			DELETE FROM user_platform_roles
 			WHERE user_id = ? AND role_id = ?
@@ -58,7 +58,7 @@ func (s *Store) RemoveUserPlatformRoleByName(ctx context.Context, userID uuid.UU
 func (s *Store) getPlatformRoleIDByName(ctx context.Context, name string) (uuid.UUID, error) {
 	var role model.Role
 
-	err := s.dbFromContext(ctx).
+	err := s.query(ctx).
 		Where("name = ?", name).
 		First(&role).Error
 	if err != nil {
