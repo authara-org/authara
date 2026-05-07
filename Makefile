@@ -12,6 +12,8 @@ DOCKER_COMPOSE_TEST = docker compose -f $(DOCKER_COMPOSE_FILE)
 POSTGRES_SERVICE   = postgres
 AUTHARA_SERVICE   = authara
 MIGRATIONS_SERVICE = backend-migrations
+MAILHOG_CONTAINER = mailhog
+MAILHOG_IMAGE     = mailhog/mailhog
 
 TEST_DB_NAME       ?= authara_test
 TEST_DB_HOST       ?= postgres
@@ -20,7 +22,7 @@ TEST_DB_SCHEMA     ?= authara
 TEST_DB_TIMEZONE   ?= UTC
 TEST_DB_LOG_SQL    ?= false
 
-.PHONY: dev dev-tailwind connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email \
+.PHONY: dev dev-tailwind mailhog-up mailhog-down connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email \
 	test test-up test-db-create test-migrate test-run test-down test-reset \
 	test-coverage test-coverage-profile test-coverage-html
 
@@ -45,11 +47,28 @@ dev:
 dev-tailwind:
 	cd frontend && npm run dev:tailwind
 
+mailhog-up:
+	@if docker ps -a --format '{{.Names}}' | grep -qx '$(MAILHOG_CONTAINER)'; then \
+		docker start $(MAILHOG_CONTAINER); \
+	else \
+		docker run -d \
+			--name $(MAILHOG_CONTAINER) \
+			-p 1025:1025 \
+			-p 8025:8025 \
+			$(MAILHOG_IMAGE); \
+	fi
+	@echo "MailHog SMTP: localhost:1025"
+	@echo "MailHog UI:   http://localhost:8025"
+
+mailhog-down:
+	-docker stop $(MAILHOG_CONTAINER)
+
 connect-db:
 	$(DOCKER_COMPOSE_DEV) exec -it $(POSTGRES_SERVICE) \
 	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE)
 
 migrate-up:
+	$(DOCKER_COMPOSE_DEV) build $(MIGRATIONS_SERVICE)
 	$(DOCKER_COMPOSE_DEV) run --rm $(MIGRATIONS_SERVICE)
 
 db-clean:
