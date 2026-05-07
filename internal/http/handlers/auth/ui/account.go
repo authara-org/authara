@@ -379,7 +379,7 @@ func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session.ClearSessionCookies(w)
-	redirect.Redirect(w, r, "/auth/successfull-deletion", http.StatusSeeOther)
+	redirect.Redirect(w, r, "/auth/successful-deletion", http.StatusSeeOther)
 }
 
 func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, error) {

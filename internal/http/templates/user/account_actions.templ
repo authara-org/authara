@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
 )
@@ -9,7 +10,7 @@ import (
 templ AccountFooterActions() {
 	<div class="p-4 sm:p-6 bg-grey-50 dark:bg-grey-950 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
 		<form
-			hx-post={ templ.SafeURL("/auth/sessions/logout?return_to=" + httpctx.ReturnToOrDefault(ctx, "/")) }
+			hx-post={ templ.SafeURL(redirect.WithReturnTo("/auth/sessions/logout", httpctx.ReturnToOrDefault(ctx, "/"))) }
 			class="w-full sm:w-auto"
 		>
 			@CSRFInput()

@@ -2,11 +2,13 @@ package ui
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/http/kit/htmx"
+	"github.com/authara-org/authara/internal/http/kit/httputil"
 	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	"github.com/go-chi/chi/v5"
@@ -78,12 +80,16 @@ func (h *UIHandler) renderVerifyChallengeRedirect(
 	htmx.ReTarget(w, "#body")
 	htmx.ReSwap(w, "innerHTML")
 
-	url := "/auth/verify-challenge/" + action.Path() + "?challenge_id=" + challengeID
+	u := url.URL{Path: "/auth/verify-challenge/" + action.Path()}
+	q := u.Query()
+	q.Set("challenge_id", challengeID)
 	if returnTo != "" {
-		url += "&return_to=" + returnTo
+		q.Set("return_to", returnTo)
 	}
+	u.RawQuery = q.Encode()
+	targetURL := u.String()
 
-	htmx.PushUrl(w, url)
+	htmx.PushUrl(w, targetURL)
 
 	return h.Render(
 		w,
@@ -116,6 +122,18 @@ func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) 
 			action,
 			challengeIDStr,
 			"Invalid verification request.",
+		)
+		return
+	}
+
+	allowed, err := h.Limiter.AllowChallengeVerifyAttempt(r.Context(), httputil.ClientIP(r), challengeIDStr)
+	if err != nil || !allowed {
+		h.renderVerifyChallengeError(
+			w,
+			r,
+			action,
+			challengeIDStr,
+			"Too many verification attempts. Please try again later.",
 		)
 		return
 	}
@@ -164,6 +182,17 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 	challengeID, err := uuid.Parse(challengeIDStr)
 	if err != nil {
 		http.Error(w, "invalid challenge", http.StatusBadRequest)
+		return
+	}
+
+	allowed, err := h.Limiter.AllowChallengeResendAttempt(ctx, httputil.ClientIP(r), challengeIDStr)
+	if err != nil || !allowed {
+		_ = h.Render(
+			w,
+			r,
+			http.StatusTooManyRequests,
+			toast.ToastMessage(toast.Error, "Too many resend attempts. Please try again later."),
+		)
 		return
 	}
 

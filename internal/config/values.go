@@ -7,8 +7,9 @@ import (
 )
 
 type Values struct {
-	AppEnv    string `env:"APP_ENV,default=dev"`
-	PublicURL string `env:"PUBLIC_URL,required"`
+	AppEnv            string `env:"APP_ENV,default=dev"`
+	PublicURL         string `env:"PUBLIC_URL,required"`
+	TrustProxyHeaders bool   `env:"AUTHARA_TRUST_PROXY_HEADERS,default=false"`
 
 	HttpAddr string
 }

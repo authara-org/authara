@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/authara-org/authara/internal/http/kit/csrf"
+	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/session"
 	"gopkg.in/yaml.v3"
 )
@@ -114,6 +115,12 @@ func TestStableCookiesFromContract(t *testing.T) {
 				req := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
 				if _, err := csrf.EnsureCookie(rr, req); err != nil {
 					t.Fatalf("EnsureCookie returned error: %v", err)
+				}
+
+			case "authara_oauth_nonce":
+				req := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
+				if _, err := oauthstate.EnsureNonce(rr, req); err != nil {
+					t.Fatalf("EnsureNonce returned error: %v", err)
 				}
 
 			default:

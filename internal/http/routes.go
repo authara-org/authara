@@ -17,7 +17,9 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	if cfg.TrustProxyHeaders {
+		r.Use(middleware.RealIP)
+	}
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
@@ -59,7 +61,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Use(mw.HTMX)
 
 			// authara internals
-			r.Get("/successfull-deletion", uih.SuccessfullDeletionPage)
+			r.Get("/successful-deletion", uih.SuccessfullDeletionPage)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RedirectIfAuthenticated)
@@ -106,6 +108,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 			r.Route("/oauth", func(r chi.Router) {
 				r.Use(mw.OptionalAppAccessIdentity)
+				r.Use(mw.RequireCSRF)
 
 				r.Post("/google/callback", uih.GoogleCallback)
 			})

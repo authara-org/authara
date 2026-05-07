@@ -2,6 +2,7 @@ package auth
 
 import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/templates"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
@@ -20,7 +21,7 @@ templ Login(oauthProviders []oauth.OAuthProvider) {
 				<p class="text-grey-800 dark:text-grey-200">
 					Don't have an Account?
 					<a
-						hx-get={ "/auth/signup?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
+						hx-get={ redirect.WithReturnTo("/auth/signup", httpctx.ReturnToOrDefault(ctx, "/")) }
 						hx-target="#body"
 						hx-swap="innerHTML"
 						hx-replace-url="true"
@@ -38,7 +39,7 @@ templ LoginForm() {
 	<form
 		x-data
 		autocomplete="on"
-		hx-post={ "/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
+		hx-post={ redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/")) }
 		hx-target="this"
 		hx-swap="outerHTML"
 	>
@@ -105,7 +106,7 @@ templ LoginForm() {
 			</label>
 			if httpctx.ChallengeEnabledOrDefault(ctx, false) {
 				<a
-					hx-get={ "/auth/password-reset?return_to=/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
+					hx-get={ redirect.WithReturnTo("/auth/password-reset", redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/"))) }
 					hx-target="#body"
 					hx-swap="innerHTML"
 					hx-replace-url="true"

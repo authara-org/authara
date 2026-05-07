@@ -11,6 +11,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
@@ -49,6 +50,18 @@ func (h *UIHandler) PasswordResetRequestPost(w http.ResponseWriter, r *http.Requ
 			r,
 			http.StatusUnprocessableEntity,
 			"Please provide a valid email and password.",
+			authview.PasswordResetForm(),
+		)
+		return
+	}
+
+	allowed, err := h.Limiter.AllowPasswordResetAttempt(ctx, httputil.ClientIP(r), form.Email)
+	if err != nil || !allowed {
+		h.renderFormError(
+			w,
+			r,
+			http.StatusTooManyRequests,
+			"Too many reset attempts. Please try again later.",
 			authview.PasswordResetForm(),
 		)
 		return

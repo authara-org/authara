@@ -23,7 +23,7 @@ func New(clientID string) *Client {
 	}
 }
 
-func (c *Client) VerifyIDToken(ctx context.Context, rawIDToken string) (*Identity, error) {
+func (c *Client) VerifyIDToken(ctx context.Context, rawIDToken string, expectedNonce string) (*Identity, error) {
 	if rawIDToken == "" {
 		return nil, errors.New("google id token is empty")
 	}
@@ -39,6 +39,21 @@ func (c *Client) VerifyIDToken(ctx context.Context, rawIDToken string) (*Identit
 	}
 
 	email, _ := payload.Claims["email"].(string)
+	if email == "" {
+		return nil, errors.New("google id token missing email")
+	}
+
+	emailVerified, _ := payload.Claims["email_verified"].(bool)
+	if !emailVerified {
+		return nil, errors.New("google id token email is not verified")
+	}
+
+	if expectedNonce != "" {
+		nonce, _ := payload.Claims["nonce"].(string)
+		if nonce == "" || nonce != expectedNonce {
+			return nil, errors.New("google id token nonce mismatch")
+		}
+	}
 
 	return &Identity{
 		OAuthID: sub,

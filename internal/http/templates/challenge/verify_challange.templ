@@ -2,6 +2,7 @@ package challenge
 
 import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/templates"
 	"github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
@@ -39,7 +40,7 @@ templ VerifyChallenge(challengeID string, action string, header string) {
 templ VerifyChallengeForm(challengeID string, action string, incorrect bool) {
 	<form
 		id="verification-code-input-form"
-		hx-post={ "/auth/verify-challenge/" + action + "?return_to=" + httpctx.ReturnToOrDefault(ctx, "/") }
+		hx-post={ redirect.WithReturnTo("/auth/verify-challenge/" + action, httpctx.ReturnToOrDefault(ctx, "/")) }
 		hx-target="this"
 		hx-swap="outerHTML"
 		autocomplete="one-time-code"

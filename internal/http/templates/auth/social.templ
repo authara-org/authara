@@ -41,6 +41,7 @@ templ GoogleSignin(action string, clientID string, flow string) {
 			data-client_id={ clientID }
 			data-callback="autharaGoogleCallback"
 			data-auto_prompt="false"
+			data-nonce={ httpctx.OAuthNonceOrDefault(ctx, "") }
 		></div>
 		<img
 			src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"

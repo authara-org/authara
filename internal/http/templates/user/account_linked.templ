@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
 )
 
@@ -44,7 +45,7 @@ templ AccountLinkedAccounts(googleConnected bool) {
 				</button>
 			} else {
 				<a
-					href={ templ.SafeURL("/auth/login?return_to=" + httpctx.ReturnToOrDefault(ctx, "/")) }
+					href={ templ.SafeURL(redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/"))) }
 					class="text-sm font-semibold text-blue-800 underline"
 				>
 					Connect

@@ -9,6 +9,11 @@ function getCSRFToken(): string {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
+function getGoogleNonce(): string {
+  const onload = document.querySelector<HTMLElement>("#g_id_onload");
+  return onload?.dataset.nonce || "";
+}
+
 window.autharaGoogleCallback = async (response: { credential?: string }) => {
   const credential = response?.credential;
   if (!credential) return;
@@ -21,6 +26,7 @@ window.autharaGoogleCallback = async (response: { credential?: string }) => {
   const form = new URLSearchParams();
   form.set("credential", credential);
   form.set("flow", flow);
+  form.set("nonce", getGoogleNonce());
 
   try {
     if (flow === "link") {
@@ -58,6 +64,7 @@ window.autharaGoogleCallback = async (response: { credential?: string }) => {
         credentials: "include",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
+          "X-CSRF-Token": getCSRFToken(),
         },
         body: form.toString(),
         redirect: "manual",

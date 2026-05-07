@@ -18,6 +18,7 @@ import (
 	"github.com/authara-org/authara/internal/email"
 	httpserver "github.com/authara-org/authara/internal/http"
 	"github.com/authara-org/authara/internal/http/kit/csrf"
+	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	"github.com/authara-org/authara/internal/logging"
@@ -83,6 +84,7 @@ func main() {
 	secure := cfg.Values.AppEnv == "prod"
 
 	csrf.Configure(secure)
+	oauthstate.Configure(secure)
 	session.Configure(secure)
 
 	accessTokenService := token.NewAccessTokenService(
@@ -165,9 +167,19 @@ func main() {
 	}
 
 	// Challenge services
+	_, activeVerificationSecret := cfg.Token.KeySet.SigningKey()
+	verificationSecrets := [][]byte{activeVerificationSecret}
+	for keyID, secret := range cfg.Token.KeySet.Keys {
+		if keyID == cfg.Token.KeySet.ActiveKeyID {
+			continue
+		}
+		verificationSecrets = append(verificationSecrets, secret)
+	}
+
 	verificationCodeService := challenge.NewVerificationCodeService(
 		store,
 		cfg.Challenge.VerificationCodeTTL,
+		verificationSecrets...,
 	)
 
 	challengeService := challenge.New(challenge.Config{
@@ -248,6 +260,21 @@ func main() {
 		SignupEmailLimit:  cfg.RateLimit.SignupEmailLimit,
 		SignupEmailWindow: cfg.RateLimit.SignupEmailWindow,
 
+		PasswordResetIPLimit:     cfg.RateLimit.PasswordResetIPLimit,
+		PasswordResetIPWindow:    cfg.RateLimit.PasswordResetIPWindow,
+		PasswordResetEmailLimit:  cfg.RateLimit.PasswordResetEmailLimit,
+		PasswordResetEmailWindow: cfg.RateLimit.PasswordResetEmailWindow,
+
+		ChallengeVerifyIPLimit:  cfg.RateLimit.ChallengeVerifyIPLimit,
+		ChallengeVerifyIPWindow: cfg.RateLimit.ChallengeVerifyIPWindow,
+		ChallengeVerifyIDLimit:  cfg.RateLimit.ChallengeVerifyIDLimit,
+		ChallengeVerifyIDWindow: cfg.RateLimit.ChallengeVerifyIDWindow,
+
+		ChallengeResendIPLimit:  cfg.RateLimit.ChallengeResendIPLimit,
+		ChallengeResendIPWindow: cfg.RateLimit.ChallengeResendIPWindow,
+		ChallengeResendIDLimit:  cfg.RateLimit.ChallengeResendIDLimit,
+		ChallengeResendIDWindow: cfg.RateLimit.ChallengeResendIDWindow,
+
 		CleanupEvery: cfg.RateLimit.CleanupEvery,
 		MaxEntries:   cfg.RateLimit.MaxEntries,
 	})
@@ -259,22 +286,23 @@ func main() {
 	renderer := render.New(assets, cfg.Challenge.Enabled)
 
 	server := httpserver.NewServer(httpserver.ServerConfig{
-		Version:          Version,
-		Addr:             cfg.Values.HttpAddr,
-		Dev:              cfg.Values.AppEnv == "dev",
-		Auth:             authService,
-		Session:          sessionService,
-		Challenge:        challengeService,
-		ChallengeEnabled: cfg.Challenge.Enabled,
-		Verification:     verificationCodeService,
-		Logger:           logger,
-		Store:            store,
-		AuthLimiter:      limiter,
-		Google:           googleClient,
-		OAuthProviders:   oauthProviders,
-		AccessTokenTTL:   cfg.Token.AccessTokenTTL,
-		RefreshTokenTTL:  cfg.Session.RefreshTokenTTL,
-		Render:           renderer,
+		Version:           Version,
+		Addr:              cfg.Values.HttpAddr,
+		Dev:               cfg.Values.AppEnv == "dev",
+		TrustProxyHeaders: cfg.Values.TrustProxyHeaders,
+		Auth:              authService,
+		Session:           sessionService,
+		Challenge:         challengeService,
+		ChallengeEnabled:  cfg.Challenge.Enabled,
+		Verification:      verificationCodeService,
+		Logger:            logger,
+		Store:             store,
+		AuthLimiter:       limiter,
+		Google:            googleClient,
+		OAuthProviders:    oauthProviders,
+		AccessTokenTTL:    cfg.Token.AccessTokenTTL,
+		RefreshTokenTTL:   cfg.Session.RefreshTokenTTL,
+		Render:            renderer,
 	}, mw)
 
 	ctx, stop := signal.NotifyContext(

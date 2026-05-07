@@ -6,7 +6,7 @@ import "time"
 // RetryAfter can be used to set HTTP Retry-After header or show a UI message.
 type RateLimitedError struct {
 	RetryAfter time.Duration
-	Scope      string // "login:ip", "login:email", "signup:ip", "signup:email"
+	Scope      string
 }
 
 func (e *RateLimitedError) Error() string {

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/flash"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/session"
 )
@@ -22,20 +24,24 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	idToken := r.FormValue("credential")
+	nonce := r.FormValue("nonce")
 	flow := r.FormValue("flow")
 	linkID := r.FormValue("link_id")
 
-	if idToken == "" {
+	expectedNonce, ok := oauthstate.ReadNonce(r)
+	if idToken == "" || nonce == "" || !ok ||
+		subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
 		h.renderError(w, r, ctx)
 		return
 
 	}
 
-	identity, err := h.Google.VerifyIDToken(ctx, idToken)
+	identity, err := h.Google.VerifyIDToken(ctx, idToken, expectedNonce)
 	if err != nil {
 		h.renderError(w, r, ctx)
 		return
 	}
+	oauthstate.ClearNonce(w)
 
 	if flow == "link" {
 		if err := h.CompleteProviderLink(ctx, linkID, domain.ProviderGoogle, identity.OAuthID); err != nil {
@@ -96,5 +102,4 @@ func (h *UIHandler) renderError(w http.ResponseWriter, r *http.Request, ctx cont
 		Message: "Google login failed. Please try again.",
 	})
 	redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/")), http.StatusSeeOther)
-	return
 }

@@ -155,8 +155,7 @@ csrf_contract:
 
   applies_to:
     rule: every stable POST route under /auth requires CSRF
-    exceptions:
-      - /auth/oauth/google/callback
+    exceptions: []
 
   browser_error:
     status: 403
@@ -180,6 +179,10 @@ cookies:
   - name: authara_csrf
     stability: stable
     purpose: CSRF protection cookie.
+
+  - name: authara_oauth_nonce
+    stability: stable
+    purpose: Google OAuth nonce binding cookie.
 
 headers:
   - name: HX-Redirect

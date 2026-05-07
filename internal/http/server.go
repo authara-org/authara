@@ -17,22 +17,23 @@ import (
 )
 
 type ServerConfig struct {
-	Version          string
-	Addr             string
-	Dev              bool
-	Auth             *auth.Service
-	Session          *session.Service
-	Challenge        *challenge.Service
-	ChallengeEnabled bool
-	Verification     *challenge.VerificationCodeService
-	Logger           *slog.Logger
-	Store            *store.Store
-	AuthLimiter      ratelimiter.AuthLimiter
-	Google           *google.Client
-	OAuthProviders   oauth.OAuthProviders
-	AccessTokenTTL   time.Duration
-	RefreshTokenTTL  time.Duration
-	Render           render.Renderer
+	Version           string
+	Addr              string
+	Dev               bool
+	TrustProxyHeaders bool
+	Auth              *auth.Service
+	Session           *session.Service
+	Challenge         *challenge.Service
+	ChallengeEnabled  bool
+	Verification      *challenge.VerificationCodeService
+	Logger            *slog.Logger
+	Store             *store.Store
+	AuthLimiter       ratelimiter.AuthLimiter
+	Google            *google.Client
+	OAuthProviders    oauth.OAuthProviders
+	AccessTokenTTL    time.Duration
+	RefreshTokenTTL   time.Duration
+	Render            render.Renderer
 }
 
 type Middlewares struct {

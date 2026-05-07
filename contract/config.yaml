@@ -102,6 +102,13 @@ variables:
     type: url
     notes: Must not include /auth
 
+  - name: AUTHARA_TRUST_PROXY_HEADERS
+    stability: stable
+    required: false
+    type: bool
+    default: false
+    notes: Enables trusted X-Forwarded-For/X-Real-IP parsing when Authara is behind a proxy that strips client-supplied forwarded headers.
+
   # ------------------------------------------------------------
   # JWT / Tokens
   # ------------------------------------------------------------
@@ -225,6 +232,90 @@ variables:
     required: false
     type: duration
     default: 24h
+
+  # ------------------------------------------------------------
+  # Rate Limiting (Password Reset)
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_RATE_LIMIT_PASSWORD_RESET_IP_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 5
+
+  - name: AUTHARA_RATE_LIMIT_PASSWORD_RESET_IP_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 1h
+
+  - name: AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 3
+
+  - name: AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 24h
+
+  # ------------------------------------------------------------
+  # Rate Limiting (Challenge Verify)
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 30
+
+  - name: AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 10m
+
+  - name: AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_ID_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 10
+
+  - name: AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_ID_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 30m
+
+  # ------------------------------------------------------------
+  # Rate Limiting (Challenge Resend)
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 10
+
+  - name: AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 1h
+
+  - name: AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_ID_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 5
+
+  - name: AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_ID_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 30m
 
   # ------------------------------------------------------------
   # Limiter Safety

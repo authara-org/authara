@@ -6,6 +6,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/http/kit/csrf"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 )
 
 func New(a Assets, challengeEnabled bool) Renderer {
@@ -18,6 +19,16 @@ func New(a Assets, challengeEnabled bool) Renderer {
 				return err
 			}
 			r = r.WithContext(httpctx.WithCSRF(r.Context(), tok))
+		}
+
+		_, ok = httpctx.OAuthNonce(r.Context())
+		if !ok {
+			nonce, err := oauthstate.EnsureNonce(w, r)
+			if err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return err
+			}
+			r = r.WithContext(httpctx.WithOAuthNonce(r.Context(), nonce))
 		}
 
 		r = r.WithContext(httpctx.WithAssets(r.Context(), a))

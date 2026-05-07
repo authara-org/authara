@@ -11,7 +11,6 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/handlers/auth/ui/flow"
-	"github.com/authara-org/authara/internal/http/kit/htmx"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
@@ -153,10 +152,6 @@ func (h *UIHandler) startSignupChallenge(
 		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Could not start signup verification. Please try again.", authview.SignupForm())
 		return
 	}
-
-	htmx.ReTarget(w, "#body")
-	htmx.ReSwap(w, "innerHTML")
-	htmx.PushUrl(w, "/auth/verify-challenge?challenge_id="+challengeID.String()+"&return_to="+httpctx.ReturnToOrDefault(ctx, "/"))
 
 	_ = h.renderVerifyChallengeRedirect(
 		w,

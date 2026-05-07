@@ -1,12 +1,24 @@
 package auth
 
-import "strings"
+import (
+	"net/mail"
+	"strings"
+)
 
 func IsValidEmail(email string) bool {
-	if len(email) > 254 {
+	email = strings.TrimSpace(email)
+	if len(email) == 0 || len(email) > 254 {
 		return false
 	}
-	return strings.Contains(email, "@")
+	if strings.ContainsAny(email, "\r\n\t ") {
+		return false
+	}
+
+	addr, err := mail.ParseAddress(email)
+	if err != nil {
+		return false
+	}
+	return addr.Name == "" && strings.EqualFold(addr.Address, email)
 }
 
 func IsValidPassword(pw string) bool {

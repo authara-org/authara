@@ -448,12 +448,15 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 	now := time.Now()
 
-	err := s.store.DisableUser(ctx, userID, now)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.DisableUser(txCtx, userID, now); err != nil {
+			return err
+		}
+		if err := s.store.RevokeAllSessionsForUser(txCtx, userID, now); err != nil {
+			return err
+		}
+		return s.store.DeleteRefreshTokensByUserID(txCtx, userID)
+	})
 }
 
 func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username string) error {
