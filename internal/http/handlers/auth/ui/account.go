@@ -100,12 +100,12 @@ func (h *UIHandler) ChangePasswordPage(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *UIHandler) SuccessfullDeletionPage(w http.ResponseWriter, r *http.Request) {
+func (h *UIHandler) SuccessfulDeletionPage(w http.ResponseWriter, r *http.Request) {
 	_ = h.Render(
 		w,
 		r,
 		http.StatusOK,
-		authview.SuccessfullDeletion(),
+		authview.SuccessfulDeletion(),
 	)
 }
 

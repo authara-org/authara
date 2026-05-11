@@ -1,0 +1,139 @@
+package user
+
+import (
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/http/viewmodel"
+)
+
+templ PasswordProviderActions(provider viewmodel.AuthProvider) {
+	if provider.Linked {
+		<div class="hidden sm:flex gap-2">
+			<a
+				hx-get="/auth/providers/password/change?return_to=/auth/account"
+				hx-target="#body"
+				hx-swap="innerHTML"
+				hx-replace-url="true"
+				class="block"
+			>
+				<div class="w-fit">
+					@button.Button(button.ButtonConfig{
+						Label:   "Change",
+						Type:    button.RegularButton,
+						Color:   button.Light,
+						Variant: button.Outline,
+					})
+				</div>
+			</a>
+			@button.Button(button.ButtonConfig{
+				Label:   "Remove",
+				Type:    button.RegularButton,
+				Color:   button.Light,
+				Variant: button.Outline,
+				OnClick: "activeModal = 'remove-password'",
+			})
+		</div>
+		<div class="sm:hidden">
+			@ActionMenu() {
+				<a
+					hx-get="/auth/providers/password/change?return_to=/auth/account"
+					hx-target="#body"
+					hx-swap="innerHTML"
+					hx-replace-url="true"
+					class="block"
+				>
+					@ActionMenuItem("Change password")
+				</a>
+				<div class="w-full h-px bg-grey-100 dark:bg-grey-800"></div>
+				<button
+					type="button"
+					@click="activeModal = 'remove-password'; open = false"
+					class="flex justify-center w-full text-left px-4 py-3 text-sm
+						text-red-700 dark:text-red-400
+						hover:bg-grey-50 dark:hover:bg-grey-800
+						cursor-pointer transition-colors"
+				>
+					Remove password
+				</button>
+			}
+		</div>
+	} else {
+		<a
+			hx-get="/auth/providers/password/add?return_to=/auth/account"
+			hx-target="#body"
+			hx-swap="innerHTML"
+			hx-replace-url="true"
+			class="block"
+		>
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Label: "Add Password",
+					Type:  button.RegularButton,
+					Color: button.Main,
+				})
+			</div>
+		</a>
+	}
+}
+
+templ ActionMenu() {
+	<div x-data="{ open: false }" class="relative">
+		<button
+			type="button"
+			@click="open = !open"
+			class="h-10 w-10 rounded-xl border-2 border-grey-100 dark:border-grey-800
+				bg-white dark:bg-grey-900 text-grey-700 dark:text-grey-300
+				hover:bg-grey-50 dark:hover:bg-grey-800
+				flex items-center justify-center cursor-pointer transition-colors"
+			aria-label="Open actions"
+		>
+			<span class="h-5 w-5 stroke-2">
+				@icons.EllipsisHorizontal()
+			</span>
+		</button>
+		<div
+			x-cloak
+			x-show="open"
+			x-transition.opacity
+			@click.outside="open = false"
+			class="absolute right-0 mt-2 min-w-48 rounded-xl border border-grey-200 dark:border-grey-800 bg-white dark:bg-grey-900 shadow-lg z-30 overflow-hidden"
+		>
+			{ children... }
+		</div>
+	</div>
+}
+
+templ ActionMenuItem(label string) {
+	<div
+		class="flex justify-center w-full text-left px-4 py-3 text-sm
+			text-grey-900 dark:text-grey-100
+			hover:bg-grey-50 dark:hover:bg-grey-800
+			cursor-pointer transition-colors"
+	>
+		{ label }
+	</div>
+}
+
+templ ActionMenuSubmitItem(label string) {
+	<button
+		type="submit"
+		class="flex justify-center w-full text-left px-4 py-3 text-sm
+			text-grey-900 dark:text-grey-100
+			hover:bg-grey-50 dark:hover:bg-grey-800
+			cursor-pointer transition-colors"
+	>
+		{ label }
+	</button>
+}
+
+templ ActionMenuSubmitItemDanger(label string) {
+	<button
+		type="submit"
+		class="flex justify-center w-full text-left px-4 py-3 text-sm
+			text-red-700 dark:text-red-400
+			hover:bg-grey-50 dark:hover:bg-grey-800
+			cursor-pointer transition-colors"
+	>
+		{ label }
+	</button>
+}
