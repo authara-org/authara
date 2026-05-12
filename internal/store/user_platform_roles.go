@@ -3,21 +3,31 @@ package store
 import (
 	"context"
 
-	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
 )
 
 func (s *Store) GetUserPlatformRoleNames(ctx context.Context, userID uuid.UUID) ([]string, error) {
-	var names []string
-
-	err := s.query(ctx).
-		Table("user_platform_roles upr").
-		Select("pr.name").
-		Joins("JOIN platform_roles pr ON pr.id = upr.role_id").
-		Where("upr.user_id = ?", userID).
-		Order("pr.name ASC").
-		Scan(&names).Error
+	rows, err := s.queryRows(ctx, `
+		SELECT pr.name
+		FROM user_platform_roles upr
+		JOIN platform_roles pr ON pr.id = upr.role_id
+		WHERE upr.user_id = $1
+		ORDER BY pr.name ASC
+	`, userID)
 	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	names := make([]string, 0)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -30,13 +40,12 @@ func (s *Store) AddUserPlatformRoleByName(ctx context.Context, userID uuid.UUID,
 		return err
 	}
 
-	return s.query(ctx).
-		Exec(`
-			INSERT INTO user_platform_roles (user_id, role_id)
-			VALUES (?, ?)
-			ON CONFLICT (user_id, role_id) DO NOTHING
-		`, userID, roleID).
-		Error
+	_, err = s.exec(ctx, `
+		INSERT INTO user_platform_roles (user_id, role_id)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id, role_id) DO NOTHING
+	`, userID, roleID)
+	return err
 }
 
 func (s *Store) RemoveUserPlatformRoleByName(ctx context.Context, userID uuid.UUID, roleName string) error {
@@ -45,29 +54,22 @@ func (s *Store) RemoveUserPlatformRoleByName(ctx context.Context, userID uuid.UU
 		return err
 	}
 
-	return s.query(ctx).
-		Exec(`
-			DELETE FROM user_platform_roles
-			WHERE user_id = ? AND role_id = ?
-		`, userID, roleID).
-		Error
+	_, err = s.exec(ctx, `
+		DELETE FROM user_platform_roles
+		WHERE user_id = $1 AND role_id = $2
+	`, userID, roleID)
+	return err
 }
 
 // ---- helpers ----
 
 func (s *Store) getPlatformRoleIDByName(ctx context.Context, name string) (uuid.UUID, error) {
-	var role model.Role
+	var id uuid.UUID
 
-	err := s.query(ctx).
-		Where("name = ?", name).
-		First(&role).Error
+	err := s.queryRow(ctx, `SELECT id FROM platform_roles WHERE name = $1`, name).Scan(&id)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, mapNoRows(err, ErrorRoleNotFound)
 	}
 
-	if role.ID == nil {
-		return uuid.Nil, ErrorRoleNotFound
-	}
-
-	return *role.ID, nil
+	return id, nil
 }

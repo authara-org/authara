@@ -2,8 +2,7 @@ package store
 
 import (
 	"context"
-
-	"gorm.io/gorm"
+	"database/sql"
 )
 
 type contextKey string
@@ -13,13 +12,19 @@ const (
 	DbKey contextKey = "store.tx.db"
 )
 
-func (s *Store) dbFromContext(ctx context.Context) *gorm.DB {
-	if txDB, ok := ctx.Value(DbKey).(*gorm.DB); ok {
+type queryer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func (s *Store) dbFromContext(ctx context.Context) queryer {
+	if txDB, ok := ctx.Value(DbKey).(*sql.Tx); ok {
 		return txDB
 	}
 	return s.db
 }
 
-func (s *Store) query(ctx context.Context) *gorm.DB {
-	return s.dbFromContext(ctx).WithContext(ctx)
+func (s *Store) query(ctx context.Context) queryer {
+	return s.dbFromContext(ctx)
 }

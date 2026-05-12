@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/authara-org/authara/internal/store"
-	"gorm.io/gorm"
 )
 
 type Manager struct {
@@ -54,7 +53,7 @@ func (m *Manager) Commit(ctx context.Context) error {
 		return err
 	}
 
-	if err := db.Commit().Error; err != nil {
+	if err := db.Commit(); err != nil {
 		return err
 	}
 
@@ -72,7 +71,7 @@ func (m *Manager) Rollback(ctx context.Context) error {
 		return err
 	}
 
-	if err := db.Rollback().Error; err != nil {
+	if err := db.Rollback(); err != nil {
 		return err
 	}
 
@@ -93,7 +92,7 @@ func (m *Manager) Begin(parent context.Context) (context.Context, context.Cancel
 
 func (m *Manager) withCancel(parent context.Context) (context.Context, context.CancelFunc, bool, error) {
 	// Reuse existing transaction if already present in context.
-	if existing, ok := parent.Value(store.DbKey).(*gorm.DB); ok && existing != nil {
+	if existing, ok := parent.Value(store.DbKey).(*sql.Tx); ok && existing != nil {
 		// ensure tx state exists
 		if _, ok := parent.Value(store.TxKey).(*transactionState); ok {
 			return parent, func() {}, false, nil
@@ -112,14 +111,14 @@ func (m *Manager) withCancel(parent context.Context) (context.Context, context.C
 }
 
 func (m *Manager) withContext(parent context.Context) (context.Context, error) {
-	session := m.store.DB().
-		WithContext(parent).
-		Begin(&sql.TxOptions{
+	session, err := m.store.DB().BeginTx(
+		parent,
+		&sql.TxOptions{
 			Isolation: sql.LevelReadCommitted,
-		})
-
-	if session.Error != nil {
-		return nil, session.Error
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	ctx := context.WithValue(parent, store.DbKey, session)
@@ -141,8 +140,8 @@ func (m *Manager) cleanup(ctx context.Context) {
 // Context utilities
 // ---------------------------------------------------------------------
 
-func getDB(ctx context.Context) (*gorm.DB, error) {
-	db, ok := ctx.Value(store.DbKey).(*gorm.DB)
+func getDB(ctx context.Context) (*sql.Tx, error) {
+	db, ok := ctx.Value(store.DbKey).(*sql.Tx)
 	if !ok {
 		return nil, fmt.Errorf("no transaction in context")
 	}

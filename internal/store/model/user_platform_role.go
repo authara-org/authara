@@ -7,10 +7,10 @@ import (
 )
 
 type UserRole struct {
-	UserID uuid.UUID `gorm:"type:uuid;not null;column:user_id;primaryKey"`
-	RoleID uuid.UUID `gorm:"type:uuid;not null;column:role_id;primaryKey"`
+	UserID uuid.UUID `db:"user_id"`
+	RoleID uuid.UUID `db:"role_id"`
 
-	CreatedAt time.Time `gorm:"not null;column:created_at"`
+	CreatedAt time.Time `db:"created_at"`
 }
 
 func (UserRole) TableName() string {

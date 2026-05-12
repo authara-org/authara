@@ -4,21 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
-
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 func (s *Store) CurrentSchemaVersion(ctx context.Context) (int, error) {
 	var version sql.NullInt32
 
-	silentDB := s.db.Session(&gorm.Session{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-
-	err := silentDB.WithContext(ctx).
-		Raw(`SELECT max(version) FROM public.authara_schema_version`).
-		Scan(&version).Error
+	err := s.db.QueryRowContext(ctx, `SELECT max(version) FROM public.authara_schema_version`).Scan(&version)
 
 	if err != nil {
 		slog.Error(

@@ -7,13 +7,13 @@ import (
 )
 
 type PendingSignupAction struct {
-	ID        *uuid.UUID `gorm:"type:uuid;primaryKey;column:id;default:gen_random_uuid()"`
-	CreatedAt time.Time  `gorm:"not null;column:created_at"`
+	ID        uuid.UUID `db:"id"`
+	CreatedAt time.Time `db:"created_at"`
 
-	ChallengeID  uuid.UUID `gorm:"type:uuid;not null;column:challenge_id"`
-	Email        string    `gorm:"type:varchar(255);not null;column:email"`
-	Username     string    `gorm:"type:varchar(255);not null;column:username"`
-	PasswordHash string    `gorm:"type:varchar(255);not null;column:password_hash"`
+	ChallengeID  uuid.UUID `db:"challenge_id"`
+	Email        string    `db:"email"`
+	Username     string    `db:"username"`
+	PasswordHash string    `db:"password_hash"`
 }
 
 func (PendingSignupAction) TableName() string {
@@ -21,12 +21,12 @@ func (PendingSignupAction) TableName() string {
 }
 
 type PendingPasswordReset struct {
-	ID        *uuid.UUID `gorm:"type:uuid;primaryKey;column:id;default:gen_random_uuid()"`
-	CreatedAt time.Time  `gorm:"not null;column:created_at"`
+	ID        uuid.UUID `db:"id"`
+	CreatedAt time.Time `db:"created_at"`
 
-	ChallengeID  uuid.UUID `gorm:"type:uuid;not null;column:challenge_id"`
-	UserID       uuid.UUID `gorm:"type:uuid;not null;column:user_id"`
-	PasswordHash string    `gorm:"type:varchar(255);not null;column:password_hash"`
+	ChallengeID  uuid.UUID `db:"challenge_id"`
+	UserID       uuid.UUID `db:"user_id"`
+	PasswordHash string    `db:"password_hash"`
 }
 
 func (PendingPasswordReset) TableName() string {
@@ -34,14 +34,14 @@ func (PendingPasswordReset) TableName() string {
 }
 
 type PendingEmailChange struct {
-	ID        *uuid.UUID `gorm:"type:uuid;primaryKey;column:id;default:gen_random_uuid()"`
-	CreatedAt time.Time  `gorm:"not null;column:created_at"`
+	ID        uuid.UUID `db:"id"`
+	CreatedAt time.Time `db:"created_at"`
 
-	ChallengeID uuid.UUID `gorm:"type:uuid;not null;column:challenge_id"`
-	UserID      uuid.UUID `gorm:"type:uuid;not null;column:user_id"`
+	ChallengeID uuid.UUID `db:"challenge_id"`
+	UserID      uuid.UUID `db:"user_id"`
 
-	OldEmail string `gorm:"type:varchar(255);not null;column:old_email"`
-	NewEmail string `gorm:"type:varchar(255);not null;column:new_email"`
+	OldEmail string `db:"old_email"`
+	NewEmail string `db:"new_email"`
 }
 
 func (PendingEmailChange) TableName() string {

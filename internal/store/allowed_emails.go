@@ -2,77 +2,82 @@ package store
 
 import (
 	"context"
-	"errors"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store/model"
-	"gorm.io/gorm"
 )
 
 func toDomainAllowedEmail(m model.AllowedEmail) domain.AllowedEmail {
 	return domain.AllowedEmail{
-		ID:    *m.ID,
+		ID:    m.ID,
 		Email: m.Email,
 	}
 }
 
 func toModelAllowedEmail(d domain.AllowedEmail) model.AllowedEmail {
 	return model.AllowedEmail{
-		ID:    nil,
 		Email: d.Email,
 	}
 }
 
+const allowedEmailColumns = `
+	id,
+	created_at,
+	updated_at,
+	email
+`
+
+func scanAllowedEmail(row rowScanner, m *model.AllowedEmail) error {
+	return row.Scan(
+		&m.ID,
+		&m.CreatedAt,
+		&m.UpdatedAt,
+		&m.Email,
+	)
+}
+
 func (s *Store) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
-	var count int64
+	var exists bool
 
-	err := s.query(ctx).
-		Model(&model.AllowedEmail{}).
-		Where("email = ?", email).
-		Count(&count).
-		Error
-
-	if err != nil {
+	if err := s.queryRow(ctx, `SELECT EXISTS(SELECT 1 FROM allowed_emails WHERE email = $1)`, email).Scan(&exists); err != nil {
 		return false, err
 	}
-	return count > 0, nil
+	return exists, nil
 }
 
 func (s *Store) CreateAllowedEmail(ctx context.Context, allowedEmail domain.AllowedEmail) error {
 	m := toModelAllowedEmail(allowedEmail)
 
-	return s.query(ctx).Create(&m).Error
+	_, err := s.exec(ctx, `INSERT INTO allowed_emails (email) VALUES ($1)`, m.Email)
+	return err
 }
 
 func (s *Store) DeleteAllowedEmail(ctx context.Context, email string) error {
-	result := s.query(ctx).
-		Where("email = ?", email).
-		Delete(&model.AllowedEmail{})
-
-	if result.Error != nil {
-		return result.Error
-	}
-
-	return nil
+	_, err := s.exec(ctx, `DELETE FROM allowed_emails WHERE email = $1`, email)
+	return err
 }
 
 func (s *Store) ListAllowedEmails(ctx context.Context) ([]domain.AllowedEmail, error) {
-	var rows []model.AllowedEmail
-
-	err := s.query(ctx).
-		Order("email ASC").
-		Find(&rows).
-		Error
+	rows, err := s.queryRows(ctx, `
+		SELECT `+allowedEmailColumns+`
+		FROM allowed_emails
+		ORDER BY email ASC
+	`)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return []domain.AllowedEmail{}, nil
-		}
 		return nil, err
 	}
+	defer rows.Close()
 
-	out := make([]domain.AllowedEmail, 0, len(rows))
-	for _, row := range rows {
+	out := make([]domain.AllowedEmail, 0)
+	for rows.Next() {
+		var row model.AllowedEmail
+		if err := scanAllowedEmail(rows, &row); err != nil {
+			return nil, err
+		}
 		out = append(out, toDomainAllowedEmail(row))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return out, nil
