@@ -23,13 +23,9 @@ type RateLimit struct {
 
 	ChallengeVerifyIPLimit     int    `env:"AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_LIMIT,default=30"`
 	ChallengeVerifyIPWindowRaw string `env:"AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_WINDOW,default=10m"`
-	ChallengeVerifyIDLimit     int    `env:"AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_ID_LIMIT,default=10"`
-	ChallengeVerifyIDWindowRaw string `env:"AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_ID_WINDOW,default=30m"`
 
 	ChallengeResendIPLimit     int    `env:"AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_LIMIT,default=10"`
 	ChallengeResendIPWindowRaw string `env:"AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_WINDOW,default=1h"`
-	ChallengeResendIDLimit     int    `env:"AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_ID_LIMIT,default=5"`
-	ChallengeResendIDWindowRaw string `env:"AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_ID_WINDOW,default=30m"`
 
 	CleanupEvery int `env:"AUTHARA_RATE_LIMIT_CLEANUP_EVERY,default=200"`
 	MaxEntries   int `env:"AUTHARA_RATE_LIMIT_MAX_ENTRIES,default=50000"`
@@ -41,9 +37,7 @@ type RateLimit struct {
 	PasswordResetIPWindow    time.Duration
 	PasswordResetEmailWindow time.Duration
 	ChallengeVerifyIPWindow  time.Duration
-	ChallengeVerifyIDWindow  time.Duration
 	ChallengeResendIPWindow  time.Duration
-	ChallengeResendIDWindow  time.Duration
 }
 
 func (r *RateLimit) validate() error {
@@ -68,14 +62,8 @@ func (r *RateLimit) validate() error {
 	if r.ChallengeVerifyIPLimit <= 0 {
 		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_LIMIT must be > 0 (got %d)", r.ChallengeVerifyIPLimit)
 	}
-	if r.ChallengeVerifyIDLimit <= 0 {
-		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_ID_LIMIT must be > 0 (got %d)", r.ChallengeVerifyIDLimit)
-	}
 	if r.ChallengeResendIPLimit <= 0 {
 		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_LIMIT must be > 0 (got %d)", r.ChallengeResendIPLimit)
-	}
-	if r.ChallengeResendIDLimit <= 0 {
-		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_ID_LIMIT must be > 0 (got %d)", r.ChallengeResendIDLimit)
 	}
 	if r.CleanupEvery <= 0 {
 		return fmt.Errorf("AUTHARA_RATE_LIMIT_CLEANUP_EVERY must be > 0 (got %d)", r.CleanupEvery)
@@ -117,15 +105,7 @@ func (r *RateLimit) parse() error {
 	if err != nil {
 		return err
 	}
-	r.ChallengeVerifyIDWindow, err = parseDurationEnv("AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_ID_WINDOW", r.ChallengeVerifyIDWindowRaw)
-	if err != nil {
-		return err
-	}
 	r.ChallengeResendIPWindow, err = parseDurationEnv("AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_WINDOW", r.ChallengeResendIPWindowRaw)
-	if err != nil {
-		return err
-	}
-	r.ChallengeResendIDWindow, err = parseDurationEnv("AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_ID_WINDOW", r.ChallengeResendIDWindowRaw)
 	if err != nil {
 		return err
 	}
@@ -151,14 +131,8 @@ func (r *RateLimit) parse() error {
 	if r.ChallengeVerifyIPWindow <= 0 {
 		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_WINDOW must be > 0 (got %s)", r.ChallengeVerifyIPWindow)
 	}
-	if r.ChallengeVerifyIDWindow <= 0 {
-		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_ID_WINDOW must be > 0 (got %s)", r.ChallengeVerifyIDWindow)
-	}
 	if r.ChallengeResendIPWindow <= 0 {
 		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_WINDOW must be > 0 (got %s)", r.ChallengeResendIPWindow)
-	}
-	if r.ChallengeResendIDWindow <= 0 {
-		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_ID_WINDOW must be > 0 (got %s)", r.ChallengeResendIDWindow)
 	}
 
 	return nil

@@ -126,7 +126,7 @@ func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	allowed, err := h.Limiter.AllowChallengeVerifyAttempt(r.Context(), httputil.ClientIP(r), challengeIDStr)
+	allowed, err := h.Limiter.AllowChallengeVerifyAttempt(r.Context(), httputil.ClientIP(r))
 	if err != nil || !allowed {
 		h.renderVerifyChallengeError(
 			w,
@@ -185,7 +185,7 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	allowed, err := h.Limiter.AllowChallengeResendAttempt(ctx, httputil.ClientIP(r), challengeIDStr)
+	allowed, err := h.Limiter.AllowChallengeResendAttempt(ctx, httputil.ClientIP(r))
 	if err != nil || !allowed {
 		_ = h.Render(
 			w,

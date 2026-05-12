@@ -147,9 +147,9 @@ In multi-instance deployments, operators should consider:
 - load balancing behavior
 - schema compatibility during rollout
 
-Some features, such as the current in-memory rate limiter, are instance-local.
+Some features, such as the default in-memory rate limiter, are instance-local.
 
-This means rate limiting is **not shared across instances** unless a shared limiter backend is added in the future.
+Set `AUTHARA_CACHE_PROVIDER=redis` to use Redis-backed rate limiting across instances.
 
 ---
 

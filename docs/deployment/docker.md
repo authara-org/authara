@@ -110,6 +110,7 @@ The `.env` file usually contains:
 - JWT configuration
 - session settings
 - OAuth settings
+- cache / Redis settings
 - rate limiting settings
 
 See:

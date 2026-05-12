@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Values       Values
 	DB           DB
+	Cache        Cache
 	Logging      Logging
 	OAuth        OAuth
 	Token        Token
@@ -32,6 +33,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.DB.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Cache.validate(); err != nil {
 		return nil, err
 	}
 	if err := cfg.Logging.validate(); err != nil {
@@ -65,6 +69,9 @@ func Load() (*Config, error) {
 	cfg.Values.HttpAddr = ":8080"
 
 	if err := cfg.Logging.parse(cfg.Values.AppEnv); err != nil {
+		return nil, err
+	}
+	if err := cfg.Cache.parse(); err != nil {
 		return nil, err
 	}
 	if err := cfg.Token.parse(); err != nil {

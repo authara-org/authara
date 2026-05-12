@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	cachepkg "github.com/authara-org/authara/internal/cache"
 	httpserver "github.com/authara-org/authara/internal/http"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
@@ -80,7 +81,21 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 }
 
 func newAuthLimiter(app *App) ratelimiter.AuthLimiter {
-	return ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{
+	cfg := newLimiterConfig(app)
+
+	if app.Config.Cache.Provider == "redis" {
+		if counter, ok := app.Cache.(cachepkg.Counter); ok {
+			return ratelimiter.NewCacheLimiter(counter, cfg)
+		}
+
+		app.Logger.Warn("configured cache does not support atomic counters; falling back to in-memory rate limiter")
+	}
+
+	return ratelimiter.NewInMemoryLimiter(cfg)
+}
+
+func newLimiterConfig(app *App) ratelimiter.LimiterConfig {
+	return ratelimiter.LimiterConfig{
 		LoginIPLimit:     app.Config.RateLimit.LoginIPLimit,
 		LoginIPWindow:    app.Config.RateLimit.LoginIPWindow,
 		LoginEmailLimit:  app.Config.RateLimit.LoginEmailLimit,
@@ -98,15 +113,11 @@ func newAuthLimiter(app *App) ratelimiter.AuthLimiter {
 
 		ChallengeVerifyIPLimit:  app.Config.RateLimit.ChallengeVerifyIPLimit,
 		ChallengeVerifyIPWindow: app.Config.RateLimit.ChallengeVerifyIPWindow,
-		ChallengeVerifyIDLimit:  app.Config.RateLimit.ChallengeVerifyIDLimit,
-		ChallengeVerifyIDWindow: app.Config.RateLimit.ChallengeVerifyIDWindow,
 
 		ChallengeResendIPLimit:  app.Config.RateLimit.ChallengeResendIPLimit,
 		ChallengeResendIPWindow: app.Config.RateLimit.ChallengeResendIPWindow,
-		ChallengeResendIDLimit:  app.Config.RateLimit.ChallengeResendIDLimit,
-		ChallengeResendIDWindow: app.Config.RateLimit.ChallengeResendIDWindow,
 
 		CleanupEvery: app.Config.RateLimit.CleanupEvery,
 		MaxEntries:   app.Config.RateLimit.MaxEntries,
-	})
+	}
 }

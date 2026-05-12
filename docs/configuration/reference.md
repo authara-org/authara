@@ -44,6 +44,21 @@ POSTGRESQL_PASSWORD
 
 ---
 
+### Cache
+
+Configures the optional cache backend.
+
+→ See: `configuration/cache.md`
+
+Examples:
+
+```
+AUTHARA_CACHE_PROVIDER
+AUTHARA_REDIS_HOST
+```
+
+---
+
 ### Public URL
 
 Defines the externally accessible base URL.

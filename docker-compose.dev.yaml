@@ -24,6 +24,19 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
   backend-migrations:
     build:
       context: ./migrations
@@ -60,6 +73,8 @@ services:
     depends_on:
       backend-migrations:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
   testapp:
     build:
@@ -76,4 +91,4 @@ services:
 
 volumes:
   postgres-data:
-
+  redis-data:

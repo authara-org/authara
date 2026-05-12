@@ -134,8 +134,9 @@ This acts as a safety valve against memory exhaustion.
 
 ## Multi-instance deployments
 
-Rate limiting is currently **in-memory per instance**.
+By default, rate limiting is **in-memory per instance**.
 
 In multi-instance deployments, limits are **not shared** between instances.
 
-Future versions may support shared rate limiting via Redis.
+Set `AUTHARA_CACHE_PROVIDER=redis` to use Redis-backed counters and share
+rate limits across Authara instances.
