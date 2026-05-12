@@ -2,18 +2,16 @@ package store
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 func toDomainPendingProviderLink(m model.PendingProviderLink) domain.PendingProviderLink {
 	return domain.PendingProviderLink{
-		ID:        *m.ID,
+		ID:        m.ID,
 		CreatedAt: m.CreatedAt,
 
 		UserID:      m.UserID,
@@ -33,7 +31,6 @@ func toDomainPendingProviderLink(m model.PendingProviderLink) domain.PendingProv
 
 func toModelPendingProviderLink(d domain.PendingProviderLink) model.PendingProviderLink {
 	return model.PendingProviderLink{
-		ID:                    nil,
 		UserID:                d.UserID,
 		SessionID:             d.SessionID,
 		ChallengeID:           d.ChallengeID,
@@ -47,13 +44,67 @@ func toModelPendingProviderLink(d domain.PendingProviderLink) model.PendingProvi
 	}
 }
 
+const pendingProviderLinkColumns = `
+	id,
+	user_id,
+	session_id,
+	challenge_id,
+	provider,
+	provider_user_id,
+	provider_email,
+	provider_email_verified,
+	purpose,
+	expires_at,
+	consumed_at,
+	created_at
+`
+
+func scanPendingProviderLink(row rowScanner, m *model.PendingProviderLink) error {
+	return row.Scan(
+		&m.ID,
+		&m.UserID,
+		&m.SessionID,
+		&m.ChallengeID,
+		&m.Provider,
+		&m.ProviderUserID,
+		&m.ProviderEmail,
+		&m.ProviderEmailVerified,
+		&m.Purpose,
+		&m.ExpiresAt,
+		&m.ConsumedAt,
+		&m.CreatedAt,
+	)
+}
+
 func (s *Store) CreatePendingProviderLink(ctx context.Context, link domain.PendingProviderLink) (domain.PendingProviderLink, error) {
 	m := toModelPendingProviderLink(link)
 
-	err := s.query(ctx).
-		Create(&m).
-		Error
-	if err != nil {
+	if err := scanPendingProviderLink(s.queryRow(ctx, `
+		INSERT INTO pending_provider_links (
+			user_id,
+			session_id,
+			challenge_id,
+			provider,
+			provider_user_id,
+			provider_email,
+			provider_email_verified,
+			purpose,
+			expires_at,
+			consumed_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING `+pendingProviderLinkColumns,
+		m.UserID,
+		m.SessionID,
+		m.ChallengeID,
+		m.Provider,
+		m.ProviderUserID,
+		m.ProviderEmail,
+		m.ProviderEmailVerified,
+		m.Purpose,
+		m.ExpiresAt,
+		m.ConsumedAt,
+	), &m); err != nil {
 		return domain.PendingProviderLink{}, err
 	}
 
@@ -63,30 +114,32 @@ func (s *Store) CreatePendingProviderLink(ctx context.Context, link domain.Pendi
 func (s *Store) GetPendingProviderLinkByID(ctx context.Context, id uuid.UUID) (domain.PendingProviderLink, error) {
 	var m model.PendingProviderLink
 
-	err := s.query(ctx).
-		Where("id = ?", id).
-		First(&m).
-		Error
+	err := scanPendingProviderLink(s.queryRow(ctx, `
+		SELECT `+pendingProviderLinkColumns+`
+		FROM pending_provider_links
+		WHERE id = $1
+	`, id), &m)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return domain.PendingProviderLink{}, ErrorPendingProviderLinkNotFound
-		}
-		return domain.PendingProviderLink{}, err
+		return domain.PendingProviderLink{}, mapNoRows(err, ErrorPendingProviderLinkNotFound)
 	}
 
 	return toDomainPendingProviderLink(m), nil
 }
 
 func (s *Store) ConsumePendingProviderLink(ctx context.Context, id uuid.UUID, now time.Time) error {
-	res := s.query(ctx).
-		Model(&model.PendingProviderLink{}).
-		Where("id = ? AND consumed_at IS NULL AND expires_at > ?", id, now).
-		Update("consumed_at", now)
-
-	if res.Error != nil {
-		return res.Error
+	res, err := s.exec(ctx, `
+		UPDATE pending_provider_links
+		SET consumed_at = $1
+		WHERE id = $2 AND consumed_at IS NULL AND expires_at > $1
+	`, now, id)
+	if err != nil {
+		return err
 	}
-	if res.RowsAffected == 0 {
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
 		return ErrorPendingProviderLinkNotFound
 	}
 
@@ -100,19 +153,21 @@ func (s *Store) UpdatePendingProviderLinkOAuthIdentity(
 	providerEmail string,
 	providerEmailVerified bool,
 ) error {
-	res := s.query(ctx).
-		Model(&model.PendingProviderLink{}).
-		Where("id = ? AND consumed_at IS NULL", id).
-		Updates(map[string]any{
-			"provider_user_id":        providerUserID,
-			"provider_email":          providerEmail,
-			"provider_email_verified": providerEmailVerified,
-		})
-
-	if res.Error != nil {
-		return res.Error
+	res, err := s.exec(ctx, `
+		UPDATE pending_provider_links
+		SET provider_user_id = $1,
+		    provider_email = $2,
+		    provider_email_verified = $3
+		WHERE id = $4 AND consumed_at IS NULL
+	`, providerUserID, providerEmail, providerEmailVerified, id)
+	if err != nil {
+		return err
 	}
-	if res.RowsAffected == 0 {
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
 		return ErrorPendingProviderLinkNotFound
 	}
 

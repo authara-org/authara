@@ -1,10 +1,6 @@
 package user
 
 import (
-	"fmt"
-	"time"
-
-	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
@@ -114,27 +110,4 @@ func hasOtherSessions(sessions []viewmodel.Session, currentSessionID uuid.UUID) 
 		}
 	}
 	return false
-}
-
-func sessionTitle(session domain.Session, currentSessionID uuid.UUID) string {
-	if session.ID == currentSessionID {
-		return "Current session"
-	}
-	if session.UserAgent != "" {
-		label := viewmodel.Label(session.UserAgent)
-		return label
-	}
-	return "Other session"
-}
-
-func sessionSubtitle(session domain.Session) string {
-	if session.UserAgent == "" {
-		return "Created " + formatSessionTime(session.CreatedAt)
-	}
-	label := viewmodel.Label(session.UserAgent)
-	return fmt.Sprintf("%s · Created %s", label, formatSessionTime(session.CreatedAt))
-}
-
-func formatSessionTime(t time.Time) string {
-	return t.UTC().Format("2006-01-02 15:04 UTC")
 }

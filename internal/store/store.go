@@ -1,13 +1,12 @@
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-	"gorm.io/gorm/schema"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 // Config is the configuration for the database.
@@ -28,50 +27,34 @@ type Config struct {
 }
 
 type Store struct {
-	db *gorm.DB
+	db     *sql.DB
+	logSQL bool
 }
 
-func (s *Store) DB() *gorm.DB {
+func (s *Store) DB() *sql.DB {
 	return s.db
 }
 
 func New(cfg Config) (*Store, error) {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s TimeZone=%s search_path=%s",
-		cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database, cfg.Timezone, cfg.Schema,
-	)
-
-	var lg gormlogger.Interface
-	if cfg.LogSql {
-		lg = gormlogger.Default.LogMode(gormlogger.Info)
-	}
-
 	location, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {
 		return nil, fmt.Errorf("can't load location %s: %w", cfg.Timezone, err)
 	}
+	_ = location
 
-	gormConfig := gorm.Config{
-		NowFunc: func() time.Time {
-			return time.Now().In(location)
-		},
-		Logger:                 lg,
-		SkipDefaultTransaction: true,
-		PrepareStmt:            true,
-		NamingStrategy: schema.NamingStrategy{
-			TablePrefix:   cfg.Schema + ".",
-			SingularTable: false,
-		},
-	}
-
-	gormDB, err := gorm.Open(postgres.Open(dsn), &gormConfig)
+	pgxConfig, err := pgx.ParseConfig(fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s",
+		cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database,
+	))
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to database: %w", err)
+		return nil, fmt.Errorf("error parsing database config: %w", err)
 	}
+	pgxConfig.RuntimeParams["search_path"] = cfg.Schema
+	pgxConfig.RuntimeParams["timezone"] = cfg.Timezone
 
-	sqlDB, err := gormDB.DB()
+	sqlDB, err := sql.Open("pgx", stdlib.RegisterConnConfig(pgxConfig))
 	if err != nil {
-		return nil, fmt.Errorf("error getting sql db: %w", err)
+		return nil, fmt.Errorf("error opening database: %w", err)
 	}
 
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
@@ -79,6 +62,6 @@ func New(cfg Config) (*Store, error) {
 	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
-	c := Store{db: gormDB}
+	c := Store{db: sqlDB, logSQL: cfg.LogSql}
 	return &c, nil
 }

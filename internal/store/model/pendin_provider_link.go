@@ -7,22 +7,22 @@ import (
 )
 
 type PendingProviderLink struct {
-	ID *uuid.UUID `gorm:"type:uuid;primaryKey;column:id;default:gen_random_uuid()"`
+	ID uuid.UUID `db:"id"`
 
-	UserID      uuid.UUID  `gorm:"type:uuid;not null;column:user_id"`
-	SessionID   *uuid.UUID `gorm:"type:uuid;column:session_id"`
-	ChallengeID *uuid.UUID `gorm:"type:uuid;column:challenge_id"`
-	Provider    string     `gorm:"type:varchar(50);not null;column:provider"`
+	UserID      uuid.UUID  `db:"user_id"`
+	SessionID   *uuid.UUID `db:"session_id"`
+	ChallengeID *uuid.UUID `db:"challenge_id"`
+	Provider    string     `db:"provider"`
 
-	ProviderUserID        *string `gorm:"type:varchar(255);column:provider_user_id"`
-	ProviderEmail         *string `gorm:"type:varchar(255);column:provider_email"`
-	ProviderEmailVerified bool    `gorm:"not null;column:provider_email_verified"`
-	Purpose               string  `gorm:"type:varchar(64);not null;column:purpose"`
+	ProviderUserID        *string `db:"provider_user_id"`
+	ProviderEmail         *string `db:"provider_email"`
+	ProviderEmailVerified bool    `db:"provider_email_verified"`
+	Purpose               string  `db:"purpose"`
 
-	ExpiresAt  time.Time  `gorm:"not null;column:expires_at"`
-	ConsumedAt *time.Time `gorm:"column:consumed_at"`
+	ExpiresAt  time.Time  `db:"expires_at"`
+	ConsumedAt *time.Time `db:"consumed_at"`
 
-	CreatedAt time.Time `gorm:"not null;column:created_at"`
+	CreatedAt time.Time `db:"created_at"`
 }
 
 func (PendingProviderLink) TableName() string {

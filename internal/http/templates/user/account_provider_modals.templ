@@ -1,0 +1,82 @@
+package user
+
+import (
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/http/templates/components/modal"
+)
+
+templ RemovePasswordModal() {
+	@modal.TwoActionModal(modal.TwoActionModalConfig{
+		ID:       "remove-password",
+		Headline: "Remove password?",
+		Body:     "You will no longer be able to sign in with your password. Make sure you still have another sign-in method linked to this account.",
+		Icon:     icons.Attention(),
+		Theme:    modal.ThemeNeutral,
+		MaxWidth: "max-w-md",
+		Primary:  RemovePasswordPrimaryAction(),
+		Secondary: button.Button(button.ButtonConfig{
+			Label:   "Cancel",
+			Color:   button.Light,
+			OnClick: "activeModal = ''",
+			Variant: button.Outline,
+			Type:    button.RegularButton,
+		}),
+	})
+}
+
+templ RemoveGoogleModal() {
+	@modal.TwoActionModal(modal.TwoActionModalConfig{
+		ID:       "remove-google",
+		Headline: "Unlink Google?",
+		Body: `You will no longer be able to sign in with Google unless
+			you link it again later. Make sure you still have
+			another sign-in method linked to this account.`,
+		Icon:     icons.Attention(),
+		Theme:    modal.ThemeNeutral,
+		Primary:  RemoveGooglePrimaryAction(),
+		MaxWidth: "max-w-md",
+		Secondary: button.Button(button.ButtonConfig{
+			Label:   "Cancel",
+			Color:   button.Light,
+			OnClick: "activeModal = ''",
+			Variant: button.Outline,
+			Type:    button.RegularButton,
+		}),
+	})
+}
+
+templ RemovePasswordPrimaryAction() {
+	<form
+		hx-post="/auth/providers/password/unlink"
+		hx-target="#linked-providers-section"
+		hx-swap="outerHTML"
+		class="w-full"
+	>
+		@csrf.CSRFInput()
+		@button.Button(button.ButtonConfig{
+			Label:   "Remove password",
+			Type:    button.Submit,
+			Color:   button.Main,
+			OnClick: "activeModal = ''",
+		})
+	</form>
+}
+
+templ RemoveGooglePrimaryAction() {
+	<form
+		hx-post="/auth/providers/google/unlink"
+		hx-target="#linked-providers-section"
+		hx-swap="outerHTML"
+		class="w-full"
+	>
+		@csrf.CSRFInput()
+		@button.Button(button.ButtonConfig{
+			Label:   "Unlink Google",
+			Type:    button.Submit,
+			Color:   button.Main,
+			OnClick: "activeModal = ''",
+		})
+	</form>
+}

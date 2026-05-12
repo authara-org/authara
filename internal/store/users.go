@@ -2,14 +2,12 @@ package store
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 func NormalizeUsername(u string) string {
@@ -18,7 +16,7 @@ func NormalizeUsername(u string) string {
 
 func toDomainUser(m model.User) domain.User {
 	return domain.User{
-		ID:         *m.ID,
+		ID:         m.ID,
 		CreatedAt:  m.CreatedAt,
 		UpdatedAt:  m.UpdatedAt,
 		DisabledAt: m.DisabledAt,
@@ -29,7 +27,6 @@ func toDomainUser(m model.User) domain.User {
 
 func toModelUser(d domain.User) model.User {
 	return model.User{
-		ID:                 nil,
 		Username:           d.Username,
 		UsernameNormalized: NormalizeUsername(d.Username),
 		Email:              d.Email,
@@ -37,17 +34,41 @@ func toModelUser(d domain.User) model.User {
 	}
 }
 
+const userColumns = `
+	id,
+	created_at,
+	updated_at,
+	disabled_at,
+	username,
+	username_normalized,
+	email
+`
+
+func scanUser(row rowScanner, m *model.User) error {
+	return row.Scan(
+		&m.ID,
+		&m.CreatedAt,
+		&m.UpdatedAt,
+		&m.DisabledAt,
+		&m.Username,
+		&m.UsernameNormalized,
+		&m.Email,
+	)
+}
+
 func (s *Store) CreateUser(ctx context.Context, user domain.User) (domain.User, error) {
 	m := toModelUser(user)
 	m.UsernameNormalized = NormalizeUsername(user.Username)
 
-	db := s.query(ctx)
-
-	err := db.
-		Create(&m).
-		Error
-
-	if err != nil {
+	if err := scanUser(s.queryRow(ctx, `
+		INSERT INTO users (username, username_normalized, email, disabled_at)
+		VALUES ($1, $2, $3, $4)
+		RETURNING `+userColumns,
+		m.Username,
+		m.UsernameNormalized,
+		m.Email,
+		m.DisabledAt,
+	), &m); err != nil {
 		return domain.User{}, err
 	}
 
@@ -57,16 +78,9 @@ func (s *Store) CreateUser(ctx context.Context, user domain.User) (domain.User, 
 func (s *Store) GetUserByID(ctx context.Context, userID uuid.UUID) (domain.User, error) {
 	var m model.User
 
-	err := s.query(ctx).
-		Where("id = ?", userID).
-		First(&m).
-		Error
-
+	err := scanUser(s.queryRow(ctx, `SELECT `+userColumns+` FROM users WHERE id = $1`, userID), &m)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return domain.User{}, ErrUserNotFound
-		}
-		return domain.User{}, err
+		return domain.User{}, mapNoRows(err, ErrUserNotFound)
 	}
 
 	return toDomainUser(m), nil
@@ -77,82 +91,64 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, 
 
 	email = normalizeEmail(email)
 
-	err := s.query(ctx).
-		Where("email = ?", email).
-		First(&m).
-		Error
-
+	err := scanUser(s.queryRow(ctx, `SELECT `+userColumns+` FROM users WHERE email = $1`, email), &m)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return domain.User{}, ErrUserNotFound
-		}
-		return domain.User{}, err
+		return domain.User{}, mapNoRows(err, ErrUserNotFound)
 	}
 
 	return toDomainUser(m), nil
 }
 
 func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
-	var count int64
+	var exists bool
 
 	email = normalizeEmail(email)
 
-	err := s.query(ctx).
-		Model(&model.User{}).
-		Where("email = ?", email).
-		Count(&count).
-		Error
-
-	if err != nil {
+	if err := s.queryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`, email).Scan(&exists); err != nil {
 		return false, err
 	}
 
-	return count > 0, nil
+	return exists, nil
 }
 
 func (s *Store) DisableUser(ctx context.Context, userID uuid.UUID, disabledAt time.Time) error {
-	return s.query(ctx).
-		Model(&model.User{}).
-		Where("id = ?", userID).
-		Update("disabled_at", disabledAt).
-		Error
+	_, err := s.exec(ctx, `UPDATE users SET disabled_at = $1 WHERE id = $2`, disabledAt, userID)
+	return err
 }
 
 func (s *Store) IsUserDisabled(ctx context.Context, userID uuid.UUID) (bool, error) {
 	var exists bool
 
-	err := s.query(ctx).
-		Model(&model.User{}).
-		Select("count(1) > 0").
-		Where("id = ? AND disabled_at IS NOT NULL", userID).
-		Find(&exists).
-		Error
-
+	err := s.queryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND disabled_at IS NOT NULL)`, userID).
+		Scan(&exists)
 	return exists, err
 }
 
 func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username string) error {
-	res := s.query(ctx).
-		Model(&model.User{}).
-		Where("id = ?", userID).
-		Update("username", username)
-
-	if res.Error != nil {
-		return res.Error
+	res, err := s.exec(ctx, `
+		UPDATE users
+		SET username = $1,
+		    username_normalized = $2
+		WHERE id = $3
+	`, username, NormalizeUsername(username), userID)
+	if err != nil {
+		return err
 	}
 
-	if res.RowsAffected == 0 {
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
 		return ErrUserNotFound
 	}
 
-	return res.Error
+	return nil
 }
 
 func (s *Store) DeleteUser(ctx context.Context, userID uuid.UUID) error {
-	return s.query(ctx).
-		Where("id = ?", userID).
-		Delete(&model.User{}).
-		Error
+	_, err := s.exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
+	return err
 }
 
 func normalizeEmail(e string) string {

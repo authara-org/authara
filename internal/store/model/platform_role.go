@@ -7,9 +7,9 @@ import (
 )
 
 type Role struct {
-	ID        *uuid.UUID `gorm:"type:uuid;primaryKey;column:id;default:gen_random_uuid()"`
-	Name      string     `gorm:"type:text;not null;column:name"`
-	CreatedAt time.Time  `gorm:"not null;column:created_at"`
+	ID        uuid.UUID `db:"id"`
+	Name      string    `db:"name"`
+	CreatedAt time.Time `db:"created_at"`
 }
 
 func (Role) TableName() string {

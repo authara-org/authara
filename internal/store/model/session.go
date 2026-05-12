@@ -7,16 +7,16 @@ import (
 )
 
 type Session struct {
-	ID        *uuid.UUID `gorm:"type:uuid;primaryKey;column:id;default:gen_random_uuid()"`
-	CreatedAt time.Time  `gorm:"not null;column:created_at"`
-	UpdatedAt time.Time  `gorm:"not null;column:updated_at"`
+	ID        uuid.UUID `db:"id"`
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
 
-	UserID uuid.UUID `gorm:"type:uuid;not null;column:user_id"`
+	UserID uuid.UUID `db:"user_id"`
 
-	ExpiresAt time.Time  `gorm:"not null;column:expires_at"`
-	RevokedAt *time.Time `gorm:"column:revoked_at"`
+	ExpiresAt time.Time  `db:"expires_at"`
+	RevokedAt *time.Time `db:"revoked_at"`
 
-	UserAgent string `gorm:"type:varchar(255);not null;column:user_agent"`
+	UserAgent string `db:"user_agent"`
 }
 
 func (Session) TableName() string {

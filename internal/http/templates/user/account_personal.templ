@@ -1,7 +1,6 @@
 package user
 
 import (
-	"encoding/json"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
@@ -52,20 +51,6 @@ templ ChangeUsernameSection(username string) {
 			@ChangeUsernameForm(username)
 		</div>
 	</div>
-}
-
-func usernameFormState(username string) string {
-	u, _ := json.Marshal(username)
-
-	return `(() => {
-		  const u = ` + string(u) + `;
-		  return {
-		    username: u,
-		    initialUsername: u,
-		    get unchanged() { return this.username === this.initialUsername },
-		    cancel() { this.username = this.initialUsername },
-		  };
-		})()`
 }
 
 templ ChangeUsernameForm(username string) {

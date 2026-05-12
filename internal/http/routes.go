@@ -61,7 +61,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Use(mw.HTMX)
 
 			// authara internals
-			r.Get("/successful-deletion", uih.SuccessfullDeletionPage)
+			r.Get("/successful-deletion", uih.SuccessfulDeletionPage)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RedirectIfAuthenticated)
