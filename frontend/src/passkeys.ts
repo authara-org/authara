@@ -511,14 +511,16 @@ async function initConditionalPasskeyLogin(
 }
 
 function bindConditionalAbortOnPasswordSubmit(root: ParentNode): void {
-  root.querySelectorAll<HTMLFormElement>("[data-login-form]").forEach((form) => {
-    if (form.dataset.passkeyAbortBound === "true") return;
-    form.dataset.passkeyAbortBound = "true";
-    form.addEventListener("submit", () => {
-      conditionalLoginAbortController?.abort();
-      conditionalLoginAbortController = null;
+  root
+    .querySelectorAll<HTMLFormElement>("[data-login-form]")
+    .forEach((form) => {
+      if (form.dataset.passkeyAbortBound === "true") return;
+      form.dataset.passkeyAbortBound = "true";
+      form.addEventListener("submit", () => {
+        conditionalLoginAbortController?.abort();
+        conditionalLoginAbortController = null;
+      });
     });
-  });
 }
 
 export function initPasskeys(root: ParentNode = document): void {
