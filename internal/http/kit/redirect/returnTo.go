@@ -3,6 +3,7 @@ package redirect
 import (
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 const ReturnToQueryParam = "return_to"
@@ -16,6 +17,16 @@ func QueryParam(r *http.Request) string {
 func IsSafeReturnTo(v string) bool {
 	if v == "" {
 		return false
+	}
+
+	if strings.TrimSpace(v) != v {
+		return false
+	}
+
+	for _, r := range v {
+		if r == '\\' || r < 0x20 || r == 0x7f {
+			return false
+		}
 	}
 
 	// Must start with "/"
