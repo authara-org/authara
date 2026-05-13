@@ -7,7 +7,6 @@ import { initTheme, setTheme } from "./theme";
 declare global {
   interface Window {
     htmx: any;
-    autharaGoogleCallback: (response: { credential?: string }) => Promise<void>;
   }
 }
 

@@ -35,6 +35,18 @@ templ Layout() {
 			 document.documentElement.classList.toggle("dark", isDark);
 			 })();
 			</script>
+			<script>
+			(function () {
+			 window.autharaGoogleCredentialQueue = window.autharaGoogleCredentialQueue || [];
+			 window.autharaGoogleCallback = function (response) {
+			  var handler = window.autharaGoogleCredentialHandler;
+			  if (typeof handler === "function") {
+			   return handler(response);
+			  }
+			  window.autharaGoogleCredentialQueue.push(response);
+			 };
+			 })();
+			</script>
 			<link rel="preload" href={ ui.Static(ctx, "FunnelSans-VariableFont_wght.ttf") } as="font" type="font/ttf" crossorigin="anonymous"/>
 			<link rel="stylesheet" href={ ui.Static(ctx, "app.css") }/>
 			@CriticalStyles()

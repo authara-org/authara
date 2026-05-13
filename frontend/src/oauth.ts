@@ -1,5 +1,20 @@
 import { showRedirecting } from "./ui";
 
+type GoogleCredentialResponse = { credential?: string };
+type GoogleCredentialHandler = (
+  response: GoogleCredentialResponse,
+) => Promise<void>;
+
+declare global {
+  interface Window {
+    autharaGoogleCallback?: (
+      response: GoogleCredentialResponse,
+    ) => void | Promise<void>;
+    autharaGoogleCredentialHandler?: GoogleCredentialHandler;
+    autharaGoogleCredentialQueue?: GoogleCredentialResponse[];
+  }
+}
+
 function getGoogleFlowButton(): HTMLElement | null {
   return document.querySelector("[data-google-flow]");
 }
@@ -14,7 +29,7 @@ function getGoogleNonce(): string {
   return onload?.dataset.nonce || "";
 }
 
-window.autharaGoogleCallback = async (response: { credential?: string }) => {
+const handleGoogleCredential: GoogleCredentialHandler = async (response) => {
   const credential = response?.credential;
   if (!credential) return;
 
@@ -107,3 +122,15 @@ window.autharaGoogleCallback = async (response: { credential?: string }) => {
         : `/auth/login?return_to=${encodeURIComponent(returnTo)}`;
   }
 };
+
+window.autharaGoogleCredentialHandler = handleGoogleCredential;
+
+if (typeof window.autharaGoogleCallback !== "function") {
+  window.autharaGoogleCallback = (response: GoogleCredentialResponse) => {
+    void handleGoogleCredential(response);
+  };
+}
+
+for (const response of window.autharaGoogleCredentialQueue?.splice(0) ?? []) {
+  void handleGoogleCredential(response);
+}
