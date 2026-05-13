@@ -610,6 +610,57 @@ func createPasswordUser(
 	return user
 }
 
+func TestUnlinkAuthProvider_BlockedWhenOnlyProviderAndNoPasskey(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user := createPasswordUser(t, ctx, tdb, "unlink-only-provider@example.com", "unlink-only-provider", "hashed-password")
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+		})
+
+		err := svc.UnlinkAuthProvider(ctx, user.ID, domain.ProviderPassword)
+		if !errors.Is(err, ErrCannotRemoveLastAuthMethod) {
+			t.Fatalf("expected ErrCannotRemoveLastAuthMethod, got %v", err)
+		}
+	})
+}
+
+func TestUnlinkAuthProvider_AllowedWhenPasskeyExists(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user := createPasswordUser(t, ctx, tdb, "unlink-with-passkey@example.com", "unlink-with-passkey", "hashed-password")
+		_, err := tdb.Store.CreatePasskey(ctx, domain.Passkey{
+			UserID:       user.ID,
+			CredentialID: []byte("unlink-provider-passkey"),
+			PublicKey:    []byte("public-key"),
+			Name:         "Passkey",
+		})
+		if err != nil {
+			t.Fatalf("CreatePasskey failed: %v", err)
+		}
+
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+		})
+
+		if err := svc.UnlinkAuthProvider(ctx, user.ID, domain.ProviderPassword); err != nil {
+			t.Fatalf("UnlinkAuthProvider failed: %v", err)
+		}
+
+		count, err := tdb.Store.CountAuthMethods(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("CountAuthMethods failed: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected only passkey to remain, got %d auth methods", count)
+		}
+	})
+}
+
 func TestGetUser_NotFound(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

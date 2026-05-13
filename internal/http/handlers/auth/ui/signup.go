@@ -254,7 +254,7 @@ func (h *UIHandler) finishSignup(
 	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
 
-	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
+	redirect.Redirect(w, r, redirect.WithReturnTo("/auth/passkeys/setup", returnTo), http.StatusSeeOther)
 }
 
 func (h *UIHandler) verifySignupChallengePost(

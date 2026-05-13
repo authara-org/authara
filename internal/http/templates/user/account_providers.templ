@@ -8,10 +8,10 @@ import (
 	"github.com/authara-org/authara/internal/http/viewmodel"
 )
 
-templ LinkedProvidersSection(providers []viewmodel.AuthProvider, googleClientID string) {
+templ LinkedProvidersSection(providers []viewmodel.AuthProvider, passkeys []viewmodel.Passkey, googleClientID string) {
 	<div id="linked-providers-section">
 		@SectionHeader("Sign-in Methods", icons.Key())
-		if len(providers) == 0 {
+		if len(providers) == 0 && len(passkeys) == 0 {
 			<div class="border-2 border-grey-100 dark:border-grey-800 rounded-xl px-4 py-3 bg-grey-50 dark:bg-grey-800">
 				<p class="text-sm text-grey-700 dark:text-grey-300">
 					No sign-in methods configured.
@@ -22,11 +22,101 @@ templ LinkedProvidersSection(providers []viewmodel.AuthProvider, googleClientID 
 				for _, provider := range providers {
 					@AuthProviderRow(provider, googleClientID)
 				}
+				@PasskeySubsection(passkeys)
 			</div>
 		}
 		<p class="mt-2 text-xs text-grey-600 dark:text-grey-400">
 			Manage how you sign in to your account. You can link multiple providers to the same user.
 		</p>
+	</div>
+}
+
+templ PasskeySubsection(passkeys []viewmodel.Passkey) {
+	<div class="pt-2">
+		<div class="mb-2 flex items-center justify-between gap-3">
+			<h3 class="text-sm font-medium text-grey-900 dark:text-grey-100">Passkeys</h3>
+			<button
+				type="button"
+				data-passkey-register
+				data-return-to="/auth/account"
+				class="rounded-xl border border-blue-600 bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 cursor-pointer transition-colors disabled:bg-blue-400 disabled:border-blue-400 disabled:cursor-not-allowed"
+			>
+				Add passkey
+			</button>
+		</div>
+		if len(passkeys) == 0 {
+			<div class="border-2 border-grey-100 dark:border-grey-800 rounded-xl px-4 py-3 bg-grey-50 dark:bg-grey-800">
+				<p class="text-sm text-grey-700 dark:text-grey-300">
+					No passkeys added.
+				</p>
+			</div>
+		} else {
+			<div class="space-y-2">
+				for _, passkey := range passkeys {
+					@PasskeyRow(passkey)
+				}
+			</div>
+		}
+	</div>
+}
+
+templ PasskeyRow(passkey viewmodel.Passkey) {
+	<div
+		id={ "passkey-" + passkey.ID.String() }
+		class="flex items-center justify-between gap-3 border-2 border-grey-100 dark:border-grey-800 rounded-xl px-4 py-3 bg-white dark:bg-grey-900"
+	>
+		<div class="flex items-start gap-3 min-w-0 flex-1">
+			<div class="h-10 w-10 shrink-0 rounded-xl bg-grey-50 dark:bg-grey-800 text-grey-700 dark:text-grey-300 p-2 stroke-2">
+				@icons.Key()
+			</div>
+			<div class="flex my-auto sm:my-0 flex-col min-w-0">
+				<span class="text-sm font-medium text-grey-900 dark:text-grey-100 truncate">
+					{ passkey.Name }
+				</span>
+				<span class="text-xs text-grey-600 dark:text-grey-400 hidden sm:block">
+					Created { passkey.CreatedAt } - { passkey.LastUsedAt }
+				</span>
+			</div>
+		</div>
+		<form
+			hx-post={ "/auth/passkeys/" + passkey.ID.String() + "/delete" }
+			hx-target="#linked-providers-section"
+			hx-swap="outerHTML"
+			class="hidden sm:block"
+		>
+			@csrf.CSRFInput()
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Label:    "Remove",
+					Type:     button.Submit,
+					Color:    button.Light,
+					Variant:  button.Outline,
+					Disabled: !passkey.CanDelete,
+				})
+			</div>
+		</form>
+		<div class="sm:hidden">
+			@ActionMenu() {
+				<form
+					hx-post={ "/auth/passkeys/" + passkey.ID.String() + "/delete" }
+					hx-target="#linked-providers-section"
+					hx-swap="outerHTML"
+				>
+					@csrf.CSRFInput()
+					if passkey.CanDelete {
+						@ActionMenuSubmitItemDanger("Remove passkey")
+					} else {
+						<button
+							type="button"
+							disabled
+							class="flex justify-center w-full text-left px-4 py-3 text-sm text-grey-400 dark:text-grey-600 cursor-not-allowed"
+						>
+							Remove passkey
+						</button>
+					}
+				</form>
+			}
+		</div>
 	</div>
 }
 

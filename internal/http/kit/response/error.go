@@ -8,6 +8,7 @@ const (
 
 	CodeInvalidRequest ErrorCode = "invalid_request"
 	CodeNotFound       ErrorCode = "not_found"
+	CodeRateLimited    ErrorCode = "rate_limited"
 
 	CodeInternalError ErrorCode = "internal_error"
 )

@@ -37,6 +37,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 	deps := authhandler.Deps{
 		Auth:             cfg.Auth,
+		Passkeys:         cfg.Passkeys,
 		Session:          cfg.Session,
 		Limiter:          cfg.AuthLimiter,
 		Logger:           cfg.Logger,
@@ -76,6 +77,8 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Post("/signup", uih.SignupPost)
 				r.Post("/login", uih.LoginPost)
+				r.Post("/passkeys/authenticate/options", uih.PasskeyAuthenticateOptionsPost)
+				r.Post("/passkeys/authenticate/finish", uih.PasskeyAuthenticateFinishPost)
 				r.Post("/provider-links/confirm", uih.ProviderLinkConfirmPost)
 				r.Post("/sessions/logout", uih.LogoutPost)
 				r.Post("/sessions/refresh", uih.RefreshPost)
@@ -120,6 +123,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Use(mw.RequireAppAccessAuthWithRefresh)
 
 				r.Get("/account", uih.AccountGet)
+				r.Get("/passkeys/setup", uih.PasskeySetupPage)
 
 				// password pages
 				r.Get("/providers/password/add", uih.AddPasswordPage)
@@ -138,6 +142,9 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 					r.Post("/providers/password/link", uih.PasswordLinkPost)
 					r.Post("/providers/password/change", uih.PasswordChangePost)
 					r.Post("/providers/{provider}/link/start", uih.ProviderLinkStartPost)
+					r.Post("/passkeys/register/options", uih.PasskeyRegisterOptionsPost)
+					r.Post("/passkeys/register/finish", uih.PasskeyRegisterFinishPost)
+					r.Post("/passkeys/{id}/delete", uih.PasskeyDeletePost)
 				})
 			})
 

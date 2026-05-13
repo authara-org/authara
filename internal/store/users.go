@@ -86,6 +86,17 @@ func (s *Store) GetUserByID(ctx context.Context, userID uuid.UUID) (domain.User,
 	return toDomainUser(m), nil
 }
 
+func (s *Store) LockUserForAuthMethodMutation(ctx context.Context, userID uuid.UUID) error {
+	var lockedID uuid.UUID
+	err := s.queryRow(ctx, `
+		SELECT id
+		FROM users
+		WHERE id = $1
+		FOR UPDATE
+	`, userID).Scan(&lockedID)
+	return mapNoRows(err, ErrUserNotFound)
+}
+
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, error) {
 	var m model.User
 

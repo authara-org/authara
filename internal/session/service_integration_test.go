@@ -11,6 +11,8 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
+	"github.com/authara-org/authara/internal/store"
+	"github.com/authara-org/authara/internal/testutil"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -62,6 +64,63 @@ func TestNew_UsesProvidedAccessPolicy(t *testing.T) {
 	if svc.accessPolicy == nil {
 		t.Fatal("expected provided access policy to be set")
 	}
+}
+
+func TestCleanupExpiredDataDeletesWebAuthnChallenges(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+		svc := New(SessionConfig{Store: tdb.Store})
+
+		expired, err := tdb.Store.CreateWebAuthnChallenge(ctx, domain.WebAuthnChallenge{
+			Purpose:     domain.WebAuthnChallengePurposeAuthentication,
+			Challenge:   "expired",
+			SessionData: []byte(`{"challenge":"expired"}`),
+			ExpiresAt:   now.Add(-time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("CreateWebAuthnChallenge expired failed: %v", err)
+		}
+
+		consumedAt := now.Add(-time.Second)
+		consumed, err := tdb.Store.CreateWebAuthnChallenge(ctx, domain.WebAuthnChallenge{
+			Purpose:     domain.WebAuthnChallengePurposeAuthentication,
+			Challenge:   "consumed",
+			SessionData: []byte(`{"challenge":"consumed"}`),
+			ExpiresAt:   now.Add(time.Minute),
+			ConsumedAt:  &consumedAt,
+		})
+		if err != nil {
+			t.Fatalf("CreateWebAuthnChallenge consumed failed: %v", err)
+		}
+
+		active, err := tdb.Store.CreateWebAuthnChallenge(ctx, domain.WebAuthnChallenge{
+			Purpose:     domain.WebAuthnChallengePurposeAuthentication,
+			Challenge:   "active",
+			SessionData: []byte(`{"challenge":"active"}`),
+			ExpiresAt:   now.Add(time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("CreateWebAuthnChallenge active failed: %v", err)
+		}
+
+		if err := svc.CleanupExpiredData(ctx, now); err != nil {
+			t.Fatalf("CleanupExpiredData failed: %v", err)
+		}
+
+		_, err = tdb.Store.GetWebAuthnChallengeByIDForUpdate(ctx, expired.ID)
+		if !errors.Is(err, store.ErrWebAuthnChallengeNotFound) {
+			t.Fatalf("expected expired challenge to be deleted, got %v", err)
+		}
+		_, err = tdb.Store.GetWebAuthnChallengeByIDForUpdate(ctx, consumed.ID)
+		if !errors.Is(err, store.ErrWebAuthnChallengeNotFound) {
+			t.Fatalf("expected consumed challenge to be deleted, got %v", err)
+		}
+		if _, err = tdb.Store.GetWebAuthnChallengeByIDForUpdate(ctx, active.ID); err != nil {
+			t.Fatalf("expected active challenge to remain, got %v", err)
+		}
+	})
 }
 
 func TestValidateAccessToken_Succeeds(t *testing.T) {

@@ -34,11 +34,11 @@ type InMemoryLimiter struct {
 	passwordResetByIP    map[string]*counter
 	passwordResetByEmail map[string]*counter
 
+	passkeyLoginByIP map[string]*counter
+
 	challengeVerifyByIP map[string]*counter
-	challengeVerifyByID map[string]*counter
 
 	challengeResendByIP map[string]*counter
-	challengeResendByID map[string]*counter
 
 	loginIPLimit     int
 	loginIPWindow    time.Duration
@@ -55,15 +55,14 @@ type InMemoryLimiter struct {
 	passwordResetEmailLimit  int
 	passwordResetEmailWindow time.Duration
 
+	passkeyLoginIPLimit  int
+	passkeyLoginIPWindow time.Duration
+
 	challengeVerifyIPLimit  int
 	challengeVerifyIPWindow time.Duration
-	challengeVerifyIDLimit  int
-	challengeVerifyIDWindow time.Duration
 
 	challengeResendIPLimit  int
 	challengeResendIPWindow time.Duration
-	challengeResendIDLimit  int
-	challengeResendIDWindow time.Duration
 
 	cleanupEvery int              // sweep every N calls
 	callCount    int              // increments each Allow* call
@@ -87,15 +86,14 @@ type LimiterConfig struct {
 	PasswordResetEmailLimit  int
 	PasswordResetEmailWindow time.Duration
 
+	PasskeyLoginIPLimit  int
+	PasskeyLoginIPWindow time.Duration
+
 	ChallengeVerifyIPLimit  int
 	ChallengeVerifyIPWindow time.Duration
-	ChallengeVerifyIDLimit  int
-	ChallengeVerifyIDWindow time.Duration
 
 	ChallengeResendIPLimit  int
 	ChallengeResendIPWindow time.Duration
-	ChallengeResendIDLimit  int
-	ChallengeResendIDWindow time.Duration
 
 	CleanupEvery int
 	MaxEntries   int
@@ -111,10 +109,9 @@ func NewInMemoryLimiter(cfg LimiterConfig) AuthLimiter {
 		signupByEmail:        make(map[string]*counter),
 		passwordResetByIP:    make(map[string]*counter),
 		passwordResetByEmail: make(map[string]*counter),
+		passkeyLoginByIP:     make(map[string]*counter),
 		challengeVerifyByIP:  make(map[string]*counter),
-		challengeVerifyByID:  make(map[string]*counter),
 		challengeResendByIP:  make(map[string]*counter),
-		challengeResendByID:  make(map[string]*counter),
 
 		loginIPLimit:     cfg.LoginIPLimit,
 		loginIPWindow:    cfg.LoginIPWindow,
@@ -131,15 +128,14 @@ func NewInMemoryLimiter(cfg LimiterConfig) AuthLimiter {
 		passwordResetEmailLimit:  cfg.PasswordResetEmailLimit,
 		passwordResetEmailWindow: cfg.PasswordResetEmailWindow,
 
+		passkeyLoginIPLimit:  cfg.PasskeyLoginIPLimit,
+		passkeyLoginIPWindow: cfg.PasskeyLoginIPWindow,
+
 		challengeVerifyIPLimit:  cfg.ChallengeVerifyIPLimit,
 		challengeVerifyIPWindow: cfg.ChallengeVerifyIPWindow,
-		challengeVerifyIDLimit:  cfg.ChallengeVerifyIDLimit,
-		challengeVerifyIDWindow: cfg.ChallengeVerifyIDWindow,
 
 		challengeResendIPLimit:  cfg.ChallengeResendIPLimit,
 		challengeResendIPWindow: cfg.ChallengeResendIPWindow,
-		challengeResendIDLimit:  cfg.ChallengeResendIDLimit,
-		challengeResendIDWindow: cfg.ChallengeResendIDWindow,
 
 		cleanupEvery: cfg.CleanupEvery,
 		maxEntries:   cfg.MaxEntries,
@@ -163,15 +159,14 @@ func defaultLimiterConfig(cfg LimiterConfig) LimiterConfig {
 	setIntDefault(&cfg.PasswordResetEmailLimit, 3)
 	setDurationDefault(&cfg.PasswordResetEmailWindow, 24*time.Hour)
 
+	setIntDefault(&cfg.PasskeyLoginIPLimit, 30)
+	setDurationDefault(&cfg.PasskeyLoginIPWindow, 10*time.Minute)
+
 	setIntDefault(&cfg.ChallengeVerifyIPLimit, 30)
 	setDurationDefault(&cfg.ChallengeVerifyIPWindow, 10*time.Minute)
-	setIntDefault(&cfg.ChallengeVerifyIDLimit, 10)
-	setDurationDefault(&cfg.ChallengeVerifyIDWindow, 30*time.Minute)
 
 	setIntDefault(&cfg.ChallengeResendIPLimit, 10)
 	setDurationDefault(&cfg.ChallengeResendIPWindow, time.Hour)
-	setIntDefault(&cfg.ChallengeResendIDLimit, 5)
-	setDurationDefault(&cfg.ChallengeResendIDWindow, 30*time.Minute)
 
 	setIntDefault(&cfg.CleanupEvery, 200)
 	setIntDefault(&cfg.MaxEntries, 50000)
@@ -218,22 +213,66 @@ func (l *InMemoryLimiter) AllowPasswordResetAttempt(_ context.Context, ip net.IP
 	)
 }
 
-func (l *InMemoryLimiter) AllowChallengeVerifyAttempt(_ context.Context, ip net.IP, challengeID string) (bool, error) {
-	return l.allow(ip, challengeID,
-		l.challengeVerifyByIP, l.challengeVerifyByID,
-		l.challengeVerifyIPLimit, l.challengeVerifyIPWindow,
-		l.challengeVerifyIDLimit, l.challengeVerifyIDWindow,
-		"challenge_verify", "challenge",
+func (l *InMemoryLimiter) AllowPasskeyLoginAttempt(_ context.Context, ip net.IP) (bool, error) {
+	return l.allowIP(
+		ip,
+		l.passkeyLoginByIP,
+		l.passkeyLoginIPLimit,
+		l.passkeyLoginIPWindow,
+		"passkey_login",
 	)
 }
 
-func (l *InMemoryLimiter) AllowChallengeResendAttempt(_ context.Context, ip net.IP, challengeID string) (bool, error) {
-	return l.allow(ip, challengeID,
-		l.challengeResendByIP, l.challengeResendByID,
-		l.challengeResendIPLimit, l.challengeResendIPWindow,
-		l.challengeResendIDLimit, l.challengeResendIDWindow,
-		"challenge_resend", "challenge",
+func (l *InMemoryLimiter) AllowChallengeVerifyAttempt(_ context.Context, ip net.IP) (bool, error) {
+	return l.allowIP(
+		ip,
+		l.challengeVerifyByIP,
+		l.challengeVerifyIPLimit,
+		l.challengeVerifyIPWindow,
+		"challenge_verify",
 	)
+}
+
+func (l *InMemoryLimiter) AllowChallengeResendAttempt(_ context.Context, ip net.IP) (bool, error) {
+	return l.allowIP(
+		ip,
+		l.challengeResendByIP,
+		l.challengeResendIPLimit,
+		l.challengeResendIPWindow,
+		"challenge_resend",
+	)
+}
+
+func (l *InMemoryLimiter) allowIP(
+	ip net.IP,
+	byIP map[string]*counter,
+	ipLimit int,
+	ipWindow time.Duration,
+	kind string,
+) (bool, error) {
+	now := l.now()
+	ipKey := normalizeIP(ip)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.callCount++
+	if l.callCount%l.cleanupEvery == 0 {
+		l.sweepExpiredLocked(now)
+		l.enforceMaxEntriesLocked()
+	}
+
+	ipCounter := getCounterLocked(byIP, ipKey, now, ipWindow)
+	if ipCounter.count >= ipLimit {
+		return false, &RateLimitedError{
+			RetryAfter: retryAfter(now, ipCounter.reset),
+			Scope:      kind + ":ip",
+		}
+	}
+
+	ipCounter.count++
+
+	return true, nil
 }
 
 func (l *InMemoryLimiter) allow(
@@ -337,18 +376,18 @@ func (l *InMemoryLimiter) sweepExpiredLocked(now time.Time) {
 	sweep(l.signupByEmail)
 	sweep(l.passwordResetByIP)
 	sweep(l.passwordResetByEmail)
+	sweep(l.passkeyLoginByIP)
 	sweep(l.challengeVerifyByIP)
-	sweep(l.challengeVerifyByID)
 	sweep(l.challengeResendByIP)
-	sweep(l.challengeResendByID)
 }
 
 func (l *InMemoryLimiter) enforceMaxEntriesLocked() {
 	total := len(l.loginByIP) + len(l.loginByEmail) +
 		len(l.signupByIP) + len(l.signupByEmail) +
 		len(l.passwordResetByIP) + len(l.passwordResetByEmail) +
-		len(l.challengeVerifyByIP) + len(l.challengeVerifyByID) +
-		len(l.challengeResendByIP) + len(l.challengeResendByID)
+		len(l.passkeyLoginByIP) +
+		len(l.challengeVerifyByIP) +
+		len(l.challengeResendByIP)
 	if total <= l.maxEntries {
 		return
 	}
@@ -366,11 +405,10 @@ func (l *InMemoryLimiter) enforceMaxEntriesLocked() {
 	clearMap(l.loginByIP)
 	clearMap(l.signupByIP)
 	clearMap(l.passwordResetByIP)
+	clearMap(l.passkeyLoginByIP)
 	clearMap(l.challengeVerifyByIP)
 	clearMap(l.challengeResendByIP)
 	clearMap(l.loginByEmail)
 	clearMap(l.signupByEmail)
 	clearMap(l.passwordResetByEmail)
-	clearMap(l.challengeVerifyByID)
-	clearMap(l.challengeResendByID)
 }

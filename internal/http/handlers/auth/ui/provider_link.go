@@ -176,7 +176,23 @@ func (h *UIHandler) UnlinkProviderPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var passkeys []domain.Passkey
+	if h.Passkeys != nil {
+		passkeys, err = h.Passkeys.ListUserPasskeys(ctx, userID)
+		if err != nil {
+			htmx.ReSwap(w, "none")
+			_ = h.Render(
+				w,
+				r,
+				http.StatusInternalServerError,
+				toast.ToastMessage(toast.Error, "Could not load sign-in methods."),
+			)
+			return
+		}
+	}
+
 	vm := viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers)
+	passkeyVM := viewmodel.PasskeysFromDomain(passkeys, len(providers)+len(passkeys))
 
 	_ = h.Render(
 		w,
@@ -184,7 +200,7 @@ func (h *UIHandler) UnlinkProviderPost(w http.ResponseWriter, r *http.Request) {
 		http.StatusOK,
 		templ.Join(
 			toast.ToastMessage(toast.Success, "Successfully removed Sign-In method."),
-			userview.LinkedProvidersSection(vm, h.Google.ClientID),
+			userview.LinkedProvidersSection(vm, passkeyVM, h.Google.ClientID),
 		),
 	)
 }

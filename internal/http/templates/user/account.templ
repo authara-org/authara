@@ -15,6 +15,7 @@ type AccountConfig struct {
 	Sessions         []viewmodel.Session
 	CurrentSessionID uuid.UUID
 	AuthProviders    []viewmodel.AuthProvider
+	Passkeys         []viewmodel.Passkey
 }
 
 templ Account(cfg AccountConfig) {
@@ -38,7 +39,7 @@ templ Account(cfg AccountConfig) {
 								@SessionSection(cfg.Sessions, cfg.CurrentSessionID)
 							}
 							@CollapsibleSection(false) {
-								@LinkedProvidersSection(cfg.AuthProviders, cfg.GoogleClientID)
+								@LinkedProvidersSection(cfg.AuthProviders, cfg.Passkeys, cfg.GoogleClientID)
 							}
 						</div>
 					</div>

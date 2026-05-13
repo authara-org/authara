@@ -35,6 +35,14 @@ func (s *Store) DB() *sql.DB {
 	return s.db
 }
 
+func (s *Store) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+
+	return s.db.Close()
+}
+
 func New(cfg Config) (*Store, error) {
 	location, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {

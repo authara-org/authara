@@ -258,6 +258,10 @@ func (s *Service) CleanupExpiredData(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	err = s.store.DeleteExpiredWebAuthnChallenges(ctx, now)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

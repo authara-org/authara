@@ -1,6 +1,7 @@
 import { initVerificationCodeForm } from "./verificationInput";
 import { showRedirecting, hideRedirecting } from "./ui";
 import "./oauth";
+import { initPasskeys } from "./passkeys";
 import { initTheme, setTheme } from "./theme";
 
 declare global {
@@ -16,6 +17,7 @@ window.htmx.config.defaultSwapStyle = "outerHTML";
 
 document.addEventListener("DOMContentLoaded", () => {
   initVerificationCodeForm(document);
+  initPasskeys(document);
   initTheme();
 });
 
@@ -43,4 +45,5 @@ window.addEventListener("pageshow", hideRedirecting);
 
 document.body.addEventListener("htmx:afterSwap", () => {
   initVerificationCodeForm(document);
+  initPasskeys(document);
 });

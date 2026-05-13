@@ -623,13 +623,17 @@ func (s *Service) linkExternalIdentityToUser(
 
 func (s *Service) UnlinkAuthProvider(ctx context.Context, userID uuid.UUID, provider domain.Provider) error {
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		providers, err := s.store.ListAuthProvidersByUserID(txCtx, userID)
+		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {
+			return err
+		}
+
+		count, err := s.store.CountAuthMethods(txCtx, userID)
 		if err != nil {
 			return err
 		}
 
-		if len(providers) <= 1 {
-			return ErrCannotRemoveLastAuthProvider
+		if count <= 1 {
+			return ErrCannotRemoveLastAuthMethod
 		}
 
 		err = s.store.DeleteAuthProviderByMethodAndUserID(txCtx, provider, userID)

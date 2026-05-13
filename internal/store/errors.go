@@ -7,24 +7,29 @@ import (
 )
 
 var (
-	ErrUserNotFound                   = errors.New("user not found")
-	ErrSessionNotFound                = errors.New("session not found")
-	ErrorAuthProviderNotFound         = errors.New("auth_provider not found")
-	ErrRefreshTokenNotFound           = errors.New("refresh_token not found")
-	ErrorChallengeNotFound            = errors.New("challenge not found")
-	ErrorChallengeAlreadyConsumed     = errors.New("challenge already consumed")
-	ErrorVerificationCodeNotFound     = errors.New("verification code not found")
-	ErrorEmailJobNotFound             = errors.New("email job not found")
-	ErrorPendingSignupActionNotFound  = errors.New("pending signup action not found")
-	ErrorPendingPasswordResetNotFound = errors.New("pending password reset not found")
-	ErrorPendingEmailChangeNotFound   = errors.New("pending email change not found")
-	ErrorRoleNotFound                 = errors.New("role not found")
-	ErrorPendingProviderLinkNotFound  = errors.New("pending provider link not found")
+	ErrUserNotFound                     = errors.New("user not found")
+	ErrSessionNotFound                  = errors.New("session not found")
+	ErrorAuthProviderNotFound           = errors.New("auth_provider not found")
+	ErrRefreshTokenNotFound             = errors.New("refresh_token not found")
+	ErrorChallengeNotFound              = errors.New("challenge not found")
+	ErrorChallengeAlreadyConsumed       = errors.New("challenge already consumed")
+	ErrorVerificationCodeNotFound       = errors.New("verification code not found")
+	ErrorEmailJobNotFound               = errors.New("email job not found")
+	ErrorPendingSignupActionNotFound    = errors.New("pending signup action not found")
+	ErrorPendingPasswordResetNotFound   = errors.New("pending password reset not found")
+	ErrorPendingEmailChangeNotFound     = errors.New("pending email change not found")
+	ErrorRoleNotFound                   = errors.New("role not found")
+	ErrorPendingProviderLinkNotFound    = errors.New("pending provider link not found")
+	ErrPasskeyNotFound                  = errors.New("passkey not found")
+	ErrPasskeyAlreadyExists             = errors.New("passkey already exists")
+	ErrWebAuthnChallengeNotFound        = errors.New("webauthn challenge not found")
+	ErrWebAuthnChallengeAlreadyConsumed = errors.New("webauthn challenge already consumed")
 )
 
 const (
-	ConstraintUserEmail    = "unique_user_email"
-	ConstraintUserUsername = "unique_user_username"
+	ConstraintUserEmail           = "unique_user_email"
+	ConstraintUserUsername        = "unique_user_username"
+	ConstraintPasskeyCredentialID = "unique_passkey_credential_id"
 
 	uniqueViolationCode = "23505"
 )

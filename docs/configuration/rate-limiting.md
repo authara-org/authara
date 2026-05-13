@@ -4,6 +4,7 @@ Authara includes built-in rate limiting to protect against:
 
 - brute-force login attempts
 - automated signup abuse
+- unauthenticated passkey challenge creation
 
 Limits are applied per:
 
@@ -116,6 +117,32 @@ Default:
 
 ---
 
+## Passkey login limits
+
+### AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT
+
+Maximum passkey login option requests per IP.
+
+Default:
+
+```
+30
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW
+
+Time window for IP-based passkey login option requests.
+
+Default:
+
+```
+10m
+```
+
+---
+
 ## Safety limits
 
 ### AUTHARA_RATE_LIMIT_MAX_ENTRIES
@@ -134,8 +161,9 @@ This acts as a safety valve against memory exhaustion.
 
 ## Multi-instance deployments
 
-Rate limiting is currently **in-memory per instance**.
+By default, rate limiting is **in-memory per instance**.
 
 In multi-instance deployments, limits are **not shared** between instances.
 
-Future versions may support shared rate limiting via Redis.
+Set `AUTHARA_CACHE_PROVIDER=redis` to use Redis-backed counters and share
+rate limits across Authara instances.

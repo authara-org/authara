@@ -93,6 +93,46 @@ variables:
     default: 5m
 
   # ------------------------------------------------------------
+  # Cache
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_CACHE_PROVIDER
+    stability: stable
+    required: false
+    type: enum
+    default: noop
+    allowed_values:
+      - noop
+      - redis
+
+  - name: AUTHARA_REDIS_HOST
+    stability: stable
+    required: false
+    type: string
+    default: localhost
+    notes: Used when AUTHARA_CACHE_PROVIDER=redis
+
+  - name: AUTHARA_REDIS_PORT
+    stability: stable
+    required: false
+    type: int
+    default: 6379
+    notes: Used when AUTHARA_CACHE_PROVIDER=redis
+
+  - name: AUTHARA_REDIS_PASSWORD
+    stability: stable
+    required: false
+    type: string
+    notes: Used when AUTHARA_CACHE_PROVIDER=redis
+
+  - name: AUTHARA_REDIS_DB
+    stability: stable
+    required: false
+    type: int
+    default: 0
+    notes: Used when AUTHARA_CACHE_PROVIDER=redis
+
+  # ------------------------------------------------------------
   # Public URL
   # ------------------------------------------------------------
 
@@ -262,6 +302,22 @@ variables:
     default: 24h
 
   # ------------------------------------------------------------
+  # Rate Limiting (Passkey Login)
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 30
+
+  - name: AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 10m
+
+  # ------------------------------------------------------------
   # Rate Limiting (Challenge Verify)
   # ------------------------------------------------------------
 
@@ -276,18 +332,6 @@ variables:
     required: false
     type: duration
     default: 10m
-
-  - name: AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_ID_LIMIT
-    stability: stable
-    required: false
-    type: int
-    default: 10
-
-  - name: AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_ID_WINDOW
-    stability: stable
-    required: false
-    type: duration
-    default: 30m
 
   # ------------------------------------------------------------
   # Rate Limiting (Challenge Resend)
@@ -304,18 +348,6 @@ variables:
     required: false
     type: duration
     default: 1h
-
-  - name: AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_ID_LIMIT
-    stability: stable
-    required: false
-    type: int
-    default: 5
-
-  - name: AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_ID_WINDOW
-    stability: stable
-    required: false
-    type: duration
-    default: 30m
 
   # ------------------------------------------------------------
   # Limiter Safety
