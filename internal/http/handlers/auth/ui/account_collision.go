@@ -10,6 +10,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/flash"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/session"
@@ -74,6 +75,31 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 	linkID, err := uuid.Parse(linkIDStr)
 	if err != nil {
 		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid or expired link.", authview.AccountCollisionForm(linkIDStr, "", "Google"))
+		return
+	}
+
+	link, err := h.Auth.GetPendingProviderLink(ctx, linkID)
+	if err != nil {
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid or expired link.", authview.AccountCollisionForm(linkIDStr, "", "Google"))
+		return
+	}
+
+	email := ""
+	if link.ProviderEmail != nil {
+		email = *link.ProviderEmail
+	}
+	if email == "" {
+		user, err := h.Auth.GetUser(ctx, link.UserID)
+		if err != nil {
+			h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid or expired link.", authview.AccountCollisionForm(linkIDStr, "", "Google"))
+			return
+		}
+		email = user.Email
+	}
+
+	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), email)
+	if err != nil || !allowed {
+		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.AccountCollisionForm(linkIDStr, email, "Google"))
 		return
 	}
 
