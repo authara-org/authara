@@ -1,7 +1,9 @@
 type PasskeyOptionsResponse = {
   challenge_id: string;
   options: {
-    publicKey: PublicKeyCredentialCreationOptions | PublicKeyCredentialRequestOptions;
+    publicKey:
+      | PublicKeyCredentialCreationOptions
+      | PublicKeyCredentialRequestOptions;
     mediation?: CredentialMediationRequirement;
   };
 };
@@ -23,13 +25,18 @@ function getCSRFToken(): string {
 }
 
 function platformHint(): string {
-  const uaData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
+  const uaData = (
+    navigator as Navigator & { userAgentData?: { platform?: string } }
+  ).userAgentData;
   return uaData?.platform || navigator.platform || "";
 }
 
 function base64urlToBuffer(value: string): Uint8Array {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "=",
+  );
   const binary = window.atob(padded);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {
@@ -57,11 +64,16 @@ function normalizeCreationOptions(
 ): PublicKeyCredentialCreationOptions {
   const publicKey = { ...options } as any;
   publicKey.challenge = base64urlToBuffer(String(options.challenge));
-  publicKey.user = { ...options.user, id: base64urlToBuffer(String(options.user.id)) };
-  publicKey.excludeCredentials = (options.excludeCredentials || []).map((credential) => ({
-    ...credential,
-    id: base64urlToBuffer(String(credential.id)),
-  }));
+  publicKey.user = {
+    ...options.user,
+    id: base64urlToBuffer(String(options.user.id)),
+  };
+  publicKey.excludeCredentials = (options.excludeCredentials || []).map(
+    (credential) => ({
+      ...credential,
+      id: base64urlToBuffer(String(credential.id)),
+    }),
+  );
   return publicKey;
 }
 
@@ -70,17 +82,21 @@ function normalizeRequestOptions(
 ): PublicKeyCredentialRequestOptions {
   const publicKey = { ...options } as any;
   publicKey.challenge = base64urlToBuffer(String(options.challenge));
-  publicKey.allowCredentials = (options.allowCredentials || []).map((credential) => ({
-    ...credential,
-    id: base64urlToBuffer(String(credential.id)),
-  }));
+  publicKey.allowCredentials = (options.allowCredentials || []).map(
+    (credential) => ({
+      ...credential,
+      id: base64urlToBuffer(String(credential.id)),
+    }),
+  );
   return publicKey;
 }
 
 function serializeRegistrationCredential(credential: PublicKeyCredential) {
   const response = credential.response as AuthenticatorAttestationResponse;
   const transports =
-    typeof response.getTransports === "function" ? response.getTransports() : undefined;
+    typeof response.getTransports === "function"
+      ? response.getTransports()
+      : undefined;
 
   return {
     id: credential.id,
@@ -114,7 +130,10 @@ function serializeAuthenticationCredential(credential: PublicKeyCredential) {
   };
 }
 
-async function responseErrorMessage(res: Response, fallback: string): Promise<string> {
+async function responseErrorMessage(
+  res: Response,
+  fallback: string,
+): Promise<string> {
   if (!res.ok) {
     try {
       const data = (await res.json()) as { error?: { message?: string } };
@@ -186,7 +205,9 @@ function removeToast(toast: HTMLElement): void {
 
 function showToast(kind: ToastKind, message: string): void {
   const container = document.querySelector<HTMLElement>("#toast-container");
-  const template = document.querySelector<HTMLTemplateElement>(`#toast-template-${kind}`);
+  const template = document.querySelector<HTMLTemplateElement>(
+    `#toast-template-${kind}`,
+  );
   const templateRoot = template?.content.firstElementChild;
 
   if (!container || !(templateRoot instanceof HTMLElement)) {
@@ -214,17 +235,23 @@ function showPasskeyError(message: string): void {
 }
 
 function replaceLinkedProvidersSection(html: string): boolean {
-  const current = document.querySelector<HTMLElement>("#linked-providers-section");
+  const current = document.querySelector<HTMLElement>(
+    "#linked-providers-section",
+  );
   if (!current) return false;
 
   const template = document.createElement("template");
   template.innerHTML = html.trim();
-  const next = template.content.querySelector<HTMLElement>("#linked-providers-section");
+  const next = template.content.querySelector<HTMLElement>(
+    "#linked-providers-section",
+  );
   if (!next) return false;
 
   current.replaceWith(next);
 
-  const htmx = (window as Window & { htmx?: { process?: (element: Element) => void } }).htmx;
+  const htmx = (
+    window as Window & { htmx?: { process?: (element: Element) => void } }
+  ).htmx;
   htmx?.process?.(next);
   initPasskeys(next);
 
@@ -267,12 +294,16 @@ async function registerPasskey(button: HTMLButtonElement): Promise<void> {
       return;
     }
 
-    const data = await postJSON<PasskeyOptionsResponse>("/auth/passkeys/register/options");
+    const data = await postJSON<PasskeyOptionsResponse>(
+      "/auth/passkeys/register/options",
+    );
     const publicKey = normalizeCreationOptions(
       data.options.publicKey as PublicKeyCredentialCreationOptions,
     );
 
-    const credential = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential | null;
+    const credential = (await navigator.credentials.create({
+      publicKey,
+    })) as PublicKeyCredential | null;
 
     if (!credential) {
       showPasskeyError("Passkey setup was cancelled.");
@@ -280,20 +311,28 @@ async function registerPasskey(button: HTMLButtonElement): Promise<void> {
     }
 
     const responseMode =
-      button.dataset.passkeyRedirect === "true" ? "json" : "linked-providers-section";
-    const finish = await postRegistrationFinish({
-      challenge_id: data.challenge_id,
-      credential: serializeRegistrationCredential(credential),
-      platform_hint: platformHint(),
-      return_to: button.dataset.returnTo || "/auth/account",
-    }, responseMode);
+      button.dataset.passkeyRedirect === "true"
+        ? "json"
+        : "linked-providers-section";
+    const finish = await postRegistrationFinish(
+      {
+        challenge_id: data.challenge_id,
+        credential: serializeRegistrationCredential(credential),
+        platform_hint: platformHint(),
+        return_to: button.dataset.returnTo || "/auth/account",
+      },
+      responseMode,
+    );
 
     if (button.dataset.passkeyRedirect === "true") {
       window.location.href = finish.return_to || button.dataset.returnTo || "/";
       return;
     }
 
-    if (!finish.linkedProvidersHTML || !replaceLinkedProvidersSection(finish.linkedProvidersHTML)) {
+    if (
+      !finish.linkedProvidersHTML ||
+      !replaceLinkedProvidersSection(finish.linkedProvidersHTML)
+    ) {
       window.location.href = "/auth/account";
       return;
     }
@@ -307,7 +346,11 @@ async function registerPasskey(button: HTMLButtonElement): Promise<void> {
       return;
     }
     showPasskeyError(
-      passkeyErrorMessage(err, "Could not add passkey.", "Passkey setup was cancelled."),
+      passkeyErrorMessage(
+        err,
+        "Could not add passkey.",
+        "Passkey setup was cancelled.",
+      ),
     );
   } finally {
     if (!keepDisabled) {
@@ -356,7 +399,11 @@ async function loginWithPasskey(button: HTMLButtonElement): Promise<void> {
     window.location.href = finish.return_to || returnTo;
   } catch (err) {
     showPasskeyError(
-      passkeyErrorMessage(err, "Passkey sign-in failed.", "Passkey sign-in was cancelled."),
+      passkeyErrorMessage(
+        err,
+        "Passkey sign-in failed.",
+        "Passkey sign-in was cancelled.",
+      ),
     );
   } finally {
     button.disabled = wasDisabled;
@@ -364,15 +411,19 @@ async function loginWithPasskey(button: HTMLButtonElement): Promise<void> {
 }
 
 export function initPasskeys(root: ParentNode = document): void {
-  root.querySelectorAll<HTMLButtonElement>("[data-passkey-register]").forEach((button) => {
-    if (button.dataset.passkeyBound === "true") return;
-    button.dataset.passkeyBound = "true";
-    button.addEventListener("click", () => void registerPasskey(button));
-  });
+  root
+    .querySelectorAll<HTMLButtonElement>("[data-passkey-register]")
+    .forEach((button) => {
+      if (button.dataset.passkeyBound === "true") return;
+      button.dataset.passkeyBound = "true";
+      button.addEventListener("click", () => void registerPasskey(button));
+    });
 
-  root.querySelectorAll<HTMLButtonElement>("[data-passkey-login]").forEach((button) => {
-    if (button.dataset.passkeyBound === "true") return;
-    button.dataset.passkeyBound = "true";
-    button.addEventListener("click", () => void loginWithPasskey(button));
-  });
+  root
+    .querySelectorAll<HTMLButtonElement>("[data-passkey-login]")
+    .forEach((button) => {
+      if (button.dataset.passkeyBound === "true") return;
+      button.dataset.passkeyBound = "true";
+      button.addEventListener("click", () => void loginWithPasskey(button));
+    });
 }
