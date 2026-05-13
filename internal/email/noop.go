@@ -27,8 +27,8 @@ func (s *NoopSender) Send(ctx context.Context, to string, msg Message) error {
 	s.logger.InfoContext(ctx, "email noop send",
 		"to", to,
 		"subject", msg.Subject,
-		"text", msg.Text,
-		"html", msg.HTML,
+		"has_text", msg.Text != "",
+		"has_html", msg.HTML != "",
 	)
 
 	return nil
