@@ -55,7 +55,7 @@ func (s *Service) CreateOpaqueChallenge(
 			AttemptCount: 0,
 			MaxAttempts:  s.maxAttempts,
 			ResendCount:  0,
-			MaxResends:   s.maxResends,
+			MaxResends:   0,
 		})
 
 		challengeID = challenge.ID
