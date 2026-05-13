@@ -155,12 +155,13 @@ func TestPasskeyAuthenticateOptionsRateLimited(t *testing.T) {
 	})
 }
 
-func TestLoginPageIncludesPasskeyButton(t *testing.T) {
+func TestLoginPageIncludesPasskeyControls(t *testing.T) {
 	h := &UIHandler{
 		Render: render.New(render.Assets{}, false),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/login?return_to=%2Fdashboard", nil)
+	req = req.WithContext(httpctx.WithReturnTo(req.Context(), "/dashboard"))
 	rr := httptest.NewRecorder()
 
 	h.LoginPage(rr, req)
@@ -168,8 +169,21 @@ func TestLoginPageIncludesPasskeyButton(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "data-passkey-login") {
+	body := rr.Body.String()
+	if !strings.Contains(body, "data-passkey-login") {
 		t.Fatal("expected login page to include passkey button")
+	}
+	if !strings.Contains(body, `autocomplete="username webauthn"`) {
+		t.Fatal("expected login email input to enable passkey autofill")
+	}
+	if !strings.Contains(body, `data-passkey-conditional-login="true"`) {
+		t.Fatal("expected login page to include conditional passkey marker")
+	}
+	if !strings.Contains(body, "data-login-form") {
+		t.Fatal("expected login form to include password-submit abort marker")
+	}
+	if !strings.Contains(body, `data-return-to="/dashboard"`) {
+		t.Fatal("expected conditional passkey marker to include normalized return_to")
 	}
 }
 

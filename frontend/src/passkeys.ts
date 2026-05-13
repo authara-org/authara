@@ -19,6 +19,8 @@ type PasskeyRegistrationFinishResponse = PasskeyFinishResponse & {
 
 type ToastKind = "success" | "info" | "error";
 
+let conditionalLoginAbortController: AbortController | null = null;
+
 function getCSRFToken(): string {
   const match = document.cookie.match(/(?:^|;\s*)authara_csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : "";
@@ -360,6 +362,9 @@ async function registerPasskey(button: HTMLButtonElement): Promise<void> {
 }
 
 async function loginWithPasskey(button: HTMLButtonElement): Promise<void> {
+  conditionalLoginAbortController?.abort();
+  conditionalLoginAbortController = null;
+
   const wasDisabled = button.disabled;
   button.disabled = true;
 
@@ -410,7 +415,115 @@ async function loginWithPasskey(button: HTMLButtonElement): Promise<void> {
   }
 }
 
+function conditionalLoginRoot(root: ParentNode): HTMLElement | null {
+  if (
+    root instanceof HTMLElement &&
+    root.matches("[data-passkey-conditional-login]")
+  ) {
+    return root;
+  }
+
+  return root.querySelector?.(
+    "[data-passkey-conditional-login]",
+  ) as HTMLElement | null;
+}
+
+async function initConditionalPasskeyLogin(
+  root: ParentNode = document,
+): Promise<void> {
+  const scope = conditionalLoginRoot(root);
+  if (!scope) return;
+
+  if (scope.dataset.passkeyConditionalBound === "true") return;
+  scope.dataset.passkeyConditionalBound = "true";
+
+  if (!window.PublicKeyCredential || !navigator.credentials?.get) return;
+
+  conditionalLoginAbortController?.abort();
+  const abortController = new AbortController();
+  conditionalLoginAbortController = abortController;
+
+  let isAvailable = false;
+  try {
+    isAvailable =
+      (await PublicKeyCredential.isConditionalMediationAvailable?.()) ?? false;
+  } catch (err) {
+    if (conditionalLoginAbortController === abortController) {
+      conditionalLoginAbortController = null;
+    }
+    console.debug?.("conditional passkey login unavailable", err);
+    return;
+  }
+
+  if (
+    !isAvailable ||
+    abortController.signal.aborted ||
+    conditionalLoginAbortController !== abortController
+  ) {
+    if (conditionalLoginAbortController === abortController) {
+      conditionalLoginAbortController = null;
+    }
+    return;
+  }
+
+  try {
+    const returnTo = scope.dataset.returnTo || "/";
+
+    const data = await postJSON<PasskeyOptionsResponse>(
+      `/auth/passkeys/authenticate/options?return_to=${encodeURIComponent(returnTo)}`,
+    );
+
+    const publicKey = normalizeRequestOptions(
+      data.options.publicKey as PublicKeyCredentialRequestOptions,
+    );
+
+    const credential = (await navigator.credentials.get({
+      publicKey,
+      mediation: "conditional",
+      signal: abortController.signal,
+    } as CredentialRequestOptions)) as PublicKeyCredential | null;
+
+    if (!credential) {
+      if (conditionalLoginAbortController === abortController) {
+        conditionalLoginAbortController = null;
+      }
+      return;
+    }
+
+    const finish = await postJSON<PasskeyFinishResponse>(
+      `/auth/passkeys/authenticate/finish?return_to=${encodeURIComponent(returnTo)}`,
+      {
+        challenge_id: data.challenge_id,
+        credential: serializeAuthenticationCredential(credential),
+        return_to: returnTo,
+      },
+    );
+
+    window.location.href = finish.return_to || returnTo;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") return;
+
+    if (conditionalLoginAbortController === abortController) {
+      conditionalLoginAbortController = null;
+    }
+    console.debug?.("conditional passkey login unavailable", err);
+  }
+}
+
+function bindConditionalAbortOnPasswordSubmit(root: ParentNode): void {
+  root.querySelectorAll<HTMLFormElement>("[data-login-form]").forEach((form) => {
+    if (form.dataset.passkeyAbortBound === "true") return;
+    form.dataset.passkeyAbortBound = "true";
+    form.addEventListener("submit", () => {
+      conditionalLoginAbortController?.abort();
+      conditionalLoginAbortController = null;
+    });
+  });
+}
+
 export function initPasskeys(root: ParentNode = document): void {
+  bindConditionalAbortOnPasswordSubmit(root);
+
   root
     .querySelectorAll<HTMLButtonElement>("[data-passkey-register]")
     .forEach((button) => {
@@ -426,4 +539,6 @@ export function initPasskeys(root: ParentNode = document): void {
       button.dataset.passkeyBound = "true";
       button.addEventListener("click", () => void loginWithPasskey(button));
     });
+
+  void initConditionalPasskeyLogin(root);
 }
