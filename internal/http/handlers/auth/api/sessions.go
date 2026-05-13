@@ -51,7 +51,11 @@ func (h *APIHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case errors.Is(err, session.ErrInvalidRefreshToken),
-		errors.Is(err, session.ErrForbidden):
+		errors.Is(err, session.ErrRefreshTokenReuse),
+		errors.Is(err, session.ErrForbidden),
+		errors.Is(err, session.ErrUserDisabled),
+		errors.Is(err, session.ErrUserNotAllowed):
+		session.ClearSessionCookies(w)
 		response.WriteError(
 			w,
 			mustRouteError(RefreshPostErrors, response.CodeUnauthorized),
