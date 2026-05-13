@@ -302,6 +302,22 @@ variables:
     default: 24h
 
   # ------------------------------------------------------------
+  # Rate Limiting (Passkey Login)
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT
+    stability: stable
+    required: false
+    type: int
+    default: 30
+
+  - name: AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 10m
+
+  # ------------------------------------------------------------
   # Rate Limiting (Challenge Verify)
   # ------------------------------------------------------------
 

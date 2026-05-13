@@ -21,6 +21,9 @@ type RateLimit struct {
 	PasswordResetEmailLimit     int    `env:"AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_LIMIT,default=3"`
 	PasswordResetEmailWindowRaw string `env:"AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW,default=24h"`
 
+	PasskeyLoginIPLimit     int    `env:"AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT,default=30"`
+	PasskeyLoginIPWindowRaw string `env:"AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW,default=10m"`
+
 	ChallengeVerifyIPLimit     int    `env:"AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_LIMIT,default=30"`
 	ChallengeVerifyIPWindowRaw string `env:"AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_WINDOW,default=10m"`
 
@@ -36,6 +39,7 @@ type RateLimit struct {
 	SignupEmailWindow        time.Duration
 	PasswordResetIPWindow    time.Duration
 	PasswordResetEmailWindow time.Duration
+	PasskeyLoginIPWindow     time.Duration
 	ChallengeVerifyIPWindow  time.Duration
 	ChallengeResendIPWindow  time.Duration
 }
@@ -58,6 +62,9 @@ func (r *RateLimit) validate() error {
 	}
 	if r.PasswordResetEmailLimit <= 0 {
 		return fmt.Errorf("AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_LIMIT must be > 0 (got %d)", r.PasswordResetEmailLimit)
+	}
+	if r.PasskeyLoginIPLimit <= 0 {
+		return fmt.Errorf("AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT must be > 0 (got %d)", r.PasskeyLoginIPLimit)
 	}
 	if r.ChallengeVerifyIPLimit <= 0 {
 		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_LIMIT must be > 0 (got %d)", r.ChallengeVerifyIPLimit)
@@ -101,6 +108,10 @@ func (r *RateLimit) parse() error {
 	if err != nil {
 		return err
 	}
+	r.PasskeyLoginIPWindow, err = parseDurationEnv("AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW", r.PasskeyLoginIPWindowRaw)
+	if err != nil {
+		return err
+	}
 	r.ChallengeVerifyIPWindow, err = parseDurationEnv("AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_WINDOW", r.ChallengeVerifyIPWindowRaw)
 	if err != nil {
 		return err
@@ -127,6 +138,9 @@ func (r *RateLimit) parse() error {
 	}
 	if r.PasswordResetEmailWindow <= 0 {
 		return fmt.Errorf("AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW must be > 0 (got %s)", r.PasswordResetEmailWindow)
+	}
+	if r.PasskeyLoginIPWindow <= 0 {
+		return fmt.Errorf("AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW must be > 0 (got %s)", r.PasskeyLoginIPWindow)
 	}
 	if r.ChallengeVerifyIPWindow <= 0 {
 		return fmt.Errorf("AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_WINDOW must be > 0 (got %s)", r.ChallengeVerifyIPWindow)

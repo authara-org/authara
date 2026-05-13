@@ -4,6 +4,7 @@ Authara includes built-in rate limiting to protect against:
 
 - brute-force login attempts
 - automated signup abuse
+- unauthenticated passkey challenge creation
 
 Limits are applied per:
 
@@ -112,6 +113,32 @@ Default:
 
 ```
 24h
+```
+
+---
+
+## Passkey login limits
+
+### AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT
+
+Maximum passkey login option requests per IP.
+
+Default:
+
+```
+30
+```
+
+---
+
+### AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW
+
+Time window for IP-based passkey login option requests.
+
+Default:
+
+```
+10m
 ```
 
 ---

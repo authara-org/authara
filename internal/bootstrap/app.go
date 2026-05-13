@@ -54,7 +54,13 @@ func NewApp() (*App, error) {
 		Store:  st,
 		Cache:  ca,
 	}
-	a.Services = NewServices(a)
+	services, err := NewServices(a)
+	if err != nil {
+		_ = ca.Close()
+		_ = st.Close()
+		return nil, err
+	}
+	a.Services = services
 	return a, nil
 }
 

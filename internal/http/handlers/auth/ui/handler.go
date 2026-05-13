@@ -10,12 +10,14 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/session"
 )
 
 type UIHandler struct {
 	Auth             *auth.Service
+	Passkeys         *passkey.Service
 	Session          *session.Service
 	Challenge        *challenge.Service
 	ChallengeEnabled bool
@@ -35,6 +37,7 @@ type UIHandler struct {
 func NewUIHandler(d authhandler.Deps) *UIHandler {
 	return &UIHandler{
 		Auth:             d.Auth,
+		Passkeys:         d.Passkeys,
 		Session:          d.Session,
 		Challenge:        d.Challenge,
 		ChallengeEnabled: d.ChallengeEnabled,

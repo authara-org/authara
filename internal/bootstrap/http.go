@@ -63,6 +63,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		Dev:               app.Config.Values.AppEnv == "dev",
 		TrustProxyHeaders: app.Config.Values.TrustProxyHeaders,
 		Auth:              app.Services.Auth,
+		Passkeys:          app.Services.Passkeys,
 		Session:           app.Services.Session,
 		Challenge:         app.Services.Challenge,
 		ChallengeEnabled:  app.Config.Challenge.Enabled,
@@ -110,6 +111,9 @@ func newLimiterConfig(app *App) ratelimiter.LimiterConfig {
 		PasswordResetIPWindow:    app.Config.RateLimit.PasswordResetIPWindow,
 		PasswordResetEmailLimit:  app.Config.RateLimit.PasswordResetEmailLimit,
 		PasswordResetEmailWindow: app.Config.RateLimit.PasswordResetEmailWindow,
+
+		PasskeyLoginIPLimit:  app.Config.RateLimit.PasskeyLoginIPLimit,
+		PasskeyLoginIPWindow: app.Config.RateLimit.PasskeyLoginIPWindow,
 
 		ChallengeVerifyIPLimit:  app.Config.RateLimit.ChallengeVerifyIPLimit,
 		ChallengeVerifyIPWindow: app.Config.RateLimit.ChallengeVerifyIPWindow,

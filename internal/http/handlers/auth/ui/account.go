@@ -405,6 +405,16 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 		return userview.AccountConfig{}, err
 	}
 
+	var passkeys []domain.Passkey
+	if h.Passkeys != nil {
+		passkeys, err = h.Passkeys.ListUserPasskeys(ctx, userID)
+		if err != nil {
+			return userview.AccountConfig{}, err
+		}
+	}
+
+	totalAuthMethods := len(providers) + len(passkeys)
+
 	return userview.AccountConfig{
 		Username:         user.Username,
 		Email:            user.Email,
@@ -412,6 +422,7 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 		Sessions:         toSessionViewModels(sessions, currentSessionID),
 		CurrentSessionID: currentSessionID,
 		AuthProviders:    viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers),
+		Passkeys:         viewmodel.PasskeysFromDomain(passkeys, totalAuthMethods),
 	}, nil
 }
 

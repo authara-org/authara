@@ -1,0 +1,36 @@
+package auth
+
+import (
+	"github.com/authara-org/authara/internal/http/templates"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+)
+
+templ PasskeySetup(returnTo string) {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@HeaderSection("Add a passkey", "Use your device unlock, security key, or synced passkey to sign in.")
+			<div class="space-y-4">
+				<button
+					type="button"
+					data-passkey-register
+					data-passkey-redirect="true"
+					data-return-to={ returnTo }
+					class="h-fit w-full rounded-xl border bg-blue-600 px-3.5 py-2 text-base text-white border-transparent hover:bg-blue-700 cursor-pointer transition-colors"
+				>
+					<span class="flex items-center justify-center gap-2">
+						<span class="h-5 w-5 stroke-[1.5]">
+							@icons.Key()
+						</span>
+						Add passkey
+					</span>
+				</button>
+				<a
+					href={ templ.SafeURL(returnTo) }
+					class="block text-center text-sm text-blue-800 dark:text-blue-400 underline"
+				>
+					Skip for now
+				</a>
+			</div>
+		}
+	}
+}

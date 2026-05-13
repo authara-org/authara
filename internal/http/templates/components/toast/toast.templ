@@ -79,6 +79,9 @@ templ ToastWrapper() {
 			@ToastMessage(Kind(flash.Kind), flash.Message)
 		}
 	</div>
+	@ClientToastTemplate(Success)
+	@ClientToastTemplate(Info)
+	@ClientToastTemplate(Error)
 	<style>
 		@keyframes slideIn {
 			from {
@@ -107,4 +110,64 @@ templ ToastWrapper() {
 			animation: slideOut 0.3s ease-in forwards;
 		}
 	</style>
+}
+
+templ ClientToastTemplate(kind Kind) {
+	<template id={ "toast-template-" + string(kind) }>
+		<div
+			class={
+				"toast toast-enter border-l-4 p-4 rounded-lg shadow-lg flex items-start gap-3",
+				templ.KV("bg-green-50 border-green-500", kind == "success"),
+				templ.KV("bg-blue-50 border-blue-500", kind == "info"),
+				templ.KV("bg-red-50 border-red-500", kind == "error"),
+			}
+		>
+			<div
+				class={
+					"flex-shrink-0",
+					templ.KV("text-green-600", kind == "success"),
+					templ.KV("text-blue-600", kind == "info"),
+					templ.KV("text-red-600", kind == "error"),
+				}
+			>
+				if kind == "success" {
+					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+					</svg>
+				}
+				if kind == "error" {
+					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+					</svg>
+				}
+				if kind == "info" {
+					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 0118 0z"></path>
+					</svg>
+				}
+			</div>
+			<div class="flex-1">
+				if kind == "success" {
+					<h3 class="font-semibold text-green-800">Success!</h3>
+				}
+				if kind == "error" {
+					<h3 class="font-semibold text-red-800">Error!</h3>
+				}
+				if kind == "info" {
+					<h3 class="font-semibold text-blue-800">Info</h3>
+				}
+				<p data-toast-message class="text-sm opacity-90 mt-1 text-gray-700"></p>
+			</div>
+			<button
+				type="button"
+				data-toast-close
+				class="text-gray-500 hover:text-gray-800 transition-opacity flex-shrink-0 cursor-pointer"
+				aria-label="Close"
+			>
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			</button>
+		</div>
+	</template>
 }

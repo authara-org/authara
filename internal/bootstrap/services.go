@@ -1,11 +1,14 @@
 package bootstrap
 
 import (
+	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -13,6 +16,7 @@ import (
 
 type Services struct {
 	Auth           *auth.Service
+	Passkeys       *passkey.Service
 	Session        *session.Service
 	Challenge      *challenge.Service
 	Verification   *challenge.VerificationCodeService
@@ -20,7 +24,7 @@ type Services struct {
 	OAuthProviders oauth.OAuthProviders
 }
 
-func NewServices(app *App) Services {
+func NewServices(app *App) (Services, error) {
 	txManager := tx.New(app.Store)
 	accessPolicy := newAccessPolicy(app)
 	oauthProviders := newOAuthProviders(app.Config)
@@ -50,6 +54,11 @@ func NewServices(app *App) Services {
 		AccessPolicy:         accessPolicy,
 	})
 
+	passkeyService, err := newPasskeyService(app, txManager)
+	if err != nil {
+		return Services{}, fmt.Errorf("create passkey service: %w", err)
+	}
+
 	verificationCodeService := newVerificationCodeService(app)
 	challengeService := challenge.New(challenge.Config{
 		Store:             app.Store,
@@ -78,10 +87,27 @@ func NewServices(app *App) Services {
 
 	return Services{
 		Auth:           authService,
+		Passkeys:       passkeyService,
 		Session:        sessionService,
 		Challenge:      challengeService,
 		Verification:   verificationCodeService,
 		EmailWorker:    emailWorker,
 		OAuthProviders: oauthProviders,
+	}, nil
+}
+
+func newPasskeyService(app *App, txManager *tx.Manager) (*passkey.Service, error) {
+	publicURL, err := url.Parse(app.Config.Values.PublicURL)
+	if err != nil {
+		return nil, err
 	}
+
+	return passkey.New(passkey.Config{
+		RPDisplayName: "Authara",
+		RPID:          publicURL.Hostname(),
+		RPOrigins:     []string{app.Config.Values.PublicURL},
+		Store:         app.Store,
+		Tx:            txManager,
+		Logger:        app.Logger,
+	})
 }

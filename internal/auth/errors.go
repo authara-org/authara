@@ -13,7 +13,8 @@ var (
 	ErrEmailNotAllowed                 = errors.New("email is not allowed to access the application")
 	ErrAuthProviderAlreadyLinked       = errors.New("auth provider already linked to another user")
 	ErrAuthProviderAlreadyLinkedToUser = errors.New("auth provider already linked to user")
-	ErrCannotRemoveLastAuthProvider    = errors.New("cannot remove last auth provider")
+	ErrCannotRemoveLastAuthMethod      = errors.New("cannot remove last auth method")
+	ErrCannotRemoveLastAuthProvider    = ErrCannotRemoveLastAuthMethod
 	ErrPasswordAlreadyExists           = errors.New("password provider already exists")
 	ErrPendingProviderLinkExpired      = errors.New("pending provider link expired")
 	ErrPendingProviderLinkInvalid      = errors.New("pending provider link invalid")
@@ -21,4 +22,8 @@ var (
 	ErrProviderEmailNotVerified        = errors.New("provider email is not verified")
 	ErrProviderDisabled                = errors.New("provider disabled")
 	ErrPasswordProviderMissing         = errors.New("password provider missing")
+	ErrPasskeyNotFound                 = errors.New("passkey not found")
+	ErrPasskeyAlreadyExists            = errors.New("passkey already exists")
+	ErrPasskeyRegistrationInvalid      = errors.New("passkey registration invalid")
+	ErrPasskeyAuthenticationInvalid    = errors.New("passkey authentication invalid")
 )

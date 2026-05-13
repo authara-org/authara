@@ -185,7 +185,7 @@ AUTHARA_EMAIL_CLEANUP_FAILED_AFTER
 
 ### Rate limiting
 
-Protects login and signup endpoints.
+Protects login, signup, and passkey challenge endpoints.
 
 See: [Rate Limiting](rate-limiting.md)
 
@@ -193,6 +193,7 @@ Examples:
 
 ```
 AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT
+AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT
 AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_LIMIT
 ```
 
