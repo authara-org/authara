@@ -109,6 +109,26 @@ func TestCountAuthMethods(t *testing.T) {
 
 		createStorePasskey(t, ctx, tdb, both.ID, "both-passkey-2")
 		assertStoreAuthMethodCount(t, ctx, tdb, both.ID, 3)
+
+		incompletePassword := createStorePasskeyUser(t, ctx, tdb, "incomplete-password-count@example.com", "incomplete-password-count")
+		_, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID:   incompletePassword.ID,
+			Provider: domain.ProviderPassword,
+		})
+		if err != nil {
+			t.Fatalf("CreateAuthProvider incomplete password failed: %v", err)
+		}
+		assertStoreAuthMethodCount(t, ctx, tdb, incompletePassword.ID, 0)
+
+		incompleteExternal := createStorePasskeyUser(t, ctx, tdb, "incomplete-external-count@example.com", "incomplete-external-count")
+		_, err = tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID:   incompleteExternal.ID,
+			Provider: domain.ProviderGoogle,
+		})
+		if err != nil {
+			t.Fatalf("CreateAuthProvider incomplete external failed: %v", err)
+		}
+		assertStoreAuthMethodCount(t, ctx, tdb, incompleteExternal.ID, 0)
 	})
 }
 

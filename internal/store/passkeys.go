@@ -266,9 +266,17 @@ func (s *Store) CountAuthMethods(ctx context.Context, userID uuid.UUID) (int, er
 	var count int
 	err := s.queryRow(ctx, `
 		SELECT
-			(SELECT count(*) FROM auth_providers WHERE user_id = $1) +
+			(SELECT count(*)
+			   FROM auth_providers
+			  WHERE user_id = $1
+			    AND (
+			      (provider = $2 AND password_hash IS NOT NULL AND password_hash <> '')
+			      OR
+			      (provider <> $2 AND provider_user_id IS NOT NULL AND provider_user_id <> '')
+			    )
+			) +
 			(SELECT count(*) FROM passkeys WHERE user_id = $1)
-	`, userID).Scan(&count)
+	`, userID, string(domain.ProviderPassword)).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
