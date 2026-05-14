@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/authara-org/authara/internal/domain"
 	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/handlers/auth/api"
 	"github.com/authara-org/authara/internal/http/handlers/auth/ui"
@@ -20,6 +21,9 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	if cfg.TrustProxyHeaders {
 		r.Use(middleware.RealIP)
 	}
+	r.Use(httpmiddleware.SecurityHeaders(httpmiddleware.SecurityHeadersConfig{
+		AllowGoogleOAuth: hasOAuthProvider(cfg, domain.ProviderGoogle),
+	}))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
@@ -27,6 +31,16 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	registerRoutes(r, cfg, mw)
 
 	return r
+}
+
+func hasOAuthProvider(cfg ServerConfig, name domain.Provider) bool {
+	for _, provider := range cfg.OAuthProviders.Providers {
+		if provider.Name == name {
+			return true
+		}
+	}
+
+	return false
 }
 
 func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {

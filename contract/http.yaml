@@ -189,6 +189,22 @@ headers:
     stability: stable
     purpose: HTMX redirect behavior.
 
+  - name: Content-Security-Policy
+    stability: stable
+    purpose: Restricts browser-executable content and external resource origins on Authara routes.
+
+  - name: X-Frame-Options
+    stability: stable
+    purpose: Prevents Authara pages from being embedded in frames.
+
+  - name: X-Content-Type-Options
+    stability: stable
+    purpose: Prevents browser MIME sniffing.
+
+  - name: Referrer-Policy
+    stability: stable
+    purpose: Limits referrer leakage from Authara routes.
+
 query_parameters:
   - name: return_to
     stability: stable
