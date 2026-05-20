@@ -2,20 +2,20 @@ package viewmodel
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/useragent"
 	"github.com/google/uuid"
 )
 
-type DeviceKind string
+type DeviceKind = useragent.DeviceKind
 
 const (
-	DeviceDesktop DeviceKind = "desktop"
-	DevicePhone   DeviceKind = "phone"
-	DeviceTablet  DeviceKind = "tablet"
-	DeviceUnknown DeviceKind = "unknown"
+	DeviceDesktop = useragent.DeviceDesktop
+	DevicePhone   = useragent.DevicePhone
+	DeviceTablet  = useragent.DeviceTablet
+	DeviceUnknown = useragent.DeviceUnknown
 )
 
 type Session struct {
@@ -39,18 +39,7 @@ func SessionFromDomain(s domain.Session, currentSessionID uuid.UUID) Session {
 }
 
 func DeviceKindFromUserAgent(ua string) DeviceKind {
-	ua = strings.ToLower(ua)
-
-	switch {
-	case strings.Contains(ua, "ipad"), strings.Contains(ua, "tablet"):
-		return DeviceTablet
-	case strings.Contains(ua, "iphone"), strings.Contains(ua, "android") && strings.Contains(ua, "mobile"):
-		return DevicePhone
-	case ua == "":
-		return DeviceUnknown
-	default:
-		return DeviceDesktop
-	}
+	return useragent.Parse(ua).DeviceKind
 }
 
 func sessionTitle(session domain.Session, currentSessionID uuid.UUID, label string) string {
