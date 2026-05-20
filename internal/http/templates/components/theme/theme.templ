@@ -1,6 +1,9 @@
 package theme
 
-import "github.com/authara-org/authara/internal/http/templates/components/icons"
+import (
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+)
 
 templ ThemeToggle() {
 	<div
@@ -13,13 +16,12 @@ templ ThemeToggle() {
 			  }"
 		class="flex items-center"
 	>
-		<button
-			@click="toggle()"
-			class="relative w-16 h-8 rounded-full transition
-			   bg-white dark:bg-grey-700
-			   outline outline-grey-100 dark:outline-none
-			   cursor-pointer"
-		>
+		@button.Button(button.ButtonConfig{
+			Type:    button.RegularButton,
+			Color:   button.Custom,
+			Class:   " relative !h-8 !w-16 !rounded-full !border-0 !p-0 bg-white outline outline-grey-100 dark:bg-grey-700 dark:outline-none",
+			OnClick: "toggle()",
+		}) {
 			<!-- knob -->
 			<div
 				class="absolute top-1 left-1 w-6 h-6 rounded-full bg-grey-100 dark:bg-white transition-transform"
@@ -36,6 +38,6 @@ templ ThemeToggle() {
 					@icons.Moon()
 				</div>
 			</div>
-		</button>
+		}
 	</div>
 }

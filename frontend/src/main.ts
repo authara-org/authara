@@ -3,6 +3,7 @@ import { showRedirecting, hideRedirecting } from "./ui";
 import "./oauth";
 import { initPasskeys } from "./passkeys";
 import { initTheme, setTheme } from "./theme";
+import "./confirmDialog";
 
 declare global {
   interface Window {

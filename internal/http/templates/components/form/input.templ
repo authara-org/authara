@@ -1,4 +1,97 @@
 package form
 
-templ Input() {
+type InputType string
+
+const (
+	Text     InputType = "text"
+	Email    InputType = "email"
+	Password InputType = "password"
+	Hidden   InputType = "hidden"
+	Search   InputType = "search"
+	Checkbox InputType = "checkbox"
+)
+
+type Size string
+
+const (
+	Small  Size = "small"
+	Medium Size = "medium"
+	Large  Size = "large"
+)
+
+type InputConfig struct {
+	ID           string
+	Name         string
+	Type         InputType
+	Size         Size
+	Value        string
+	Placeholder  string
+	Autocomplete string
+	Required     bool
+	Disabled     bool
+	Checked      bool
+	Class        string
+	Unstyled     bool
+	Attrs        templ.Attributes
+}
+
+templ Input(cfg InputConfig) {
+	{{
+		if cfg.Type == "" {
+			cfg.Type = Text
+		}
+		if cfg.Size == "" {
+			cfg.Size = Medium
+		}
+	}}
+	<input
+		id={ cfg.ID }
+		name={ cfg.Name }
+		type={ string(cfg.Type) }
+		value={ cfg.Value }
+		placeholder={ cfg.Placeholder }
+		required?={ cfg.Required }
+		disabled?={ cfg.Disabled }
+		checked?={ cfg.Checked }
+		class={ inputClass(cfg) }
+		{ inputAttrs(cfg)... }
+	/>
+}
+
+func inputAttrs(cfg InputConfig) templ.Attributes {
+	attrs := templ.Attributes{}
+	for key, value := range cfg.Attrs {
+		attrs[key] = value
+	}
+	if cfg.Autocomplete != "" {
+		attrs["autocomplete"] = cfg.Autocomplete
+	}
+	return attrs
+}
+
+func inputClass(cfg InputConfig) string {
+	if cfg.Unstyled || cfg.Type == Hidden || cfg.Type == Checkbox {
+		return cfg.Class
+	}
+
+	return `w-full border-grey-100 dark:border-grey-800
+		bg-white dark:bg-grey-900
+		text-grey-900 dark:text-grey-100
+		placeholder:text-grey-400 dark:placeholder:text-grey-500
+		focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40
+		disabled:bg-grey-50 disabled:text-grey-600
+		dark:disabled:bg-grey-800 dark:disabled:text-grey-300 ` + inputSize(cfg.Size) + " " + cfg.Class
+}
+
+func inputSize(size Size) string {
+	class := ""
+	switch size {
+	case Small:
+		class = " h-[34px] rounded-xl border px-3 text-sm placeholder:text-sm"
+	case Medium:
+		class = " h-[42px] rounded-xl border px-4 text-base sm:text-sm placeholder:text-base sm:placeholder:text-sm"
+	case Large:
+		class = " h-[46px] rounded-2xl border-2 px-5 text-lg placeholder:text-md"
+	}
+	return class
 }

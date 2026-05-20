@@ -3,6 +3,7 @@ package user
 import (
 	"github.com/authara-org/authara/internal/http/templates"
 	"github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 	"github.com/google/uuid"
@@ -47,9 +48,9 @@ templ Account(cfg AccountConfig) {
 				</div>
 				@AccountDangerZone()
 			</div>
-			@DeleteAccountModal()
-			@RemovePasswordModal()
-			@RemoveGoogleModal()
+			@DeleteAccountConfirmForm()
+			@RemovePasswordConfirmForm()
+			@RemoveGoogleConfirmForm()
 		</div>
 	}
 }
@@ -60,18 +61,20 @@ templ CollapsibleSection(bordered bool) {
 		:class="open ? 'h-auto sm:h-auto' : 'h-16 sm:h-22'"
 		class={ sectionClass(bordered) + " overflow-hidden h-16 sm:h-22" }
 	>
-		<button
-			type="button"
-			@click="open = !open"
-			class="absolute top-5 right-4 sm:top-8 sm:right-8 text-grey-600 dark:text-grey-400 hover:text-grey-900 dark:hover:text-grey-100 cursor-pointer h-6 w-6"
-		>
+		@button.Button(button.ButtonConfig{
+			Type:      button.RegularButton,
+			Color:     button.Custom,
+			AriaLabel: "Toggle section",
+			Class:     " !absolute top-5 right-4 !h-6 !w-6 !border-0 !rounded-none !p-0 text-grey-600 hover:text-grey-900 dark:text-grey-400 dark:hover:text-grey-100 sm:top-8 sm:right-8",
+			OnClick:   "open = !open",
+		}) {
 			<span
 				:class="open ? 'rotate-180' : ''"
 				class="block transition-transform duration-300 ease-in-out stroke-2"
 			>
 				@icons.ChevronDown()
 			</span>
-		</button>
+		}
 		{ children... }
 	</div>
 }

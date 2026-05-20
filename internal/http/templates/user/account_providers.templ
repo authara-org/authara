@@ -5,6 +5,7 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/http/templates/components/modal"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 )
 
@@ -35,14 +36,18 @@ templ PasskeySubsection(passkeys []viewmodel.Passkey) {
 	<div class="pt-2">
 		<div class="mb-2 flex items-center justify-between gap-3">
 			<h3 class="text-sm font-medium text-grey-900 dark:text-grey-100">Passkeys</h3>
-			<button
-				type="button"
-				data-passkey-register
-				data-return-to="/auth/account"
-				class="rounded-xl border border-blue-600 bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 cursor-pointer transition-colors disabled:bg-blue-400 disabled:border-blue-400 disabled:cursor-not-allowed"
-			>
-				Add passkey
-			</button>
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Label: "Add passkey",
+					Type:  button.RegularButton,
+					Size:  button.Small,
+					Color: button.Main,
+					Attrs: templ.Attributes{
+						"data-passkey-register": "",
+						"data-return-to":        "/auth/account",
+					},
+				})
+			</div>
 		</div>
 		if len(passkeys) == 0 {
 			<div class="border-2 border-grey-100 dark:border-grey-800 rounded-xl px-4 py-3 bg-grey-50 dark:bg-grey-800">
@@ -61,6 +66,7 @@ templ PasskeySubsection(passkeys []viewmodel.Passkey) {
 }
 
 templ PasskeyRow(passkey viewmodel.Passkey) {
+	{{ formID := "remove-passkey-" + passkey.ID.String() + "-form" }}
 	<div
 		id={ "passkey-" + passkey.ID.String() }
 		class="flex items-center justify-between gap-3 border-2 border-grey-100 dark:border-grey-800 rounded-xl px-4 py-3 bg-white dark:bg-grey-900"
@@ -78,43 +84,71 @@ templ PasskeyRow(passkey viewmodel.Passkey) {
 				</span>
 			</div>
 		</div>
-		<form
-			hx-post={ "/auth/passkeys/" + passkey.ID.String() + "/delete" }
-			hx-target="#linked-providers-section"
-			hx-swap="outerHTML"
-			class="hidden sm:block"
-		>
-			@csrf.CSRFInput()
+		if passkey.CanDelete {
+			<form
+				id={ formID }
+				hx-post={ "/auth/passkeys/" + passkey.ID.String() + "/delete" }
+				hx-target="#linked-providers-section"
+				hx-swap="outerHTML"
+				class="hidden"
+			>
+				@csrf.CSRFInput()
+			</form>
+		}
+		<div class="hidden sm:block">
 			<div class="w-fit">
-				@button.Button(button.ButtonConfig{
-					Label:    "Remove",
-					Type:     button.Submit,
-					Color:    button.Light,
-					Variant:  button.Outline,
-					Disabled: !passkey.CanDelete,
-				})
+				if passkey.CanDelete {
+					@button.Button(button.ButtonConfig{
+						Label:   "Remove",
+						Type:    button.RegularButton,
+						Color:   button.Light,
+						Variant: button.Outline,
+						OnClick: modal.OpenConfirm(
+							"Remove passkey?",
+							"This passkey will no longer be usable for this account. Make sure another sign-in method is available.",
+							"Remove passkey",
+							formID,
+							modal.ThemeDanger,
+						),
+					})
+				} else {
+					@button.Button(button.ButtonConfig{
+						Label:    "Remove",
+						Type:     button.RegularButton,
+						Color:    button.Light,
+						Variant:  button.Outline,
+						Disabled: true,
+					})
+				}
 			</div>
-		</form>
+		</div>
 		<div class="sm:hidden">
 			@ActionMenu() {
-				<form
-					hx-post={ "/auth/passkeys/" + passkey.ID.String() + "/delete" }
-					hx-target="#linked-providers-section"
-					hx-swap="outerHTML"
-				>
-					@csrf.CSRFInput()
-					if passkey.CanDelete {
-						@ActionMenuSubmitItemDanger("Remove passkey")
-					} else {
-						<button
-							type="button"
-							disabled
-							class="flex justify-center w-full text-left px-4 py-3 text-sm text-grey-400 dark:text-grey-600 cursor-not-allowed"
-						>
-							Remove passkey
-						</button>
-					}
-				</form>
+				if passkey.CanDelete {
+					@button.Button(button.ButtonConfig{
+						Label: "Remove passkey",
+						Type:  button.RegularButton,
+						Color: button.Custom,
+						Class: ` !w-full !rounded-none !border-0 !px-4 !py-3 text-sm
+							text-red-700 hover:bg-grey-50 dark:text-red-400 dark:hover:bg-grey-800`,
+						OnClick: modal.OpenConfirm(
+							"Remove passkey?",
+							"This passkey will no longer be usable for this account. Make sure another sign-in method is available.",
+							"Remove passkey",
+							formID,
+							modal.ThemeDanger,
+						) + "; open = false",
+					})
+				} else {
+					@button.Button(button.ButtonConfig{
+						Label:    "Remove passkey",
+						Type:     button.RegularButton,
+						Color:    button.Light,
+						Variant:  button.Outline,
+						Disabled: true,
+						Class:    " !w-full !rounded-none !border-0 !px-4 !py-3 text-sm",
+					})
+				}
 			}
 		</div>
 	</div>
@@ -165,21 +199,31 @@ templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
 						Type:    button.RegularButton,
 						Color:   button.Light,
 						Variant: button.Outline,
-						OnClick: "activeModal = 'remove-google'",
+						OnClick: modal.OpenConfirm(
+							"Unlink Google?",
+							"You will no longer be able to sign in with Google unless you link it again later. Make sure you still have another sign-in method linked to this account.",
+							"Unlink Google",
+							"remove-google-form",
+							modal.ThemeNeutral,
+						),
 					})
 				</div>
 				<div class="sm:hidden">
 					@ActionMenu() {
-						<button
-							type="button"
-							@click="activeModal = 'remove-google'; open = false"
-							class="block w-full text-left px-4 py-3 text-sm
-						text-red-700 dark:text-red-400
-						hover:bg-grey-50 dark:hover:bg-grey-800
-						cursor-pointer transition-colors"
-						>
-							Unlink Google
-						</button>
+						@button.Button(button.ButtonConfig{
+							Label: "Unlink Google",
+							Type:  button.RegularButton,
+							Color: button.Custom,
+							Class: ` !w-full !rounded-none !border-0 !px-4 !py-3 text-sm
+								text-red-700 hover:bg-grey-50 dark:text-red-400 dark:hover:bg-grey-800`,
+							OnClick: modal.OpenConfirm(
+								"Unlink Google?",
+								"You will no longer be able to sign in with Google unless you link it again later. Make sure you still have another sign-in method linked to this account.",
+								"Unlink Google",
+								"remove-google-form",
+								modal.ThemeNeutral,
+							) + "; open = false",
+						})
 					}
 				</div>
 			} else {
@@ -194,7 +238,7 @@ templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
 						@button.Button(button.ButtonConfig{
 							Label:   provider.ActionLabel,
 							Type:    button.Submit,
-							Color:   button.Light,
+							Color:   button.Main,
 							Variant: button.Outline,
 						})
 					</div>

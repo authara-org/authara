@@ -4,6 +4,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/form"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
 )
 
@@ -28,24 +29,23 @@ templ ChangeUsernameSection(username string) {
 					@icons.At()
 				</span>
 			</div>
-			<input
-				type="text"
-				value={ username }
-				disabled
-				class="border-2 border-grey-100 dark:border-grey-800
-				w-full rounded-xl px-4 py-3 pl-12 text-sm
-				bg-grey-50 dark:bg-grey-800
-				text-grey-600 dark:text-grey-300"
-			/>
+			@form.Input(form.InputConfig{
+				Type:     form.Text,
+				Value:    username,
+				Disabled: true,
+				Class:    "!pl-12",
+			})
 		</div>
 		<div x-show="!editing">
-			<button
-				type="button"
-				@click="editing = true"
-				class="text-sm text-blue-800 dark:text-blue-400 hover:underline cursor-pointer"
-			>
-				Change username
-			</button>
+			<div class="w-fit">
+				@button.Button(button.ButtonConfig{
+					Label:   "Change username",
+					Type:    button.RegularButton,
+					Color:   button.Custom,
+					Class:   " !w-auto !border-0 !rounded-none !p-0 text-sm text-blue-800 hover:underline dark:text-blue-400",
+					OnClick: "editing = true",
+				})
+			</div>
 		</div>
 		<div x-cloak x-show="editing" class="mt-3">
 			@ChangeUsernameForm(username)
@@ -61,18 +61,14 @@ templ ChangeUsernameForm(username string) {
 		hx-swap="outerHTML"
 	>
 		@csrf.CSRFInput()
-		<input
-			type="text"
-			name="username"
-			value={ username }
-			required
-			placeholder="Enter new username"
-			class="border-2 border-grey-100 dark:border-grey-800
-			w-full rounded-xl px-4 py-3 text-sm mb-3
-			bg-white dark:bg-grey-900
-			text-grey-900 dark:text-grey-100
-			placeholder:text-grey-400 dark:placeholder:text-grey-500"
-		/>
+		@form.Input(form.InputConfig{
+			Type:        form.Text,
+			Name:        "username",
+			Value:       username,
+			Required:    true,
+			Placeholder: "Enter new username",
+			Class:       "mb-3",
+		})
 		<div class="flex gap-2">
 			<div class="w-fit">
 				@button.Button(button.ButtonConfig{
@@ -106,25 +102,24 @@ templ ChangeEmailSection(email string) {
 					@icons.Email()
 				</span>
 			</div>
-			<input
-				type="email"
-				value={ email }
-				disabled
-				class="border-2 border-grey-100 dark:border-grey-800
-				w-full rounded-xl px-4 py-3 pl-12 text-sm
-				bg-grey-50 dark:bg-grey-800
-				text-grey-600 dark:text-grey-300"
-			/>
+			@form.Input(form.InputConfig{
+				Type:     form.Email,
+				Value:    email,
+				Disabled: true,
+				Class:    "!pl-12",
+			})
 		</div>
 		if httpctx.ChallengeEnabledOrDefault(ctx,false) {
 			<div x-show="!editing">
-				<button
-					type="button"
-					@click="editing = true"
-					class="text-sm text-blue-800 dark:text-blue-400 hover:underline cursor-pointer"
-				>
-					Change email
-				</button>
+				<div class="w-fit">
+					@button.Button(button.ButtonConfig{
+						Label:   "Change email",
+						Type:    button.RegularButton,
+						Color:   button.Custom,
+						Class:   " !w-auto !border-0 !rounded-none !p-0 text-sm text-blue-800 hover:underline dark:text-blue-400",
+						OnClick: "editing = true",
+					})
+				</div>
 			</div>
 			<div x-cloak x-show="editing" class="mt-3">
 				@ChangeEmailForm()
@@ -144,17 +139,13 @@ templ ChangeEmailForm() {
 		hx-swap="innerHTML"
 	>
 		@csrf.CSRFInput()
-		<input
-			type="email"
-			name="new_email"
-			required
-			placeholder="Enter new email address"
-			class="border-2 border-grey-100 dark:border-grey-800
-			w-full rounded-xl px-4 py-3 text-sm mb-3
-			bg-white dark:bg-grey-900
-			text-grey-900 dark:text-grey-100
-			placeholder:text-grey-400 dark:placeholder:text-grey-500"
-		/>
+		@form.Input(form.InputConfig{
+			Type:        form.Email,
+			Name:        "new_email",
+			Required:    true,
+			Placeholder: "Enter new email address",
+			Class:       "mb-3",
+		})
 		<div class="flex gap-2">
 			<div class="w-fit">
 				@button.Button(button.ButtonConfig{

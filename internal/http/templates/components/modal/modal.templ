@@ -1,5 +1,12 @@
 package modal
 
+import (
+	"encoding/json"
+
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+)
+
 type Theme string
 
 const (
@@ -7,117 +14,101 @@ const (
 	ThemeDanger  Theme = "danger"
 )
 
-type ConfirmModalConfig struct {
-	ID       string
-	Headline string
-	Body     string
-	Icon     templ.Component
-	Actions  templ.Component
-	Theme    Theme
-	MaxWidth string
+type openConfirmOptions struct {
+	Headline      string `json:"headline"`
+	Body          string `json:"body"`
+	ConfirmLabel  string `json:"confirmLabel"`
+	ConfirmFormID string `json:"confirmFormId"`
+	Theme         Theme  `json:"theme"`
 }
 
-type TwoActionModalConfig struct {
-	ID        string
-	Headline  string
-	Body      string
-	Icon      templ.Component
-	Primary   templ.Component
-	Secondary templ.Component
-	Theme     Theme
-	MaxWidth  string
+func OpenConfirm(headline string, body string, confirmLabel string, confirmFormID string, theme Theme) string {
+	if confirmLabel == "" {
+		confirmLabel = "Confirm"
+	}
+	if theme == "" {
+		theme = ThemeNeutral
+	}
+
+	payload, err := json.Marshal(openConfirmOptions{
+		Headline:      headline,
+		Body:          body,
+		ConfirmLabel:  confirmLabel,
+		ConfirmFormID: confirmFormID,
+		Theme:         theme,
+	})
+	if err != nil {
+		return ""
+	}
+	return "openConfirm(" + string(payload) + ")"
 }
 
-templ ConfirmModal(cfg ConfirmModalConfig) {
-	if cfg.Theme == "" {
-		cfg.Theme = ThemeNeutral
-	}
-	if cfg.MaxWidth == "" {
-		cfg.MaxWidth = "max-w-md"
-	}
+templ GlobalConfirmDialog() {
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop-blur"
-		data-purpose="confirmation-modal"
-		id={ cfg.ID }
-		x-show={ "activeModal === '" + cfg.ID + "'" }
+		x-show="confirm.open"
 		x-cloak
 		x-transition.opacity
-		@keydown.escape.window="activeModal = ''"
-		aria-hidden="true"
+		@keydown.escape.window="!confirm.submitting && closeConfirm()"
 	>
 		<div
-			class="absolute inset-0 bg-black/40 dark:bg-black/60"
-			@click="activeModal = ''"
+			class="absolute inset-0 cursor-pointer bg-black/50"
+			@click="!confirm.submitting && closeConfirm()"
 		></div>
 		<div
 			role="dialog"
 			aria-modal="true"
-			aria-labelledby={ cfg.ID + "-headline" }
-			class={ "relative bg-white dark:bg-grey-900 border border-grey-200 dark:border-grey-800 rounded-2xl shadow-2xl w-full overflow-hidden transform transition-all " + cfg.MaxWidth }
-			x-show={ "activeModal === '" + cfg.ID + "'" }
+			aria-labelledby="global-confirm-headline"
+			class="relative w-full max-w-md overflow-hidden rounded-2xl border border-grey-200 bg-white shadow-2xl dark:border-grey-800 dark:bg-grey-900"
+			x-show="confirm.open"
 			x-transition.scale.origin.center
 			@click.stop
 		>
 			<div class="px-6 pt-8 pb-4 text-center">
-				<div class={ modalIconWrapperClass(cfg.Theme) }>
-					<div class={ modalIconClass(cfg.Theme) }>
-						@cfg.Icon
+				<div
+					class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full"
+					:class="confirm.theme === 'danger' ? 'bg-red-100 dark:bg-red-950/40' : 'bg-blue-50 dark:bg-blue-900/30'"
+				>
+					<div
+						class="h-6 w-6 stroke-2"
+						:class="confirm.theme === 'danger' ? 'text-red-600 dark:text-red-400' : 'text-blue-800 dark:text-blue-300'"
+					>
+						@icons.Attention()
 					</div>
 				</div>
 				<h3
-					class="text-xl font-bold text-grey-900 dark:text-grey-100"
-					id={ cfg.ID + "-headline" }
-				>
-					{ cfg.Headline }
-				</h3>
+					class="text-xl font-semibold text-grey-900 dark:text-grey-100"
+					id="global-confirm-headline"
+					x-text="confirm.headline"
+				></h3>
 			</div>
 			<div class="px-8 pb-8">
-				<p class="text-sm text-grey-600 dark:text-grey-300 text-center leading-relaxed">
-					{ cfg.Body }
-				</p>
+				<p
+					class="text-center text-sm leading-relaxed text-grey-600 dark:text-grey-300"
+					x-text="confirm.body"
+				></p>
 			</div>
-			<div class="px-6 py-4 bg-grey-50 dark:bg-grey-950 flex flex-col sm:flex-row-reverse gap-3">
-				@cfg.Actions
+			<div class="flex flex-col gap-3 bg-grey-50 px-6 py-4 dark:bg-grey-950 sm:flex-row-reverse">
+				@button.Button(button.ButtonConfig{
+					Type:               button.RegularButton,
+					Color:              button.Custom,
+					Class:              " sm:flex-1 disabled:cursor-not-allowed",
+					ClassExpression:    "[confirm.theme === 'danger' ? 'bg-red-700 text-red-50 border-transparent hover:bg-red-800 disabled:bg-red-500' : 'bg-blue-600 text-white border-transparent hover:bg-blue-700 disabled:bg-blue-400', confirm.submitting ? 'htmx-request' : '']",
+					DisabledExpression: "confirm.submitting",
+					OnClick:            "runConfirm()",
+				}) {
+					<span x-text="confirm.confirmLabel"></span>
+				}
+				@button.Button(button.ButtonConfig{
+					Label:              "Cancel",
+					Type:               button.RegularButton,
+					Color:              button.Light,
+					Variant:            button.Outline,
+					Class:              " sm:flex-1",
+					DisabledExpression: "confirm.submitting",
+					OnClick:            "closeConfirm()",
+				})
 			</div>
 		</div>
 	</div>
-}
-
-templ TwoActionModal(cfg TwoActionModalConfig) {
-	@ConfirmModal(ConfirmModalConfig{
-		ID:       cfg.ID,
-		Headline: cfg.Headline,
-		Body:     cfg.Body,
-		Icon:     cfg.Icon,
-		Theme:    cfg.Theme,
-		MaxWidth: cfg.MaxWidth,
-		Actions:  ModalTwoActions(cfg.Primary, cfg.Secondary),
-	})
-}
-
-templ ModalTwoActions(primary templ.Component, secondary templ.Component) {
-	<div class="w-full sm:flex-1">
-		@primary
-	</div>
-	<div class="w-full sm:flex-1">
-		@secondary
-	</div>
-}
-
-func modalIconWrapperClass(theme Theme) string {
-	switch theme {
-	case ThemeDanger:
-		return "mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-950/40 mb-4"
-	default:
-		return "mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-50 dark:bg-blue-900/30 mb-4"
-	}
-}
-
-func modalIconClass(theme Theme) string {
-	switch theme {
-	case ThemeDanger:
-		return "h-6 w-6 stroke-2 text-red-600 dark:text-red-400"
-	default:
-		return "h-6 w-6 stroke-2 text-blue-800 dark:text-blue-300"
-	}
 }
