@@ -15,6 +15,7 @@ var (
 	ErrAuthProviderAlreadyLinkedToUser = errors.New("auth provider already linked to user")
 	ErrCannotRemoveLastAuthMethod      = errors.New("cannot remove last auth method")
 	ErrCannotRemoveLastAuthProvider    = ErrCannotRemoveLastAuthMethod
+	ErrCannotDeleteLastAdmin           = errors.New("cannot delete last active admin")
 	ErrPasswordAlreadyExists           = errors.New("password provider already exists")
 	ErrPendingProviderLinkExpired      = errors.New("pending provider link expired")
 	ErrPendingProviderLinkInvalid      = errors.New("pending provider link invalid")

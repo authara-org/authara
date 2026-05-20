@@ -8,6 +8,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
 )
@@ -576,6 +577,79 @@ func TestDeleteUser_RemovesUser(t *testing.T) {
 		_, err = tdb.Store.GetUserByID(ctx, user.ID)
 		if err == nil {
 			t.Fatal("expected deleted user lookup to fail")
+		}
+	})
+}
+
+func TestDeleteUserRejectsLastActiveAdmin(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "delete-last-admin@example.com",
+			Username: "delete-last-admin",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if err := tdb.Store.AddUserPlatformRoleByName(ctx, user.ID, roles.DBAdminRoleName); err != nil {
+			t.Fatalf("AddUserPlatformRoleByName failed: %v", err)
+		}
+
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+		})
+
+		err = svc.DeleteUser(ctx, user.ID)
+		if !errors.Is(err, ErrCannotDeleteLastAdmin) {
+			t.Fatalf("expected ErrCannotDeleteLastAdmin, got %v", err)
+		}
+
+		if _, err := tdb.Store.GetUserByID(ctx, user.ID); err != nil {
+			t.Fatalf("expected last admin to remain, got %v", err)
+		}
+	})
+}
+
+func TestDeleteUserAllowsAdminWhenAnotherActiveAdminExists(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "delete-admin-target@example.com",
+			Username: "delete-admin-target",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser target failed: %v", err)
+		}
+		otherAdmin, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "delete-admin-other@example.com",
+			Username: "delete-admin-other",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser other admin failed: %v", err)
+		}
+		for _, id := range []uuid.UUID{user.ID, otherAdmin.ID} {
+			if err := tdb.Store.AddUserPlatformRoleByName(ctx, id, roles.DBAdminRoleName); err != nil {
+				t.Fatalf("AddUserPlatformRoleByName failed: %v", err)
+			}
+		}
+
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+		})
+
+		if err := svc.DeleteUser(ctx, user.ID); err != nil {
+			t.Fatalf("DeleteUser failed: %v", err)
+		}
+
+		if _, err := tdb.Store.GetUserByID(ctx, user.ID); err == nil {
+			t.Fatal("expected deleted admin lookup to fail")
+		}
+		if _, err := tdb.Store.GetUserByID(ctx, otherAdmin.ID); err != nil {
+			t.Fatalf("expected other admin to remain, got %v", err)
 		}
 	})
 }
