@@ -138,6 +138,7 @@ func newAccessContractTestRouter() chi.Router {
 		RedirectIfAuthenticated:   pass,
 		ReturnTo:                  pass,
 		RequireChallengeEnabled:   pass,
+		RequireAllowlistEnabled:   pass,
 		HTMX:                      pass,
 		RequireCSRF:               pass,
 		RequireAPICSRF:            pass,

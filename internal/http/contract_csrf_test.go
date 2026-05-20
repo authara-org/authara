@@ -95,6 +95,7 @@ func newCSRFFocusedContractTestRouter() http.Handler {
 		ReturnTo:                          pass,
 		HTMX:                              pass,
 		RequireChallengeEnabled:           pass,
+		RequireAllowlistEnabled:           pass,
 		OptionalAppAccessIdentity:         pass,
 
 		// real CSRF middlewares
@@ -131,6 +132,7 @@ func newCSRFWiringContractTestRouter() http.Handler {
 		ReturnTo:                          pass,
 		HTMX:                              pass,
 		RequireChallengeEnabled:           pass,
+		RequireAllowlistEnabled:           pass,
 		OptionalAppAccessIdentity:         pass,
 
 		RequireCSRF:    marker(markerBrowserCSRF, "browser-csrf"),

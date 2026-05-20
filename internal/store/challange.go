@@ -233,6 +233,54 @@ func (s *Store) DeleteExpiredChallenges(ctx context.Context, now time.Time) erro
 	return err
 }
 
+func (s *Store) ListRecentRiskyChallenges(ctx context.Context, now time.Time, limit, offset int) ([]domain.Challenge, error) {
+	rows, err := s.queryRows(ctx, `
+		SELECT `+challengeColumns+`
+		FROM challenges
+		WHERE consumed_at IS NULL
+		  AND (
+		    expires_at < $1
+		    OR attempt_count >= max_attempts
+		    OR resend_count >= max_resends
+		  )
+		ORDER BY updated_at DESC, created_at DESC
+		LIMIT $2 OFFSET $3
+	`, now, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.Challenge, 0)
+	for rows.Next() {
+		var row model.Challenge
+		if err := scanChallenge(rows, &row); err != nil {
+			return nil, err
+		}
+		out = append(out, toDomainChallenge(row))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+func (s *Store) CountRecentRiskyChallenges(ctx context.Context, now time.Time) (int, error) {
+	var count int
+	err := s.queryRow(ctx, `
+		SELECT count(*)
+		FROM challenges
+		WHERE consumed_at IS NULL
+		  AND (
+		    expires_at < $1
+		    OR attempt_count >= max_attempts
+		    OR resend_count >= max_resends
+		  )
+	`, now).Scan(&count)
+	return count, err
+}
+
 func (s *Store) UpsertVerificationCode(ctx context.Context, in domain.VerificationCode) error {
 	row := toModelVerificationCode(in)
 

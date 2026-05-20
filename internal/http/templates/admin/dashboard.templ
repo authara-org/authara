@@ -1,0 +1,74 @@
+package admin
+
+import (
+	"fmt"
+
+	adminsvc "github.com/authara-org/authara/internal/admin"
+)
+
+templ Dashboard(stats adminsvc.DashboardStats, failures adminsvc.RecentFailures, features FeatureFlags) {
+	@AdminShell("dashboard", features) {
+		<div class="space-y-6">
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+				@statCard("Total users", stats.TotalUsers)
+				@statCard("Signups in last 24 hours", stats.SignupsLast24Hours)
+				@statCard("Disabled users", stats.DisabledUsers)
+				@statCard("Active sessions", stats.ActiveSessions)
+			</div>
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+				<section class="space-y-3">
+					<h2 class="text-xl font-semibold">Admin tools</h2>
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+						@toolLink("/auth/admin/users", "Users", "Search users, inspect auth methods, and manage roles.")
+						if features.AllowlistEnabled {
+							@toolLink("/auth/admin/allowlist", "Allowlist", "Add, search, paginate, and remove allowed emails.")
+						}
+						@toolLink("/auth/admin/failures", "Recent failures", "Review failed email jobs and risky challenges.")
+						@toolLink("/auth/admin/audit", "Audit log", "Inspect security-sensitive admin mutations.")
+					</div>
+				</section>
+				<section class="space-y-3">
+					<div class="flex items-center justify-between gap-3">
+						<h2 class="text-xl font-semibold">Recent failures</h2>
+						<a class="text-sm text-blue-700 dark:text-blue-300 hover:underline" href="/auth/admin/failures">View all</a>
+					</div>
+					@failurePreview(failures)
+				</section>
+			</div>
+		</div>
+	}
+}
+
+templ statCard(label string, value int) {
+	<div class="border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900 p-4">
+		<div class="text-sm text-grey-600 dark:text-grey-400">{ label }</div>
+		<div class="mt-2 text-3xl font-semibold">{ fmt.Sprint(value) }</div>
+	</div>
+}
+
+templ toolLink(href string, title string, description string) {
+	<a class="block border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900 p-4 hover:bg-grey-50 dark:hover:bg-grey-800" href={ href }>
+		<div class="font-medium">{ title }</div>
+		<div class="mt-1 text-sm text-grey-600 dark:text-grey-400">{ description }</div>
+	</a>
+}
+
+templ failurePreview(failures adminsvc.RecentFailures) {
+	<div class="border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900 divide-y divide-grey-200 dark:divide-grey-800">
+		if len(failures.EmailJobs) == 0 && len(failures.Challenges) == 0 {
+			<p class="p-4 text-sm text-grey-600 dark:text-grey-400">No recent failures found.</p>
+		}
+		for _, job := range failures.EmailJobs {
+			<div class="p-4">
+				<div class="text-sm font-medium">{ job.ToEmail }</div>
+				<div class="text-xs text-grey-600 dark:text-grey-400">{ string(job.Template) } · { string(job.Status) } · { formatTime(job.UpdatedAt) }</div>
+			</div>
+		}
+		for _, challenge := range failures.Challenges {
+			<div class="p-4">
+				<div class="text-sm font-medium">{ challenge.Email }</div>
+				<div class="text-xs text-grey-600 dark:text-grey-400">{ string(challenge.Purpose) } · attempts { fmt.Sprintf("%d / %d", challenge.AttemptCount, challenge.MaxAttempts) }</div>
+			</div>
+		}
+	</div>
+}

@@ -63,6 +63,10 @@ func RequireAccessAuthWithRefresh(
 
 					// should not happen, but fail safe
 					session.ClearSessionCookies(w)
+				} else if err == session.ErrForbidden {
+					// user does not have necessary roles
+					redirect.Redirect(w, r, "/", http.StatusSeeOther)
+					return
 				} else {
 					// refresh invalid/reused/expired/etc.
 					session.ClearSessionCookies(w)

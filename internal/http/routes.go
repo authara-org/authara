@@ -50,19 +50,20 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	})
 
 	deps := authhandler.Deps{
-		Auth:             cfg.Auth,
-		Passkeys:         cfg.Passkeys,
-		Session:          cfg.Session,
-		Limiter:          cfg.AuthLimiter,
-		Logger:           cfg.Logger,
-		Google:           cfg.Google,
-		OAuthProviders:   cfg.OAuthProviders,
-		AccessTTL:        cfg.AccessTokenTTL,
-		RefreshTTL:       cfg.RefreshTokenTTL,
-		Render:           cfg.Render,
-		Challenge:        cfg.Challenge,
-		ChallengeEnabled: cfg.ChallengeEnabled,
-		Verification:     cfg.Verification,
+		Admin:          cfg.Admin,
+		Auth:           cfg.Auth,
+		Passkeys:       cfg.Passkeys,
+		Session:        cfg.Session,
+		Limiter:        cfg.AuthLimiter,
+		Logger:         cfg.Logger,
+		Google:         cfg.Google,
+		OAuthProviders: cfg.OAuthProviders,
+		AccessTTL:      cfg.AccessTokenTTL,
+		RefreshTTL:     cfg.RefreshTokenTTL,
+		Render:         cfg.Render,
+		Challenge:      cfg.Challenge,
+		Features:       cfg.Features,
+		Verification:   cfg.Verification,
 	}
 
 	uih := ui.NewUIHandler(deps)
@@ -163,20 +164,46 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			})
 
 			// admin
-			r.Route("/admin", func(r chi.Router) {
+			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAdminAccessAuthWithRefresh)
 				r.Use(mw.RequireAdminRole)
 
+				r.Get("/admin", uih.AdminPage)
+
 				// UI
-				r.Group(func(r chi.Router) {
+				r.Route("/admin", func(r chi.Router) {
 					r.Get("/", uih.AdminPage)
-				})
+					r.Get("/users", uih.AdminUsersPage)
+					r.Get("/users/search", uih.AdminUserSearchGet)
+					r.Get("/users/{userID}", uih.AdminUserDetailPage)
+					r.Get("/failures", uih.AdminFailuresPage)
+					r.Get("/audit", uih.AdminAuditPage)
 
-				// API
-				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireCSRF)
+					r.Group(func(r chi.Router) {
+						r.Use(mw.RequireAllowlistEnabled)
 
-					r.Post("/users/{userID}/disable", uih.DisableUserPost)
+						r.Get("/allowlist", uih.AdminAllowlistPage)
+						r.Get("/allowlist/results", uih.AdminAllowlistResultsGet)
+
+						r.Group(func(r chi.Router) {
+							r.Use(mw.RequireCSRF)
+
+							r.Post("/allowlist", uih.AdminAllowlistCreatePost)
+							r.Post("/allowlist/{emailID}/delete", uih.AdminAllowlistDeletePost)
+						})
+					})
+
+					// API
+					r.Group(func(r chi.Router) {
+						r.Use(mw.RequireCSRF)
+
+						r.Post("/users/{userID}/disable", uih.DisableUserPost)
+						r.Post("/users/{userID}/enable", uih.EnableUserPost)
+						r.Post("/users/{userID}/roles/admin/grant", uih.GrantAdminPost)
+						r.Post("/users/{userID}/roles/admin/revoke", uih.RevokeAdminPost)
+						r.Post("/users/{userID}/sessions/{sessionID}/revoke", uih.RevokeAdminUserSessionPost)
+						r.Post("/users/{userID}/sessions/revoke-all", uih.RevokeAllAdminUserSessionsPost)
+					})
 				})
 			})
 		})
@@ -205,6 +232,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(mw.RequireAdminAccessAuthAPI)
+				r.Use(mw.RequireAdminRole)
 
 			})
 

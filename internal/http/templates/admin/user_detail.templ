@@ -1,0 +1,265 @@
+package admin
+
+import (
+	adminsvc "github.com/authara-org/authara/internal/admin"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/modal"
+	"github.com/google/uuid"
+)
+
+templ UserDetail(detail adminsvc.UserDetail, features FeatureFlags) {
+	@AdminShell("users", features) {
+		<div class="space-y-6">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					<a class="text-sm text-blue-700 dark:text-blue-300 hover:underline" href="/auth/admin/users">Back to user search</a>
+					<h2 class="mt-2 text-xl font-semibold">{ detail.User.Email }</h2>
+					<p class="text-sm text-grey-600 dark:text-grey-400">User ID { shortID(detail.User.ID) }</p>
+				</div>
+				<div class="flex flex-wrap gap-2">
+					@userStatusBadge(detail.User)
+					if detail.User.HasRole("admin") {
+						@badge("Admin", "blue")
+					}
+				</div>
+			</div>
+			<section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+				<div class="lg:col-span-2 border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900 p-4 space-y-3">
+					<h3 class="font-semibold">Basic Info</h3>
+					@definitionList([]kv{
+						{"User ID", detail.User.ID.String()},
+						{"Username", detail.User.Username},
+						{"Email", detail.User.Email},
+						{"Created", formatTime(detail.User.CreatedAt)},
+						{"Updated", formatTime(detail.User.UpdatedAt)},
+						{"Disabled at", formatTimePtr(detail.User.DisabledAt)},
+						{"Roles", joinStrings(detail.User.Roles)},
+					})
+				</div>
+				<div class="border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900 p-4 space-y-3">
+					<h3 class="font-semibold">Admin Actions</h3>
+					<div class="space-y-2">
+						if detail.User.Disabled() {
+							if detail.Actions.Enable.Allowed {
+								@adminModalAction(
+									"admin-enable-user-" + detail.User.ID.String(),
+									"/auth/admin/users/" + detail.User.ID.String() + "/enable",
+									"Re-enable user",
+									"Re-enable user?",
+									"This user will be able to sign in again. Revoked sessions will not be restored.",
+									"Re-enable user",
+									button.Main,
+									modal.ThemeNeutral,
+								)
+							}
+						} else {
+							if detail.Actions.Disable.Allowed {
+								@adminModalAction(
+									"admin-disable-user-" + detail.User.ID.String(),
+									"/auth/admin/users/" + detail.User.ID.String() + "/disable",
+									"Disable user",
+									"Disable user?",
+									"This user will no longer be able to sign in. Active sessions and refresh tokens will be revoked.",
+									"Disable user",
+									button.Attention,
+									modal.ThemeDanger,
+								)
+							} else {
+								@actionNotice(detail.Actions.Disable.Reason)
+							}
+						}
+						if detail.User.HasRole("admin") {
+							if detail.Actions.RevokeAdmin.Allowed {
+								@adminModalAction(
+									"admin-revoke-admin-" + detail.User.ID.String(),
+									"/auth/admin/users/" + detail.User.ID.String() + "/roles/admin/revoke",
+									"Remove admin role",
+									"Remove admin role?",
+									"This user will lose access to Authara admin pages and admin APIs.",
+									"Remove admin role",
+									button.Attention,
+									modal.ThemeDanger,
+								)
+							} else {
+								@actionNotice(detail.Actions.RevokeAdmin.Reason)
+							}
+						} else {
+							if detail.Actions.GrantAdmin.Allowed {
+								@adminModalAction(
+									"admin-grant-admin-" + detail.User.ID.String(),
+									"/auth/admin/users/" + detail.User.ID.String() + "/roles/admin/grant",
+									"Grant admin role",
+									"Grant admin role?",
+									"This user will be able to access Authara admin pages and admin APIs.",
+									"Grant admin role",
+									button.Main,
+									modal.ThemeNeutral,
+								)
+							}
+						}
+						if detail.Actions.RevokeAllSessions.Allowed {
+							@adminModalAction(
+								"admin-revoke-all-sessions-" + detail.User.ID.String(),
+								"/auth/admin/users/" + detail.User.ID.String() + "/sessions/revoke-all",
+								"Revoke all sessions",
+								"Revoke all sessions?",
+								"All active sessions for this user will be revoked. They will need to sign in again.",
+								"Revoke all sessions",
+								button.Attention,
+								modal.ThemeDanger,
+							)
+						} else {
+							@actionNotice(detail.Actions.RevokeAllSessions.Reason)
+						}
+					</div>
+				</div>
+			</section>
+			<section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+				@authProviders(detail.AuthProviders)
+				@passkeys(detail.Passkeys)
+			</section>
+			@sessions(detail.User.ID, detail.Sessions)
+		</div>
+	}
+}
+
+templ authProviders(providers []adminsvc.AuthProviderSummary) {
+	<section class="border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900 p-4 space-y-3">
+		<h3 class="font-semibold">Auth Providers</h3>
+		if len(providers) == 0 {
+			<p class="text-sm text-grey-600 dark:text-grey-400">No auth providers found.</p>
+		}
+		for _, provider := range providers {
+			<div class="border-t first:border-t-0 border-grey-200 dark:border-grey-800 py-3">
+				<div class="font-medium">{ provider.Provider }</div>
+				<div class="text-sm text-grey-600 dark:text-grey-400">Created { formatTime(provider.CreatedAt) }</div>
+				<div class="mt-2 flex flex-wrap gap-2">
+					if provider.HasPassword {
+						@badge("Password provider", "grey")
+					}
+					if provider.HasOAuthID {
+						@badge("OAuth provider", "grey")
+					}
+				</div>
+			</div>
+		}
+	</section>
+}
+
+templ passkeys(passkeys []adminsvc.PasskeySummary) {
+	<section class="border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900 p-4 space-y-3">
+		<h3 class="font-semibold">Passkeys</h3>
+		if len(passkeys) == 0 {
+			<p class="text-sm text-grey-600 dark:text-grey-400">No passkeys found.</p>
+		}
+		for _, passkey := range passkeys {
+			<div class="border-t first:border-t-0 border-grey-200 dark:border-grey-800 py-3">
+				<div class="font-medium">{ passkey.Name }</div>
+				<div class="text-sm text-grey-600 dark:text-grey-400">{ passkey.DeviceLabel }</div>
+				<div class="text-sm text-grey-600 dark:text-grey-400">Created { formatTime(passkey.CreatedAt) }</div>
+				<div class="text-sm text-grey-600 dark:text-grey-400">Last used { formatTimePtr(passkey.LastUsedAt) }</div>
+				<div class="mt-2 flex flex-wrap gap-2">
+					if passkey.CloneWarning {
+						@badge("Clone warning", "red")
+					}
+					if passkey.BackupEligible {
+						@badge("Backup eligible", "grey")
+					}
+					if passkey.BackupState {
+						@badge("Backed up", "green")
+					}
+				</div>
+				if len(passkey.Transport) > 0 {
+					<details class="mt-2 text-xs text-grey-600 dark:text-grey-400">
+						<summary class="cursor-pointer text-blue-700 dark:text-blue-300">Show technical details</summary>
+						<div class="mt-1 break-all">Transports: { joinStrings(passkey.Transport) }</div>
+					</details>
+				}
+			</div>
+		}
+	</section>
+}
+
+templ sessions(userID uuid.UUID, sessions []adminsvc.SessionSummary) {
+	<section class="border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900 p-4 space-y-3">
+		<h3 class="font-semibold">Sessions</h3>
+		if len(sessions) == 0 {
+			<p class="text-sm text-grey-600 dark:text-grey-400">No sessions found.</p>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="w-full min-w-[62rem] table-fixed text-sm">
+					<colgroup>
+						<col class="w-24"/>
+						<col class="w-40"/>
+						<col class="w-40"/>
+						<col class="w-28"/>
+						<col class="w-80"/>
+						<col class="w-28"/>
+					</colgroup>
+					<thead class="text-left text-grey-600 dark:text-grey-300">
+						<tr>
+							<th class="py-2 pr-3">Session</th>
+							<th class="py-2 pr-3">Created</th>
+							<th class="py-2 pr-3">Expires</th>
+							<th class="py-2 pr-3">Status</th>
+							<th class="py-2 pr-3">Device/browser</th>
+							<th class="py-2 pr-3"></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, session := range sessions {
+							<tr class="border-t border-grey-200 dark:border-grey-800">
+								<td class="py-3 pr-3 whitespace-nowrap">{ shortID(session.ID) }</td>
+								<td class="py-3 pr-3 whitespace-nowrap">{ formatTime(session.CreatedAt) }</td>
+								<td class="py-3 pr-3 whitespace-nowrap">{ formatTime(session.ExpiresAt) }</td>
+								<td class="py-3 pr-3">@sessionStatusBadge(session.Status)</td>
+								<td class="py-3 pr-3 align-top">
+									<div>{ session.UserAgentSummary }</div>
+									if session.UserAgent != "" {
+										<details class="mt-1 text-xs text-grey-600 dark:text-grey-400">
+											<summary class="cursor-pointer text-blue-700 dark:text-blue-300">Show full user agent</summary>
+											<div class="mt-1 max-w-full whitespace-normal break-all">{ session.UserAgent }</div>
+										</details>
+									}
+								</td>
+								<td class="py-3 pr-3 text-right">
+									if session.Status == "Active" {
+										@adminInlineModalAction(
+											"admin-revoke-session-" + session.ID.String(),
+											"/auth/admin/users/" + userID.String() + "/sessions/" + session.ID.String() + "/revoke",
+											"Revoke",
+											"Revoke session?",
+											"This session will be revoked. The user will need to sign in again on that device.",
+											"Revoke session",
+											button.Attention,
+											modal.ThemeDanger,
+										)
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</section>
+}
+
+templ actionNotice(reason string) {
+	if reason != "" {
+		<p class="rounded-lg border border-grey-200 bg-grey-50 px-3 py-2 text-sm text-grey-600 dark:border-grey-800 dark:bg-grey-950 dark:text-grey-300">
+			{ reason }
+		</p>
+	}
+}
+
+templ definitionList(items []kv) {
+	<dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+		for _, item := range items {
+			<div>
+				<dt class="text-grey-500 dark:text-grey-400">{ item.Key }</dt>
+				<dd class="mt-1 break-all">{ item.Value }</dd>
+			</div>
+		}
+	</dl>
+}

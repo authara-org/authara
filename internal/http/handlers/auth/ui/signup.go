@@ -59,7 +59,7 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.ChallengeEnabled {
+	if h.Features.ChallengeEnabled {
 		h.startSignupChallenge(w, r, form.Email, form.Password)
 		return
 	}

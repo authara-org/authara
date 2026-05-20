@@ -404,6 +404,17 @@ variables:
     default: false
 
   # ------------------------------------------------------------
+  # Admin
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_ADMIN_AUDIT_RETENTION_DAYS
+    stability: stable
+    required: false
+    type: int
+    default: 180
+    notes: Delete admin audit events after this many days. Must be greater than 0.
+
+  # ------------------------------------------------------------
   # Challenge / Verification
   # ------------------------------------------------------------
 

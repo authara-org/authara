@@ -1,0 +1,157 @@
+package admin
+
+import (
+	"fmt"
+
+	adminsvc "github.com/authara-org/authara/internal/admin"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/modal"
+)
+
+templ navLink(href string, label string, active bool) {
+	<form
+		class="inline-flex"
+		method="get"
+		action={ href }
+		hx-get={ href }
+		hx-target="#body"
+		hx-swap="innerHTML"
+		hx-push-url={ href }
+	>
+		@button.Button(button.ButtonConfig{
+			Label: label,
+			Type:  button.Submit,
+			Size:  button.Small,
+			Color: navButtonColor(active),
+		})
+	</form>
+}
+
+templ badge(label string, color string) {
+	<span class={ "inline-flex items-center rounded-lg px-2 py-1 text-xs font-medium " + badgeClass(color) }>
+		{ label }
+	</span>
+}
+
+templ adminModalAction(
+	id string,
+	action string,
+	triggerLabel string,
+	headline string,
+	body string,
+	primaryLabel string,
+	primaryColor button.Color,
+	theme modal.Theme,
+) {
+	{{ formID := id + "-form" }}
+	<div class="w-full">
+		@button.Button(button.ButtonConfig{
+			Label:   triggerLabel,
+			Type:    button.RegularButton,
+			Color:   primaryColor,
+			Variant: button.Outline,
+			OnClick: modal.OpenConfirm(headline, body, primaryLabel, formID, theme),
+		})
+	</div>
+	@adminConfirmForm(formID, action)
+}
+
+templ adminInlineModalAction(
+	id string,
+	action string,
+	triggerLabel string,
+	headline string,
+	body string,
+	primaryLabel string,
+	primaryColor button.Color,
+	theme modal.Theme,
+) {
+	@adminInlineModalActionTarget(id, action, triggerLabel, headline, body, primaryLabel, primaryColor, theme, "#body")
+}
+
+templ adminInlineModalActionTarget(
+	id string,
+	action string,
+	triggerLabel string,
+	headline string,
+	body string,
+	primaryLabel string,
+	primaryColor button.Color,
+	theme modal.Theme,
+	target string,
+) {
+	{{ formID := id + "-form" }}
+	<div class="inline-flex w-fit">
+		@button.Button(button.ButtonConfig{
+			Label:   triggerLabel,
+			Type:    button.RegularButton,
+			Size:    button.Small,
+			Color:   primaryColor,
+			Variant: button.Outline,
+			OnClick: modal.OpenConfirm(headline, body, primaryLabel, formID, theme),
+		})
+	</div>
+	@adminConfirmFormTarget(formID, action, target)
+}
+
+templ adminConfirmForm(formID string, action string) {
+	@adminConfirmFormTarget(formID, action, "#body")
+}
+
+templ adminConfirmFormTarget(formID string, action string, target string) {
+	<form
+		id={ formID }
+		hx-post={ action }
+		hx-target={ target }
+		hx-swap="innerHTML"
+		class="hidden"
+	>
+		@csrf.CSRFInput()
+	</form>
+}
+
+templ userStatusBadge(user adminsvc.UserSummary) {
+	if user.Disabled() {
+		@badge("Disabled", "red")
+	} else {
+		@badge("Active", "green")
+	}
+}
+
+templ sessionStatusBadge(status string) {
+	switch status {
+		case "Active":
+			@badge("Active", "green")
+		case "Revoked":
+			@badge("Revoked", "red")
+		default:
+			@badge("Expired", "grey")
+	}
+}
+
+templ pagination(base string, query string, page int, hasPrevious bool, hasNext bool) {
+	<div class="flex items-center justify-between gap-3">
+		<div class="text-sm text-grey-600 dark:text-grey-400">Page { fmt.Sprint(page) }</div>
+		<div class="flex gap-2">
+			if hasPrevious {
+				<a class="rounded-lg border border-grey-300 dark:border-grey-700 px-3 py-2 text-sm" href={ pageHref(base, query, page - 1) }>Previous</a>
+			}
+			if hasNext {
+				<a class="rounded-lg border border-grey-300 dark:border-grey-700 px-3 py-2 text-sm" href={ pageHref(base, query, page + 1) }>Next</a>
+			}
+		</div>
+	</div>
+}
+
+templ simplePageControls(base string, page int) {
+	<div class="flex items-center justify-between gap-3">
+		<div class="text-sm text-grey-600 dark:text-grey-400">Page { fmt.Sprint(page) }</div>
+		<div class="flex gap-2">
+			if page > 1 {
+				<a class="rounded-lg border border-grey-300 dark:border-grey-700 px-3 py-2 text-sm" href={ pageHref(base, "", page - 1) }>Previous</a>
+			}
+			<a class="rounded-lg border border-grey-300 dark:border-grey-700 px-3 py-2 text-sm" href={ pageHref(base, "", page + 1) }>Next</a>
+		</div>
+	</div>
+}

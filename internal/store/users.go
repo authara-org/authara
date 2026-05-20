@@ -110,6 +110,34 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, 
 	return toDomainUser(m), nil
 }
 
+func (s *Store) GetUserByEmailOrUsername(ctx context.Context, query string) (domain.User, error) {
+	var m model.User
+
+	email := normalizeEmail(query)
+	username := NormalizeUsername(query)
+	usernameExact := strings.TrimSpace(query)
+
+	err := scanUser(s.queryRow(ctx, `
+		SELECT `+userColumns+`
+		FROM users
+		WHERE email = $1 OR username_normalized = $2
+		ORDER BY
+			CASE
+				WHEN email = $1 THEN 0
+				WHEN username = $3 THEN 1
+				WHEN username_normalized = $2 THEN 2
+				ELSE 3
+			END,
+			created_at DESC
+		LIMIT 1
+	`, email, username, usernameExact), &m)
+	if err != nil {
+		return domain.User{}, mapNoRows(err, ErrUserNotFound)
+	}
+
+	return toDomainUser(m), nil
+}
+
 func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
 	var exists bool
 
@@ -123,8 +151,33 @@ func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, erro
 }
 
 func (s *Store) DisableUser(ctx context.Context, userID uuid.UUID, disabledAt time.Time) error {
-	_, err := s.exec(ctx, `UPDATE users SET disabled_at = $1 WHERE id = $2`, disabledAt, userID)
-	return err
+	res, err := s.exec(ctx, `UPDATE users SET disabled_at = $1 WHERE id = $2`, disabledAt, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+func (s *Store) EnableUser(ctx context.Context, userID uuid.UUID) error {
+	res, err := s.exec(ctx, `UPDATE users SET disabled_at = NULL WHERE id = $1`, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+	return nil
 }
 
 func (s *Store) IsUserDisabled(ctx context.Context, userID uuid.UUID) (bool, error) {
@@ -133,6 +186,48 @@ func (s *Store) IsUserDisabled(ctx context.Context, userID uuid.UUID) (bool, err
 	err := s.queryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND disabled_at IS NOT NULL)`, userID).
 		Scan(&exists)
 	return exists, err
+}
+
+func (s *Store) CountUsers(ctx context.Context) (int, error) {
+	var count int
+	err := s.queryRow(ctx, `SELECT count(*) FROM users`).Scan(&count)
+	return count, err
+}
+
+func (s *Store) CountUsersCreatedSince(ctx context.Context, since time.Time) (int, error) {
+	var count int
+	err := s.queryRow(ctx, `SELECT count(*) FROM users WHERE created_at >= $1`, since).Scan(&count)
+	return count, err
+}
+
+func (s *Store) CountDisabledUsers(ctx context.Context) (int, error) {
+	var count int
+	err := s.queryRow(ctx, `SELECT count(*) FROM users WHERE disabled_at IS NOT NULL`).Scan(&count)
+	return count, err
+}
+
+func (s *Store) CountUsersWithRole(ctx context.Context, roleName string) (int, error) {
+	var count int
+	err := s.queryRow(ctx, `
+		SELECT count(*)
+		FROM users u
+		JOIN user_platform_roles upr ON upr.user_id = u.id
+		JOIN platform_roles pr ON pr.id = upr.role_id
+		WHERE pr.name = $1
+	`, roleName).Scan(&count)
+	return count, err
+}
+
+func (s *Store) CountActiveUsersWithRole(ctx context.Context, roleName string) (int, error) {
+	var count int
+	err := s.queryRow(ctx, `
+		SELECT count(*)
+		FROM users u
+		JOIN user_platform_roles upr ON upr.user_id = u.id
+		JOIN platform_roles pr ON pr.id = upr.role_id
+		WHERE pr.name = $1 AND u.disabled_at IS NULL
+	`, roleName).Scan(&count)
+	return count, err
 }
 
 func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username string) error {

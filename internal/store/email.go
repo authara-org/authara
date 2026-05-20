@@ -190,3 +190,41 @@ func (s *Store) MarkEmailJobFailed(ctx context.Context, jobID uuid.UUID, lastErr
 	`, string(domain.EmailJobStatusFailed), lastError, jobID)
 	return err
 }
+
+func (s *Store) ListRecentFailedEmailJobs(ctx context.Context, limit, offset int) ([]domain.EmailJob, error) {
+	rows, err := s.queryRows(ctx, `
+		SELECT `+emailJobColumns+`
+		FROM email_jobs
+		WHERE status = $1 OR last_error IS NOT NULL
+		ORDER BY updated_at DESC, created_at DESC
+		LIMIT $2 OFFSET $3
+	`, string(domain.EmailJobStatusFailed), limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.EmailJob, 0)
+	for rows.Next() {
+		var row model.EmailJob
+		if err := scanEmailJob(rows, &row); err != nil {
+			return nil, err
+		}
+		out = append(out, toDomainEmailJob(row))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+func (s *Store) CountRecentFailedEmailJobs(ctx context.Context) (int, error) {
+	var count int
+	err := s.queryRow(ctx, `
+		SELECT count(*)
+		FROM email_jobs
+		WHERE status = $1 OR last_error IS NOT NULL
+	`, string(domain.EmailJobStatusFailed)).Scan(&count)
+	return count, err
+}

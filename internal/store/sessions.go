@@ -143,6 +143,26 @@ func (s *Store) RevokeAllSessionsForUser(ctx context.Context, userID uuid.UUID, 
 	return err
 }
 
+func (s *Store) CountActiveSessions(ctx context.Context, now time.Time) (int, error) {
+	var count int
+	err := s.queryRow(ctx, `
+		SELECT count(*)
+		FROM sessions
+		WHERE revoked_at IS NULL AND expires_at > $1
+	`, now).Scan(&count)
+	return count, err
+}
+
+func (s *Store) CountActiveSessionsByUserID(ctx context.Context, userID uuid.UUID, now time.Time) (int, error) {
+	var count int
+	err := s.queryRow(ctx, `
+		SELECT count(*)
+		FROM sessions
+		WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > $2
+	`, userID, now).Scan(&count)
+	return count, err
+}
+
 func (s *Store) CreateRefreshToken(ctx context.Context, token domain.RefreshToken) error {
 	m := toModelRefreshToken(token)
 
@@ -240,6 +260,33 @@ func (s *Store) ListActiveSessionsByUserID(ctx context.Context, userID uuid.UUID
 	return out, nil
 }
 
+func (s *Store) ListSessionsByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Session, error) {
+	rows, err := s.queryRows(ctx, `
+		SELECT `+sessionColumns+`
+		FROM sessions
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.Session, 0)
+	for rows.Next() {
+		var row model.Session
+		if err := scanSession(rows, &row); err != nil {
+			return nil, err
+		}
+		out = append(out, toDomainSession(row))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
 func (s *Store) GetActiveSessionByID(ctx context.Context, sessionID uuid.UUID, now time.Time) (domain.Session, error) {
 	var m model.Session
 
@@ -262,6 +309,37 @@ func (s *Store) RevokeOtherSessionsByUserID(ctx context.Context, userID uuid.UUI
 		WHERE user_id = $2 AND id <> $3 AND revoked_at IS NULL
 	`, revokedAt, userID, keepSessionID)
 	return err
+}
+
+func (s *Store) RevokeSessionByIDAndUserID(ctx context.Context, sessionID uuid.UUID, userID uuid.UUID, revokedAt time.Time) error {
+	res, err := s.exec(ctx, `
+		UPDATE sessions
+		SET revoked_at = $1
+		WHERE id = $2 AND user_id = $3 AND revoked_at IS NULL
+	`, revokedAt, sessionID, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
+}
+
+func (s *Store) RevokeAllActiveSessionsForUser(ctx context.Context, userID uuid.UUID, revokedAt time.Time) (int64, error) {
+	res, err := s.exec(ctx, `
+		UPDATE sessions
+		SET revoked_at = $1
+		WHERE user_id = $2 AND revoked_at IS NULL
+	`, revokedAt, userID)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (s *Store) DeleteRefreshTokensForOtherSessions(ctx context.Context, userID uuid.UUID, keepSessionID uuid.UUID) error {

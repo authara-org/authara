@@ -5,6 +5,7 @@ import (
 	"time"
 
 	cachepkg "github.com/authara-org/authara/internal/cache"
+	"github.com/authara-org/authara/internal/features"
 	httpserver "github.com/authara-org/authara/internal/http"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
@@ -16,6 +17,11 @@ import (
 const assetsManifestPath = "./internal/http/static/manifest.json"
 
 func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
+	enabledFeatures := features.Features{
+		ChallengeEnabled: app.Config.Challenge.Enabled,
+		AllowlistEnabled: app.Config.AccessPolicy.AllowedEmailEnabled,
+	}
+
 	mw := httpserver.Middlewares{
 		RedirectIfAuthenticated: httpmiddleware.RedirectIfAuthenticated(app.Services.Session, time.Now),
 		RequireAppAccessAuthAPI: httpmiddleware.RequireAPIAccessAuth(
@@ -47,7 +53,8 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		RequireAPICSRF:            httpmiddleware.RequireAPICSRF,
 		ReturnTo:                  httpmiddleware.ReturnTo,
 		HTMX:                      httpmiddleware.HTMXMiddleware,
-		RequireChallengeEnabled:   httpmiddleware.RequireChallengeEnabled(app.Config.Challenge.Enabled),
+		RequireChallengeEnabled:   httpmiddleware.RequireChallengeEnabled(enabledFeatures.ChallengeEnabled),
+		RequireAllowlistEnabled:   httpmiddleware.RequireAllowlistEnabled(enabledFeatures.AllowlistEnabled),
 		OptionalAppAccessIdentity: httpmiddleware.OptionalAccessIdentity(app.Services.Session, token.AudienceApp, time.Now),
 	}
 
@@ -55,18 +62,19 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load assets manifest: %w", err)
 	}
-	renderer := render.New(assets, app.Config.Challenge.Enabled)
+	renderer := render.New(assets, enabledFeatures.ChallengeEnabled)
 
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Version:           version,
 		Addr:              app.Config.Values.HttpAddr,
 		Dev:               app.Config.Values.AppEnv == "dev",
 		TrustProxyHeaders: app.Config.Values.TrustProxyHeaders,
+		Admin:             app.Services.Admin,
 		Auth:              app.Services.Auth,
 		Passkeys:          app.Services.Passkeys,
 		Session:           app.Services.Session,
 		Challenge:         app.Services.Challenge,
-		ChallengeEnabled:  app.Config.Challenge.Enabled,
+		Features:          enabledFeatures,
 		Verification:      app.Services.Verification,
 		Logger:            app.Logger,
 		Store:             app.Store,

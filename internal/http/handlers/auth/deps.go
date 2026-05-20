@@ -4,8 +4,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/features"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
@@ -15,16 +17,17 @@ import (
 )
 
 type Deps struct {
-	Auth             *auth.Service
-	Passkeys         *passkey.Service
-	Session          *session.Service
-	Challenge        *challenge.Service
-	ChallengeEnabled bool
-	Verification     *challenge.VerificationCodeService
-	Limiter          ratelimiter.AuthLimiter
-	Logger           *slog.Logger
-	Google           *google.Client
-	OAuthProviders   oauth.OAuthProviders
+	Admin          *admin.Service
+	Auth           *auth.Service
+	Passkeys       *passkey.Service
+	Session        *session.Service
+	Challenge      *challenge.Service
+	Features       features.Features
+	Verification   *challenge.VerificationCodeService
+	Limiter        ratelimiter.AuthLimiter
+	Logger         *slog.Logger
+	Google         *google.Client
+	OAuthProviders oauth.OAuthProviders
 
 	AccessTTL  time.Duration
 	RefreshTTL time.Duration

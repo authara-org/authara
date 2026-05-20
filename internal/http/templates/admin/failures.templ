@@ -1,0 +1,99 @@
+package admin
+
+import (
+	"fmt"
+
+	adminsvc "github.com/authara-org/authara/internal/admin"
+	"github.com/authara-org/authara/internal/domain"
+)
+
+templ Failures(failures adminsvc.RecentFailures, features FeatureFlags) {
+	@AdminShell("failures", features) {
+		<div class="space-y-6">
+			<div>
+				<h2 class="text-xl font-semibold">Recent Failures</h2>
+				<p class="text-sm text-grey-600 dark:text-grey-400">Operational failures from email delivery and challenge flows.</p>
+			</div>
+			@emailFailures(failures.EmailJobs)
+			@challengeFailures(failures.Challenges)
+		</div>
+	}
+}
+
+templ emailFailures(jobs []domain.EmailJob) {
+	<section class="space-y-3">
+		<h3 class="font-semibold">Email Jobs</h3>
+		<div class="overflow-x-auto border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900">
+			<table class="min-w-full text-sm">
+				<thead class="bg-grey-50 dark:bg-grey-800 text-left text-grey-600 dark:text-grey-300">
+					<tr>
+						<th class="px-3 py-2">ID</th>
+						<th class="px-3 py-2">To</th>
+						<th class="px-3 py-2">Template</th>
+						<th class="px-3 py-2">Status</th>
+						<th class="px-3 py-2">Attempts</th>
+						<th class="px-3 py-2">Last error</th>
+						<th class="px-3 py-2">Next attempt</th>
+						<th class="px-3 py-2">Sent</th>
+					</tr>
+				</thead>
+				<tbody>
+					if len(jobs) == 0 {
+						<tr><td class="px-3 py-4 text-grey-600 dark:text-grey-400" colspan="8">No failed email jobs found.</td></tr>
+					}
+					for _, job := range jobs {
+						<tr class="border-t border-grey-200 dark:border-grey-800">
+							<td class="px-3 py-3 whitespace-nowrap">{ shortID(job.ID) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ job.ToEmail }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ string(job.Template) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ string(job.Status) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ fmt.Sprint(job.AttemptCount) }</td>
+							<td class="px-3 py-3 max-w-sm truncate">{ stringPtr(job.LastError) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ formatTime(job.NextAttemptAt) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ formatTimePtr(job.SentAt) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</section>
+}
+
+templ challengeFailures(challenges []domain.Challenge) {
+	<section class="space-y-3">
+		<h3 class="font-semibold">Challenges</h3>
+		<div class="overflow-x-auto border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900">
+			<table class="min-w-full text-sm">
+				<thead class="bg-grey-50 dark:bg-grey-800 text-left text-grey-600 dark:text-grey-300">
+					<tr>
+						<th class="px-3 py-2">ID</th>
+						<th class="px-3 py-2">Email</th>
+						<th class="px-3 py-2">Purpose</th>
+						<th class="px-3 py-2">Attempts</th>
+						<th class="px-3 py-2">Resends</th>
+						<th class="px-3 py-2">Expires</th>
+						<th class="px-3 py-2">Consumed</th>
+						<th class="px-3 py-2">Created</th>
+					</tr>
+				</thead>
+				<tbody>
+					if len(challenges) == 0 {
+						<tr><td class="px-3 py-4 text-grey-600 dark:text-grey-400" colspan="8">No risky challenges found.</td></tr>
+					}
+					for _, challenge := range challenges {
+						<tr class="border-t border-grey-200 dark:border-grey-800">
+							<td class="px-3 py-3 whitespace-nowrap">{ shortID(challenge.ID) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ challenge.Email }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ string(challenge.Purpose) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ fmt.Sprintf("%d / %d", challenge.AttemptCount, challenge.MaxAttempts) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ fmt.Sprintf("%d / %d", challenge.ResendCount, challenge.MaxResends) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ formatTime(challenge.ExpiresAt) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ formatTimePtr(challenge.ConsumedAt) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ formatTime(challenge.CreatedAt) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</section>
+}

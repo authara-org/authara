@@ -88,6 +88,7 @@ func newSecurityHeadersTestRouter(providers oauth.OAuthProviders) http.Handler {
 		ReturnTo:                          pass,
 		HTMX:                              pass,
 		RequireChallengeEnabled:           pass,
+		RequireAllowlistEnabled:           pass,
 		OptionalAppAccessIdentity:         pass,
 	}
 

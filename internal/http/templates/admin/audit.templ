@@ -1,0 +1,86 @@
+package admin
+
+import adminsvc "github.com/authara-org/authara/internal/admin"
+
+templ Audit(page adminsvc.AuditEventPage, features FeatureFlags) {
+	@AdminShell("audit", features) {
+		<div class="space-y-5">
+			<div>
+				<h2 class="text-xl font-semibold">Audit Log</h2>
+				<p class="text-sm text-grey-600 dark:text-grey-400">Recent security-sensitive admin mutations. Personal data is hidden by default.</p>
+			</div>
+			<div class="overflow-x-auto border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900">
+				<table class="min-w-[64rem] table-fixed text-sm">
+					<colgroup>
+						<col class="w-40"/>
+						<col class="w-44"/>
+						<col class="w-24"/>
+						<col class="w-24"/>
+						<col class="w-48"/>
+						<col class="w-80"/>
+					</colgroup>
+					<thead class="bg-grey-50 dark:bg-grey-800 text-left text-grey-600 dark:text-grey-300">
+						<tr>
+							<th class="px-3 py-2">Created</th>
+							<th class="px-3 py-2">Action</th>
+							<th class="px-3 py-2">Actor</th>
+							<th class="px-3 py-2">Target</th>
+							<th class="px-3 py-2">Email</th>
+							<th class="min-w-[200px] px-3 py-2">Details</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(page.Events) == 0 {
+							<tr><td class="px-3 py-4 text-grey-600 dark:text-grey-400" colspan="6">No audit events found.</td></tr>
+						}
+						for _, event := range page.Events {
+							<tr class="border-t border-grey-200 dark:border-grey-800">
+								<td class="px-3 py-3 align-top whitespace-nowrap">{ formatTime(event.CreatedAt) }</td>
+								<td class="px-3 py-3 align-top truncate">{ event.Action }</td>
+								<td class="px-3 py-3 align-top whitespace-nowrap">{ uuidPtrShort(event.ActorUserID) }</td>
+								<td class="px-3 py-3 align-top whitespace-nowrap">{ uuidPtrShort(event.TargetUserID) }</td>
+								<td class="px-3 py-3 align-top truncate">{ maskedStringPtr(event.TargetEmail) }</td>
+								<td class="min-w-[200px] px-3 py-3 align-top">
+									<details class="max-w-80 text-xs text-grey-600 dark:text-grey-400">
+										<summary class="cursor-pointer text-blue-700 dark:text-blue-300">Show personal data</summary>
+										<dl class="mt-2 grid gap-1">
+											<div>
+												<dt class="font-medium text-grey-700 dark:text-grey-200">Actor user ID</dt>
+												<dd class="break-all">{ uuidPtrString(event.ActorUserID) }</dd>
+											</div>
+											<div>
+												<dt class="font-medium text-grey-700 dark:text-grey-200">Target user ID</dt>
+												<dd class="break-all">{ uuidPtrString(event.TargetUserID) }</dd>
+											</div>
+											<div>
+												<dt class="font-medium text-grey-700 dark:text-grey-200">Target email</dt>
+												<dd class="break-all">{ stringPtr(event.TargetEmail) }</dd>
+											</div>
+											if event.IP != nil {
+												<div>
+													<dt class="font-medium text-grey-700 dark:text-grey-200">IP</dt>
+													<dd class="break-all">{ stringPtr(event.IP) }</dd>
+												</div>
+											}
+											if event.UserAgent != nil {
+												<div>
+													<dt class="font-medium text-grey-700 dark:text-grey-200">User agent</dt>
+													<dd class="break-all">{ stringPtr(event.UserAgent) }</dd>
+												</div>
+											}
+											<div>
+												<dt class="font-medium text-grey-700 dark:text-grey-200">Metadata</dt>
+												<dd class="break-all">{ compactJSON(event.Metadata) }</dd>
+											</div>
+										</dl>
+									</details>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			@simplePageControls("/auth/admin/audit", page.Page)
+		</div>
+	}
+}

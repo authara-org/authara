@@ -241,6 +241,18 @@ AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED
 
 ---
 
+### Admin audit
+
+Controls retention for admin audit events.
+
+Examples:
+
+```
+AUTHARA_ADMIN_AUDIT_RETENTION_DAYS
+```
+
+---
+
 ## Configuration reference
 
 For the complete list of variables:

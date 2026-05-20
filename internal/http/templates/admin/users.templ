@@ -1,0 +1,79 @@
+package admin
+
+import (
+	"fmt"
+
+	adminsvc "github.com/authara-org/authara/internal/admin"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/form"
+)
+
+templ Users(query string, features FeatureFlags) {
+	@AdminShell("users", features) {
+		<div class="space-y-5">
+			<div>
+				<h2 class="text-xl font-semibold">User Search</h2>
+				<p class="text-sm text-grey-600 dark:text-grey-400">Search by exact email address or username.</p>
+			</div>
+			<form
+				class="flex gap-3"
+				hx-get="/auth/admin/users/search"
+				hx-target="#user-search-results"
+				hx-swap="innerHTML"
+			>
+				@form.Input(form.InputConfig{
+					Type:        form.Text,
+					Name:        "q",
+					Value:       query,
+					Placeholder: "email or username",
+					Class:       "flex-1",
+				})
+				<div class="w-fit">
+					@button.Button(button.ButtonConfig{
+						Label: "Search",
+						Type:  button.Submit,
+						Color: button.Main,
+					})
+				</div>
+			</form>
+			<div id="user-search-results">
+				@UserSearchResult(nil)
+			</div>
+		</div>
+	}
+}
+
+templ UserSearchResult(result *adminsvc.UserSummary) {
+	<div class="space-y-3">
+		if result != nil {
+			<div class="overflow-x-auto border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900">
+				<table class="min-w-full text-sm">
+					<thead class="bg-grey-50 dark:bg-grey-800 text-left text-grey-600 dark:text-grey-300">
+						<tr>
+							<th class="px-3 py-2">Email</th>
+							<th class="px-3 py-2">Username</th>
+							<th class="px-3 py-2">Status</th>
+							<th class="px-3 py-2">Roles</th>
+							<th class="px-3 py-2">Providers</th>
+							<th class="px-3 py-2">Sessions</th>
+							<th class="px-3 py-2"></th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr class="border-t border-grey-200 dark:border-grey-800">
+							<td class="px-3 py-3 whitespace-nowrap">{ result.Email }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ result.Username }</td>
+							<td class="px-3 py-3">@userStatusBadge(*result)</td>
+							<td class="px-3 py-3">{ joinStrings(result.Roles) }</td>
+							<td class="px-3 py-3">{ fmt.Sprint(result.AuthProviderCount) }</td>
+							<td class="px-3 py-3">{ fmt.Sprint(result.ActiveSessionCount) }</td>
+							<td class="px-3 py-3 text-right">
+								<a class="text-blue-700 dark:text-blue-300 hover:underline" href={ "/auth/admin/users/" + result.ID.String() }>Open</a>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}

@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/features"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
@@ -22,11 +24,12 @@ type ServerConfig struct {
 	Addr              string
 	Dev               bool
 	TrustProxyHeaders bool
+	Admin             *admin.Service
 	Auth              *auth.Service
 	Passkeys          *passkey.Service
 	Session           *session.Service
 	Challenge         *challenge.Service
-	ChallengeEnabled  bool
+	Features          features.Features
 	Verification      *challenge.VerificationCodeService
 	Logger            *slog.Logger
 	Store             *store.Store
@@ -53,6 +56,7 @@ type Middlewares struct {
 	ReturnTo                  func(http.Handler) http.Handler
 	HTMX                      func(http.Handler) http.Handler
 	RequireChallengeEnabled   func(http.Handler) http.Handler
+	RequireAllowlistEnabled   func(http.Handler) http.Handler
 	OptionalAppAccessIdentity func(http.Handler) http.Handler
 }
 

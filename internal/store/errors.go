@@ -24,12 +24,15 @@ var (
 	ErrPasskeyAlreadyExists             = errors.New("passkey already exists")
 	ErrWebAuthnChallengeNotFound        = errors.New("webauthn challenge not found")
 	ErrWebAuthnChallengeAlreadyConsumed = errors.New("webauthn challenge already consumed")
+	ErrAllowedEmailNotFound             = errors.New("allowed email not found")
+	ErrAllowedEmailAlreadyExists        = errors.New("allowed email already exists")
 )
 
 const (
 	ConstraintUserEmail           = "unique_user_email"
 	ConstraintUserUsername        = "unique_user_username"
 	ConstraintPasskeyCredentialID = "unique_passkey_credential_id"
+	ConstraintAllowedEmailEmail   = "unique_allowed_email"
 
 	uniqueViolationCode = "23505"
 )

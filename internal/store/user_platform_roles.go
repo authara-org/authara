@@ -61,6 +61,30 @@ func (s *Store) RemoveUserPlatformRoleByName(ctx context.Context, userID uuid.UU
 	return err
 }
 
+func (s *Store) UserHasPlatformRole(ctx context.Context, userID uuid.UUID, roleName string) (bool, error) {
+	var exists bool
+	err := s.queryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM user_platform_roles upr
+			JOIN platform_roles pr ON pr.id = upr.role_id
+			WHERE upr.user_id = $1 AND pr.name = $2
+		)
+	`, userID, roleName).Scan(&exists)
+	return exists, err
+}
+
+func (s *Store) LockPlatformRoleByName(ctx context.Context, roleName string) error {
+	var id uuid.UUID
+	err := s.queryRow(ctx, `
+		SELECT id
+		FROM platform_roles
+		WHERE name = $1
+		FOR UPDATE
+	`, roleName).Scan(&id)
+	return mapNoRows(err, ErrorRoleNotFound)
+}
+
 // ---- helpers ----
 
 func (s *Store) getPlatformRoleIDByName(ctx context.Context, name string) (uuid.UUID, error) {
