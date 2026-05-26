@@ -69,7 +69,7 @@ func (h *UIHandler) PasswordResetRequestPost(w http.ResponseWriter, r *http.Requ
 
 	passwordHash, err := auth.Hash(form.NewPassword)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 

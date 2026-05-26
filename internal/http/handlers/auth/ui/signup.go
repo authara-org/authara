@@ -70,7 +70,7 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 
 	passwordHash, err := auth.Hash(form.Password)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 	h.finishSignup(
@@ -109,7 +109,7 @@ func (h *UIHandler) startSignupChallenge(
 
 	passwordHash, err := auth.Hash(password)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 

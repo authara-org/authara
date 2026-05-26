@@ -217,7 +217,7 @@ func (h *UIHandler) PasskeyDeletePost(w http.ResponseWriter, r *http.Request) {
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		h.renderUnauthorized(w, r)
 		return
 	}
 	if h.Passkeys == nil {

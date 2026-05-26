@@ -20,13 +20,13 @@ import (
 func (h *UIHandler) AdminPage(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.Admin.DashboardStats(r.Context())
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 
 	failures, err := h.Admin.RecentFailures(r.Context(), adminsvc.Page{Page: 1, Size: 5})
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *UIHandler) AdminUserSearchGet(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		http.Error(w, "server error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -85,11 +85,11 @@ func (h *UIHandler) AdminUserSearchGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UIHandler) AdminUserDetailPage(w http.ResponseWriter, r *http.Request) {
-	userID, ok := parseUUIDParam(w, r, "userID")
+	userID, ok := h.parseUUIDParam(w, r, "userID")
 	if !ok {
 		return
 	}
-	actor, ok := adminActorFromRequest(w, r)
+	actor, ok := h.adminActorFromRequest(w, r)
 	if !ok {
 		return
 	}
@@ -97,10 +97,10 @@ func (h *UIHandler) AdminUserDetailPage(w http.ResponseWriter, r *http.Request) 
 	detail, err := h.Admin.GetUserDetail(r.Context(), actor, userID)
 	if err != nil {
 		if errors.Is(err, store.ErrUserNotFound) {
-			http.NotFound(w, r)
+			h.renderNotFound(w, r)
 			return
 		}
-		http.Error(w, "server error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -132,15 +132,15 @@ func (h *UIHandler) RevokeAdminPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UIHandler) RevokeAdminUserSessionPost(w http.ResponseWriter, r *http.Request) {
-	userID, ok := parseUUIDParam(w, r, "userID")
+	userID, ok := h.parseUUIDParam(w, r, "userID")
 	if !ok {
 		return
 	}
-	sessionID, ok := parseUUIDParam(w, r, "sessionID")
+	sessionID, ok := h.parseUUIDParam(w, r, "sessionID")
 	if !ok {
 		return
 	}
-	actor, ok := adminActorFromRequest(w, r)
+	actor, ok := h.adminActorFromRequest(w, r)
 	if !ok {
 		return
 	}
@@ -157,7 +157,7 @@ func (h *UIHandler) RevokeAllAdminUserSessionsPost(w http.ResponseWriter, r *htt
 
 func (h *UIHandler) AdminAllowlistPage(w http.ResponseWriter, r *http.Request) {
 	if !h.Features.AllowlistEnabled {
-		http.NotFound(w, r)
+		h.renderNotFound(w, r)
 		return
 	}
 
@@ -166,17 +166,17 @@ func (h *UIHandler) AdminAllowlistPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *UIHandler) AdminAllowlistResultsGet(w http.ResponseWriter, r *http.Request) {
 	if !h.Features.AllowlistEnabled {
-		http.NotFound(w, r)
+		h.renderNotFound(w, r)
 		return
 	}
 
 	page, err := h.Admin.ListAllowedEmails(r.Context(), r.URL.Query().Get("q"), pageFromRequest(r, 25))
 	if err != nil {
 		if errors.Is(err, adminsvc.ErrAllowlistDisabled) {
-			http.NotFound(w, r)
+			h.renderNotFound(w, r)
 			return
 		}
-		http.Error(w, "server error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -185,11 +185,11 @@ func (h *UIHandler) AdminAllowlistResultsGet(w http.ResponseWriter, r *http.Requ
 
 func (h *UIHandler) AdminAllowlistCreatePost(w http.ResponseWriter, r *http.Request) {
 	if !h.Features.AllowlistEnabled {
-		http.NotFound(w, r)
+		h.renderNotFound(w, r)
 		return
 	}
 
-	actor, ok := adminActorFromRequest(w, r)
+	actor, ok := h.adminActorFromRequest(w, r)
 	if !ok {
 		return
 	}
@@ -199,15 +199,15 @@ func (h *UIHandler) AdminAllowlistCreatePost(w http.ResponseWriter, r *http.Requ
 
 func (h *UIHandler) AdminAllowlistDeletePost(w http.ResponseWriter, r *http.Request) {
 	if !h.Features.AllowlistEnabled {
-		http.NotFound(w, r)
+		h.renderNotFound(w, r)
 		return
 	}
 
-	emailID, ok := parseUUIDParam(w, r, "emailID")
+	emailID, ok := h.parseUUIDParam(w, r, "emailID")
 	if !ok {
 		return
 	}
-	actor, ok := adminActorFromRequest(w, r)
+	actor, ok := h.adminActorFromRequest(w, r)
 	if !ok {
 		return
 	}
@@ -218,7 +218,7 @@ func (h *UIHandler) AdminAllowlistDeletePost(w http.ResponseWriter, r *http.Requ
 func (h *UIHandler) AdminFailuresPage(w http.ResponseWriter, r *http.Request) {
 	failures, err := h.Admin.RecentFailures(r.Context(), pageFromRequest(r, 25))
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -228,7 +228,7 @@ func (h *UIHandler) AdminFailuresPage(w http.ResponseWriter, r *http.Request) {
 func (h *UIHandler) AdminAuditPage(w http.ResponseWriter, r *http.Request) {
 	events, err := h.Admin.ListAuditEvents(r.Context(), pageFromRequest(r, 50))
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -241,11 +241,11 @@ func (h *UIHandler) mutateUser(
 	success string,
 	fn func(adminsvc.Actor, uuid.UUID, adminsvc.RequestMeta) error,
 ) {
-	userID, ok := parseUUIDParam(w, r, "userID")
+	userID, ok := h.parseUUIDParam(w, r, "userID")
 	if !ok {
 		return
 	}
-	actor, ok := adminActorFromRequest(w, r)
+	actor, ok := h.adminActorFromRequest(w, r)
 	if !ok {
 		return
 	}
@@ -258,7 +258,7 @@ func (h *UIHandler) renderUserMutationResult(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		detail, detailErr := h.Admin.GetUserDetail(r.Context(), actor, userID)
 		if detailErr != nil {
-			http.Error(w, adminErrorMessage(err), http.StatusBadRequest)
+			h.renderRequestError(w, r, http.StatusBadRequest, adminErrorMessage(err))
 			return
 		}
 		h.Render(
@@ -275,7 +275,7 @@ func (h *UIHandler) renderUserMutationResult(w http.ResponseWriter, r *http.Requ
 
 	detail, err := h.Admin.GetUserDetail(r.Context(), actor, userID)
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 	h.Render(
@@ -291,7 +291,7 @@ func (h *UIHandler) renderUserMutationResult(w http.ResponseWriter, r *http.Requ
 
 func (h *UIHandler) renderAllowlistMutationResult(w http.ResponseWriter, r *http.Request, success string, err error) {
 	if errors.Is(err, adminsvc.ErrAllowlistDisabled) {
-		http.NotFound(w, r)
+		h.renderNotFound(w, r)
 		return
 	}
 
@@ -307,10 +307,10 @@ func (h *UIHandler) renderAllowlistMutationResult(w http.ResponseWriter, r *http
 	page, pageErr := h.Admin.ListAllowedEmails(r.Context(), allowlistQueryFromRequest(r), pageFromRequest(r, 25))
 	if pageErr != nil {
 		if errors.Is(pageErr, adminsvc.ErrAllowlistDisabled) {
-			http.NotFound(w, r)
+			h.renderNotFound(w, r)
 			return
 		}
-		http.Error(w, "server error", http.StatusInternalServerError)
+		h.renderInternalError(w, r)
 		return
 	}
 	h.Render(
@@ -335,19 +335,19 @@ func allowlistQueryFromRequest(r *http.Request) string {
 	return strings.TrimSpace(r.URL.Query().Get("q"))
 }
 
-func parseUUIDParam(w http.ResponseWriter, r *http.Request, name string) (uuid.UUID, bool) {
+func (h *UIHandler) parseUUIDParam(w http.ResponseWriter, r *http.Request, name string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, name))
 	if err != nil {
-		http.Error(w, "invalid "+name, http.StatusBadRequest)
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid "+name+".")
 		return uuid.Nil, false
 	}
 	return id, true
 }
 
-func adminActorFromRequest(w http.ResponseWriter, r *http.Request) (adminsvc.Actor, bool) {
+func (h *UIHandler) adminActorFromRequest(w http.ResponseWriter, r *http.Request) (adminsvc.Actor, bool) {
 	userID, ok := httpctx.UserID(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		h.renderUnauthorized(w, r)
 		return adminsvc.Actor{}, false
 	}
 	actorRoles, _ := httpctx.Roles(r.Context())

@@ -67,7 +67,7 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid form.")
 		return
 	}
 
@@ -122,7 +122,7 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 	now := time.Now()
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)
 	if err != nil {
-		http.Error(w, "session error", http.StatusInternalServerError)
+		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not create session.")
 		return
 	}
 
