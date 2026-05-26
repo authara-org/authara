@@ -22,7 +22,7 @@ func PrecompressedFileServer(fs http.FileSystem, dev bool) http.Handler {
 			name = strings.TrimPrefix(name, "/")
 
 			if name == "manifest.json" || strings.HasSuffix(name, ".br") || strings.HasSuffix(name, ".gz") {
-				http.NotFound(w, r)
+				staticNotFound(w)
 				return
 			}
 
@@ -46,12 +46,12 @@ func PrecompressedFileServer(fs http.FileSystem, dev bool) http.Handler {
 		name = strings.TrimPrefix(name, "/")
 
 		if name == "manifest.json" {
-			http.NotFound(w, r)
+			staticNotFound(w)
 			return
 		}
 
 		if strings.HasSuffix(name, ".br") || strings.HasSuffix(name, ".gz") {
-			http.NotFound(w, r)
+			staticNotFound(w)
 			return
 		}
 
@@ -74,6 +74,10 @@ func PrecompressedFileServer(fs http.FileSystem, dev bool) http.Handler {
 
 		http.FileServer(fs).ServeHTTP(w, r)
 	})
+}
+
+func staticNotFound(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNotFound)
 }
 
 func buildPrecompressedIndex(fs http.FileSystem) map[string]uint8 {

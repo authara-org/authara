@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/authara-org/authara/internal/http/kit/csrf"
+	"github.com/authara-org/authara/internal/http/kit/requesterror"
 	"github.com/authara-org/authara/internal/http/kit/response"
 )
 
@@ -41,7 +42,7 @@ func validateCSRF(r *http.Request) error {
 func RequireCSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := validateCSRF(r); err != nil {
-			http.Error(w, err.Error(), http.StatusForbidden)
+			_ = requesterror.Render(nil, w, r, http.StatusForbidden, "Security check failed. Please refresh and try again.")
 			return
 		}
 

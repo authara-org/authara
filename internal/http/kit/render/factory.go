@@ -1,6 +1,7 @@
 package render
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/a-h/templ"
@@ -15,7 +16,7 @@ func New(a Assets, challengeEnabled bool) Renderer {
 		if !ok {
 			tok, err := csrf.EnsureCookie(w, r)
 			if err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
+				writeSetupError(w)
 				return err
 			}
 			r = r.WithContext(httpctx.WithCSRF(r.Context(), tok))
@@ -25,7 +26,7 @@ func New(a Assets, challengeEnabled bool) Renderer {
 		if !ok {
 			nonce, err := oauthstate.EnsureNonce(w, r)
 			if err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
+				writeSetupError(w)
 				return err
 			}
 			r = r.WithContext(httpctx.WithOAuthNonce(r.Context(), nonce))
@@ -41,4 +42,12 @@ func New(a Assets, challengeEnabled bool) Renderer {
 		w.WriteHeader(status)
 		return component.Render(r.Context(), w)
 	}
+}
+
+func writeSetupError(w http.ResponseWriter) {
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	}
+	w.WriteHeader(http.StatusInternalServerError)
+	_, _ = io.WriteString(w, `<!DOCTYPE html><html lang="en"><head><title>Internal Server Error</title><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/></head><body><main><h1>Internal Server Error</h1><p>Something went wrong. Please try again.</p></main></body></html>`)
 }

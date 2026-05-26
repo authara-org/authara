@@ -7,6 +7,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/csrf"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/kit/requesterror"
 	"github.com/authara-org/authara/internal/session"
 )
 
@@ -37,7 +38,7 @@ func RedirectIfAuthenticated(sessionService *session.Service, now func() time.Ti
 
 				_, err = csrf.EnsureCookie(w, r)
 				if err != nil {
-					http.Error(w, "server error", http.StatusInternalServerError)
+					_ = requesterror.Internal(nil, w, r)
 					return
 				}
 

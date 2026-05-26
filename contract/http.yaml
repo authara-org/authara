@@ -159,7 +159,7 @@ csrf_contract:
 
   browser_error:
     status: 403
-    response_kind: text
+    response_kind: html
 
   api_error:
     status: 403

@@ -112,7 +112,8 @@ func newCSRFWiringContractTestRouter() http.Handler {
 	marker := func(status int, body string) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, body, status)
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(body))
 			})
 		}
 	}
@@ -243,7 +244,7 @@ func TestCSRFContract_OnlyExpectedRoutesHaveCSRFMiddleware(t *testing.T) {
 	}
 }
 
-func TestCSRFContract_BrowserMiddlewareReturnsForbiddenText(t *testing.T) {
+func TestCSRFContract_BrowserMiddlewareReturnsForbiddenHTML(t *testing.T) {
 	contract := loadHTTPContract(t)
 
 	handler := middleware.RequireCSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -259,19 +260,17 @@ func TestCSRFContract_BrowserMiddlewareReturnsForbiddenText(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", contract.CSRFContract.BrowserErr.Status, rr.Code)
 	}
 
-	if contract.CSRFContract.BrowserErr.ResponseKind != "text" {
-		t.Fatalf("expected browser response_kind text, got %q", contract.CSRFContract.BrowserErr.ResponseKind)
+	if contract.CSRFContract.BrowserErr.ResponseKind != "html" {
+		t.Fatalf("expected browser response_kind html, got %q", contract.CSRFContract.BrowserErr.ResponseKind)
 	}
 
 	ct := rr.Header().Get("Content-Type")
-	if ct != "" {
-		mediaType, _, err := mime.ParseMediaType(ct)
-		if err != nil {
-			t.Fatalf("parse Content-Type: %v", err)
-		}
-		if mediaType == "application/json" {
-			t.Fatalf("expected non-JSON browser CSRF error, got %q", mediaType)
-		}
+	mediaType, _, err := mime.ParseMediaType(ct)
+	if err != nil {
+		t.Fatalf("parse Content-Type: %v", err)
+	}
+	if mediaType != "text/html" {
+		t.Fatalf("expected text/html browser CSRF error, got %q", mediaType)
 	}
 }
 

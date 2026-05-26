@@ -1,12 +1,16 @@
 package middleware
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/authara-org/authara/internal/http/kit/requesterror"
+)
 
 func RequireAllowlistEnabled(enabled bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !enabled {
-				http.NotFound(w, r)
+				_ = requesterror.NotFound(nil, w, r)
 				return
 			}
 
