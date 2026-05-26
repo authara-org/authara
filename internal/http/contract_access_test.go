@@ -111,7 +111,8 @@ func newAccessContractTestRouter() chi.Router {
 	marker := func(status int, body string) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, body, status)
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(body))
 			})
 		}
 	}
@@ -138,6 +139,7 @@ func newAccessContractTestRouter() chi.Router {
 		RedirectIfAuthenticated:   pass,
 		ReturnTo:                  pass,
 		RequireChallengeEnabled:   pass,
+		RequireAllowlistEnabled:   pass,
 		HTMX:                      pass,
 		RequireCSRF:               pass,
 		RequireAPICSRF:            pass,

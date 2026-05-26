@@ -1,6 +1,9 @@
 package toast
 
-import "github.com/authara-org/authara/internal/http/kit/httpctx"
+import (
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+)
 
 templ ToastMessage(kind Kind, message string) {
 	<div hx-swap-oob="afterbegin:#toast-container">
@@ -56,15 +59,17 @@ templ ToastMessage(kind Kind, message string) {
 				}
 				<p class="text-sm opacity-90 mt-1 text-gray-700">{ message }</p>
 			</div>
-			<button
-				class="text-gray-500 hover:text-gray-800 transition-opacity flex-shrink-0 cursor-pointer"
-				@click="removeToast($root)"
-				aria-label="Close"
-			>
+			@button.Button(button.ButtonConfig{
+				Type:      button.RegularButton,
+				Color:     button.Custom,
+				AriaLabel: "Close",
+				Class:     " !w-auto !border-0 !rounded-none !p-0 text-gray-500 hover:text-gray-800 flex-shrink-0",
+				OnClick:   "removeToast($root)",
+			}) {
 				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
 				</svg>
-			</button>
+			}
 		</div>
 	</div>
 }
@@ -158,16 +163,19 @@ templ ClientToastTemplate(kind Kind) {
 				}
 				<p data-toast-message class="text-sm opacity-90 mt-1 text-gray-700"></p>
 			</div>
-			<button
-				type="button"
-				data-toast-close
-				class="text-gray-500 hover:text-gray-800 transition-opacity flex-shrink-0 cursor-pointer"
-				aria-label="Close"
-			>
+			@button.Button(button.ButtonConfig{
+				Type:      button.RegularButton,
+				Color:     button.Custom,
+				AriaLabel: "Close",
+				Class:     " !w-auto !border-0 !rounded-none !p-0 text-gray-500 hover:text-gray-800 flex-shrink-0",
+				Attrs: templ.Attributes{
+					"data-toast-close": "",
+				},
+			}) {
 				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
 				</svg>
-			</button>
+			}
 		</div>
 	</template>
 }

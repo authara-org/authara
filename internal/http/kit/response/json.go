@@ -11,12 +11,17 @@ type ErrorSpec struct {
 }
 
 func JSON(w http.ResponseWriter, status int, v any) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"JSON encoding error."}}`))
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		http.Error(w, "json encoding error", http.StatusInternalServerError)
-	}
+	_, _ = w.Write(append(body, '\n'))
 }
 
 func ErrorJSON(w http.ResponseWriter, status int, code ErrorCode, message string) {

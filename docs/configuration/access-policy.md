@@ -36,7 +36,13 @@ Enable the feature via configuration:
 AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED=true
 ```
 
-When disabled, all emails are allowed and no additional checks are performed.
+When disabled, all emails are allowed and no additional access-policy checks are performed.
+The admin allowlist UI is hidden, admin allowlist routes return `404 Not Found`,
+and allowlist service methods reject use.
+
+When enabled, admins can manage allowlisted emails under `/auth/admin/allowlist`.
+The management page supports paginated live search. Add and remove operations are
+state-changing `POST` actions and require CSRF protection.
 
 ---
 

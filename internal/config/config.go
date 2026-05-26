@@ -18,6 +18,7 @@ type Config struct {
 	RateLimit    RateLimit
 	Webhook      Webhook
 	AccessPolicy AccessPolicy
+	Admin        Admin
 	Challenge    Challenge
 	Email        Email
 }
@@ -57,6 +58,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.AccessPolicy.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Admin.validate(); err != nil {
 		return nil, err
 	}
 	if err := cfg.Challenge.validate(); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
+	"github.com/authara-org/authara/internal/useragent"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
@@ -435,30 +436,28 @@ func passkeyRegistrationName(
 }
 
 func passkeyPlatformName(metadata RegistrationMetadata, credential *webauthn.Credential) string {
-	hint := strings.ToLower(strings.TrimSpace(metadata.PlatformHint))
-	ua := strings.ToLower(metadata.UserAgent)
+	signals := useragent.NewPlatformSignals(metadata.PlatformHint, metadata.UserAgent)
 
 	if isSecurityKeyCredential(credential) {
 		return securityKeyPlatformName(credential)
 	}
 
 	switch {
-	case containsAny(hint, "iphone") || containsAny(ua, "iphone"):
+	case signals.IsIPhone():
 		return "iPhone"
-	case containsAny(hint, "ipad") || containsAny(ua, "ipad"):
+	case signals.IsIPad():
 		return "iPad"
-	case hint == "ios":
+	case signals.IsIOS():
 		return "iPhone"
-	case containsAny(hint, "macos", "mac os", "mac") ||
-		containsAny(ua, "macintosh", "mac os x"):
+	case signals.IsMacOS():
 		return "MacBook Pro"
-	case containsAny(hint, "chrome os", "chromium os", "cros") || containsAny(ua, "cros"):
+	case signals.IsChromeOS():
 		return "Chromebook"
-	case containsAny(hint, "windows") || containsAny(ua, "windows"):
+	case signals.IsWindows():
 		return "Windows PC"
-	case containsAny(hint, "android") || containsAny(ua, "android"):
+	case signals.IsAndroid():
 		return "Android Phone"
-	case containsAny(hint, "linux") || containsAny(ua, "linux"):
+	case signals.IsLinux():
 		return "Linux PC"
 	default:
 		return "This Device"
@@ -473,23 +472,20 @@ func passkeyAuthenticatorType(metadata RegistrationMetadata, credential *webauth
 		return "Security Key"
 	}
 
-	hint := strings.ToLower(strings.TrimSpace(metadata.PlatformHint))
-	ua := strings.ToLower(metadata.UserAgent)
+	signals := useragent.NewPlatformSignals(metadata.PlatformHint, metadata.UserAgent)
 
 	if credential.Authenticator.Attachment == protocol.Platform ||
 		hasTransport(credential, protocol.Internal) {
 		switch {
-		case containsAny(hint, "windows") || containsAny(ua, "windows"):
+		case signals.IsWindows():
 			return "Windows Hello"
-		case containsAny(hint, "iphone", "ipad") || hint == "ios" ||
-			containsAny(ua, "iphone", "ipad"):
+		case signals.IsIOS():
 			return "Face ID"
-		case containsAny(hint, "macos", "mac os", "mac") ||
-			containsAny(ua, "macintosh", "mac os x"):
+		case signals.IsMacOS():
 			return "Touch ID"
-		case containsAny(hint, "android") || containsAny(ua, "android"):
+		case signals.IsAndroid():
 			return "Android Biometrics"
-		case containsAny(hint, "chrome os", "chromium os", "cros") || containsAny(ua, "cros"):
+		case signals.IsChromeOS():
 			return "ChromeOS Biometrics"
 		default:
 			return "Device Passkey"
@@ -523,15 +519,6 @@ func hasTransport(credential *webauthn.Credential, transports ...protocol.Authen
 			if actual == expected {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-func containsAny(value string, needles ...string) bool {
-	for _, needle := range needles {
-		if strings.Contains(value, needle) {
-			return true
 		}
 	}
 	return false

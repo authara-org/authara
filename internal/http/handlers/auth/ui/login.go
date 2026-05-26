@@ -80,7 +80,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now)
 	if err != nil {
-		http.Error(w, "session error", http.StatusInternalServerError)
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, "This account is disabled.", authview.LoginForm())
 		return
 	}
 

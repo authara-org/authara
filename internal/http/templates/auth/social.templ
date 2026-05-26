@@ -2,6 +2,7 @@ package auth
 
 import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 	"github.com/authara-org/authara/internal/oauth"
@@ -28,16 +29,18 @@ templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider) {
 
 templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFlow, linkID string) {
 	<script src="https://accounts.google.com/gsi/client" async></script>
-	<button
-		id="google-signin-btn"
-		type="button"
-		data-provider="google"
-		data-google-flow={ flow }
-		data-link-id={ linkID }
-		data-return-to={ httpctx.ReturnToOrDefault(ctx, "/") }
-		class="relative w-full flex items-center cursor-pointer justify-center gap-3 h-12 px-4 border-2 border-gray-100 dark:border-grey-800 rounded-xl
-			 bg-white dark:bg-grey-900 hover:bg-gray-50 dark:hover:bg-grey-800 transition text-gray-700 dark:text-white overflow-hidden"
-	>
+	@button.Button(button.ButtonConfig{
+		Type:    button.RegularButton,
+		Color:   button.Custom,
+		Class:   " relative !h-12 !w-full !rounded-xl !border-2 border-gray-100 !px-4 !py-0 text-gray-700 overflow-hidden bg-white hover:bg-gray-50 dark:border-grey-800 dark:bg-grey-900 dark:text-white dark:hover:bg-grey-800",
+		Attrs: templ.Attributes{
+			"id":               "google-signin-btn",
+			"data-provider":    "google",
+			"data-google-flow": flow,
+			"data-link-id":     linkID,
+			"data-return-to":   httpctx.ReturnToOrDefault(ctx, "/"),
+		},
+	}) {
 		<div
 			id="g_id_onload"
 			data-client_id={ clientID }
@@ -73,17 +76,18 @@ templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFl
 				data-logo_alignment="left"
 			></div>
 		</div>
-	</button>
+	}
 }
 
 templ AppleSignin(action string) {
 	// <div id="appleid-signin" class="h-10" data-color="black" data-border="true" data-type="sign-in"></div>
 	// <script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>
-	<button
-		class="flex cursor-pointer items-center justify-center gap-2 bg-black border-2 border-black text-white 
-				text-base rounded-xl px-6 h-12"
-	>
+	@button.Button(button.ButtonConfig{
+		Type:  button.RegularButton,
+		Color: button.Custom,
+		Class: " !h-12 !rounded-xl !border-2 !border-black bg-black !px-6 text-base text-white",
+	}) {
 		@icons.AppleLogoMediumWhite()
 		{ action } with Apple
-	</button>
+	}
 }

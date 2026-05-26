@@ -55,13 +55,13 @@ func (h *UIHandler) AddPasswordPage(w http.ResponseWriter, r *http.Request) {
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		h.renderUnauthorized(w, r)
 		return
 	}
 
 	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil {
-		http.Error(w, "could not load user", http.StatusInternalServerError)
+		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load user.")
 		return
 	}
 
@@ -80,13 +80,13 @@ func (h *UIHandler) ChangePasswordPage(w http.ResponseWriter, r *http.Request) {
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		h.renderUnauthorized(w, r)
 		return
 	}
 
 	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil {
-		http.Error(w, "could not load user", http.StatusInternalServerError)
+		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load user.")
 		return
 	}
 
@@ -189,13 +189,13 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		h.renderUnauthorized(w, r)
 		return
 	}
 
 	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		h.renderUnauthorized(w, r)
 		return
 	}
 
@@ -369,12 +369,13 @@ func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	err := h.Auth.DeleteUser(ctx, userID)
 	if err != nil {
-		_ = h.Render(
-			w,
-			r,
-			http.StatusTooManyRequests,
-			toast.ToastMessage(toast.Error, "Error deleting Account"),
-		)
+		message := "Error deleting Account"
+		status := http.StatusTooManyRequests
+		if errors.Is(err, auth.ErrCannotDeleteLastAdmin) {
+			message = "You cannot delete the last active admin account."
+			status = http.StatusUnprocessableEntity
+		}
+		h.renderRequestError(w, r, status, message)
 		return
 	}
 
@@ -489,7 +490,7 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 
 	cfg, err := h.accountConfig(ctx)
 	if err != nil {
-		http.Error(w, "could not load account", http.StatusInternalServerError)
+		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load account.")
 		return
 	}
 

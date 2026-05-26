@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/templates/components/modal"
 	"github.com/authara-org/authara/internal/http/templates/components/redirect"
 	"github.com/authara-org/authara/internal/http/templates/components/theme"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
@@ -59,11 +60,11 @@ templ Layout() {
 			}
 			</script>
 			<script src={ ui.Static(ctx, "htmx.min.js") } defer></script>
-			<script src={ ui.Static(ctx, "alpine.min.js") } defer></script>
 			<script src={ ui.Static(ctx, "app.js") } defer></script>
+			<script src={ ui.Static(ctx, "alpine.min.js") } defer></script>
 		</head>
 		<body
-			x-data="{ activeModal: '' }"
+			x-data="confirmDialog()"
 			class="m-0 bg-background-light dark:bg-background-dark"
 		>
 			<main id="body">
@@ -73,6 +74,7 @@ templ Layout() {
 				@theme.ThemeToggle()
 			</div>
 			@toast.ToastWrapper()
+			@modal.GlobalConfirmDialog()
 			@redirect.RedirectOverlay()
 		</body>
 	</html>

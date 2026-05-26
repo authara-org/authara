@@ -13,7 +13,8 @@ import (
 
 func TestSender_Publish_ReturnsErrorOnNon2xx(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "nope", http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("nope"))
 	}))
 	defer srv.Close()
 
@@ -32,7 +33,8 @@ func TestSender_Publish_RetriesOnServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if calls < 3 {
-			http.Error(w, "temporary", http.StatusBadGateway)
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte("temporary"))
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -56,7 +58,8 @@ func TestSender_Publish_DoesNotRetryOnBadRequest(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		http.Error(w, "bad request", http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("bad request"))
 	}))
 	defer srv.Close()
 

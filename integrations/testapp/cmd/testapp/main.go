@@ -67,7 +67,8 @@ func main() {
 		case authara.WebhookEventUserCreated:
 			data, err := authara.DecodeWebhookData[authara.UserCreatedData](evt)
 			if err != nil {
-				http.Error(w, "invalid user.created payload", http.StatusBadRequest)
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte("invalid user.created payload"))
 				return
 			}
 			log.Printf("user.created: user_id=%s", data.UserID)
@@ -75,7 +76,8 @@ func main() {
 		case authara.WebhookEventUserDeleted:
 			data, err := authara.DecodeWebhookData[authara.UserDeletedData](evt)
 			if err != nil {
-				http.Error(w, "invalid user.deleted payload", http.StatusBadRequest)
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte("invalid user.deleted payload"))
 				return
 			}
 			log.Printf("user.deleted: user_id=%s", data.UserID)

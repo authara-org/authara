@@ -44,6 +44,7 @@ nav:
 
   - Operations:
       - Migrations: operations/migrations.md
+      - Admin Dashboard: operations/admin-dashboard.md
       - Health Checks: operations/healthchecks.md
 
   - HTTP:

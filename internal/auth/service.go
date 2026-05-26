@@ -9,6 +9,7 @@ import (
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/webhook"
@@ -97,7 +98,32 @@ func (s *Service) UserExistsByEmail(ctx context.Context, email string) (bool, er
 }
 
 func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
-	if err := s.store.DeleteUser(ctx, userID); err != nil {
+	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.LockPlatformRoleByName(txCtx, roles.DBAdminRoleName); err != nil {
+			return err
+		}
+
+		user, err := s.store.GetUserByID(txCtx, userID)
+		if err != nil {
+			return err
+		}
+
+		hasAdmin, err := s.store.UserHasPlatformRole(txCtx, userID, roles.DBAdminRoleName)
+		if err != nil {
+			return err
+		}
+		if hasAdmin && user.DisabledAt == nil {
+			activeAdmins, err := s.store.CountActiveUsersWithRole(txCtx, roles.DBAdminRoleName)
+			if err != nil {
+				return err
+			}
+			if activeAdmins <= 1 {
+				return ErrCannotDeleteLastAdmin
+			}
+		}
+
+		return s.store.DeleteUser(txCtx, userID)
+	}); err != nil {
 		return err
 	}
 

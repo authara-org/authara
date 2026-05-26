@@ -58,7 +58,7 @@ func (h *UIHandler) VerifyChallengePage(w http.ResponseWriter, r *http.Request) 
 
 	action, ok := parseVerifyChallengeAction(chi.URLParam(r, "action"))
 	if !ok {
-		http.Error(w, "invalid verification action", http.StatusBadRequest)
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid verification action.")
 		return
 	}
 
@@ -101,13 +101,13 @@ func (h *UIHandler) renderVerifyChallengeRedirect(
 
 func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid form.")
 		return
 	}
 
 	action, ok := parseVerifyChallengeAction(chi.URLParam(r, "action"))
 	if !ok {
-		http.Error(w, "invalid verification action", http.StatusBadRequest)
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid verification action.")
 		return
 	}
 
@@ -174,14 +174,14 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid form.")
 		return
 	}
 
 	challengeIDStr := strings.TrimSpace(r.FormValue("challenge_id"))
 	challengeID, err := uuid.Parse(challengeIDStr)
 	if err != nil {
-		http.Error(w, "invalid challenge", http.StatusBadRequest)
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid challenge.")
 		return
 	}
 

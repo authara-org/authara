@@ -15,6 +15,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/htmx"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
@@ -27,19 +28,19 @@ func (h *UIHandler) ProviderLinkStartPost(w http.ResponseWriter, r *http.Request
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		response.ErrorJSON(w, http.StatusUnauthorized, response.CodeUnauthorized, "Unauthorized.")
 		return
 	}
 
 	sessionID, ok := httpctx.SessionID(ctx)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		response.ErrorJSON(w, http.StatusUnauthorized, response.CodeUnauthorized, "Unauthorized.")
 		return
 	}
 
 	provider, err := parseLinkProvider(chi.URLParam(r, "provider"))
 	if err != nil {
-		http.Error(w, "invalid provider", http.StatusBadRequest)
+		response.ErrorJSON(w, http.StatusBadRequest, response.CodeInvalidRequest, "Invalid provider.")
 		return
 	}
 
@@ -51,7 +52,7 @@ func (h *UIHandler) ProviderLinkStartPost(w http.ResponseWriter, r *http.Request
 		time.Now().UTC(),
 	)
 	if err != nil {
-		http.Error(w, "could not start provider link", http.StatusUnprocessableEntity)
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Could not start provider link.")
 		return
 	}
 
@@ -102,13 +103,13 @@ func (h *UIHandler) GoogleLinkStartPost(w http.ResponseWriter, r *http.Request) 
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		response.ErrorJSON(w, http.StatusUnauthorized, response.CodeUnauthorized, "Unauthorized.")
 		return
 	}
 
 	sessionID, ok := httpctx.SessionID(ctx)
 	if !ok {
-		http.Error(w, "missing session", http.StatusUnauthorized)
+		response.ErrorJSON(w, http.StatusUnauthorized, response.CodeUnauthorized, "Missing session.")
 		return
 	}
 
@@ -120,7 +121,7 @@ func (h *UIHandler) GoogleLinkStartPost(w http.ResponseWriter, r *http.Request) 
 		time.Now().UTC(),
 	)
 	if err != nil {
-		http.Error(w, "could not start link", http.StatusUnprocessableEntity)
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Could not start link.")
 		return
 	}
 
@@ -135,14 +136,14 @@ func (h *UIHandler) UnlinkProviderPost(w http.ResponseWriter, r *http.Request) {
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		h.renderUnauthorized(w, r)
 		return
 	}
 
 	providerStr := chi.URLParam(r, "provider")
 	provider, err := parseProvider(providerStr)
 	if err != nil {
-		http.Error(w, "invalid provider", http.StatusBadRequest)
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid provider.")
 		return
 	}
 
@@ -265,7 +266,7 @@ func (h *UIHandler) PasswordLinkPost(w http.ResponseWriter, r *http.Request) {
 
 	cfg, err := h.accountConfig(ctx)
 	if err != nil {
-		http.Error(w, "could not load account", http.StatusInternalServerError)
+		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load account.")
 		return
 	}
 

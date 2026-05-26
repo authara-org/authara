@@ -1,0 +1,39 @@
+package templates
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+)
+
+templ ErrorPage(status int, message string) {
+	@Layout() {
+		<section class="min-h-screen px-4 py-16 sm:px-6 flex items-center justify-center">
+			<div class="w-full max-w-lg rounded-2xl border border-grey-200 bg-white p-8 text-center shadow-sm dark:border-grey-800 dark:bg-grey-900 sm:p-10">
+				<p class="mb-3 text-sm font-semibold uppercase text-grey-500 dark:text-grey-400">
+					{ strconv.Itoa(status) }
+				</p>
+				<h1 class="mb-3 text-3xl text-grey-950 dark:text-grey-50">
+					{ errorPageTitle(status) }
+				</h1>
+				<p class="mb-8 text-base text-grey-700 dark:text-grey-300">
+					{ message }
+				</p>
+				<div class="mx-auto max-w-xs">
+					@button.LinkButton(button.LinkButtonConfig{
+						Href:  "/",
+						Label: "Go home",
+					})
+				</div>
+			</div>
+		</section>
+	}
+}
+
+func errorPageTitle(status int) string {
+	if text := http.StatusText(status); text != "" {
+		return text
+	}
+	return "Unexpected error"
+}

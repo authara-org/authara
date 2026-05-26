@@ -1,9 +1,41 @@
 package admin
 
-import "github.com/authara-org/authara/internal/http/templates"
+import (
+	appfeatures "github.com/authara-org/authara/internal/features"
+	"github.com/authara-org/authara/internal/http/templates"
+	"github.com/authara-org/authara/internal/http/templates/components/theme"
+)
 
-templ Admin() {
+type FeatureFlags = appfeatures.Features
+
+templ AdminShell(active string, features FeatureFlags) {
 	@templates.PartialRender() {
-		Test
+		<div class="min-h-screen bg-background-light dark:bg-background-dark text-grey-900 dark:text-grey-100">
+			<div class="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-10 pt-4 sm:pt-12">
+				<header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-grey-200 dark:border-grey-800 pb-5">
+					<div class="flex justify-between">
+						<div>
+							<p class="text-xs uppercase tracking-wide text-grey-500 dark:text-grey-400">Authara</p>
+							<h1 class="text-3xl font-semibold">Admin</h1>
+						</div>
+						<div class="block sm:hidden">
+							@theme.ThemeToggle()
+						</div>
+					</div>
+					<nav class="flex flex-wrap gap-2 text-sm">
+						@navLink("/auth/admin", "Dashboard", active == "dashboard")
+						@navLink("/auth/admin/users", "Users", active == "users")
+						if features.AllowlistEnabled {
+							@navLink("/auth/admin/allowlist", "Allowlist", active == "allowlist")
+						}
+						@navLink("/auth/admin/failures", "Failures", active == "failures")
+						@navLink("/auth/admin/audit", "Audit", active == "audit")
+					</nav>
+				</header>
+				<section id="admin-content" class="pt-6">
+					{ children... }
+				</section>
+			</div>
+		</div>
 	}
 }

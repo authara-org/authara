@@ -7,6 +7,7 @@ import (
 
 func (a *App) StartBackgroundWorkers(ctx context.Context) {
 	a.Services.Session.StartCleanupWorker(ctx, a.Logger, 5*time.Minute)
+	a.Services.Admin.StartAuditCleanupWorker(ctx, a.Logger, 24*time.Hour)
 
 	if a.Config.Challenge.Enabled {
 		a.Services.EmailWorker.Run(ctx)

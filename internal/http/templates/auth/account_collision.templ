@@ -6,6 +6,7 @@ import (
 	"github.com/authara-org/authara/internal/http/templates"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/form"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 )
@@ -59,20 +60,29 @@ templ AccountCollisionForm(linkID string, email string, provider string) {
 		hx-swap="outerHTML"
 	>
 		@csrf.CSRFInput()
-		<input type="hidden" name="link_id" value={ linkID }/>
-		<input type="hidden" name="username" autocomplete="username" value={ email }/>
+		@form.Input(form.InputConfig{
+			Type:  form.Hidden,
+			Name:  "link_id",
+			Value: linkID,
+		})
+		@form.Input(form.InputConfig{
+			Type:         form.Hidden,
+			Name:         "username",
+			Value:        email,
+			Autocomplete: "username",
+		})
 		<label for="existing-password" class="text-grey-800 dark:text-grey-200">
 			<div class="pb-1.5">Password <span class="text-red-600">*</span></div>
 		</label>
-		<input
-			type="password"
-			id="existing-password"
-			name="password"
-			autocomplete="current-password"
-			placeholder="Enter your existing password"
-			required
-			class="w-full px-4 py-3 mb-4 text-base sm:text-sm placeholder:text-base sm:placeholder:text-sm border-2 border-grey-100 dark:border-grey-800 bg-white dark:bg-grey-900 text-grey-900 dark:text-grey-100 placeholder:text-grey-400 dark:placeholder:text-grey-500 rounded-xl"
-		/>
+		@form.Input(form.InputConfig{
+			ID:           "existing-password",
+			Type:         form.Password,
+			Name:         "password",
+			Autocomplete: "current-password",
+			Placeholder:  "Enter your existing password",
+			Required:     true,
+			Class:        "mb-4",
+		})
 		@button.Button(button.ButtonConfig{
 			Label: "Connect account",
 			Icon:  icons.Login(),

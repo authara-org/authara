@@ -127,6 +127,21 @@ See:
 
 ---
 
+# Security Headers
+
+Authara sets security headers on its HTTP responses by default:
+
+- `Content-Security-Policy`
+- `X-Frame-Options`
+- `X-Content-Type-Options`
+- `Referrer-Policy`
+
+These headers harden the built-in authentication UI and API responses against common browser-side risks such as clickjacking, MIME sniffing, referrer leakage, and unexpected script or asset loading.
+
+When Google OAuth is enabled, the Content Security Policy allows the Google Identity Services origins required by the login and account-linking UI.
+
+---
+
 # Versioning
 
 The JSON API uses **path-based versioning**.

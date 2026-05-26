@@ -17,6 +17,9 @@ func validProdConfigForValidate() Config {
 		Session: Session{
 			RefreshTokenTTL: time.Hour,
 		},
+		Admin: Admin{
+			AuditRetentionDays: 180,
+		},
 	}
 }
 
@@ -47,5 +50,14 @@ func TestConfigValidate_ProdWebhookRejectsShortSecret(t *testing.T) {
 
 	if err := cfg.validate(); err == nil {
 		t.Fatal("expected validate to reject short webhook secret in prod")
+	}
+}
+
+func TestAdminValidateRejectsInvalidAuditRetention(t *testing.T) {
+	cfg := validProdConfigForValidate()
+	cfg.Admin.AuditRetentionDays = 0
+
+	if err := cfg.Admin.validate(); err == nil {
+		t.Fatal("expected admin audit retention validation error")
 	}
 }

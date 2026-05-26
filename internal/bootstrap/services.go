@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/oauth"
@@ -15,6 +16,7 @@ import (
 )
 
 type Services struct {
+	Admin          *admin.Service
 	Auth           *auth.Service
 	Passkeys       *passkey.Service
 	Session        *session.Service
@@ -54,6 +56,13 @@ func NewServices(app *App) (Services, error) {
 		AccessPolicy:         accessPolicy,
 	})
 
+	adminService := admin.New(admin.Config{
+		Store:            app.Store,
+		Tx:               txManager,
+		AllowlistEnabled: app.Config.AccessPolicy.AllowedEmailEnabled,
+		AuditRetention:   time.Duration(app.Config.Admin.AuditRetentionDays) * 24 * time.Hour,
+	})
+
 	passkeyService, err := newPasskeyService(app, txManager)
 	if err != nil {
 		return Services{}, fmt.Errorf("create passkey service: %w", err)
@@ -86,6 +95,7 @@ func NewServices(app *App) (Services, error) {
 	)
 
 	return Services{
+		Admin:          adminService,
 		Auth:           authService,
 		Passkeys:       passkeyService,
 		Session:        sessionService,

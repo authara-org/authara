@@ -3,6 +3,7 @@ package user
 import (
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/http/templates/components/modal"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 )
 
@@ -30,7 +31,13 @@ templ PasswordProviderActions(provider viewmodel.AuthProvider) {
 				Type:    button.RegularButton,
 				Color:   button.Light,
 				Variant: button.Outline,
-				OnClick: "activeModal = 'remove-password'",
+				OnClick: modal.OpenConfirm(
+					"Remove password?",
+					"You will no longer be able to sign in with your password. Make sure you still have another sign-in method linked to this account.",
+					"Remove password",
+					"remove-password-form",
+					modal.ThemeNeutral,
+				),
 			})
 		</div>
 		<div class="sm:hidden">
@@ -45,16 +52,20 @@ templ PasswordProviderActions(provider viewmodel.AuthProvider) {
 					@ActionMenuItem("Change password")
 				</a>
 				<div class="w-full h-px bg-grey-100 dark:bg-grey-800"></div>
-				<button
-					type="button"
-					@click="activeModal = 'remove-password'; open = false"
-					class="flex justify-center w-full text-left px-4 py-3 text-sm
-						text-red-700 dark:text-red-400
-						hover:bg-grey-50 dark:hover:bg-grey-800
-						cursor-pointer transition-colors"
-				>
-					Remove password
-				</button>
+				@button.Button(button.ButtonConfig{
+					Label: "Remove password",
+					Type:  button.RegularButton,
+					Color: button.Custom,
+					Class: ` !w-full !rounded-none !border-0 !px-4 !py-3 text-sm
+						text-red-700 hover:bg-grey-50 dark:text-red-400 dark:hover:bg-grey-800`,
+					OnClick: modal.OpenConfirm(
+						"Remove password?",
+						"You will no longer be able to sign in with your password. Make sure you still have another sign-in method linked to this account.",
+						"Remove password",
+						"remove-password-form",
+						modal.ThemeNeutral,
+					) + "; open = false",
+				})
 			}
 		</div>
 	} else {
@@ -78,19 +89,16 @@ templ PasswordProviderActions(provider viewmodel.AuthProvider) {
 
 templ ActionMenu() {
 	<div x-data="{ open: false }" class="relative">
-		<button
-			type="button"
-			@click="open = !open"
-			class="h-10 w-10 rounded-xl border-2 border-grey-100 dark:border-grey-800
-				bg-white dark:bg-grey-900 text-grey-700 dark:text-grey-300
-				hover:bg-grey-50 dark:hover:bg-grey-800
-				flex items-center justify-center cursor-pointer transition-colors"
-			aria-label="Open actions"
-		>
-			<span class="h-5 w-5 stroke-2">
-				@icons.EllipsisHorizontal()
-			</span>
-		</button>
+		@button.Button(button.ButtonConfig{
+			Type:      button.RegularButton,
+			Color:     button.Custom,
+			Icon:      icons.EllipsisHorizontal(),
+			AriaLabel: "Open actions",
+			Class: ` !h-10 !w-10 !rounded-xl !border-2 !border-grey-100 !p-0
+				bg-white text-grey-700 hover:bg-grey-50 dark:!border-grey-800
+				dark:bg-grey-900 dark:text-grey-300 dark:hover:bg-grey-800`,
+			OnClick: "open = !open",
+		})
 		<div
 			x-cloak
 			x-show="open"
@@ -115,25 +123,19 @@ templ ActionMenuItem(label string) {
 }
 
 templ ActionMenuSubmitItem(label string) {
-	<button
-		type="submit"
-		class="flex justify-center w-full text-left px-4 py-3 text-sm
-			text-grey-900 dark:text-grey-100
-			hover:bg-grey-50 dark:hover:bg-grey-800
-			cursor-pointer transition-colors"
-	>
-		{ label }
-	</button>
+	@button.Button(button.ButtonConfig{
+		Label: label,
+		Type:  button.Submit,
+		Color: button.Main,
+		Class: " !w-full !rounded-none !border-0 !px-4 !py-3 text-sm",
+	})
 }
 
 templ ActionMenuSubmitItemDanger(label string) {
-	<button
-		type="submit"
-		class="flex justify-center w-full text-left px-4 py-3 text-sm
-			text-red-700 dark:text-red-400
-			hover:bg-grey-50 dark:hover:bg-grey-800
-			cursor-pointer transition-colors"
-	>
-		{ label }
-	</button>
+	@button.Button(button.ButtonConfig{
+		Label: label,
+		Type:  button.Submit,
+		Color: button.Main,
+		Class: " !w-full !rounded-none !border-0 !px-4 !py-3 text-sm",
+	})
 }
