@@ -24,7 +24,8 @@ func Private(w http.ResponseWriter, r *http.Request) {
 
 	user, err := client.GetCurrentUser(r.Context(), r)
 	if err != nil {
-		http.Error(w, "internal error aa", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = fmt.Fprint(w, "internal error aa")
 		return
 	}
 
