@@ -17,6 +17,7 @@ import (
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
 	"github.com/authara-org/authara/internal/session"
+	"github.com/authara-org/authara/internal/session/token"
 	"github.com/google/uuid"
 )
 
@@ -49,6 +50,9 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 
 	if !authhandler.IsValidEmail(form.Email) || !authhandler.IsValidPassword(form.Password) {
 		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Please provide a valid email and password.", authview.SignupForm())
+		return
+	}
+	if _, ok := h.requireSignupAppAudience(w, r, authview.SignupForm()); !ok {
 		return
 	}
 
@@ -218,6 +222,11 @@ func (h *UIHandler) finishSignup(
 ) {
 	ctx := r.Context()
 
+	returnTo, ok := h.requireSignupAppAudience(w, r, errorRenderForm)
+	if !ok {
+		return
+	}
+
 	user, err := h.Auth.Signup(ctx, input)
 	if err != nil {
 		h.renderFormError(
@@ -230,16 +239,10 @@ func (h *UIHandler) finishSignup(
 		return
 	}
 
-	returnTo, ok := httpctx.ReturnTo(ctx)
-	if !ok {
-		returnTo = "/"
-	}
-
-	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()
 	now := time.Now()
 
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now)
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, ua, now)
 	if err != nil {
 		h.renderFormError(
 			w,
@@ -255,6 +258,19 @@ func (h *UIHandler) finishSignup(
 	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
 
 	redirect.Redirect(w, r, redirect.WithReturnTo("/auth/passkeys/setup", returnTo), http.StatusSeeOther)
+}
+
+func (h *UIHandler) requireSignupAppAudience(
+	w http.ResponseWriter,
+	r *http.Request,
+	errorRenderForm templ.Component,
+) (string, bool) {
+	returnTo := httpctx.ReturnToOrDefault(r.Context(), "/")
+	if redirect.AudienceForPath(returnTo) != token.AudienceApp {
+		h.renderFormError(w, r, http.StatusForbidden, "Signup only supports app access.", errorRenderForm)
+		return "", false
+	}
+	return returnTo, true
 }
 
 func (h *UIHandler) verifySignupChallengePost(

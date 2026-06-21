@@ -18,8 +18,9 @@ type APIHandler struct {
 	Logger  *slog.Logger
 	Google  *google.Client
 
-	AccessTTL  time.Duration
-	RefreshTTL time.Duration
+	ChallengeEnabled bool
+	AccessTTL        time.Duration
+	RefreshTTL       time.Duration
 }
 
 func NewAPIHandler(d authhandler.Deps) *APIHandler {
@@ -30,7 +31,8 @@ func NewAPIHandler(d authhandler.Deps) *APIHandler {
 		Logger:  d.Logger,
 		Google:  d.Google,
 
-		AccessTTL:  d.AccessTTL,
-		RefreshTTL: d.RefreshTTL,
+		ChallengeEnabled: d.Features.ChallengeEnabled,
+		AccessTTL:        d.AccessTTL,
+		RefreshTTL:       d.RefreshTTL,
 	}
 }

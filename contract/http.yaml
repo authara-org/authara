@@ -73,6 +73,27 @@ routes:
   # JSON API v1
   # ------------------------------------------------------------
   - method: GET
+    path: /auth/api/v1/csrf
+    stability: stable
+    kind: json
+    access: public
+    notes: Returns a CSRF token and sets authara_csrf.
+
+  - method: POST
+    path: /auth/api/v1/login
+    stability: stable
+    kind: json
+    access: public
+    notes: Logs in with email and password.
+
+  - method: POST
+    path: /auth/api/v1/signup
+    stability: stable
+    kind: json
+    access: public
+    notes: Creates an account with email and password.
+
+  - method: GET
     path: /auth/api/v1/user
     stability: stable
     kind: json
@@ -94,6 +115,33 @@ routes:
     notes: Logs out current session.
 
 json_success_responses:
+  - endpoint: GET /auth/api/v1/csrf
+    stability: stable
+    response:
+      csrf_token: string
+      cookies_set:
+        - authara_csrf
+
+  - endpoint: POST /auth/api/v1/login
+    stability: stable
+    response:
+      status: 200
+      body:
+        user: object
+      cookies_set:
+        - authara_access
+        - authara_refresh
+
+  - endpoint: POST /auth/api/v1/signup
+    stability: stable
+    response:
+      status: 201
+      body:
+        user: object
+      cookies_set:
+        - authara_access
+        - authara_refresh
+
   - endpoint: GET /auth/api/v1/user
     stability: stable
     response:
@@ -130,6 +178,38 @@ json_error_envelope:
       message: string
 
 json_error_contracts:
+  - endpoint: GET /auth/api/v1/csrf
+    stability: stable
+    errors:
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/login
+    stability: stable
+    errors:
+      - status: 400
+        code: invalid_request
+      - status: 401
+        code: unauthorized
+      - status: 403
+        code: forbidden
+      - status: 429
+        code: rate_limited
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/signup
+    stability: stable
+    errors:
+      - status: 400
+        code: invalid_request
+      - status: 403
+        code: forbidden
+      - status: 429
+        code: rate_limited
+      - status: 500
+        code: internal_error
+
   - endpoint: GET /auth/api/v1/user
     stability: stable
     errors:

@@ -210,13 +210,13 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 		// API
 		r.Route("/api/v1", func(r chi.Router) {
-			// r.Get("/csrf", apih.CSRFGet)
+			r.Get("/csrf", apih.CSRFGet)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAPICSRF)
 
-				// r.Post("/login", apih.LoginPost)
-				// r.Post("/signup", apih.SignupPost)
+				r.Post("/login", apih.LoginPost)
+				r.Post("/signup", apih.SignupPost)
 				r.Post("/sessions/logout", apih.LogoutPost)
 				r.Post("/sessions/refresh", apih.RefreshPost)
 
