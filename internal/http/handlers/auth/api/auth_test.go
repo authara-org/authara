@@ -61,6 +61,7 @@ func TestSignupAndLoginSetSessionCookies(t *testing.T) {
 		if !hasCookie(signupRR.Result().Cookies(), "authara_access") || !hasCookie(signupRR.Result().Cookies(), "authara_refresh") {
 			t.Fatal("expected signup to set session cookies")
 		}
+		assertResponseTokens(t, signupRR.Body.Bytes())
 
 		loginReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/login", `{"email":"api-auth@example.com","password":"password123"}`)
 		loginRR := httptest.NewRecorder()
@@ -72,7 +73,20 @@ func TestSignupAndLoginSetSessionCookies(t *testing.T) {
 		if !hasCookie(loginRR.Result().Cookies(), "authara_access") || !hasCookie(loginRR.Result().Cookies(), "authara_refresh") {
 			t.Fatal("expected login to set session cookies")
 		}
+		assertResponseTokens(t, loginRR.Body.Bytes())
 	})
+}
+
+func assertResponseTokens(t *testing.T, body []byte) {
+	t.Helper()
+
+	var got tokensResponse
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
+	if got.AccessToken == "" || got.RefreshToken == "" {
+		t.Fatalf("expected access and refresh tokens in response, got %+v", got)
+	}
 }
 
 func apiJSONRequest(ctx context.Context, method string, target string, body string) *http.Request {

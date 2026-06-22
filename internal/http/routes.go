@@ -221,6 +221,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Post("/sessions/refresh", apih.RefreshPost)
 
 			})
+			r.Post("/tokens/refresh", apih.TokenRefreshPost)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAppAccessAuthAPI)

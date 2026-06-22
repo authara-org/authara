@@ -26,7 +26,9 @@ type credentialsRequest struct {
 }
 
 type authResponse struct {
-	User authUser `json:"user"`
+	User         authUser `json:"user"`
+	AccessToken  string   `json:"access_token"`
+	RefreshToken string   `json:"refresh_token"`
 }
 
 type authUser struct {
@@ -266,11 +268,15 @@ func (h *APIHandler) createSessionResponse(
 	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
 
-	response.JSON(w, status, authResponse{User: authUser{
-		ID:        user.ID.String(),
-		Email:     user.Email,
-		Username:  user.Username,
-		Disabled:  user.DisabledAt != nil,
-		CreatedAt: user.CreatedAt,
-	}})
+	response.JSON(w, status, authResponse{
+		User: authUser{
+			ID:        user.ID.String(),
+			Email:     user.Email,
+			Username:  user.Username,
+			Disabled:  user.DisabledAt != nil,
+			CreatedAt: user.CreatedAt,
+		},
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	})
 }

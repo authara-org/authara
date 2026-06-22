@@ -105,7 +105,14 @@ routes:
     stability: stable
     kind: json
     access: public
-    notes: Refreshes current authenticated session.
+    notes: Refreshes current browser cookie session.
+
+  - method: POST
+    path: /auth/api/v1/tokens/refresh
+    stability: stable
+    kind: json
+    access: public
+    notes: Refreshes a token session from a JSON refresh token.
 
   - method: POST
     path: /auth/api/v1/sessions/logout
@@ -128,6 +135,8 @@ json_success_responses:
       status: 200
       body:
         user: object
+        access_token: string
+        refresh_token: string
       cookies_set:
         - authara_access
         - authara_refresh
@@ -138,6 +147,8 @@ json_success_responses:
       status: 201
       body:
         user: object
+        access_token: string
+        refresh_token: string
       cookies_set:
         - authara_access
         - authara_refresh
@@ -160,6 +171,14 @@ json_success_responses:
       cookies_set:
         - authara_access
         - authara_refresh
+
+  - endpoint: POST /auth/api/v1/tokens/refresh
+    stability: stable
+    response:
+      status: 200
+      body:
+        access_token: string
+        refresh_token: string
 
   - endpoint: POST /auth/api/v1/sessions/logout
     stability: stable
@@ -226,6 +245,16 @@ json_error_contracts:
       - status: 500
         code: internal_error
 
+  - endpoint: POST /auth/api/v1/tokens/refresh
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 500
+        code: internal_error
+
   - endpoint: POST /auth/api/v1/sessions/logout
     stability: stable
     errors: []
@@ -235,7 +264,8 @@ csrf_contract:
 
   applies_to:
     rule: every stable POST route under /auth requires CSRF
-    exceptions: []
+    exceptions:
+      - /auth/api/v1/tokens/refresh
 
   browser_error:
     status: 403

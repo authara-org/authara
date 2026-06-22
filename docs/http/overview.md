@@ -82,6 +82,7 @@ Examples:
 ```
 GET  /auth/api/v1/user
 POST /auth/api/v1/sessions/refresh
+POST /auth/api/v1/tokens/refresh
 ```
 
 See the API documentation for details:

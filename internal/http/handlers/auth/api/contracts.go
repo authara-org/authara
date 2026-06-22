@@ -113,6 +113,11 @@ var APIRouteSpecs = []RouteContractSpec{
 	},
 	{
 		Method: http.MethodPost,
+		Path:   "/auth/api/v1/tokens/refresh",
+		Errors: RefreshPostErrors,
+	},
+	{
+		Method: http.MethodPost,
 		Path:   "/auth/api/v1/sessions/logout",
 		Errors: LogoutPostErrors,
 	},

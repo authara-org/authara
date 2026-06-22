@@ -79,7 +79,7 @@ See [Errors](errors.md) for error definitions.
 
 ## Refresh session
 
-Refreshes the current session and issues a new access token.
+Refreshes the current browser cookie session and issues a new access cookie.
 
 ```
 POST /auth/api/v1/sessions/refresh
@@ -127,6 +127,44 @@ New session cookies are issued:
 
 - `authara_access`
 - `authara_refresh` (depending on rotation policy)
+
+### Errors
+
+| Status | Code |
+|------|------|
+| 401 | unauthorized |
+| 400 | invalid_request |
+| 500 | internal_error |
+
+See [Errors](errors.md).
+
+---
+
+## Refresh tokens
+
+Refreshes a token session without cookies.
+
+```
+POST /auth/api/v1/tokens/refresh
+```
+
+### Request
+
+```json
+{
+  "refresh_token": "<refresh-token>",
+  "audience": "app"
+}
+```
+
+### Response
+
+```json
+{
+  "access_token": "<access-token>",
+  "refresh_token": "<refresh-token>"
+}
+```
 
 ### Errors
 
