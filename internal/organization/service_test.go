@@ -3,7 +3,6 @@ package organization
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -46,17 +45,13 @@ func TestNormalizeInvitationEmail(t *testing.T) {
 	}
 }
 
-func TestInviteURLRejectsUnsafeReturnTo(t *testing.T) {
+func TestInviteURLBuildsTokenURL(t *testing.T) {
 	svc := New(Config{PublicURL: "https://auth.example.com"})
 
-	safe := svc.inviteURL("raw-token", "/settings/team")
-	if !strings.Contains(safe, "return_to=%2Fsettings%2Fteam") {
-		t.Fatalf("expected safe return_to in invite url, got %q", safe)
-	}
-
-	unsafe := svc.inviteURL("raw-token", "https://evil.example.com")
-	if strings.Contains(unsafe, "return_to=") {
-		t.Fatalf("expected unsafe return_to to be omitted, got %q", unsafe)
+	got := svc.inviteURL("raw-token")
+	want := "https://auth.example.com/auth/invitations/accept?token=raw-token"
+	if got != want {
+		t.Fatalf("expected invite URL %q, got %q", want, got)
 	}
 }
 

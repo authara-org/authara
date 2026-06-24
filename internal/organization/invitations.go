@@ -24,7 +24,6 @@ type CreateInvitationInput struct {
 	OrganizationID uuid.UUID
 	ActorUserID    uuid.UUID
 	Email          string
-	ReturnTo       string
 	Now            time.Time
 }
 
@@ -77,7 +76,7 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 	if err != nil {
 		return InvitationWithToken{}, err
 	}
-	inviteURL := s.inviteURL(rawToken, in.ReturnTo)
+	inviteURL := s.inviteURL(rawToken)
 
 	var out InvitationWithToken
 	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -399,7 +398,7 @@ func normalizeNow(now time.Time) time.Time {
 	return now.UTC()
 }
 
-func (s *Service) inviteURL(rawToken string, returnTo string) string {
+func (s *Service) inviteURL(rawToken string) string {
 	base := s.publicURL
 	if base == "" {
 		base = "http://localhost:3000"
@@ -407,26 +406,8 @@ func (s *Service) inviteURL(rawToken string, returnTo string) string {
 	u, _ := url.Parse(base + "/auth/invitations/accept")
 	q := u.Query()
 	q.Set("token", rawToken)
-	if returnTo = strings.TrimSpace(returnTo); returnTo != "" && isSafeReturnTo(returnTo) {
-		q.Set("return_to", returnTo)
-	}
 	u.RawQuery = q.Encode()
 	return u.String()
-}
-
-func isSafeReturnTo(v string) bool {
-	if v == "" || strings.TrimSpace(v) != v {
-		return false
-	}
-	if !strings.HasPrefix(v, "/") || strings.HasPrefix(v, "//") {
-		return false
-	}
-	for _, r := range v {
-		if r == '\\' || r < 0x20 || r == 0x7f {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *Service) enqueueInvitationEmail(ctx context.Context, invitation domain.OrganizationInvitation, org domain.Organization, inviteURL string, now time.Time) error {

@@ -31,7 +31,6 @@ func New(organizations *organization.Service, token string) *Handler {
 type createInvitationRequest struct {
 	ActorUserID string `json:"actor_user_id"`
 	Email       string `json:"email"`
-	ReturnTo    string `json:"return_to"`
 }
 
 type invitationResponse struct {
@@ -78,7 +77,6 @@ func (h *Handler) CreateOrganizationInvitation(w http.ResponseWriter, r *http.Re
 		OrganizationID: organizationID,
 		ActorUserID:    actorUserID,
 		Email:          req.Email,
-		ReturnTo:       req.ReturnTo,
 		Now:            now,
 	})
 	if err != nil {

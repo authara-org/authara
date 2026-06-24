@@ -24,7 +24,6 @@ templ InvitationAccept(
 	role string,
 	expiresAt string,
 	token string,
-	returnTo string,
 	title string,
 	description string,
 	errorMessage string,
@@ -70,14 +69,13 @@ templ InvitationAccept(
 				<form method="post" action="/auth/invitations/accept">
 					@csrf.CSRFInput()
 					<input type="hidden" name="token" value={ token }/>
-					<input type="hidden" name="return_to" value={ returnTo }/>
 					@button.Button(button.ButtonConfig{
 						Label: acceptLabel,
 					})
 				</form>
 			}
 			if showSignupForm {
-				@InvitationSignupForm(invitedEmail, token, returnTo)
+				@InvitationSignupForm(invitedEmail, token)
 				@OAuthProviders("Create account", oauthProviders)
 			}
 			for _, action := range actions {
@@ -96,18 +94,18 @@ templ InvitationAccept(
 	}
 }
 
-templ InvitationSignup(organizationName string, invitedEmail string, token string, returnTo string, oauthProviders []oauth.OAuthProvider) {
+templ InvitationSignup(organizationName string, invitedEmail string, token string, oauthProviders []oauth.OAuthProvider) {
 	@templates.PartialRender() {
 		@AuthLayout() {
 			@CardHeader()
 			@HeaderSection("Create an account to join "+organizationName, "Use the invited email address to join this organization.")
-			@InvitationSignupForm(invitedEmail, token, returnTo)
+			@InvitationSignupForm(invitedEmail, token)
 			@OAuthProviders("Create account", oauthProviders)
 		}
 	}
 }
 
-templ InvitationSignupForm(invitedEmail string, token string, returnTo string) {
+templ InvitationSignupForm(invitedEmail string, token string) {
 	<form
 		x-data="{password: '', confirm: ''}"
 		autocomplete="on"
@@ -117,7 +115,6 @@ templ InvitationSignupForm(invitedEmail string, token string, returnTo string) {
 	>
 		@csrf.CSRFInput()
 		<input type="hidden" name="token" value={ token }/>
-		<input type="hidden" name="return_to" value={ returnTo }/>
 		<label for="invitation-signup-email" class="pb-4 text-grey-800 dark:text-grey-200">
 			<div class="pb-2">Email</div>
 		</label>
@@ -193,18 +190,18 @@ templ InvitationSignupForm(invitedEmail string, token string, returnTo string) {
 	</form>
 }
 
-templ InvitationLogin(organizationName string, invitedEmail string, token string, returnTo string, oauthProviders []oauth.OAuthProvider) {
+templ InvitationLogin(organizationName string, invitedEmail string, token string, oauthProviders []oauth.OAuthProvider) {
 	@templates.PartialRender() {
 		@AuthLayout() {
 			@CardHeader()
 			@HeaderSection("Log in to join "+organizationName, "Use the account for the invited email address.")
-			@InvitationLoginForm(invitedEmail, token, returnTo)
+			@InvitationLoginForm(invitedEmail, token)
 			@OAuthProviders("Login", oauthProviders)
 		}
 	}
 }
 
-templ InvitationLoginForm(invitedEmail string, token string, returnTo string) {
+templ InvitationLoginForm(invitedEmail string, token string) {
 	<form
 		x-data
 		autocomplete="on"
@@ -214,7 +211,6 @@ templ InvitationLoginForm(invitedEmail string, token string, returnTo string) {
 	>
 		@csrf.CSRFInput()
 		<input type="hidden" name="token" value={ token }/>
-		<input type="hidden" name="return_to" value={ returnTo }/>
 		<label for="invitation-login-email" class="pb-4 text-grey-800 dark:text-grey-200">
 			<div class="pb-1.5">Email</div>
 		</label>

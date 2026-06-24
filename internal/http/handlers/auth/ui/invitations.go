@@ -37,7 +37,6 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	returnTo := invitationReturnTo(r)
 	statusMessage := invitationStatusMessage(preview.Invitation.Status(now))
 
 	userID, ok := httpctx.UserID(r.Context())
@@ -47,8 +46,8 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 		description := "Sign in or create an account with " + preview.Invitation.Email + " to accept this invitation."
 		showSignupForm := false
 		actions := []authview.InvitationAction{
-			{Label: "Log in with invited email", Href: invitationAuthURL("/auth/invitations/login", token, returnTo), Primary: true},
-			{Label: "Create account", Href: invitationAuthURL("/auth/invitations/signup", token, returnTo)},
+			{Label: "Log in with invited email", Href: invitationAuthURL("/auth/invitations/login", token), Primary: true},
+			{Label: "Create account", Href: invitationAuthURL("/auth/invitations/signup", token)},
 		}
 		if h.Organizations.Mode() == organization.OrgModeSingle {
 			title = "Create an account to join " + preview.Organization.Name
@@ -78,7 +77,6 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 		h.renderInvitationPage(w, r, invitationPage{
 			Preview:        preview,
 			Token:          token,
-			ReturnTo:       returnTo,
 			Title:          title,
 			Description:    description,
 			ErrorMessage:   errorMessage,
@@ -93,7 +91,7 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	page, err := h.invitationPageForUser(r.Context(), preview, token, returnTo, user)
+	page, err := h.invitationPageForUser(r.Context(), preview, token, user)
 	if err != nil {
 		h.renderInternalError(w, r)
 		return
@@ -111,7 +109,6 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 type invitationPage struct {
 	Preview        organization.InvitationPreview
 	Token          string
-	ReturnTo       string
 	CurrentEmail   string
 	Title          string
 	Description    string
@@ -125,7 +122,7 @@ func (h *UIHandler) renderInvitationPage(w http.ResponseWriter, r *http.Request,
 	if page.ShowSignupForm {
 		r = r.WithContext(httpctx.WithReturnTo(
 			r.Context(),
-			invitationAuthURL("/auth/invitations/signup", page.Token, page.ReturnTo),
+			invitationAuthURL("/auth/invitations/signup", page.Token),
 		))
 	}
 	_ = h.Render(
@@ -139,7 +136,6 @@ func (h *UIHandler) renderInvitationPage(w http.ResponseWriter, r *http.Request,
 			string(page.Preview.Invitation.Role),
 			page.Preview.Invitation.ExpiresAt.Local().Format(time.RFC1123),
 			page.Token,
-			page.ReturnTo,
 			page.Title,
 			page.Description,
 			page.ErrorMessage,
@@ -155,7 +151,6 @@ func (h *UIHandler) invitationPageForUser(
 	ctx context.Context,
 	preview organization.InvitationPreview,
 	rawToken string,
-	returnTo string,
 	user domain.User,
 ) (invitationPage, error) {
 	emailMatches := normalizeEmailForDisplay(user.Email) == normalizeEmailForDisplay(preview.Invitation.Email)
@@ -167,7 +162,6 @@ func (h *UIHandler) invitationPageForUser(
 	page := invitationPage{
 		Preview:      preview,
 		Token:        rawToken,
-		ReturnTo:     returnTo,
 		CurrentEmail: user.Email,
 		Title:        "You have been invited to join " + preview.Organization.Name,
 		Description:  "Choose which Authara account should accept this invitation.",
@@ -179,7 +173,7 @@ func (h *UIHandler) invitationPageForUser(
 		case memberOfInvitedOrg:
 			page.Title = "You are already a member of " + preview.Organization.Name
 			page.Description = "Continue to the application."
-			page.Actions = []authview.InvitationAction{{Label: "Continue", Href: returnTo, Primary: true}}
+			page.Actions = []authview.InvitationAction{{Label: "Continue", Href: "/", Primary: true}}
 		case emailMatches:
 			page.Title = "Invitation requires a new account"
 			page.Description = "This invitation was sent to an email that already has an account."
@@ -193,12 +187,12 @@ func (h *UIHandler) invitationPageForUser(
 		if emailMatches {
 			page.Description = "You are currently signed in as " + user.Email + "."
 			page.AcceptLabel = "Join " + preview.Organization.Name + " as " + user.Email
-			page.Actions = []authview.InvitationAction{{Label: "Use another account", Href: invitationAuthURL("/auth/invitations/login", rawToken, returnTo)}}
+			page.Actions = []authview.InvitationAction{{Label: "Use another account", Href: invitationAuthURL("/auth/invitations/login", rawToken)}}
 		} else {
 			page.Description = "This invitation was sent to " + preview.Invitation.Email + ". You are signed in as " + user.Email + "."
 			page.Actions = []authview.InvitationAction{
-				{Label: "Log in with invited email", Href: invitationAuthURL("/auth/invitations/login", rawToken, returnTo), Primary: true},
-				{Label: "Create account", Href: invitationAuthURL("/auth/invitations/signup", rawToken, returnTo)},
+				{Label: "Log in with invited email", Href: invitationAuthURL("/auth/invitations/login", rawToken), Primary: true},
+				{Label: "Create account", Href: invitationAuthURL("/auth/invitations/signup", rawToken)},
 			}
 		}
 	default:
@@ -264,10 +258,6 @@ func (h *UIHandler) InvitationAcceptPost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	returnTo, ok := redirect.NormalizeReturnTo(strings.TrimSpace(r.FormValue("return_to")))
-	if !ok {
-		returnTo = "/"
-	}
 	sessionID, ok := httpctx.SessionID(r.Context())
 	if !ok {
 		h.renderInternalError(w, r)
@@ -279,7 +269,7 @@ func (h *UIHandler) InvitationAcceptPost(w http.ResponseWriter, r *http.Request)
 		userID,
 		sessionID,
 		result.Organization.ID,
-		redirect.AudienceForPath(returnTo),
+		redirect.AudienceForPath("/"),
 		now,
 	)
 	if err != nil {
@@ -289,21 +279,21 @@ func (h *UIHandler) InvitationAcceptPost(w http.ResponseWriter, r *http.Request)
 	authsession.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	authsession.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
 
-	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
+	redirect.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (h *UIHandler) InvitationSignupPage(w http.ResponseWriter, r *http.Request) {
-	preview, token, returnTo, ok := h.invitationPreviewFromQuery(w, r)
+	preview, token, ok := h.invitationPreviewFromQuery(w, r)
 	if !ok {
 		return
 	}
 
-	r = r.WithContext(httpctx.WithReturnTo(r.Context(), invitationAuthURL("/auth/invitations/signup", token, returnTo)))
+	r = r.WithContext(httpctx.WithReturnTo(r.Context(), invitationAuthURL("/auth/invitations/signup", token)))
 	_ = h.Render(
 		w,
 		r,
 		http.StatusOK,
-		authview.InvitationSignup(preview.Organization.Name, preview.Invitation.Email, token, returnTo, h.OAuthProviders.Providers),
+		authview.InvitationSignup(preview.Organization.Name, preview.Invitation.Email, token, h.OAuthProviders.Providers),
 	)
 }
 
@@ -312,14 +302,14 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid invitation.")
 		return
 	}
-	preview, token, returnTo, ok := h.invitationPreviewFromForm(w, r)
+	preview, token, ok := h.invitationPreviewFromForm(w, r)
 	if !ok {
 		return
 	}
 
 	password := r.FormValue("password")
 	if !authhandler.IsValidPassword(password) {
-		h.renderInvitationSignupError(w, r, http.StatusUnprocessableEntity, "Please provide a valid password.", preview, token, returnTo)
+		h.renderInvitationSignupError(w, r, http.StatusUnprocessableEntity, "Please provide a valid password.", preview, token)
 		return
 	}
 
@@ -340,7 +330,6 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 			msg,
 			preview,
 			token,
-			returnTo,
 		)
 		return
 	}
@@ -348,7 +337,7 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 	ip := httputil.ClientIP(r)
 	allowed, err := h.Limiter.AllowSignupAttempt(r.Context(), ip, preview.Invitation.Email)
 	if err != nil || !allowed {
-		h.renderInvitationSignupError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token, returnTo)
+		h.renderInvitationSignupError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token)
 		return
 	}
 
@@ -366,7 +355,7 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 			InvitationID: &invitationID,
 		}, time.Now().UTC())
 		if err != nil {
-			h.renderInvitationSignupError(w, r, http.StatusUnprocessableEntity, "Could not start signup verification. Please try again.", preview, token, returnTo)
+			h.renderInvitationSignupError(w, r, http.StatusUnprocessableEntity, "Could not start signup verification. Please try again.", preview, token)
 			return
 		}
 
@@ -375,7 +364,7 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 			r,
 			VerifyChallengeActionSignup,
 			challengeID.String(),
-			returnTo,
+			"/",
 		)
 		return
 	}
@@ -387,15 +376,15 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 		InvitationToken: token,
 	})
 	if err != nil {
-		h.renderInvitationSignupError(w, r, http.StatusUnprocessableEntity, "Could not create account for this invitation.", preview, token, returnTo)
+		h.renderInvitationSignupError(w, r, http.StatusUnprocessableEntity, "Could not create account for this invitation.", preview, token)
 		return
 	}
 
-	h.finishInvitationSession(w, r, user, token, returnTo, time.Now())
+	h.finishInvitationSession(w, r, user, token, time.Now())
 }
 
 func (h *UIHandler) InvitationLoginPage(w http.ResponseWriter, r *http.Request) {
-	preview, token, returnTo, ok := h.invitationPreviewFromQuery(w, r)
+	preview, token, ok := h.invitationPreviewFromQuery(w, r)
 	if !ok {
 		return
 	}
@@ -404,12 +393,12 @@ func (h *UIHandler) InvitationLoginPage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	r = r.WithContext(httpctx.WithReturnTo(r.Context(), invitationAuthURL("/auth/invitations/login", token, returnTo)))
+	r = r.WithContext(httpctx.WithReturnTo(r.Context(), invitationAuthURL("/auth/invitations/login", token)))
 	_ = h.Render(
 		w,
 		r,
 		http.StatusOK,
-		authview.InvitationLogin(preview.Organization.Name, preview.Invitation.Email, token, returnTo, h.OAuthProviders.Providers),
+		authview.InvitationLogin(preview.Organization.Name, preview.Invitation.Email, token, h.OAuthProviders.Providers),
 	)
 }
 
@@ -418,7 +407,7 @@ func (h *UIHandler) InvitationLoginPost(w http.ResponseWriter, r *http.Request) 
 		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid invitation.")
 		return
 	}
-	preview, token, returnTo, ok := h.invitationPreviewFromForm(w, r)
+	preview, token, ok := h.invitationPreviewFromForm(w, r)
 	if !ok {
 		return
 	}
@@ -429,14 +418,14 @@ func (h *UIHandler) InvitationLoginPost(w http.ResponseWriter, r *http.Request) 
 
 	password := r.FormValue("password")
 	if password == "" {
-		h.renderInvitationLoginError(w, r, http.StatusBadRequest, "Password required.", preview, token, returnTo)
+		h.renderInvitationLoginError(w, r, http.StatusBadRequest, "Password required.", preview, token)
 		return
 	}
 
 	ip := httputil.ClientIP(r)
 	allowed, err := h.Limiter.AllowLoginAttempt(r.Context(), ip, preview.Invitation.Email)
 	if err != nil || !allowed {
-		h.renderInvitationLoginError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token, returnTo)
+		h.renderInvitationLoginError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token)
 		return
 	}
 
@@ -446,7 +435,7 @@ func (h *UIHandler) InvitationLoginPost(w http.ResponseWriter, r *http.Request) 
 		Password: password,
 	})
 	if err != nil {
-		h.renderInvitationLoginError(w, r, http.StatusUnprocessableEntity, "Invalid email or password.", preview, token, returnTo)
+		h.renderInvitationLoginError(w, r, http.StatusUnprocessableEntity, "Invalid email or password.", preview, token)
 		return
 	}
 
@@ -459,52 +448,47 @@ func (h *UIHandler) InvitationLoginPost(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.finishInvitationSession(w, r, user, token, returnTo, time.Now())
+	h.finishInvitationSession(w, r, user, token, time.Now())
 }
 
-func (h *UIHandler) invitationPreviewFromQuery(w http.ResponseWriter, r *http.Request) (organization.InvitationPreview, string, string, bool) {
+func (h *UIHandler) invitationPreviewFromQuery(w http.ResponseWriter, r *http.Request) (organization.InvitationPreview, string, bool) {
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	if token == "" {
 		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid invitation.")
-		return organization.InvitationPreview{}, "", "", false
+		return organization.InvitationPreview{}, "", false
 	}
-	returnTo := invitationReturnTo(r)
-	return h.invitationPreview(w, r, token, returnTo)
+	return h.invitationPreview(w, r, token)
 }
 
-func (h *UIHandler) invitationPreviewFromForm(w http.ResponseWriter, r *http.Request) (organization.InvitationPreview, string, string, bool) {
+func (h *UIHandler) invitationPreviewFromForm(w http.ResponseWriter, r *http.Request) (organization.InvitationPreview, string, bool) {
 	token := strings.TrimSpace(r.FormValue("token"))
 	if token == "" {
 		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid invitation.")
-		return organization.InvitationPreview{}, "", "", false
+		return organization.InvitationPreview{}, "", false
 	}
-	returnTo, ok := redirect.NormalizeReturnTo(strings.TrimSpace(r.FormValue("return_to")))
-	if !ok {
-		returnTo = "/"
-	}
-	return h.invitationPreview(w, r, token, returnTo)
+	return h.invitationPreview(w, r, token)
 }
 
-func (h *UIHandler) invitationPreview(w http.ResponseWriter, r *http.Request, token string, returnTo string) (organization.InvitationPreview, string, string, bool) {
+func (h *UIHandler) invitationPreview(w http.ResponseWriter, r *http.Request, token string) (organization.InvitationPreview, string, bool) {
 	preview, err := h.Organizations.InvitationByToken(r.Context(), token)
 	if err != nil {
 		h.renderInvitationError(w, r, err)
-		return organization.InvitationPreview{}, "", "", false
+		return organization.InvitationPreview{}, "", false
 	}
 	if msg := invitationStatusMessage(preview.Invitation.Status(time.Now().UTC())); msg != "" {
 		h.renderRequestError(w, r, http.StatusGone, msg)
-		return organization.InvitationPreview{}, "", "", false
+		return organization.InvitationPreview{}, "", false
 	}
-	return preview, token, returnTo, true
+	return preview, token, true
 }
 
-func (h *UIHandler) finishInvitationSession(w http.ResponseWriter, r *http.Request, user domain.User, token string, returnTo string, now time.Time) {
-	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath(returnTo), r.UserAgent(), now)
+func (h *UIHandler) finishInvitationSession(w http.ResponseWriter, r *http.Request, user domain.User, token string, now time.Time) {
+	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), r.UserAgent(), now)
 	if err != nil {
 		h.renderInternalError(w, r)
 		return
 	}
-	accessToken, refreshToken, err = h.switchSessionToInvitationOrganization(r.Context(), user.ID, accessToken, token, redirect.AudienceForPath(returnTo), now)
+	accessToken, refreshToken, err = h.switchSessionToInvitationOrganization(r.Context(), user.ID, accessToken, token, redirect.AudienceForPath("/"), now)
 	if err != nil {
 		h.renderInternalError(w, r)
 		return
@@ -516,16 +500,16 @@ func (h *UIHandler) finishInvitationSession(w http.ResponseWriter, r *http.Reque
 	authsession.ClearSessionCookies(w)
 	authsession.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	authsession.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
-	redirect.Redirect(w, r, invitationRedirectTarget(returnTo), http.StatusSeeOther)
+	redirect.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.Request, user domain.User, invitationID uuid.UUID, returnTo string, now time.Time) {
-	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath(returnTo), r.UserAgent(), now)
+func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.Request, user domain.User, invitationID uuid.UUID, now time.Time) {
+	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), r.UserAgent(), now)
 	if err != nil {
 		h.renderInternalError(w, r)
 		return
 	}
-	accessToken, refreshToken, err = h.switchSessionToInvitationOrganizationByID(r.Context(), user.ID, accessToken, invitationID, redirect.AudienceForPath(returnTo), now)
+	accessToken, refreshToken, err = h.switchSessionToInvitationOrganizationByID(r.Context(), user.ID, accessToken, invitationID, redirect.AudienceForPath("/"), now)
 	if err != nil {
 		h.renderInternalError(w, r)
 		return
@@ -537,7 +521,7 @@ func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.R
 	authsession.ClearSessionCookies(w)
 	authsession.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	authsession.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
-	redirect.Redirect(w, r, invitationRedirectTarget(returnTo), http.StatusSeeOther)
+	redirect.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (h *UIHandler) finishInvitationOAuth(
@@ -601,7 +585,7 @@ func (h *UIHandler) finishInvitationOAuth(
 		}
 	}
 
-	h.finishInvitationSession(w, r, user, token, returnTo, time.Now())
+	h.finishInvitationSession(w, r, user, token, time.Now())
 }
 
 func (h *UIHandler) redirectInvitationOAuthFailure(w http.ResponseWriter, returnTo string) {
@@ -616,9 +600,8 @@ func (h *UIHandler) renderInvitationSignupError(
 	msg string,
 	preview organization.InvitationPreview,
 	token string,
-	returnTo string,
 ) {
-	h.renderFormError(w, r, status, msg, authview.InvitationSignupForm(preview.Invitation.Email, token, returnTo))
+	h.renderFormError(w, r, status, msg, authview.InvitationSignupForm(preview.Invitation.Email, token))
 }
 
 func (h *UIHandler) renderInvitationLoginError(
@@ -628,16 +611,8 @@ func (h *UIHandler) renderInvitationLoginError(
 	msg string,
 	preview organization.InvitationPreview,
 	token string,
-	returnTo string,
 ) {
-	h.renderFormError(w, r, status, msg, authview.InvitationLoginForm(preview.Invitation.Email, token, returnTo))
-}
-
-func invitationReturnTo(r *http.Request) string {
-	if returnTo, ok := httpctx.ReturnTo(r.Context()); ok {
-		return returnTo
-	}
-	return "/auth/account"
+	h.renderFormError(w, r, status, msg, authview.InvitationLoginForm(preview.Invitation.Email, token))
 }
 
 func invitationStatusMessage(status domain.OrganizationInvitationStatus) string {
@@ -691,13 +666,10 @@ func invitationAuthReturnTo(returnTo string) (path string, token string, ok bool
 	return u.Path, token, true
 }
 
-func invitationAuthURL(path string, token string, returnTo string) string {
+func invitationAuthURL(path string, token string) string {
 	u := url.URL{Path: path}
 	q := u.Query()
 	q.Set("token", token)
-	if returnTo = strings.TrimSpace(returnTo); returnTo != "" {
-		q.Set("return_to", returnTo)
-	}
 	u.RawQuery = q.Encode()
 	return u.String()
 }
@@ -706,17 +678,6 @@ func isInvitationAuthPath(path string) bool {
 	return path == "/auth/invitations/accept" ||
 		path == "/auth/invitations/login" ||
 		path == "/auth/invitations/signup"
-}
-
-func invitationRedirectTarget(returnTo string) string {
-	u, err := url.Parse(returnTo)
-	if err != nil || u.IsAbs() || u.Path != "/auth/invitations/accept" {
-		return returnTo
-	}
-	if target, ok := redirect.NormalizeReturnTo(strings.TrimSpace(u.Query().Get("return_to"))); ok {
-		return target
-	}
-	return "/"
 }
 
 func (h *UIHandler) invitationAcceptedByUser(ctx context.Context, token string, userID uuid.UUID) bool {

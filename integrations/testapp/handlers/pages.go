@@ -266,7 +266,6 @@ func createInvitation(ctx context.Context, orgID, actorID, email string) (*creat
 	body, _ := json.Marshal(map[string]string{
 		"actor_user_id": actorID,
 		"email":         email,
-		"return_to":     "/private",
 	})
 	req, err := http.NewRequestWithContext(
 		ctx,

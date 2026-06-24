@@ -320,7 +320,7 @@ func (h *UIHandler) verifySignupChallengePost(
 			return
 		}
 
-		h.finishInvitationSessionByID(w, r, user, *result.Action.InvitationID, httpctx.ReturnToOrDefault(ctx, "/"), time.Now())
+		h.finishInvitationSessionByID(w, r, user, *result.Action.InvitationID, time.Now())
 		return
 	}
 

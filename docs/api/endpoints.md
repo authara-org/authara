@@ -209,8 +209,7 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
 ```json
 {
   "actor_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1",
-  "email": "teammate@example.com",
-  "return_to": "/settings/team"
+  "email": "teammate@example.com"
 }
 ```
 
