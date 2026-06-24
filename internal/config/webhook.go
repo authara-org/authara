@@ -45,7 +45,11 @@ func (w *Webhook) validate() error {
 		seen[ev] = struct{}{}
 
 		switch ev {
-		case "user.created", "user.deleted":
+		case "user.created",
+			"user.deleted",
+			"organization_invitation.created",
+			"organization_invitation.accepted",
+			"organization_membership.created":
 		default:
 			return fmt.Errorf("unsupported AUTHARA_WEBHOOK_ENABLED_EVENTS value %q", ev)
 		}

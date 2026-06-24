@@ -96,6 +96,9 @@ func TestRouteAccessContract(t *testing.T) {
 					}
 				}
 
+			case "internal":
+				assertNotAuthMarker(t, rr.Code)
+
 			default:
 				t.Fatalf("unsupported access level %q for %s %s", route.Access, route.Method, route.Path)
 			}
@@ -161,6 +164,7 @@ func newAccessContractTestRouter() chi.Router {
 
 func materializeRoutePath(path string) string {
 	path = strings.ReplaceAll(path, "{userID}", "11111111-1111-1111-1111-111111111111")
+	path = strings.ReplaceAll(path, "{organizationID}", "22222222-2222-2222-2222-222222222222")
 	return path
 }
 

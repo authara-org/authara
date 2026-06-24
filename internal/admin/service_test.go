@@ -45,9 +45,10 @@ func TestDisableUserRevokesSessionsAndAudits(t *testing.T) {
 		target := createAdminTestUser(t, ctx, tdb, "disable-target@example.com", "disable-target", false)
 		session := createAdminTestSession(t, ctx, tdb, target.ID)
 		if err := tdb.Store.CreateRefreshToken(ctx, domain.RefreshToken{
-			SessionID: session.ID,
-			TokenHash: "disable-refresh-hash",
-			ExpiresAt: fixedAdminTestNow().Add(time.Hour),
+			SessionID:      session.ID,
+			OrganizationID: session.ActiveOrganizationID,
+			TokenHash:      "disable-refresh-hash",
+			ExpiresAt:      fixedAdminTestNow().Add(time.Hour),
 		}); err != nil {
 			t.Fatalf("CreateRefreshToken failed: %v", err)
 		}
@@ -101,10 +102,15 @@ func TestDashboardStatsIncludesSummaryCounts(t *testing.T) {
 		if err := tdb.Store.DisableUser(ctx, disabled.ID, now); err != nil {
 			t.Fatalf("DisableUser failed: %v", err)
 		}
+		org, _, err := tdb.Store.GetPersonalOrganizationForUser(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("GetPersonalOrganizationForUser failed: %v", err)
+		}
 		if _, err := tdb.Store.CreateSession(ctx, domain.Session{
-			UserID:    user.ID,
-			ExpiresAt: now.Add(time.Hour),
-			UserAgent: "dashboard-test",
+			UserID:               user.ID,
+			ActiveOrganizationID: org.ID,
+			ExpiresAt:            now.Add(time.Hour),
+			UserAgent:            "dashboard-test",
 		}); err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -451,6 +457,9 @@ func createAdminTestUser(t *testing.T, ctx context.Context, tdb *testutil.TestDB
 	if err != nil {
 		t.Fatalf("CreateUser failed: %v", err)
 	}
+	if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+		t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+	}
 	if adminRole {
 		if err := tdb.Store.AddUserPlatformRoleByName(ctx, user.ID, roles.DBAdminRoleName); err != nil {
 			t.Fatalf("AddUserPlatformRoleByName failed: %v", err)
@@ -462,10 +471,15 @@ func createAdminTestUser(t *testing.T, ctx context.Context, tdb *testutil.TestDB
 func createAdminTestSession(t *testing.T, ctx context.Context, tdb *testutil.TestDB, userID uuid.UUID) domain.Session {
 	t.Helper()
 
+	org, _, err := tdb.Store.GetPersonalOrganizationForUser(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetPersonalOrganizationForUser failed: %v", err)
+	}
 	session, err := tdb.Store.CreateSession(ctx, domain.Session{
-		UserID:    userID,
-		ExpiresAt: fixedAdminTestNow().Add(time.Hour),
-		UserAgent: "admin-test",
+		UserID:               userID,
+		ActiveOrganizationID: org.ID,
+		ExpiresAt:            fixedAdminTestNow().Add(time.Hour),
+		UserAgent:            "admin-test",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession failed: %v", err)

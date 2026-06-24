@@ -9,6 +9,7 @@ import (
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
@@ -20,6 +21,7 @@ type Services struct {
 	Auth           *auth.Service
 	Passkeys       *passkey.Service
 	Session        *session.Service
+	Organizations  *organization.Service
 	Challenge      *challenge.Service
 	Verification   *challenge.VerificationCodeService
 	EmailWorker    *challenge.Worker
@@ -30,6 +32,7 @@ func NewServices(app *App) (Services, error) {
 	txManager := tx.New(app.Store)
 	accessPolicy := newAccessPolicy(app)
 	oauthProviders := newOAuthProviders(app.Config)
+	webhookPublisher := newWebhookPublisher(app.Config)
 
 	accessTokenService := token.NewAccessTokenService(
 		app.Config.Token.KeySet,
@@ -37,13 +40,25 @@ func NewServices(app *App) (Services, error) {
 		app.Config.Token.AccessTokenTTL,
 	)
 
+	organizationService := organization.New(organization.Config{
+		Store:            app.Store,
+		Tx:               txManager,
+		WebhookPublisher: webhookPublisher,
+		Logger:           app.Logger,
+		InvitationTTL:    app.Config.Organization.InvitationTTL,
+		PublicURL:        app.Config.Values.PublicURL,
+		Mode:             organization.OrgMode(app.Config.Organization.Mode),
+	})
+	app.Logger.Warn("AUTHARA_ORG_MODE is a boot-time product shape; changing it after production use is unsupported", "mode", app.Config.Organization.Mode)
+
 	authService := auth.New(auth.Config{
 		Store:            app.Store,
 		Tx:               txManager,
 		OAuthProviders:   oauthProviders,
-		WebhookPublisher: newWebhookPublisher(app.Config),
+		WebhookPublisher: webhookPublisher,
 		Logger:           app.Logger,
 		AccessPolicy:     accessPolicy,
+		Organizations:    organizationService,
 	})
 
 	sessionService := session.New(session.SessionConfig{
@@ -54,6 +69,7 @@ func NewServices(app *App) (Services, error) {
 		RefreshTokenTTL:      app.Config.Session.RefreshTokenTTL,
 		RefreshTokenRotation: app.Config.Session.RefreshTokenRotation,
 		AccessPolicy:         accessPolicy,
+		Organizations:        organizationService,
 	})
 
 	adminService := admin.New(admin.Config{
@@ -99,6 +115,7 @@ func NewServices(app *App) (Services, error) {
 		Auth:           authService,
 		Passkeys:       passkeyService,
 		Session:        sessionService,
+		Organizations:  organizationService,
 		Challenge:      challengeService,
 		Verification:   verificationCodeService,
 		EmailWorker:    emailWorker,

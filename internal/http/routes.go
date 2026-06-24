@@ -8,6 +8,7 @@ import (
 	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/handlers/auth/api"
 	"github.com/authara-org/authara/internal/http/handlers/auth/ui"
+	"github.com/authara-org/authara/internal/http/handlers/internalapi"
 	"github.com/authara-org/authara/internal/http/handlers/meta"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	"github.com/go-chi/chi/v5"
@@ -54,6 +55,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 		Auth:           cfg.Auth,
 		Passkeys:       cfg.Passkeys,
 		Session:        cfg.Session,
+		Organizations:  cfg.Organizations,
 		Limiter:        cfg.AuthLimiter,
 		Logger:         cfg.Logger,
 		Google:         cfg.Google,
@@ -68,6 +70,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 	uih := ui.NewUIHandler(deps)
 	apih := api.NewAPIHandler(deps)
+	internalh := internalapi.New(cfg.Organizations, cfg.InternalAPIToken)
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(mw.ReturnTo)
@@ -92,11 +95,21 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Post("/signup", uih.SignupPost)
 				r.Post("/login", uih.LoginPost)
+				r.Post("/invitations/signup", uih.InvitationSignupPost)
+				r.Post("/invitations/login", uih.InvitationLoginPost)
 				r.Post("/passkeys/authenticate/options", uih.PasskeyAuthenticateOptionsPost)
 				r.Post("/passkeys/authenticate/finish", uih.PasskeyAuthenticateFinishPost)
 				r.Post("/provider-links/confirm", uih.ProviderLinkConfirmPost)
 				r.Post("/sessions/logout", uih.LogoutPost)
 				r.Post("/sessions/refresh", uih.RefreshPost)
+			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(mw.OptionalAppAccessIdentity)
+
+				r.Get("/invitations/accept", uih.InvitationAcceptPage)
+				r.Get("/invitations/signup", uih.InvitationSignupPage)
+				r.Get("/invitations/login", uih.InvitationLoginPage)
 			})
 
 			r.Group(func(r chi.Router) {
@@ -149,6 +162,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 					r.Post("/user/username", uih.ChangeUsernamePost)
 					r.Post("/user/delete", uih.DeleteUser)
+					r.Post("/invitations/accept", uih.InvitationAcceptPost)
 
 					r.Post("/sessions/{sessionID}/revoke", uih.RevokeSessionPost)
 					r.Post("/sessions/revoke-other", uih.RevokeOtherSessionsPost)
@@ -237,6 +251,11 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 			})
 
+		})
+
+		// Internal server-to-server API
+		r.Route("/internal/v1", func(r chi.Router) {
+			r.Post("/organizations/{organizationID}/invitations", internalh.CreateOrganizationInvitation)
 		})
 	})
 

@@ -9,12 +9,14 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func newTestSessionService(t *testing.T, ttl time.Duration) *Service {
@@ -38,11 +40,38 @@ func newTestSessionService(t *testing.T, ttl time.Duration) *Service {
 	})
 }
 
+func newDBSessionService(t *testing.T, tdb *testutil.TestDB, ttl time.Duration) *Service {
+	t.Helper()
+
+	keySet, err := token.NewKeySet("test-key", map[string][]byte{
+		"test-key": []byte("01234567890123456789012345678901"),
+	})
+	if err != nil {
+		t.Fatalf("NewKeySet failed: %v", err)
+	}
+
+	return New(SessionConfig{
+		Store: tdb.Store,
+		Tx:    tdb.Tx,
+		AccessTokens: token.NewAccessTokenService(
+			keySet,
+			"authara-test",
+			ttl,
+		),
+		SessionTTL:      time.Hour,
+		RefreshTokenTTL: time.Hour,
+		Organizations:   organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}),
+	})
+}
+
 func TestNew_DefaultsToNoopAccessPolicy(t *testing.T) {
 	svc := New(SessionConfig{})
 
 	if svc.accessPolicy == nil {
 		t.Fatal("expected default access policy to be set")
+	}
+	if svc.organizations != nil {
+		t.Fatal("expected organization service to require explicit configuration")
 	}
 
 	allowed, err := svc.accessPolicy.IsEmailAllowed(context.Background(), "user@example.com")
@@ -123,12 +152,163 @@ func TestCleanupExpiredDataDeletesWebAuthnChallenges(t *testing.T) {
 	})
 }
 
+func TestCreateSessionAddsOrganizationContext(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "session-org@example.com",
+			Username: "session-org",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+
+		svc := newDBSessionService(t, tdb, 10*time.Minute)
+		accessToken, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		if err != nil {
+			t.Fatalf("CreateSession failed: %v", err)
+		}
+
+		identity, err := svc.ValidateAccessToken(accessToken, token.AudienceApp, now)
+		if err != nil {
+			t.Fatalf("ValidateAccessToken failed: %v", err)
+		}
+		if identity.OrganizationID == uuid.Nil {
+			t.Fatal("expected organization id in access token")
+		}
+		if identity.OrganizationRole != domain.OrganizationRoleOwner {
+			t.Fatalf("expected owner role, got %q", identity.OrganizationRole)
+		}
+
+		session, err := tdb.Store.GetSessionByID(ctx, identity.SessionID)
+		if err != nil {
+			t.Fatalf("GetSessionByID failed: %v", err)
+		}
+		if session.ActiveOrganizationID != identity.OrganizationID {
+			t.Fatalf("expected session org %q, got %q", identity.OrganizationID, session.ActiveOrganizationID)
+		}
+
+		rt, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(refreshToken))
+		if err != nil {
+			t.Fatalf("GetRefreshTokenByHash failed: %v", err)
+		}
+		if rt.OrganizationID != identity.OrganizationID {
+			t.Fatalf("expected refresh org %q, got %q", identity.OrganizationID, rt.OrganizationID)
+		}
+	})
+}
+
+func TestSwitchSessionOrganizationRotatesTokens(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "session-switch@example.com",
+			Username: "session-switch",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+		team, err := tdb.Store.CreateOrganization(ctx, domain.Organization{
+			Name: "Team",
+			Kind: domain.OrganizationKindTeam,
+		})
+		if err != nil {
+			t.Fatalf("CreateOrganization failed: %v", err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+			OrganizationID: team.ID,
+			UserID:         user.ID,
+			Role:           domain.OrganizationRoleMember,
+		}); err != nil {
+			t.Fatalf("CreateOrganizationMembership failed: %v", err)
+		}
+
+		svc := newDBSessionService(t, tdb, 10*time.Minute)
+		_, oldRefreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		if err != nil {
+			t.Fatalf("CreateSession failed: %v", err)
+		}
+		oldRT, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(oldRefreshToken))
+		if err != nil {
+			t.Fatalf("GetRefreshTokenByHash old failed: %v", err)
+		}
+
+		accessToken, refreshToken, err := svc.SwitchSessionOrganization(ctx, user.ID, oldRT.SessionID, team.ID, token.AudienceApp, now.Add(time.Minute))
+		if err != nil {
+			t.Fatalf("SwitchSessionOrganization failed: %v", err)
+		}
+
+		identity, err := svc.ValidateAccessToken(accessToken, token.AudienceApp, now.Add(time.Minute))
+		if err != nil {
+			t.Fatalf("ValidateAccessToken failed: %v", err)
+		}
+		if identity.OrganizationID != team.ID || identity.OrganizationRole != domain.OrganizationRoleMember {
+			t.Fatalf("expected switched org/member role, got org=%q role=%q", identity.OrganizationID, identity.OrganizationRole)
+		}
+
+		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(oldRefreshToken)); !errors.Is(err, store.ErrRefreshTokenNotFound) {
+			t.Fatalf("expected old refresh token deleted, got %v", err)
+		}
+		newRT, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(refreshToken))
+		if err != nil {
+			t.Fatalf("GetRefreshTokenByHash new failed: %v", err)
+		}
+		if newRT.OrganizationID != team.ID {
+			t.Fatalf("expected new refresh org %q, got %q", team.ID, newRT.OrganizationID)
+		}
+	})
+}
+
+func TestActiveSessionPreventsOrganizationMembershipRemoval(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "session-org-removed@example.com",
+			Username: "session-org-removed",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+
+		svc := newDBSessionService(t, tdb, 10*time.Minute)
+		accessToken, _, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		if err != nil {
+			t.Fatalf("CreateSession failed: %v", err)
+		}
+		identity, err := svc.ValidateAccessToken(accessToken, token.AudienceApp, now)
+		if err != nil {
+			t.Fatalf("ValidateAccessToken failed: %v", err)
+		}
+		err = tdb.Store.DeleteOrganizationMembership(ctx, identity.OrganizationID, user.ID)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.ConstraintName != "fk_sessions_active_organization_membership" {
+			t.Fatalf("expected active session membership FK violation, got %v", err)
+		}
+	})
+}
+
 func TestValidateAccessToken_Succeeds(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestSessionService(t, 10*time.Minute)
 
 	userID := uuid.New()
 	sessionID := uuid.New()
+	organizationID := uuid.New()
 
 	var rs roles.Roles
 	rs.AddAdmin()
@@ -137,6 +317,8 @@ func TestValidateAccessToken_Succeeds(t *testing.T) {
 	accessToken, err := svc.accessTokens.Generate(
 		userID,
 		sessionID,
+		organizationID,
+		string(domain.OrganizationRoleOwner),
 		token.AudienceAdmin,
 		rs,
 		now,
@@ -160,6 +342,12 @@ func TestValidateAccessToken_Succeeds(t *testing.T) {
 	if identity.SessionID != sessionID {
 		t.Fatalf("expected session id %q, got %q", sessionID, identity.SessionID)
 	}
+	if identity.OrganizationID != organizationID {
+		t.Fatalf("expected organization id %q, got %q", organizationID, identity.OrganizationID)
+	}
+	if identity.OrganizationRole != domain.OrganizationRoleOwner {
+		t.Fatalf("expected organization role %q, got %q", domain.OrganizationRoleOwner, identity.OrganizationRole)
+	}
 	if !identity.Roles.IsAdmin() {
 		t.Fatal("expected admin role to be present")
 	}
@@ -175,6 +363,8 @@ func TestValidateAccessToken_WrongAudience(t *testing.T) {
 	accessToken, err := svc.accessTokens.Generate(
 		uuid.New(),
 		uuid.New(),
+		uuid.New(),
+		string(domain.OrganizationRoleOwner),
 		token.AudienceApp,
 		roles.Roles{},
 		now,
@@ -213,6 +403,8 @@ func TestValidateAnyAccessToken_AcceptsAppAudience(t *testing.T) {
 	accessToken, err := svc.accessTokens.Generate(
 		uuid.New(),
 		uuid.New(),
+		uuid.New(),
+		string(domain.OrganizationRoleOwner),
 		token.AudienceApp,
 		roles.Roles{},
 		now,
@@ -234,6 +426,8 @@ func TestValidateAnyAccessToken_AcceptsAdminAudience(t *testing.T) {
 	accessToken, err := svc.accessTokens.Generate(
 		uuid.New(),
 		uuid.New(),
+		uuid.New(),
+		string(domain.OrganizationRoleOwner),
 		token.AudienceAdmin,
 		roles.Roles{},
 		now,
@@ -253,6 +447,8 @@ func TestIdentityFromClaims_InvalidSubject(t *testing.T) {
 
 	claims := &token.AccessClaims{
 		SessionID: uuid.New(),
+		OrgID:     uuid.New(),
+		OrgRole:   string(domain.OrganizationRoleOwner),
 		Roles:     []roles.Role{roles.AutharaAdmin},
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject: "not-a-uuid",
@@ -272,6 +468,8 @@ func TestIdentityFromClaims_NilUUIDSubject(t *testing.T) {
 
 	claims := &token.AccessClaims{
 		SessionID: uuid.New(),
+		OrgID:     uuid.New(),
+		OrgRole:   string(domain.OrganizationRoleOwner),
 		Roles:     []roles.Role{roles.AutharaAdmin},
 	}
 	claims.Subject = uuid.Nil.String()
@@ -287,6 +485,8 @@ func TestIdentityFromClaims_InvalidRoles(t *testing.T) {
 
 	claims := &token.AccessClaims{
 		SessionID: uuid.New(),
+		OrgID:     uuid.New(),
+		OrgRole:   string(domain.OrganizationRoleOwner),
 		Roles:     []roles.Role{"authara:unknown"},
 	}
 	claims.Subject = uuid.New().String()
@@ -302,9 +502,12 @@ func TestIdentityFromClaims_Succeeds(t *testing.T) {
 
 	userID := uuid.New()
 	sessionID := uuid.New()
+	organizationID := uuid.New()
 
 	claims := &token.AccessClaims{
 		SessionID: sessionID,
+		OrgID:     organizationID,
+		OrgRole:   string(domain.OrganizationRoleOwner),
 		Roles:     []roles.Role{roles.AutharaAdmin, roles.AutharaAuditor},
 	}
 	claims.Subject = userID.String()
@@ -319,6 +522,12 @@ func TestIdentityFromClaims_Succeeds(t *testing.T) {
 	}
 	if identity.SessionID != sessionID {
 		t.Fatalf("expected session id %q, got %q", sessionID, identity.SessionID)
+	}
+	if identity.OrganizationID != organizationID {
+		t.Fatalf("expected organization id %q, got %q", organizationID, identity.OrganizationID)
+	}
+	if identity.OrganizationRole != domain.OrganizationRoleOwner {
+		t.Fatalf("expected organization role %q, got %q", domain.OrganizationRoleOwner, identity.OrganizationRole)
 	}
 	if !identity.Roles.IsAdmin() {
 		t.Fatal("expected admin role")

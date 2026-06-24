@@ -29,6 +29,24 @@ func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	organizationID, ok := httpctx.OrganizationID(ctx)
+	if !ok {
+		response.WriteError(
+			w,
+			mustRouteError(UserGetErrors, response.CodeUnauthorized),
+			"Unauthorized",
+		)
+		return
+	}
+	organizationRole, ok := httpctx.OrganizationRole(ctx)
+	if !ok {
+		response.WriteError(
+			w,
+			mustRouteError(UserGetErrors, response.CodeUnauthorized),
+			"Unauthorized",
+		)
+		return
+	}
 
 	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil {
@@ -39,8 +57,17 @@ func (h *APIHandler) UserGet(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	org, err := h.Organizations.GetOrganization(ctx, organizationID)
+	if err != nil {
+		response.WriteError(
+			w,
+			mustRouteError(UserGetErrors, response.CodeUnauthorized),
+			"Unauthorized",
+		)
+		return
+	}
 
-	response.JSON(w, http.StatusOK, response.UserWithRoles(user, roles.List()))
+	response.JSON(w, http.StatusOK, response.UserWithRolesAndOrganization(user, roles.List(), org, organizationRole))
 }
 
 func (h *APIHandler) ChangeUsername(w http.ResponseWriter, r *http.Request) {

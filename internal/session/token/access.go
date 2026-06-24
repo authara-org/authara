@@ -17,6 +17,8 @@ const (
 
 type AccessClaims struct {
 	SessionID uuid.UUID    `json:"sid"`
+	OrgID     uuid.UUID    `json:"org_id"`
+	OrgRole   string       `json:"org_role"`
 	Roles     []roles.Role `json:"roles"`
 
 	jwt.RegisteredClaims
@@ -40,11 +42,21 @@ func NewAccessTokenService(
 	}
 }
 
-func (s *AccessTokenService) Generate(userID uuid.UUID, sessionId uuid.UUID, audience Audience, roles roles.Roles, now time.Time) (string, error) {
+func (s *AccessTokenService) Generate(
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	organizationID uuid.UUID,
+	organizationRole string,
+	audience Audience,
+	roles roles.Roles,
+	now time.Time,
+) (string, error) {
 	kid, key := s.keys.SigningKey()
 
 	claims := AccessClaims{
-		SessionID: sessionId,
+		SessionID: sessionID,
+		OrgID:     organizationID,
+		OrgRole:   organizationRole,
 		Roles:     roles.List(),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
@@ -130,7 +142,7 @@ func validateAccessClaims(claims *AccessClaims, now time.Time) error {
 		return ErrExpiredToken
 	}
 
-	if claims.Subject == "" || claims.SessionID == uuid.Nil {
+	if claims.Subject == "" || claims.SessionID == uuid.Nil || claims.OrgID == uuid.Nil || claims.OrgRole == "" {
 		return ErrInvalidClaims
 	}
 

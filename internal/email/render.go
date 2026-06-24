@@ -33,3 +33,12 @@ func RenderEmailChangeCodeHTML(code string) (string, error) {
 	}
 	return buf.String(), nil
 }
+
+func RenderOrganizationInvitationHTML(orgName, inviteURL, role, expiresAt string) (string, error) {
+	var buf bytes.Buffer
+	err := emailtemplates.OrganizationInvitationEmail(orgName, inviteURL, role, expiresAt).Render(context.Background(), &buf)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}

@@ -36,6 +36,7 @@ Example user object:
   email
   username
   roles
+  organization
   disabled
   created_at
 }
@@ -74,6 +75,11 @@ Example response:
   "email": "user@example.com",
   "username": "user",
   "roles": [],
+  "organization": {
+    "id": "68c673e7-1ff9-4113-8bbf-e00f039a9a61",
+    "name": "user",
+    "role": "owner"
+  },
   "disabled": false,
   "created_at": "2026-01-01T12:00:00Z"
 }
@@ -101,6 +107,7 @@ Applications typically read the user to:
 
 - determine whether the user is authenticated
 - retrieve user information
+- read the active organization ID and role
 - check roles for authorization decisions
 
 Example:

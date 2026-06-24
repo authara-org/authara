@@ -11,8 +11,9 @@ import (
 
 func toDomainSession(m model.Session) domain.Session {
 	return domain.Session{
-		ID:     m.ID,
-		UserID: m.UserID,
+		ID:                   m.ID,
+		UserID:               m.UserID,
+		ActiveOrganizationID: m.ActiveOrganizationID,
 
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,
@@ -26,7 +27,8 @@ func toDomainSession(m model.Session) domain.Session {
 
 func toModelSession(d domain.Session) model.Session {
 	return model.Session{
-		UserID: d.UserID,
+		UserID:               d.UserID,
+		ActiveOrganizationID: d.ActiveOrganizationID,
 
 		CreatedAt: d.CreatedAt,
 		UpdatedAt: d.UpdatedAt,
@@ -40,8 +42,9 @@ func toModelSession(d domain.Session) model.Session {
 
 func toDomainRefreshToken(m model.RefreshToken) domain.RefreshToken {
 	return domain.RefreshToken{
-		ID:        m.ID,
-		SessionID: m.SessionID,
+		ID:             m.ID,
+		SessionID:      m.SessionID,
+		OrganizationID: m.OrganizationID,
 
 		TokenHash: m.TokenHash,
 
@@ -53,7 +56,8 @@ func toDomainRefreshToken(m model.RefreshToken) domain.RefreshToken {
 
 func toModelRefreshToken(d domain.RefreshToken) model.RefreshToken {
 	return model.RefreshToken{
-		SessionID: d.SessionID,
+		SessionID:      d.SessionID,
+		OrganizationID: d.OrganizationID,
 
 		TokenHash: d.TokenHash,
 
@@ -68,6 +72,7 @@ const sessionColumns = `
 	created_at,
 	updated_at,
 	user_id,
+	active_organization_id,
 	expires_at,
 	revoked_at,
 	user_agent
@@ -79,6 +84,7 @@ func scanSession(row rowScanner, m *model.Session) error {
 		&m.CreatedAt,
 		&m.UpdatedAt,
 		&m.UserID,
+		&m.ActiveOrganizationID,
 		&m.ExpiresAt,
 		&m.RevokedAt,
 		&m.UserAgent,
@@ -89,6 +95,7 @@ const refreshTokenColumns = `
 	id,
 	created_at,
 	session_id,
+	organization_id,
 	token_hash,
 	expires_at,
 	consumed_at
@@ -99,6 +106,7 @@ func scanRefreshToken(row rowScanner, m *model.RefreshToken) error {
 		&m.ID,
 		&m.CreatedAt,
 		&m.SessionID,
+		&m.OrganizationID,
 		&m.TokenHash,
 		&m.ExpiresAt,
 		&m.ConsumedAt,
@@ -109,10 +117,11 @@ func (s *Store) CreateSession(ctx context.Context, session domain.Session) (doma
 	m := toModelSession(session)
 
 	if err := scanSession(s.queryRow(ctx, `
-		INSERT INTO sessions (user_id, expires_at, revoked_at, user_agent)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO sessions (user_id, active_organization_id, expires_at, revoked_at, user_agent)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING `+sessionColumns,
 		m.UserID,
+		m.ActiveOrganizationID,
 		m.ExpiresAt,
 		m.RevokedAt,
 		m.UserAgent,
@@ -131,6 +140,25 @@ func (s *Store) GetSessionByID(ctx context.Context, sessionID uuid.UUID) (domain
 	}
 
 	return toDomainSession(m), nil
+}
+
+func (s *Store) UpdateSessionActiveOrganization(ctx context.Context, sessionID uuid.UUID, organizationID uuid.UUID) error {
+	res, err := s.exec(ctx, `
+		UPDATE sessions
+		SET active_organization_id = $2
+		WHERE id = $1 AND revoked_at IS NULL
+	`, sessionID, organizationID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
 }
 
 func (s *Store) RevokeSession(ctx context.Context, sessionID uuid.UUID, revokedAt time.Time) error {
@@ -168,16 +196,16 @@ func (s *Store) CreateRefreshToken(ctx context.Context, token domain.RefreshToke
 
 	if m.CreatedAt.IsZero() {
 		_, err := s.exec(ctx, `
-			INSERT INTO refresh_tokens (session_id, token_hash, expires_at, consumed_at)
-			VALUES ($1, $2, $3, $4)
-		`, m.SessionID, m.TokenHash, m.ExpiresAt, m.ConsumedAt)
+			INSERT INTO refresh_tokens (session_id, organization_id, token_hash, expires_at, consumed_at)
+			VALUES ($1, $2, $3, $4, $5)
+		`, m.SessionID, m.OrganizationID, m.TokenHash, m.ExpiresAt, m.ConsumedAt)
 		return err
 	}
 
 	_, err := s.exec(ctx, `
-		INSERT INTO refresh_tokens (created_at, session_id, token_hash, expires_at, consumed_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`, m.CreatedAt, m.SessionID, m.TokenHash, m.ExpiresAt, m.ConsumedAt)
+		INSERT INTO refresh_tokens (created_at, session_id, organization_id, token_hash, expires_at, consumed_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, m.CreatedAt, m.SessionID, m.OrganizationID, m.TokenHash, m.ExpiresAt, m.ConsumedAt)
 	return err
 }
 

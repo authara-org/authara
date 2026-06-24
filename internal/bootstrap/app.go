@@ -39,6 +39,10 @@ func NewApp() (*App, error) {
 		_ = st.Close()
 		return nil, fmt.Errorf("schema version check: %w", err)
 	}
+	if err := EnsureOrganizationMode(st, cfg.Organization.Mode); err != nil {
+		_ = st.Close()
+		return nil, err
+	}
 
 	ca, err := NewCache(cfg)
 	if err != nil {

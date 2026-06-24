@@ -1,6 +1,6 @@
 # Webhooks
 
-Authara can notify your application about **user lifecycle events** via webhooks.
+Authara can notify your application about **user and organization lifecycle events** via webhooks.
 
 This allows your application to stay in sync with Authara without polling or tightly coupling to internal state.
 
@@ -14,6 +14,9 @@ Supported events:
 
 - `user.created`
 - `user.deleted`
+- `organization_invitation.created`
+- `organization_invitation.accepted`
+- `organization_membership.created`
 
 ---
 
@@ -31,7 +34,7 @@ AUTHARA_WEBHOOK_SECRET=your-secret
 ## Optional
 
 ```env
-AUTHARA_WEBHOOK_ENABLED_EVENTS=user.created,user.deleted
+AUTHARA_WEBHOOK_ENABLED_EVENTS=user.created,user.deleted,organization_invitation.created
 AUTHARA_WEBHOOK_TIMEOUT=5s
 ```
 
@@ -111,6 +114,8 @@ X-Authara-Signature: sha256=...
   }
 }
 ```
+
+Organization invitation events include the invitation id, organization id, invited email, role, and acceptance metadata when available. Membership events include the organization id, user id, and role so your app can update its own projection.
 
 ---
 
@@ -210,6 +215,12 @@ http.HandleFunc("/webhooks/authara", func(w http.ResponseWriter, r *http.Request
 		// handle user creation
 	case "user.deleted":
 		// handle user deletion
+	case "organization_invitation.created":
+		// track pending invitation
+	case "organization_invitation.accepted":
+		// mark invitation accepted
+	case "organization_membership.created":
+		// project organization membership
 	}
 
 	w.WriteHeader(http.StatusNoContent)

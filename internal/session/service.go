@@ -6,10 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"time"
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
@@ -25,6 +27,7 @@ type SessionConfig struct {
 	RefreshTokenTTL      time.Duration
 	RefreshTokenRotation time.Duration
 	AccessPolicy         accesspolicy.EmailAccessPolicy
+	Organizations        *organization.Service
 }
 
 type Service struct {
@@ -35,6 +38,7 @@ type Service struct {
 	refreshTokenTTL      time.Duration
 	refreshTokenRotation time.Duration
 	accessPolicy         accesspolicy.EmailAccessPolicy
+	organizations        *organization.Service
 }
 
 func New(cfg SessionConfig) *Service {
@@ -51,6 +55,7 @@ func New(cfg SessionConfig) *Service {
 		refreshTokenTTL:      cfg.RefreshTokenTTL,
 		refreshTokenRotation: cfg.RefreshTokenRotation,
 		accessPolicy:         access,
+		organizations:        cfg.Organizations,
 	}
 }
 
@@ -66,7 +71,12 @@ func (s *Service) CreateSession(
 	err error,
 ) {
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
-		err = s.ensureUserAllowed(ctx, userID)
+		user, err := s.ensureUserAllowed(ctx, userID)
+		if err != nil {
+			return err
+		}
+
+		org, membership, err := s.organizations.DefaultOrganizationForUser(ctx, user.ID)
 		if err != nil {
 			return err
 		}
@@ -94,9 +104,10 @@ func (s *Service) CreateSession(
 		}
 
 		session := domain.Session{
-			UserID:    userID,
-			UserAgent: userAgent,
-			ExpiresAt: now.Add(s.sessionTTL),
+			UserID:               userID,
+			ActiveOrganizationID: org.ID,
+			UserAgent:            userAgent,
+			ExpiresAt:            now.Add(s.sessionTTL),
 		}
 
 		createdSession, err := s.store.CreateSession(ctx, session)
@@ -112,9 +123,10 @@ func (s *Service) CreateSession(
 		hashedRefreshToken := hashRefreshToken(refreshToken)
 
 		rt := domain.RefreshToken{
-			SessionID: createdSession.ID,
-			TokenHash: hashedRefreshToken,
-			ExpiresAt: now.Add(s.refreshTokenTTL),
+			SessionID:      createdSession.ID,
+			OrganizationID: org.ID,
+			TokenHash:      hashedRefreshToken,
+			ExpiresAt:      now.Add(s.refreshTokenTTL),
 		}
 
 		err = s.store.CreateRefreshToken(ctx, rt)
@@ -125,6 +137,8 @@ func (s *Service) CreateSession(
 		accessToken, err = s.accessTokens.Generate(
 			userID,
 			createdSession.ID,
+			org.ID,
+			string(membership.Role),
 			audience,
 			platformRoles,
 			now,
@@ -140,6 +154,102 @@ func (s *Service) CreateSession(
 		return "", "", err
 	}
 
+	return accessToken, refreshToken, nil
+}
+
+func (s *Service) SwitchSessionOrganization(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	organizationID uuid.UUID,
+	audience token.Audience,
+	now time.Time,
+) (
+	accessToken string,
+	refreshToken string,
+	err error,
+) {
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		_, err := s.ensureUserAllowed(ctx, userID)
+		if err != nil {
+			return err
+		}
+
+		session, err := s.store.GetActiveSessionByID(ctx, sessionID, now)
+		if err != nil {
+			return ErrInvalidSession
+		}
+		if session.UserID != userID {
+			return ErrForbidden
+		}
+
+		membership, err := s.organizations.RequireMembership(ctx, userID, organizationID)
+		if err != nil {
+			if errors.Is(err, store.ErrOrganizationMembershipNotFound) {
+				return ErrForbidden
+			}
+			return err
+		}
+
+		roleNames, err := s.store.GetUserPlatformRoleNames(ctx, userID)
+		if err != nil {
+			return err
+		}
+		platformRoles, err := roles.FromDBRoleNames(roleNames)
+		if err != nil {
+			return err
+		}
+		if !canAccessAudience(platformRoles, audience) {
+			return ErrForbidden
+		}
+
+		disabled, err := s.store.IsUserDisabled(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if disabled {
+			return ErrUserDisabled
+		}
+
+		if err := s.store.UpdateSessionActiveOrganization(ctx, sessionID, organizationID); err != nil {
+			return err
+		}
+		if err := s.store.DeleteRefreshTokensBySession(ctx, sessionID); err != nil {
+			return err
+		}
+
+		refreshToken, err = generateRefreshToken()
+		if err != nil {
+			return err
+		}
+		expiresAt := now.Add(s.refreshTokenTTL)
+		if expiresAt.After(session.ExpiresAt) {
+			expiresAt = session.ExpiresAt
+		}
+		if err := s.store.CreateRefreshToken(ctx, domain.RefreshToken{
+			SessionID:      sessionID,
+			OrganizationID: organizationID,
+			TokenHash:      hashRefreshToken(refreshToken),
+			CreatedAt:      now,
+			ExpiresAt:      expiresAt,
+		}); err != nil {
+			return err
+		}
+
+		accessToken, err = s.accessTokens.Generate(
+			userID,
+			sessionID,
+			organizationID,
+			string(membership.Role),
+			audience,
+			platformRoles,
+			now,
+		)
+		return err
+	})
+	if err != nil {
+		return "", "", err
+	}
 	return accessToken, refreshToken, nil
 }
 
@@ -167,8 +277,15 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrInvalidRefreshToken
 		}
 
-		err = s.ensureUserAllowed(ctx, session.UserID)
+		_, err = s.ensureUserAllowed(ctx, session.UserID)
 		if err != nil {
+			return err
+		}
+		membership, err := s.organizations.RequireMembership(ctx, session.UserID, rt.OrganizationID)
+		if err != nil {
+			if errors.Is(err, store.ErrOrganizationMembershipNotFound) {
+				return ErrForbidden
+			}
 			return err
 		}
 
@@ -213,10 +330,11 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			}
 
 			newRT := domain.RefreshToken{
-				SessionID: rt.SessionID,
-				TokenHash: newHashed,
-				CreatedAt: now,
-				ExpiresAt: newExpiresAt,
+				SessionID:      rt.SessionID,
+				OrganizationID: rt.OrganizationID,
+				TokenHash:      newHashed,
+				CreatedAt:      now,
+				ExpiresAt:      newExpiresAt,
 			}
 
 			err = s.store.CreateRefreshToken(ctx, newRT)
@@ -230,6 +348,8 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		newAccessToken, err = s.accessTokens.Generate(
 			session.UserID,
 			rt.SessionID,
+			rt.OrganizationID,
+			string(membership.Role),
 			audience,
 			platformRoles,
 			now,
@@ -319,6 +439,9 @@ func (s *Service) identityFromClaims(claims *token.AccessClaims) (*AccessIdentit
 	if err != nil || userID == uuid.Nil {
 		return nil, token.ErrInvalidToken
 	}
+	if claims.OrgID == uuid.Nil || claims.OrgRole == "" {
+		return nil, token.ErrInvalidToken
+	}
 
 	rs, err := roles.FromClaims(claims.Roles)
 	if err != nil {
@@ -326,9 +449,11 @@ func (s *Service) identityFromClaims(claims *token.AccessClaims) (*AccessIdentit
 	}
 
 	return &AccessIdentity{
-		UserID:    userID,
-		SessionID: claims.SessionID,
-		Roles:     rs,
+		UserID:           userID,
+		SessionID:        claims.SessionID,
+		OrganizationID:   claims.OrgID,
+		OrganizationRole: domain.OrganizationRole(claims.OrgRole),
+		Roles:            rs,
 	}, nil
 }
 
@@ -356,20 +481,20 @@ func shouldRotate(rt domain.RefreshToken, now time.Time, rotation time.Duration)
 	}
 }
 
-func (s *Service) ensureUserAllowed(ctx context.Context, userID uuid.UUID) error {
+func (s *Service) ensureUserAllowed(ctx context.Context, userID uuid.UUID) (domain.User, error) {
 	user, err := s.store.GetUserByID(ctx, userID)
 	if err != nil {
-		return err
+		return domain.User{}, err
 	}
 
 	allowed, err := s.accessPolicy.IsEmailAllowed(ctx, user.Email)
 	if err != nil {
-		return err
+		return domain.User{}, err
 	}
 	if !allowed {
-		return ErrUserNotAllowed
+		return domain.User{}, ErrUserNotAllowed
 	}
-	return nil
+	return user, nil
 }
 
 var audienceAccess = map[token.Audience][]roles.Role{

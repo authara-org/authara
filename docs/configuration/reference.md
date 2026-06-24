@@ -88,6 +88,28 @@ AUTHARA_SESSION_TTL_DAYS
 AUTHARA_REFRESH_TOKEN_TTL_DAYS
 ```
 
+### Organizations
+
+Controls organization mode and invitation expiry.
+
+`AUTHARA_ORG_MODE` is intended to be chosen before first production use.
+Changing it after users or organizations exist is currently unsupported.
+
+Modes:
+- `personal`: direct signup creates a hidden personal org; invitations are disabled.
+- `single`: direct signup creates one team org; invite signup joins the invited org.
+- `multi`: direct signup creates a personal org; invite signup also joins the invited org.
+
+Example:
+
+```
+AUTHARA_ORG_MODE
+AUTHARA_ORGANIZATION_INVITATION_TTL
+AUTHARA_INTERNAL_API_TOKEN
+```
+
+`AUTHARA_INTERNAL_API_TOKEN` is required for calls to `/auth/internal/v1`.
+
 ---
 
 ### JWT

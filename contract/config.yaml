@@ -198,6 +198,29 @@ variables:
       - always
       - duration
 
+  - name: AUTHARA_ORG_MODE
+    stability: stable
+    required: false
+    type: enum
+    default: single
+    description: Boot-time organization behavior profile. Choose before first production use; changing after users or organizations exist is unsupported.
+    allowed_values:
+      - personal
+      - single
+      - multi
+
+  - name: AUTHARA_ORGANIZATION_INVITATION_TTL
+    stability: stable
+    required: false
+    type: duration
+    default: 168h
+
+  - name: AUTHARA_INTERNAL_API_TOKEN
+    stability: stable
+    required: false
+    type: string
+    notes: Required for calls to /auth/internal/v1 routes. If empty, internal routes reject requests.
+
   # ------------------------------------------------------------
   # OAuth
   # ------------------------------------------------------------

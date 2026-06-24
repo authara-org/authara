@@ -16,6 +16,7 @@ func toDomainPendingSignupAction(m model.PendingSignupAction) domain.PendingSign
 		Email:        m.Email,
 		Username:     m.Username,
 		PasswordHash: m.PasswordHash,
+		InvitationID: m.InvitationID,
 	}
 }
 
@@ -25,7 +26,8 @@ const pendingSignupActionColumns = `
 	challenge_id,
 	email,
 	username,
-	password_hash
+	password_hash,
+	invitation_id
 `
 
 func scanPendingSignupAction(row rowScanner, m *model.PendingSignupAction) error {
@@ -36,6 +38,7 @@ func scanPendingSignupAction(row rowScanner, m *model.PendingSignupAction) error
 		&m.Email,
 		&m.Username,
 		&m.PasswordHash,
+		&m.InvitationID,
 	)
 }
 
@@ -45,6 +48,7 @@ func toModelPendingSignupAction(d domain.PendingSignupAction) model.PendingSignu
 		Email:        d.Email,
 		Username:     d.Username,
 		PasswordHash: d.PasswordHash,
+		InvitationID: d.InvitationID,
 	}
 }
 
@@ -52,13 +56,14 @@ func (s *Store) CreatePendingSignupAction(ctx context.Context, in domain.Pending
 	row := toModelPendingSignupAction(in)
 
 	if err := scanPendingSignupAction(s.queryRow(ctx, `
-		INSERT INTO pending_signup_actions (challenge_id, email, username, password_hash)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO pending_signup_actions (challenge_id, email, username, password_hash, invitation_id)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING `+pendingSignupActionColumns,
 		row.ChallengeID,
 		row.Email,
 		row.Username,
 		row.PasswordHash,
+		row.InvitationID,
 	), &row); err != nil {
 		return domain.PendingSignupAction{}, err
 	}

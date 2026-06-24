@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/session"
@@ -303,6 +304,7 @@ func newUIPasskeyTestHandler(t *testing.T, tdb *testutil.TestDB) *UIHandler {
 			Tx:              tdb.Tx,
 			SessionTTL:      time.Hour,
 			RefreshTokenTTL: 24 * time.Hour,
+			Organizations:   organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}),
 		}),
 		Google:     google.New("test-client-id"),
 		AccessTTL:  time.Minute,
@@ -326,6 +328,9 @@ func createUIPasskeyUser(
 	})
 	if err != nil {
 		t.Fatalf("CreateUser failed: %v", err)
+	}
+	if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+		t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
 	}
 	return user
 }

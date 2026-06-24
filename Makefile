@@ -8,6 +8,7 @@ POSTGRESQL_SCHEMA ?= authara
 DOCKER_COMPOSE_FILE = docker-compose.dev.yaml
 DOCKER_COMPOSE_DEV  = docker compose -f $(DOCKER_COMPOSE_FILE)
 DOCKER_COMPOSE_TEST = docker compose -f $(DOCKER_COMPOSE_FILE)
+DOCKER_COMPOSE_ENV  = POSTGRESQL_DATABASE='$(POSTGRESQL_DATABASE)' POSTGRESQL_USERNAME='$(POSTGRESQL_USERNAME)' POSTGRESQL_PASSWORD='$(POSTGRESQL_PASSWORD)' AUTHARA_INTERNAL_API_TOKEN='$(AUTHARA_INTERNAL_API_TOKEN)' AUTHARA_JWT_ISSUER='$(AUTHARA_JWT_ISSUER)' AUTHARA_JWT_KEYS='$(AUTHARA_JWT_KEYS)' AUTHARA_WEBHOOK_SECRET='$(AUTHARA_WEBHOOK_SECRET)'
 
 POSTGRES_SERVICE   = postgres
 AUTHARA_SERVICE   = authara
@@ -17,7 +18,7 @@ MAILHOG_IMAGE     = mailhog/mailhog
 
 TEST_DB_NAME       ?= authara_test
 TEST_DB_HOST       ?= postgres
-TEST_DB_PORT       ?= 5432
+TEST_DB_PORT       ?= 5433
 TEST_DB_SCHEMA     ?= authara
 TEST_DB_TIMEZONE   ?= UTC
 TEST_DB_LOG_SQL    ?= false
@@ -29,11 +30,11 @@ TEST_DB_LOG_SQL    ?= false
 dev:
 	@if command -v tmux >/dev/null 2>&1; then \
 		echo "Starting dev environment with tmux..."; \
-		tmux new-session -d -s authara \
-			'$(DOCKER_COMPOSE_DEV) up' \; \
-			split-window -h \
-			'cd frontend && npm run dev:tailwind' \; \
-			attach; \
+		tmux new-session -d -s authara -c '$(CURDIR)' \
+			'$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE_DEV) up' \; \
+			split-window -h -c '$(CURDIR)/frontend' \
+			'npm run dev:tailwind' \; \
+		attach; \
 	else \
 		echo ""; \
 		echo "tmux not found."; \

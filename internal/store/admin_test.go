@@ -311,16 +311,24 @@ func createAdminStoreUser(t *testing.T, ctx context.Context, tdb *testutil.TestD
 	if err != nil {
 		t.Fatalf("CreateUser failed: %v", err)
 	}
+	if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+		t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+	}
 	return user
 }
 
 func createAdminStoreSession(t *testing.T, ctx context.Context, tdb *testutil.TestDB, userID uuid.UUID) domain.Session {
 	t.Helper()
 
+	org, _, err := tdb.Store.GetPersonalOrganizationForUser(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetPersonalOrganizationForUser failed: %v", err)
+	}
 	session, err := tdb.Store.CreateSession(ctx, domain.Session{
-		UserID:    userID,
-		ExpiresAt: adminStoreNow().Add(time.Hour),
-		UserAgent: "admin-store-test",
+		UserID:               userID,
+		ActiveOrganizationID: org.ID,
+		ExpiresAt:            adminStoreNow().Add(time.Hour),
+		UserAgent:            "admin-store-test",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession failed: %v", err)

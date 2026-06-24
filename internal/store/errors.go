@@ -26,6 +26,10 @@ var (
 	ErrWebAuthnChallengeAlreadyConsumed = errors.New("webauthn challenge already consumed")
 	ErrAllowedEmailNotFound             = errors.New("allowed email not found")
 	ErrAllowedEmailAlreadyExists        = errors.New("allowed email already exists")
+	ErrOrganizationNotFound             = errors.New("organization not found")
+	ErrOrganizationMembershipNotFound   = errors.New("organization membership not found")
+	ErrOrganizationInvitationNotFound   = errors.New("organization invitation not found")
+	ErrInvalidOrganizationName          = errors.New("invalid organization name")
 )
 
 const (
@@ -33,6 +37,9 @@ const (
 	ConstraintUserUsername        = "unique_user_username"
 	ConstraintPasskeyCredentialID = "unique_passkey_credential_id"
 	ConstraintAllowedEmailEmail   = "unique_allowed_email"
+	ConstraintPersonalOrgUser     = "unique_personal_org_created_by_user"
+	ConstraintInvitationTokenHash = "organization_invitations_token_hash_key"
+	ConstraintActiveInvitation    = "unique_active_organization_invitation_email"
 
 	uniqueViolationCode = "23505"
 )

@@ -1,0 +1,285 @@
+package auth
+
+import (
+	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/templates"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/form"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/oauth"
+)
+
+type InvitationAction struct {
+	Label        string
+	Href         string
+	LogoutReturn string
+	Primary      bool
+}
+
+templ InvitationAccept(
+	organizationName string,
+	invitedEmail string,
+	currentEmail string,
+	role string,
+	expiresAt string,
+	token string,
+	returnTo string,
+	title string,
+	description string,
+	errorMessage string,
+	acceptLabel string,
+	actions []InvitationAction,
+	showSignupForm bool,
+	oauthProviders []oauth.OAuthProvider,
+) {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@CardHeader()
+			@HeaderSection(title, description)
+			<div class="mb-6 rounded-lg border border-grey-200 bg-grey-50 p-4 text-grey-800 dark:border-grey-800 dark:bg-grey-900 dark:text-grey-200">
+				<div class="mb-2 text-sm text-grey-600 dark:text-grey-400">Organization</div>
+				<div class="mb-4 text-lg font-semibold text-grey-950 dark:text-grey-50">{ organizationName }</div>
+				<div class="grid gap-3 text-sm">
+					<div>
+						<div class="text-grey-600 dark:text-grey-400">Invited email</div>
+						<div>{ invitedEmail }</div>
+					</div>
+					if currentEmail != "" {
+						<div>
+							<div class="text-grey-600 dark:text-grey-400">Signed in as</div>
+							<div>{ currentEmail }</div>
+						</div>
+					}
+					<div>
+						<div class="text-grey-600 dark:text-grey-400">Role</div>
+						<div>{ role }</div>
+					</div>
+					<div>
+						<div class="text-grey-600 dark:text-grey-400">Expires</div>
+						<div>{ expiresAt }</div>
+					</div>
+				</div>
+			</div>
+			if errorMessage != "" {
+				<div class="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+					{ errorMessage }
+				</div>
+			}
+			if acceptLabel != "" {
+				<form method="post" action="/auth/invitations/accept">
+					@csrf.CSRFInput()
+					<input type="hidden" name="token" value={ token }/>
+					<input type="hidden" name="return_to" value={ returnTo }/>
+					@button.Button(button.ButtonConfig{
+						Label: acceptLabel,
+					})
+				</form>
+			}
+			if showSignupForm {
+				@InvitationSignupForm(invitedEmail, token, returnTo)
+				@OAuthProviders("Create account", oauthProviders)
+			}
+			for _, action := range actions {
+				if action.LogoutReturn != "" {
+					<form class="mt-3" method="post" action={ redirect.WithReturnTo("/auth/sessions/logout", action.LogoutReturn) }>
+						@csrf.CSRFInput()
+						@invitationActionButton(action)
+					</form>
+				} else if action.Href != "" {
+					<div class="mt-3">
+						@invitationActionLink(action)
+					</div>
+				}
+			}
+		}
+	}
+}
+
+templ InvitationSignup(organizationName string, invitedEmail string, token string, returnTo string, oauthProviders []oauth.OAuthProvider) {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@CardHeader()
+			@HeaderSection("Create an account to join "+organizationName, "Use the invited email address to join this organization.")
+			@InvitationSignupForm(invitedEmail, token, returnTo)
+			@OAuthProviders("Create account", oauthProviders)
+		}
+	}
+}
+
+templ InvitationSignupForm(invitedEmail string, token string, returnTo string) {
+	<form
+		x-data="{password: '', confirm: ''}"
+		autocomplete="on"
+		hx-post="/auth/invitations/signup"
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		@csrf.CSRFInput()
+		<input type="hidden" name="token" value={ token }/>
+		<input type="hidden" name="return_to" value={ returnTo }/>
+		<label for="invitation-signup-email" class="pb-4 text-grey-800 dark:text-grey-200">
+			<div class="pb-2">Email</div>
+		</label>
+		@form.Input(form.InputConfig{
+			ID:           "invitation-signup-email",
+			Type:         form.Email,
+			Size:         form.Large,
+			Name:         "email_display",
+			Value:        invitedEmail,
+			Autocomplete: "username",
+			Disabled:     true,
+			Class:        "mb-4 opacity-70",
+		})
+		<label for="invitation-signup-password" class="text-grey-800 dark:text-grey-200">
+			<div class="pb-2">Password <span class="text-red-600">*</span></div>
+		</label>
+		<div x-data="{ show: false }" class="relative">
+			@form.Input(form.InputConfig{
+				ID:           "invitation-signup-password",
+				Type:         form.Password,
+				Size:         form.Large,
+				Name:         "password",
+				Autocomplete: "new-password",
+				Placeholder:  "Enter your password",
+				Required:     true,
+				Class:        "!pr-12",
+				Attrs: templ.Attributes{
+					":type":     "show ? 'text' : 'password'",
+					"x-model":   "password",
+					"minlength": "8",
+					":class": `{
+						'border-grey-100 dark:border-grey-800': password.length === 0,
+						'border-red-500': password.length > 0 && password.length < 8,
+						'border-green-500': password.length >= 8
+					}`,
+				},
+			})
+			@passwordToggleButton()
+		</div>
+		<p class="text-xs text-grey-600 dark:text-grey-400 mt-1.5" x-show="password.length<8">
+			Password must be at least 8 characters long.
+		</p>
+		<div x-data="{ show: false }" class="relative mt-4">
+			@form.Input(form.InputConfig{
+				Type:         form.Password,
+				Size:         form.Large,
+				Name:         "confirm_password",
+				Autocomplete: "new-password",
+				Placeholder:  "Confirm your password",
+				Required:     true,
+				Class:        "!pr-12",
+				Attrs: templ.Attributes{
+					":type":   "show ? 'text' : 'password'",
+					"x-model": "confirm",
+					":class": `{
+						'border-grey-100 dark:border-grey-800': confirm.length === 0,
+						'border-red-500': confirm.length > 0 && confirm !== password,
+						'border-green-500': confirm.length > 0 && confirm === password
+					}`,
+				},
+			})
+			@passwordToggleButton()
+		</div>
+		<p x-show="confirm.length > 0 && confirm !== password" class="text-xs text-red-600 dark:text-red-400 mt-1.5">
+			Passwords do not match.
+		</p>
+		<div class="mt-4 w-full">
+			@button.Button(button.ButtonConfig{
+				Label: "Create account",
+				Icon:  icons.Signup(),
+			})
+		</div>
+	</form>
+}
+
+templ InvitationLogin(organizationName string, invitedEmail string, token string, returnTo string, oauthProviders []oauth.OAuthProvider) {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@CardHeader()
+			@HeaderSection("Log in to join "+organizationName, "Use the account for the invited email address.")
+			@InvitationLoginForm(invitedEmail, token, returnTo)
+			@OAuthProviders("Login", oauthProviders)
+		}
+	}
+}
+
+templ InvitationLoginForm(invitedEmail string, token string, returnTo string) {
+	<form
+		x-data
+		autocomplete="on"
+		hx-post="/auth/invitations/login"
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		@csrf.CSRFInput()
+		<input type="hidden" name="token" value={ token }/>
+		<input type="hidden" name="return_to" value={ returnTo }/>
+		<label for="invitation-login-email" class="pb-4 text-grey-800 dark:text-grey-200">
+			<div class="pb-1.5">Email</div>
+		</label>
+		@form.Input(form.InputConfig{
+			ID:           "invitation-login-email",
+			Type:         form.Email,
+			Size:         form.Large,
+			Name:         "email_display",
+			Value:        invitedEmail,
+			Autocomplete: "username",
+			Disabled:     true,
+			Class:        "mb-4 opacity-70",
+		})
+		<label for="invitation-login-password" class="text-grey-800 dark:text-grey-200">
+			<div class="pb-1.5">Password <span class="text-red-600">*</span></div>
+		</label>
+		<div x-data="{ show: false }" class="mb-4 relative">
+			@form.Input(form.InputConfig{
+				ID:           "invitation-login-password",
+				Type:         form.Password,
+				Size:         form.Large,
+				Name:         "password",
+				Autocomplete: "current-password",
+				Placeholder:  "Enter your password",
+				Required:     true,
+				Class:        "!pr-12",
+				Attrs: templ.Attributes{
+					":type": "show ? 'text' : 'password'",
+				},
+			})
+			@passwordToggleButton()
+		</div>
+		@button.Button(button.ButtonConfig{
+			Label: "Login and join",
+			Icon:  icons.Login(),
+		})
+	</form>
+}
+
+templ invitationActionButton(action InvitationAction) {
+	if action.Primary {
+		@button.Button(button.ButtonConfig{
+			Label: action.Label,
+		})
+	} else {
+		@button.Button(button.ButtonConfig{
+			Label:   action.Label,
+			Color:   button.Light,
+			Variant: button.Outline,
+		})
+	}
+}
+
+templ invitationActionLink(action InvitationAction) {
+	if action.Primary {
+		@button.LinkButton(button.LinkButtonConfig{
+			Href:  action.Href,
+			Label: action.Label,
+		})
+	} else {
+		@button.LinkButton(button.LinkButtonConfig{
+			Href:    action.Href,
+			Label:   action.Label,
+			Color:   button.Light,
+			Variant: button.Outline,
+		})
+	}
+}

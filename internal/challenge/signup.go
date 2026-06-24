@@ -12,6 +12,7 @@ type CreateSignupChallengeInput struct {
 	Email        string
 	Username     string
 	PasswordHash string
+	InvitationID *uuid.UUID
 }
 
 type VerifySignupChallengeResult struct {
@@ -35,6 +36,7 @@ func (s *Service) CreateSignupChallenge(
 				Email:        in.Email,
 				Username:     in.Username,
 				PasswordHash: in.PasswordHash,
+				InvitationID: in.InvitationID,
 			})
 			return err
 		},

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/testutil"
 )
@@ -43,8 +44,9 @@ func TestSignupAndLoginSetSessionCookies(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		orgs := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeSingle})
 		h := &APIHandler{
-			Auth:       auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx}),
+			Auth:       auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx, Organizations: orgs}),
 			Session:    newAPIHandlerTestSessionService(t, tdb),
 			Limiter:    ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{}),
 			AccessTTL:  time.Minute,

@@ -300,15 +300,34 @@ func (h *UIHandler) verifySignupChallengePost(
 		return
 	}
 
+	input := auth.SignupInput{
+		Provider:     domain.ProviderPassword,
+		Username:     result.Action.Username,
+		Email:        result.Action.Email,
+		PasswordHash: result.Action.PasswordHash,
+	}
+	if result.Action.InvitationID != nil {
+		input.InvitationID = *result.Action.InvitationID
+		user, err := h.Auth.Signup(ctx, input)
+		if err != nil {
+			h.renderVerifyChallengeError(
+				w,
+				r,
+				VerifyChallengeActionSignup,
+				challengeIDStr,
+				"Could not create account for this invitation. Please start again.",
+			)
+			return
+		}
+
+		h.finishInvitationSessionByID(w, r, user, *result.Action.InvitationID, httpctx.ReturnToOrDefault(ctx, "/"), time.Now())
+		return
+	}
+
 	h.finishSignup(
 		w,
 		r,
-		auth.SignupInput{
-			Provider:     domain.ProviderPassword,
-			Username:     result.Action.Username,
-			Email:        result.Action.Email,
-			PasswordHash: result.Action.PasswordHash,
-		},
+		input,
 		challengeview.VerifyChallengeForm(
 			challengeIDStr,
 			VerifyChallengeActionSignup.Path(),

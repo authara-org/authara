@@ -44,6 +44,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(appSdk.RequireAuthWithRefresh)
 		r.Get("/private", handlers.Private)
+		r.Post("/private/invitations", handlers.InvitePost)
 	})
 
 	// --- Webhook endpoint ---
@@ -63,27 +64,8 @@ func main() {
 			string(evt.Data),
 		)
 
-		switch evt.Type {
-		case authara.WebhookEventUserCreated:
-			data, err := authara.DecodeWebhookData[authara.UserCreatedData](evt)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte("invalid user.created payload"))
-				return
-			}
-			log.Printf("user.created: user_id=%s", data.UserID)
-
-		case authara.WebhookEventUserDeleted:
-			data, err := authara.DecodeWebhookData[authara.UserDeletedData](evt)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte("invalid user.deleted payload"))
-				return
-			}
-			log.Printf("user.deleted: user_id=%s", data.UserID)
-
-		default:
-			log.Printf("unknown webhook event type: %s", evt.Type)
+		if err := handlers.RecordWebhook(evt); err != nil {
+			log.Printf("webhook projection skipped: type=%s err=%v", evt.Type, err)
 		}
 
 		w.WriteHeader(http.StatusNoContent)

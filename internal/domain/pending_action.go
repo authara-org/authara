@@ -16,6 +16,7 @@ type PendingSignupAction struct {
 	Email        string
 	Username     string
 	PasswordHash string
+	InvitationID *uuid.UUID
 }
 
 type PendingPasswordReset struct {

@@ -29,12 +29,13 @@ func TestAccessTokenService_GenerateAndParse_AppAudience(t *testing.T) {
 
 	userID := uuid.New()
 	sessionID := uuid.New()
+	organizationID := uuid.New()
 
 	var rs roles.Roles
 	rs.AddAdmin()
 	rs.AddMonitor()
 
-	tokenString, err := svc.Generate(userID, sessionID, AudienceApp, rs, now)
+	tokenString, err := svc.Generate(userID, sessionID, organizationID, "owner", AudienceApp, rs, now)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -50,6 +51,12 @@ func TestAccessTokenService_GenerateAndParse_AppAudience(t *testing.T) {
 
 	if claims.SessionID != sessionID {
 		t.Fatalf("expected session id %q, got %q", sessionID, claims.SessionID)
+	}
+	if claims.OrgID != organizationID {
+		t.Fatalf("expected organization id %q, got %q", organizationID, claims.OrgID)
+	}
+	if claims.OrgRole != "owner" {
+		t.Fatalf("expected organization role owner, got %q", claims.OrgRole)
 	}
 
 	if claims.Issuer != "authara-test" {
@@ -75,7 +82,7 @@ func TestAccessTokenService_GenerateAndParse_AdminAudience(t *testing.T) {
 	var rs roles.Roles
 	rs.AddAuditor()
 
-	tokenString, err := svc.Generate(userID, sessionID, AudienceAdmin, rs, now)
+	tokenString, err := svc.Generate(userID, sessionID, uuid.New(), "owner", AudienceAdmin, rs, now)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -94,7 +101,7 @@ func TestAccessTokenService_Parse_WrongAudience(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestAccessTokenService(t, 10*time.Minute)
 
-	tokenString, err := svc.Generate(uuid.New(), uuid.New(), AudienceApp, roles.Roles{}, now)
+	tokenString, err := svc.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceApp, roles.Roles{}, now)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -109,7 +116,7 @@ func TestAccessTokenService_ParseAny_AllowsAppAudience(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestAccessTokenService(t, 10*time.Minute)
 
-	tokenString, err := svc.Generate(uuid.New(), uuid.New(), AudienceApp, roles.Roles{}, now)
+	tokenString, err := svc.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceApp, roles.Roles{}, now)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -124,7 +131,7 @@ func TestAccessTokenService_ParseAny_AllowsAdminAudience(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestAccessTokenService(t, 10*time.Minute)
 
-	tokenString, err := svc.Generate(uuid.New(), uuid.New(), AudienceAdmin, roles.Roles{}, now)
+	tokenString, err := svc.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceAdmin, roles.Roles{}, now)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -139,7 +146,7 @@ func TestAccessTokenService_Parse_ExpiredToken(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestAccessTokenService(t, 1*time.Minute)
 
-	tokenString, err := svc.Generate(uuid.New(), uuid.New(), AudienceApp, roles.Roles{}, now)
+	tokenString, err := svc.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceApp, roles.Roles{}, now)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -179,7 +186,7 @@ func TestAccessTokenService_Parse_UnknownKey(t *testing.T) {
 	signer := NewAccessTokenService(keySetA, "authara-test", 10*time.Minute)
 	verifier := NewAccessTokenService(keySetB, "authara-test", 10*time.Minute)
 
-	tokenString, err := signer.Generate(uuid.New(), uuid.New(), AudienceApp, roles.Roles{}, now)
+	tokenString, err := signer.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceApp, roles.Roles{}, now)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -203,7 +210,7 @@ func TestAccessTokenService_Parse_WrongIssuer(t *testing.T) {
 	signer := NewAccessTokenService(keySet, "issuer-a", 10*time.Minute)
 	verifier := NewAccessTokenService(keySet, "issuer-b", 10*time.Minute)
 
-	tokenString, err := signer.Generate(uuid.New(), uuid.New(), AudienceApp, roles.Roles{}, now)
+	tokenString, err := signer.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceApp, roles.Roles{}, now)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -222,6 +229,8 @@ func TestAccessTokenService_Parse_MissingSubjectInvalidClaims(t *testing.T) {
 
 	claims := AccessClaims{
 		SessionID: uuid.New(),
+		OrgID:     uuid.New(),
+		OrgRole:   "owner",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    svc.issuer,
 			Subject:   "",
@@ -253,6 +262,8 @@ func TestAccessTokenService_Parse_NilSessionIDInvalidClaims(t *testing.T) {
 
 	claims := AccessClaims{
 		SessionID: uuid.Nil,
+		OrgID:     uuid.New(),
+		OrgRole:   "owner",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    svc.issuer,
 			Subject:   uuid.New().String(),
@@ -288,6 +299,8 @@ func TestValidateAccessClaims(t *testing.T) {
 			name: "valid claims",
 			claims: &AccessClaims{
 				SessionID: uuid.New(),
+				OrgID:     uuid.New(),
+				OrgRole:   "owner",
 				RegisteredClaims: jwt.RegisteredClaims{
 					Subject:   uuid.New().String(),
 					ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
@@ -299,6 +312,8 @@ func TestValidateAccessClaims(t *testing.T) {
 			name: "missing expires at",
 			claims: &AccessClaims{
 				SessionID: uuid.New(),
+				OrgID:     uuid.New(),
+				OrgRole:   "owner",
 				RegisteredClaims: jwt.RegisteredClaims{
 					Subject: uuid.New().String(),
 				},
@@ -309,6 +324,8 @@ func TestValidateAccessClaims(t *testing.T) {
 			name: "expired token",
 			claims: &AccessClaims{
 				SessionID: uuid.New(),
+				OrgID:     uuid.New(),
+				OrgRole:   "owner",
 				RegisteredClaims: jwt.RegisteredClaims{
 					Subject:   uuid.New().String(),
 					ExpiresAt: jwt.NewNumericDate(now.Add(-1 * time.Minute)),
@@ -320,6 +337,8 @@ func TestValidateAccessClaims(t *testing.T) {
 			name: "empty subject",
 			claims: &AccessClaims{
 				SessionID: uuid.New(),
+				OrgID:     uuid.New(),
+				OrgRole:   "owner",
 				RegisteredClaims: jwt.RegisteredClaims{
 					Subject:   "",
 					ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
@@ -331,6 +350,34 @@ func TestValidateAccessClaims(t *testing.T) {
 			name: "nil session id",
 			claims: &AccessClaims{
 				SessionID: uuid.Nil,
+				OrgID:     uuid.New(),
+				OrgRole:   "owner",
+				RegisteredClaims: jwt.RegisteredClaims{
+					Subject:   uuid.New().String(),
+					ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+				},
+			},
+			want: ErrInvalidClaims,
+		},
+		{
+			name: "nil organization id",
+			claims: &AccessClaims{
+				SessionID: uuid.New(),
+				OrgID:     uuid.Nil,
+				OrgRole:   "owner",
+				RegisteredClaims: jwt.RegisteredClaims{
+					Subject:   uuid.New().String(),
+					ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+				},
+			},
+			want: ErrInvalidClaims,
+		},
+		{
+			name: "empty organization role",
+			claims: &AccessClaims{
+				SessionID: uuid.New(),
+				OrgID:     uuid.New(),
+				OrgRole:   "",
 				RegisteredClaims: jwt.RegisteredClaims{
 					Subject:   uuid.New().String(),
 					ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),

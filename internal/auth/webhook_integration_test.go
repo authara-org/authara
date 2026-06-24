@@ -28,6 +28,7 @@ func TestSignup_EmitsUserCreated(t *testing.T) {
 			Store:            tdb.Store,
 			Tx:               tdb.Tx,
 			WebhookPublisher: pub,
+			Organizations:    testOrganizations(tdb),
 		})
 
 		user, err := svc.Signup(ctx, SignupInput{

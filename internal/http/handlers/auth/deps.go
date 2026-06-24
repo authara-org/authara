@@ -11,6 +11,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/session"
@@ -21,6 +22,7 @@ type Deps struct {
 	Auth           *auth.Service
 	Passkeys       *passkey.Service
 	Session        *session.Service
+	Organizations  *organization.Service
 	Challenge      *challenge.Service
 	Features       features.Features
 	Verification   *challenge.VerificationCodeService

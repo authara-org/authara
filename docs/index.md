@@ -29,7 +29,8 @@ Features include:
 - Google OAuth login
 - CSRF protection for browser flows
 - a stable HTTP authentication interface
-- event webhooks for user lifecycle integration (e.g. account creation and deletion)
+- Authara-hosted organization invitation acceptance
+- event webhooks for user and organization lifecycle integration
 
 Your application remains responsible for:
 

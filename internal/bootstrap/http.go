@@ -73,6 +73,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		Auth:              app.Services.Auth,
 		Passkeys:          app.Services.Passkeys,
 		Session:           app.Services.Session,
+		Organizations:     app.Services.Organizations,
 		Challenge:         app.Services.Challenge,
 		Features:          enabledFeatures,
 		Verification:      app.Services.Verification,
@@ -84,6 +85,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		AccessTokenTTL:    app.Config.Token.AccessTokenTTL,
 		RefreshTokenTTL:   app.Config.Session.RefreshTokenTTL,
 		Render:            renderer,
+		InternalAPIToken:  app.Config.InternalAPI.Token,
 	}, mw)
 
 	return server, nil

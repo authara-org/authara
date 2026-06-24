@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -23,6 +25,7 @@ type Config struct {
 	Logger           *slog.Logger
 	AccessPolicy     accesspolicy.EmailAccessPolicy
 	OAuthProviders   oauth.OAuthProviders
+	Organizations    *organization.Service
 }
 
 type Service struct {
@@ -32,6 +35,7 @@ type Service struct {
 	logger           *slog.Logger
 	accessPolicy     accesspolicy.EmailAccessPolicy
 	oauthProviders   oauth.OAuthProviders
+	organizations    *organization.Service
 }
 
 func New(cfg Config) *Service {
@@ -51,6 +55,7 @@ func New(cfg Config) *Service {
 		logger:           cfg.Logger,
 		accessPolicy:     access,
 		oauthProviders:   cfg.OAuthProviders,
+		organizations:    cfg.Organizations,
 	}
 }
 
@@ -155,6 +160,8 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error)
 }
 
 func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, error) {
+	in.InvitationToken = strings.TrimSpace(in.InvitationToken)
+
 	uname, err := EnsureUsername(in.Username, in.Email)
 	if err != nil {
 		return domain.User{}, err
@@ -186,7 +193,12 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, erro
 func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domain.User, error) {
 	var user domain.User
 
-	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	plan, source, err := s.signupOrganizationPlan(in.InvitationToken, in.InvitationID)
+	if err != nil {
+		return domain.User{}, err
+	}
+
+	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		user = domain.User{
 			Email:    in.Email,
 			Username: in.Username,
@@ -200,6 +212,11 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 			return err
 		}
 		user = created
+		if plan.CreateInitialOrg {
+			if _, _, _, err := s.organizations.EnsureInitialOrganization(txCtx, user, source); err != nil {
+				return err
+			}
+		}
 
 		provider := domain.AuthProvider{
 			UserID:         user.ID,
@@ -213,6 +230,12 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 			return err
 		}
 
+		if plan.AcceptInvitation {
+			if err := s.acceptSignupInvitation(txCtx, in.InvitationToken, in.InvitationID, user.ID); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 
@@ -221,6 +244,37 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 	}
 
 	return user, nil
+}
+
+func (s *Service) signupOrganizationPlan(invitationToken string, invitationID uuid.UUID) (organization.SignupOrganizationPlan, organization.SignupSource, error) {
+	source := signupSource(invitationToken, invitationID)
+	plan, err := s.organizations.SignupOrganizationPlan(source)
+	return plan, source, err
+}
+
+func signupSource(invitationToken string, invitationID uuid.UUID) organization.SignupSource {
+	if strings.TrimSpace(invitationToken) != "" || invitationID != uuid.Nil {
+		return organization.SignupSourceInvite
+	}
+	return organization.SignupSourceDirect
+}
+
+func (s *Service) acceptSignupInvitation(ctx context.Context, invitationToken string, invitationID uuid.UUID, userID uuid.UUID) error {
+	now := time.Now().UTC()
+	if invitationID != uuid.Nil {
+		_, err := s.organizations.AcceptInvitationByID(ctx, organization.AcceptInvitationByIDInput{
+			InvitationID: invitationID,
+			UserID:       userID,
+			Now:          now,
+		})
+		return err
+	}
+	_, err := s.organizations.AcceptInvitation(ctx, organization.AcceptInvitationInput{
+		RawToken: invitationToken,
+		UserID:   userID,
+		Now:      now,
+	})
+	return err
 }
 
 func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (domain.User, error) {
@@ -252,6 +306,11 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 
 	var user domain.User
 	createdUser := false
+
+	plan, source, err := s.signupOrganizationPlan(in.InvitationToken, uuid.Nil)
+	if err != nil {
+		return domain.User{}, err
+	}
 
 	uname, err := EnsureUsername(in.Username, in.Email)
 	if err != nil {
@@ -295,6 +354,11 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 			return err
 		}
 		createdUser = true
+		if plan.CreateInitialOrg {
+			if _, _, _, err := s.organizations.EnsureInitialOrganization(txCtx, user, source); err != nil {
+				return err
+			}
+		}
 
 		domainProvider := domain.AuthProvider{
 			UserID:         user.ID,
@@ -302,8 +366,17 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 			ProviderUserID: &in.OAuthID,
 		}
 		_, err = s.store.CreateAuthProvider(txCtx, domainProvider)
+		if err != nil {
+			return err
+		}
 
-		return err
+		if plan.AcceptInvitation {
+			if err := s.acceptSignupInvitation(txCtx, in.InvitationToken, uuid.Nil, user.ID); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	})
 
 	if err != nil {

@@ -8,7 +8,9 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
+	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
 )
@@ -25,6 +27,10 @@ func (p staticAccessPolicy) IsEmailAllowed(ctx context.Context, email string) (b
 	return p.allowed, nil
 }
 
+func testOrganizations(tdb *testutil.TestDB) *organization.Service {
+	return organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeSingle})
+}
+
 func TestNew_DefaultsNilDependencies(t *testing.T) {
 	svc := New(Config{})
 
@@ -33,6 +39,9 @@ func TestNew_DefaultsNilDependencies(t *testing.T) {
 	}
 	if svc.accessPolicy == nil {
 		t.Fatal("expected default access policy to be set")
+	}
+	if svc.organizations != nil {
+		t.Fatal("expected organization service to require explicit configuration")
 	}
 }
 
@@ -103,9 +112,10 @@ func TestSignup_WithPassword_Succeeds(t *testing.T) {
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		svc := New(Config{
-			Store:        tdb.Store,
-			Tx:           tdb.Tx,
-			AccessPolicy: staticAccessPolicy{allowed: true},
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: testOrganizations(tdb),
 		})
 
 		user, err := svc.Signup(ctx, SignupInput{
@@ -123,6 +133,198 @@ func TestSignup_WithPassword_Succeeds(t *testing.T) {
 		if user.Username != "signup-user" {
 			t.Fatalf("expected username signup-user, got %q", user.Username)
 		}
+		org, membership := userOnlyOrganization(t, ctx, tdb, user.ID)
+		if org.Kind != domain.OrganizationKindTeam || membership.Role != domain.OrganizationRoleOwner {
+			t.Fatalf("expected team owner org, got org=%+v membership=%+v", org, membership)
+		}
+	})
+}
+
+func TestSignup_WithPassword_UsesOrganizationMode(t *testing.T) {
+	tests := []struct {
+		mode     organization.OrgMode
+		wantKind domain.OrganizationKind
+	}{
+		{organization.OrgModePersonal, domain.OrganizationKindPersonal},
+		{organization.OrgModeSingle, domain.OrganizationKindTeam},
+		{organization.OrgModeMulti, domain.OrganizationKindPersonal},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.mode), func(t *testing.T) {
+			tdb := testutil.OpenTestDB(t)
+
+			testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+				orgs := organization.New(organization.Config{
+					Store: tdb.Store,
+					Tx:    tdb.Tx,
+					Mode:  tt.mode,
+				})
+				svc := New(Config{
+					Store:         tdb.Store,
+					Tx:            tdb.Tx,
+					AccessPolicy:  staticAccessPolicy{allowed: true},
+					Organizations: orgs,
+				})
+
+				user, err := svc.Signup(ctx, SignupInput{
+					Provider:     domain.ProviderPassword,
+					Email:        "signup-" + string(tt.mode) + "@example.com",
+					Username:     "signup-" + string(tt.mode),
+					PasswordHash: "hashed-password",
+				})
+				if err != nil {
+					t.Fatalf("Signup failed: %v", err)
+				}
+
+				org, membership := userOnlyOrganization(t, ctx, tdb, user.ID)
+				if org.Kind != tt.wantKind || membership.Role != domain.OrganizationRoleOwner {
+					t.Fatalf("expected %s owner org, got org=%+v membership=%+v", tt.wantKind, org, membership)
+				}
+			})
+		})
+	}
+}
+
+func userOnlyOrganization(t *testing.T, ctx context.Context, tdb *testutil.TestDB, userID uuid.UUID) (domain.Organization, domain.OrganizationMembership) {
+	t.Helper()
+
+	memberships, err := tdb.Store.ListOrganizationMembershipsByUserID(ctx, userID)
+	if err != nil {
+		t.Fatalf("ListOrganizationMembershipsByUserID failed: %v", err)
+	}
+	if len(memberships) != 1 {
+		t.Fatalf("expected 1 membership, got %d", len(memberships))
+	}
+	org, err := tdb.Store.GetOrganizationByID(ctx, memberships[0].OrganizationID)
+	if err != nil {
+		t.Fatalf("GetOrganizationByID failed: %v", err)
+	}
+	return org, memberships[0]
+}
+
+func TestSignup_WithInvitationSkipsDefaultOrganization(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "invite-owner@example.com", Username: "invite-owner"})
+		if err != nil {
+			t.Fatalf("CreateUser owner failed: %v", err)
+		}
+		org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, owner.ID, owner.Username)
+		if err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+
+		orgs := organization.New(organization.Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			Mode:          organization.OrgModeSingle,
+			InvitationTTL: time.Hour,
+		})
+		invite, err := orgs.CreateInvitation(ctx, organization.CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			Email:          "invited-signup@example.com",
+			Now:            time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatalf("CreateInvitation failed: %v", err)
+		}
+
+		svc := New(Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: orgs,
+		})
+
+		user, err := svc.Signup(ctx, SignupInput{
+			Provider:        domain.ProviderPassword,
+			Email:           "invited-signup@example.com",
+			Username:        "invited-signup",
+			PasswordHash:    "hashed-password",
+			InvitationToken: invite.RawToken,
+		})
+		if err != nil {
+			t.Fatalf("Signup failed: %v", err)
+		}
+
+		_, _, err = tdb.Store.GetPersonalOrganizationForUser(ctx, user.ID)
+		if !errors.Is(err, store.ErrOrganizationNotFound) {
+			t.Fatalf("expected no personal default org, got %v", err)
+		}
+		membership, err := tdb.Store.GetOrganizationMembership(ctx, org.ID, user.ID)
+		if err != nil {
+			t.Fatalf("GetOrganizationMembership failed: %v", err)
+		}
+		if membership.Role != domain.OrganizationRoleMember {
+			t.Fatalf("expected member role, got %q", membership.Role)
+		}
+	})
+}
+
+func TestSignup_WithInvitationInMultiCreatesPersonalAndJoinsInvite(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "multi-owner@example.com", Username: "multi-owner"})
+		if err != nil {
+			t.Fatalf("CreateUser owner failed: %v", err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, owner.Username, domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatalf("EnsureOrganizationForUser owner failed: %v", err)
+		}
+
+		orgs := organization.New(organization.Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			Mode:          organization.OrgModeMulti,
+			InvitationTTL: time.Hour,
+		})
+		invite, err := orgs.CreateInvitation(ctx, organization.CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			Email:          "multi-invited@example.com",
+			Now:            time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatalf("CreateInvitation failed: %v", err)
+		}
+
+		svc := New(Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: orgs,
+		})
+
+		user, err := svc.Signup(ctx, SignupInput{
+			Provider:        domain.ProviderPassword,
+			Email:           "multi-invited@example.com",
+			Username:        "multi-invited",
+			PasswordHash:    "hashed-password",
+			InvitationToken: invite.RawToken,
+		})
+		if err != nil {
+			t.Fatalf("Signup failed: %v", err)
+		}
+
+		personal, ownerMembership, err := tdb.Store.GetPersonalOrganizationForUser(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("GetPersonalOrganizationForUser failed: %v", err)
+		}
+		if personal.Kind != domain.OrganizationKindPersonal || ownerMembership.Role != domain.OrganizationRoleOwner {
+			t.Fatalf("expected personal owner org, got org=%+v membership=%+v", personal, ownerMembership)
+		}
+		invitedMembership, err := tdb.Store.GetOrganizationMembership(ctx, org.ID, user.ID)
+		if err != nil {
+			t.Fatalf("GetOrganizationMembership failed: %v", err)
+		}
+		if invitedMembership.Role != domain.OrganizationRoleMember {
+			t.Fatalf("expected invited member role, got %q", invitedMembership.Role)
+		}
 	})
 }
 
@@ -131,9 +333,10 @@ func TestSignup_GeneratesUsernameWhenEmpty(t *testing.T) {
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		svc := New(Config{
-			Store:        tdb.Store,
-			Tx:           tdb.Tx,
-			AccessPolicy: staticAccessPolicy{allowed: true},
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: testOrganizations(tdb),
 		})
 
 		user, err := svc.Signup(ctx, SignupInput{
@@ -304,9 +507,10 @@ func TestLoginWithExternalIdentity_CreatesUserWhenMissing(t *testing.T) {
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		svc := New(Config{
-			Store:        tdb.Store,
-			Tx:           tdb.Tx,
-			AccessPolicy: staticAccessPolicy{allowed: true},
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: testOrganizations(tdb),
 			OAuthProviders: oauth.OAuthProviders{
 				Providers: []oauth.OAuthProvider{
 					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
@@ -346,6 +550,10 @@ func TestLoginWithExternalIdentity_CreatesUserWhenMissing(t *testing.T) {
 		if provider.UserID != user.ID {
 			t.Fatalf("expected provider user_id %q, got %q", user.ID, provider.UserID)
 		}
+		org, membership := userOnlyOrganization(t, ctx, tdb, user.ID)
+		if org.Kind != domain.OrganizationKindTeam || membership.Role != domain.OrganizationRoleOwner {
+			t.Fatalf("expected team owner org, got org=%+v membership=%+v", org, membership)
+		}
 	})
 }
 
@@ -362,9 +570,10 @@ func TestLoginWithExternalIdentity_ExistingEmailMustLink(t *testing.T) {
 		}
 
 		svc := New(Config{
-			Store:        tdb.Store,
-			Tx:           tdb.Tx,
-			AccessPolicy: staticAccessPolicy{allowed: true},
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: testOrganizations(tdb),
 			OAuthProviders: oauth.OAuthProviders{
 				Providers: []oauth.OAuthProvider{
 					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
@@ -407,9 +616,10 @@ func TestLoginWithExternalIdentity_ReturnsExistingProviderUser(t *testing.T) {
 		}
 
 		svc := New(Config{
-			Store:        tdb.Store,
-			Tx:           tdb.Tx,
-			AccessPolicy: staticAccessPolicy{allowed: true},
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: testOrganizations(tdb),
 			OAuthProviders: oauth.OAuthProviders{
 				Providers: []oauth.OAuthProvider{
 					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
@@ -764,9 +974,10 @@ func TestSignup_DuplicateEmailReturnsUserAlreadyExists(t *testing.T) {
 		}
 
 		svc := New(Config{
-			Store:        tdb.Store,
-			Tx:           tdb.Tx,
-			AccessPolicy: staticAccessPolicy{allowed: true},
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: testOrganizations(tdb),
 		})
 
 		_, err = svc.Signup(ctx, SignupInput{
@@ -980,9 +1191,10 @@ func TestLoginWithExternalIdentity_CreatesUserWhenMissing_PersistsUserAndProvide
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		svc := New(Config{
-			Store:        tdb.Store,
-			Tx:           tdb.Tx,
-			AccessPolicy: staticAccessPolicy{allowed: true},
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: testOrganizations(tdb),
 			OAuthProviders: oauth.OAuthProviders{
 				Providers: []oauth.OAuthProvider{
 					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
@@ -1027,9 +1239,10 @@ func TestLoginWithExternalIdentity_GeneratesUsernameWhenEmpty(t *testing.T) {
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		svc := New(Config{
-			Store:        tdb.Store,
-			Tx:           tdb.Tx,
-			AccessPolicy: staticAccessPolicy{allowed: true},
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  staticAccessPolicy{allowed: true},
+			Organizations: testOrganizations(tdb),
 			OAuthProviders: oauth.OAuthProviders{
 				Providers: []oauth.OAuthProvider{
 					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),

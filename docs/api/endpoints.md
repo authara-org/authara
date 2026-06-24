@@ -16,6 +16,14 @@ These endpoints are primarily intended for:
 
 Browser login flows use HTML endpoints under `/auth`.
 
+Internal server-to-server endpoints are available under:
+
+```
+/auth/internal/v1
+```
+
+These endpoints are intended for your application backend, not browsers.
+
 ---
 
 # Authentication
@@ -62,6 +70,11 @@ Example:
   "email": "user@example.com",
   "username": "user",
   "roles": [],
+  "organization": {
+    "id": "68c673e7-1ff9-4113-8bbf-e00f039a9a61",
+    "name": "user",
+    "role": "owner"
+  },
   "disabled": false,
   "created_at": "2026-01-01T12:00:00Z"
 }
@@ -175,6 +188,62 @@ POST /auth/api/v1/tokens/refresh
 | 500 | internal_error |
 
 See [Errors](errors.md).
+
+---
+
+# Internal Endpoints
+
+## Create organization invitation
+
+Creates a secure Authara member invitation object and returns the invitation link.
+
+Your application backend should call this after it has enforced product-specific rules such as billing and seat limits. `actor_user_id` is required; Authara validates that the actor is a member of the organization and is allowed to invite members. Invitations always grant the `member` role; upgrade roles separately after the user joins.
+
+```
+POST /auth/internal/v1/organizations/{organization_id}/invitations
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
+### Request
+
+```json
+{
+  "actor_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1",
+  "email": "teammate@example.com",
+  "return_to": "/settings/team"
+}
+```
+
+### Response
+
+```json
+{
+  "invitation": {
+    "id": "7ea9ce22-72bb-45bd-96d2-7368314dd345",
+    "organization_id": "68c673e7-1ff9-4113-8bbf-e00f039a9a61",
+    "email": "teammate@example.com",
+    "role": "member",
+    "status": "pending",
+    "expires_at": "2026-01-08T12:00:00Z",
+    "invite_url": "https://example.com/auth/invitations/accept?token=..."
+  }
+}
+```
+
+Authara also enqueues an invitation email when the email worker is configured. The returned `invite_url` is always present for testing or app-owned delivery.
+
+### Errors
+
+| Status | Code |
+|------|------|
+| 401 | unauthorized |
+| 403 | actor_not_member |
+| 403 | actor_not_allowed |
+| 404 | organization_not_found |
+| 409 | already_member |
+| 409 | invitation_already_pending |
+| 400 | invalid_request |
+| 500 | internal_error |
 
 ---
 

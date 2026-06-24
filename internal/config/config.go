@@ -19,6 +19,8 @@ type Config struct {
 	Webhook      Webhook
 	AccessPolicy AccessPolicy
 	Admin        Admin
+	InternalAPI  InternalAPI
+	Organization Organization
 	Challenge    Challenge
 	Email        Email
 }
@@ -63,6 +65,12 @@ func Load() (*Config, error) {
 	if err := cfg.Admin.validate(); err != nil {
 		return nil, err
 	}
+	if err := cfg.InternalAPI.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Organization.validate(); err != nil {
+		return nil, err
+	}
 	if err := cfg.Challenge.validate(); err != nil {
 		return nil, err
 	}
@@ -88,6 +96,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.Webhook.parse(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Organization.parse(); err != nil {
 		return nil, err
 	}
 	if err := cfg.Email.parse(); err != nil {

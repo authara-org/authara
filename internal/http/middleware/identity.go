@@ -33,6 +33,8 @@ func OptionalAccessIdentity(
 			ctx = httpctx.WithUserID(ctx, identity.UserID)
 			ctx = httpctx.WithRoles(ctx, identity.Roles)
 			ctx = httpctx.WithSessionID(ctx, identity.SessionID)
+			ctx = httpctx.WithOrganizationID(ctx, identity.OrganizationID)
+			ctx = httpctx.WithOrganizationRole(ctx, identity.OrganizationRole)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

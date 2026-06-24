@@ -10,10 +10,11 @@ type PendingSignupAction struct {
 	ID        uuid.UUID `db:"id"`
 	CreatedAt time.Time `db:"created_at"`
 
-	ChallengeID  uuid.UUID `db:"challenge_id"`
-	Email        string    `db:"email"`
-	Username     string    `db:"username"`
-	PasswordHash string    `db:"password_hash"`
+	ChallengeID  uuid.UUID  `db:"challenge_id"`
+	Email        string     `db:"email"`
+	Username     string     `db:"username"`
+	PasswordHash string     `db:"password_hash"`
+	InvitationID *uuid.UUID `db:"invitation_id"`
 }
 
 func (PendingSignupAction) TableName() string {

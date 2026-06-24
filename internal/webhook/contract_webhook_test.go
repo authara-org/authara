@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
@@ -26,14 +27,10 @@ type webhookContractEvent struct {
 }
 
 type webhookContractPayload struct {
-	ID        string                     `yaml:"id"`
-	Type      string                     `yaml:"type"`
-	CreatedAt string                     `yaml:"created_at"`
-	Data      webhookContractPayloadData `yaml:"data"`
-}
-
-type webhookContractPayloadData struct {
-	UserID string `yaml:"user_id"`
+	ID        string            `yaml:"id"`
+	Type      string            `yaml:"type"`
+	CreatedAt string            `yaml:"created_at"`
+	Data      map[string]string `yaml:"data"`
 }
 
 type webhookSignatureSpec struct {
@@ -170,6 +167,41 @@ func TestWebhookContract_UserDeletedPayloadShape(t *testing.T) {
 	assertEnvelopeMatchesContract(t, evt, spec)
 }
 
+func TestWebhookContract_OrganizationInvitationCreatedPayloadShape(t *testing.T) {
+	contract := loadWebhookContract(t)
+	spec := mustFindEventSpec(t, contract, string(EventOrganizationInvitationCreated))
+
+	actorID := uuid.New()
+	evt := NewOrganizationInvitationCreated(fakeInvitation(&actorID), time.Now())
+	assertEnvelopeMatchesContract(t, evt, spec)
+}
+
+func TestWebhookContract_OrganizationInvitationAcceptedPayloadShape(t *testing.T) {
+	contract := loadWebhookContract(t)
+	spec := mustFindEventSpec(t, contract, string(EventOrganizationInvitationAccepted))
+
+	acceptedBy := uuid.New()
+	acceptedAt := time.Now().UTC()
+	invitation := fakeInvitation(nil)
+	invitation.AcceptedAt = &acceptedAt
+	invitation.AcceptedByUserID = &acceptedBy
+
+	evt := NewOrganizationInvitationAccepted(invitation, time.Now())
+	assertEnvelopeMatchesContract(t, evt, spec)
+}
+
+func TestWebhookContract_OrganizationMembershipCreatedPayloadShape(t *testing.T) {
+	contract := loadWebhookContract(t)
+	spec := mustFindEventSpec(t, contract, string(EventOrganizationMembershipCreated))
+
+	evt := NewOrganizationMembershipCreated(domain.OrganizationMembership{
+		OrganizationID: uuid.New(),
+		UserID:         uuid.New(),
+		Role:           domain.OrganizationRoleMember,
+	}, time.Now())
+	assertEnvelopeMatchesContract(t, evt, spec)
+}
+
 func loadWebhookContract(t *testing.T) webhookContract {
 	t.Helper()
 
@@ -227,10 +259,6 @@ func assertEnvelopeMatchesContract(t *testing.T, evt Envelope, spec webhookContr
 	if spec.Payload.CreatedAt != "rfc3339" {
 		t.Fatalf("expected contract payload created_at type rfc3339, got %q", spec.Payload.CreatedAt)
 	}
-	if spec.Payload.Data.UserID != "uuid" {
-		t.Fatalf("expected contract payload data.user_id type uuid, got %q", spec.Payload.Data.UserID)
-	}
-
 	id, ok := body["id"].(string)
 	if !ok || id == "" {
 		t.Fatalf("expected non-empty string id, got %#v", body["id"])
@@ -253,14 +281,53 @@ func assertEnvelopeMatchesContract(t *testing.T, evt Envelope, spec webhookContr
 	if !ok {
 		t.Fatalf("expected data object, got %#v", body["data"])
 	}
-	assertFieldPresent(t, data, "user_id")
 
-	userID, ok := data["user_id"].(string)
-	if !ok || userID == "" {
-		t.Fatalf("expected non-empty user_id string, got %#v", data["user_id"])
+	for field, fieldType := range spec.Payload.Data {
+		assertContractDataField(t, data, field, fieldType)
 	}
-	if _, err := uuid.Parse(userID); err != nil {
-		t.Fatalf("expected valid uuid user_id, got %q: %v", userID, err)
+}
+
+func assertContractDataField(t *testing.T, data map[string]any, field string, fieldType string) {
+	t.Helper()
+
+	assertFieldPresent(t, data, field)
+	value := data[field]
+
+	switch fieldType {
+	case "uuid":
+		s, ok := value.(string)
+		if !ok || s == "" {
+			t.Fatalf("expected non-empty uuid string %q, got %#v", field, value)
+		}
+		if _, err := uuid.Parse(s); err != nil {
+			t.Fatalf("expected valid uuid %q, got %q: %v", field, s, err)
+		}
+	case "uuid|null":
+		if value == nil {
+			return
+		}
+		s, ok := value.(string)
+		if !ok || s == "" {
+			t.Fatalf("expected uuid string or null %q, got %#v", field, value)
+		}
+		if _, err := uuid.Parse(s); err != nil {
+			t.Fatalf("expected valid uuid %q, got %q: %v", field, s, err)
+		}
+	case "string":
+		s, ok := value.(string)
+		if !ok || s == "" {
+			t.Fatalf("expected non-empty string %q, got %#v", field, value)
+		}
+	case "rfc3339":
+		s, ok := value.(string)
+		if !ok || s == "" {
+			t.Fatalf("expected non-empty rfc3339 string %q, got %#v", field, value)
+		}
+		if _, err := time.Parse(time.RFC3339, s); err != nil {
+			t.Fatalf("expected valid rfc3339 %q, got %q: %v", field, s, err)
+		}
+	default:
+		t.Fatalf("unsupported contract data type %q for field %q", fieldType, field)
 	}
 }
 
@@ -269,5 +336,16 @@ func assertFieldPresent(t *testing.T, obj map[string]any, field string) {
 
 	if _, ok := obj[field]; !ok {
 		t.Fatalf("expected field %q to be present, got object %#v", field, obj)
+	}
+}
+
+func fakeInvitation(invitedBy *uuid.UUID) domain.OrganizationInvitation {
+	return domain.OrganizationInvitation{
+		ID:              uuid.New(),
+		OrganizationID:  uuid.New(),
+		Email:           "teammate@example.com",
+		Role:            domain.OrganizationRoleMember,
+		InvitedByUserID: invitedBy,
+		ExpiresAt:       time.Now().UTC().Add(24 * time.Hour),
 	}
 }

@@ -2,6 +2,7 @@ package challenge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"time"
@@ -135,6 +136,7 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 
 func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.Time) error {
 	var msg email.Message
+	var err error
 
 	switch job.Template {
 	case domain.EmailTemplateSignupCode:
@@ -193,6 +195,19 @@ func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.T
 		}
 
 		msg, err = email.BuildEmailChangeCodeMessage(code)
+		if err != nil {
+			return err
+		}
+
+	case domain.EmailTemplateOrganizationInvite:
+		var payload email.OrganizationInvitationPayload
+		if len(job.TemplateData) > 0 {
+			if err := json.Unmarshal(job.TemplateData, &payload); err != nil {
+				return err
+			}
+		}
+
+		msg, err = email.BuildOrganizationInvitationMessage(payload)
 		if err != nil {
 			return err
 		}

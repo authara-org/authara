@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -26,6 +27,9 @@ func TestRefreshPostSetsCookiesOnly(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
 		}
 
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
@@ -70,6 +74,9 @@ func TestTokenRefreshPostReturnsTokensFromBody(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateUser failed: %v", err)
 		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
 
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
 		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
@@ -110,6 +117,9 @@ func TestRefreshPostDisabledUserReturnsUnauthorized(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
 		}
 
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
@@ -152,10 +162,11 @@ func newAPIHandlerTestSessionService(t *testing.T, tdb *testutil.TestDB) *sessio
 	if err != nil {
 		t.Fatalf("NewKeySet failed: %v", err)
 	}
+	txManager := tx.New(tdb.Store)
 
 	return session.New(session.SessionConfig{
 		Store: tdb.Store,
-		Tx:    tx.New(tdb.Store),
+		Tx:    txManager,
 		AccessTokens: token.NewAccessTokenService(
 			keySet,
 			"authara-test",
@@ -163,6 +174,7 @@ func newAPIHandlerTestSessionService(t *testing.T, tdb *testutil.TestDB) *sessio
 		),
 		SessionTTL:      time.Hour,
 		RefreshTokenTTL: time.Hour,
+		Organizations:   organization.New(organization.Config{Store: tdb.Store, Tx: txManager}),
 	})
 }
 

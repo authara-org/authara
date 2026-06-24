@@ -27,6 +27,57 @@ events:
       data:
         user_id: uuid
 
+  - type: organization_invitation.created
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: organization_invitation.created
+      created_at: rfc3339
+      data:
+        invitation_id: uuid
+        organization_id: uuid
+        email: string
+        role: string
+        invited_by_user_id: uuid|null
+        expires_at: rfc3339
+
+  - type: organization_invitation.accepted
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: organization_invitation.accepted
+      created_at: rfc3339
+      data:
+        invitation_id: uuid
+        organization_id: uuid
+        email: string
+        role: string
+        accepted_by_user_id: uuid
+        accepted_at: rfc3339
+
+  - type: organization_membership.created
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: organization_membership.created
+      created_at: rfc3339
+      data:
+        organization_id: uuid
+        user_id: uuid
+        role: string
+
 signature:
   header: X-Authara-Signature
   format: sha256=<hex>

@@ -49,6 +49,13 @@ routes:
     access: public
     notes: Refresh current session.
 
+  - method: GET
+    path: /auth/invitations/accept
+    stability: stable
+    kind: html
+    access: public
+    notes: Authara-hosted organization invitation accept page.
+
   # ------------------------------------------------------------
   # OAuth
   # ------------------------------------------------------------
@@ -68,6 +75,13 @@ routes:
     kind: html
     access: user
     notes: Authenticated user account page.
+
+  - method: POST
+    path: /auth/invitations/accept
+    stability: stable
+    kind: action
+    access: user
+    notes: Accepts an organization invitation for the authenticated user.
 
   # ------------------------------------------------------------
   # JSON API v1
@@ -121,6 +135,16 @@ routes:
     access: public
     notes: Logs out current session.
 
+  # ------------------------------------------------------------
+  # Internal API v1
+  # ------------------------------------------------------------
+  - method: POST
+    path: /auth/internal/v1/organizations/{organizationID}/invitations
+    stability: stable
+    kind: json
+    access: internal
+    notes: Creates a member organization invitation. Requires AUTHARA_INTERNAL_API_TOKEN bearer auth, requires actor_user_id, and does not use CSRF.
+
 json_success_responses:
   - endpoint: GET /auth/api/v1/csrf
     stability: stable
@@ -162,6 +186,10 @@ json_success_responses:
       disabled: bool
       created_at: string
       roles: array
+      organization:
+        id: uuid
+        name: string
+        role: string
 
   - endpoint: POST /auth/api/v1/sessions/refresh
     stability: stable
@@ -188,6 +216,20 @@ json_success_responses:
       cookies_cleared:
         - authara_access
         - authara_refresh
+
+  - endpoint: POST /auth/internal/v1/organizations/{organizationID}/invitations
+    stability: stable
+    response:
+      status: 201
+      body:
+        invitation:
+          id: uuid
+          organization_id: uuid
+          email: string
+          role: string
+          status: string
+          expires_at: rfc3339
+          invite_url: string
 
 json_error_envelope:
   stability: stable
@@ -259,6 +301,26 @@ json_error_contracts:
     stability: stable
     errors: []
 
+  - endpoint: POST /auth/internal/v1/organizations/{organizationID}/invitations
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 403
+        code: actor_not_member
+      - status: 403
+        code: actor_not_allowed
+      - status: 404
+        code: organization_not_found
+      - status: 409
+        code: already_member
+      - status: 409
+        code: invitation_already_pending
+      - status: 400
+        code: invalid_request
+      - status: 500
+        code: internal_error
+
 csrf_contract:
   stability: stable
 
@@ -266,6 +328,7 @@ csrf_contract:
     rule: every stable POST route under /auth requires CSRF
     exceptions:
       - /auth/api/v1/tokens/refresh
+      - /auth/internal/v1/organizations/{organizationID}/invitations
 
   browser_error:
     status: 403

@@ -11,7 +11,8 @@ type Session struct {
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
 
-	UserID uuid.UUID `db:"user_id"`
+	UserID               uuid.UUID `db:"user_id"`
+	ActiveOrganizationID uuid.UUID `db:"active_organization_id"`
 
 	ExpiresAt time.Time  `db:"expires_at"`
 	RevokedAt *time.Time `db:"revoked_at"`

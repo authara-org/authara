@@ -28,6 +28,9 @@ func TestProviderLinkConfirmPostRateLimitsPasswordProof(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateUser failed: %v", err)
 		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
 
 		passwordHash, err := authsvc.Hash("correct-password")
 		if err != nil {

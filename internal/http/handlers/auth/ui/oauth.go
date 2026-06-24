@@ -111,6 +111,12 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	returnTo := httpctx.ReturnToOrDefault(ctx, "/")
+	if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
+		h.finishInvitationOAuth(w, r, path, rawToken, returnTo, identity.Email, identity.OAuthID)
+		return
+	}
+
 	input := auth.LoginInput{
 		Provider: domain.ProviderGoogle,
 		Email:    identity.Email,
@@ -145,11 +151,6 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ctx)
 		return
 
-	}
-
-	returnTo, ok := httpctx.ReturnTo(r.Context())
-	if !ok {
-		returnTo = "/"
 	}
 
 	audience := redirect.AudienceForPath(returnTo)
