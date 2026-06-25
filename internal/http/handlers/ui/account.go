@@ -12,12 +12,12 @@ import (
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
-	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/kit/flash"
 	"github.com/authara-org/authara/internal/http/kit/htmx"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
@@ -213,7 +213,7 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 	newEmail := strings.TrimSpace(r.FormValue("new_email"))
 	newEmail = strings.ToLower(newEmail)
 
-	if !authhandler.IsValidEmail(newEmail) {
+	if !validation.IsValidEmail(newEmail) {
 		htmx.ReSwap(w, "none")
 		_ = h.Render(
 			w,
@@ -447,7 +447,7 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 	newPassword := strings.TrimSpace(r.FormValue("new_password"))
 	confirmPassword := strings.TrimSpace(r.FormValue("confirm_password"))
 
-	if !authhandler.IsValidPassword(newPassword) {
+	if !validation.IsValidPassword(newPassword) {
 		htmx.ReSwap(w, "none")
 		_ = h.Render(w, r, http.StatusUnprocessableEntity, toast.ToastMessage(toast.Error, "Please provide a valid new password."))
 		return

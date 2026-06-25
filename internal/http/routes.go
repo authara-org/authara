@@ -5,10 +5,6 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
-	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
-	"github.com/authara-org/authara/internal/http/handlers/auth/api"
-	"github.com/authara-org/authara/internal/http/handlers/auth/ui"
-	"github.com/authara-org/authara/internal/http/handlers/internalapi"
 	"github.com/authara-org/authara/internal/http/handlers/meta"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	"github.com/go-chi/chi/v5"
@@ -50,27 +46,9 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 		r.Get("/auth/version", meta.Version(cfg.Version))
 	})
 
-	deps := authhandler.Deps{
-		Admin:          cfg.Admin,
-		Auth:           cfg.Auth,
-		Passkeys:       cfg.Passkeys,
-		Session:        cfg.Session,
-		Organizations:  cfg.Organizations,
-		Limiter:        cfg.AuthLimiter,
-		Logger:         cfg.Logger,
-		Google:         cfg.Google,
-		OAuthProviders: cfg.OAuthProviders,
-		AccessTTL:      cfg.AccessTokenTTL,
-		RefreshTTL:     cfg.RefreshTokenTTL,
-		Render:         cfg.Render,
-		Challenge:      cfg.Challenge,
-		Features:       cfg.Features,
-		Verification:   cfg.Verification,
-	}
-
-	uih := ui.NewUIHandler(deps)
-	apih := api.NewAPIHandler(deps)
-	internalh := internalapi.New(cfg.Organizations, cfg.InternalAPIToken)
+	uih := cfg.Handlers.UI
+	apih := cfg.Handlers.API
+	internalh := cfg.Handlers.InternalAPI
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(mw.ReturnTo)
@@ -241,8 +219,15 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Use(mw.RequireAppAccessAuthAPI)
 
 				r.Get("/user", apih.UserGet)
+				r.Get("/organizations", apih.OrganizationsGet)
+				r.Get("/organizations/current", apih.OrganizationCurrentGet)
 				// r.Post("/user/username", apih.ChangeUsername)
 				// r.Post("/user/delete", apih.DeleteUser)
+
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireAPICSRF)
+					r.Post("/organizations/{organizationID}/switch", apih.OrganizationSwitchPost)
+				})
 			})
 
 			r.Route("/admin", func(r chi.Router) {
@@ -255,7 +240,19 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 		// Internal server-to-server API
 		r.Route("/internal/v1", func(r chi.Router) {
+			r.Use(mw.RequireInternalAPIAuth)
+
+			r.Get("/capabilities", internalh.CapabilitiesGet)
+			r.Post("/organizations", internalh.CreateOrganization)
+			r.Get("/organizations/{organizationID}", internalh.GetOrganization)
+			r.Patch("/organizations/{organizationID}", internalh.UpdateOrganization)
+			r.Get("/organizations/{organizationID}/members", internalh.ListOrganizationMembers)
+			r.Get("/organizations/{organizationID}/members/{userID}", internalh.GetOrganizationMember)
+			r.Get("/organizations/{organizationID}/invitations", internalh.ListOrganizationInvitations)
 			r.Post("/organizations/{organizationID}/invitations", internalh.CreateOrganizationInvitation)
+			r.Get("/organizations/{organizationID}/invitations/{invitationID}", internalh.GetOrganizationInvitation)
+			r.Post("/organizations/{organizationID}/invitations/{invitationID}/revoke", internalh.RevokeOrganizationInvitation)
+			r.Get("/users/{userID}/memberships", internalh.ListUserMemberships)
 		})
 	})
 

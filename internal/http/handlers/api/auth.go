@@ -9,10 +9,10 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
-	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/response"
+	"github.com/authara-org/authara/internal/http/kit/validation"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
@@ -46,7 +46,7 @@ func (h *APIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !authhandler.IsValidEmail(in.Email) || !authhandler.IsValidPassword(in.Password) {
+	if !validation.IsValidEmail(in.Email) || !validation.IsValidPassword(in.Password) {
 		response.WriteError(
 			w,
 			mustRouteError(SignupPostErrors, response.CodeInvalidRequest),

@@ -7,6 +7,9 @@ import (
 	cachepkg "github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/features"
 	httpserver "github.com/authara-org/authara/internal/http"
+	"github.com/authara-org/authara/internal/http/handlers/api"
+	"github.com/authara-org/authara/internal/http/handlers/internalapi"
+	"github.com/authara-org/authara/internal/http/handlers/ui"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	"github.com/authara-org/authara/internal/oauth/google"
@@ -48,6 +51,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Config.Session.RefreshTokenTTL,
 			time.Now,
 		),
+		RequireInternalAPIAuth:    httpmiddleware.RequireInternalAPIAuth(app.Config.InternalAPI.Token),
 		RequireAdminRole:          httpmiddleware.RequireAdmin,
 		RequireCSRF:               httpmiddleware.RequireCSRF,
 		RequireAPICSRF:            httpmiddleware.RequireAPICSRF,
@@ -63,29 +67,48 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		return nil, fmt.Errorf("load assets manifest: %w", err)
 	}
 	renderer := render.New(assets, enabledFeatures.ChallengeEnabled)
+	authLimiter := newAuthLimiter(app)
+	googleClient := google.New(app.Config.OAuth.GoogleClientID)
+	handlers := httpserver.Handlers{
+		UI: ui.New(
+			app.Services.Admin,
+			app.Services.Auth,
+			app.Services.Passkeys,
+			app.Services.Session,
+			app.Services.Organizations,
+			app.Services.Challenge,
+			enabledFeatures,
+			app.Services.Verification,
+			authLimiter,
+			app.Logger,
+			googleClient,
+			app.Services.OAuthProviders,
+			app.Config.Token.AccessTokenTTL,
+			app.Config.Session.RefreshTokenTTL,
+			renderer,
+		),
+		API: api.New(
+			app.Services.Auth,
+			app.Services.Session,
+			app.Services.Organizations,
+			authLimiter,
+			app.Logger,
+			googleClient,
+			enabledFeatures.ChallengeEnabled,
+			app.Config.Token.AccessTokenTTL,
+			app.Config.Session.RefreshTokenTTL,
+		),
+		InternalAPI: internalapi.New(app.Services.Organizations),
+	}
 
 	server := httpserver.NewServer(httpserver.ServerConfig{
 		Version:           version,
 		Addr:              app.Config.Values.HttpAddr,
 		Dev:               app.Config.Values.AppEnv == "dev",
 		TrustProxyHeaders: app.Config.Values.TrustProxyHeaders,
-		Admin:             app.Services.Admin,
-		Auth:              app.Services.Auth,
-		Passkeys:          app.Services.Passkeys,
-		Session:           app.Services.Session,
-		Organizations:     app.Services.Organizations,
-		Challenge:         app.Services.Challenge,
-		Features:          enabledFeatures,
-		Verification:      app.Services.Verification,
 		Logger:            app.Logger,
-		Store:             app.Store,
-		AuthLimiter:       newAuthLimiter(app),
-		Google:            google.New(app.Config.OAuth.GoogleClientID),
 		OAuthProviders:    app.Services.OAuthProviders,
-		AccessTokenTTL:    app.Config.Token.AccessTokenTTL,
-		RefreshTokenTTL:   app.Config.Session.RefreshTokenTTL,
-		Render:            renderer,
-		InternalAPIToken:  app.Config.InternalAPI.Token,
+		Handlers:          handlers,
 	}, mw)
 
 	return server, nil

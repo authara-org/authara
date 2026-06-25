@@ -8,7 +8,6 @@ import (
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/features"
-	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
@@ -39,24 +38,38 @@ type UIHandler struct {
 	Render render.Renderer
 }
 
-func NewUIHandler(d authhandler.Deps) *UIHandler {
+func New(
+	admin *admin.Service,
+	auth *auth.Service,
+	passkeys *passkey.Service,
+	session *session.Service,
+	organizations *organization.Service,
+	challenge *challenge.Service,
+	features features.Features,
+	verification *challenge.VerificationCodeService,
+	limiter ratelimiter.AuthLimiter,
+	logger *slog.Logger,
+	google *google.Client,
+	oauthProviders oauth.OAuthProviders,
+	accessTTL time.Duration,
+	refreshTTL time.Duration,
+	renderer render.Renderer,
+) *UIHandler {
 	return &UIHandler{
-		Admin:          d.Admin,
-		Auth:           d.Auth,
-		Passkeys:       d.Passkeys,
-		Session:        d.Session,
-		Organizations:  d.Organizations,
-		Challenge:      d.Challenge,
-		Features:       d.Features,
-		Verification:   d.Verification,
-		Limiter:        d.Limiter,
-		Logger:         d.Logger,
-		Google:         d.Google,
-		OAuthProviders: d.OAuthProviders,
-
-		AccessTTL:  d.AccessTTL,
-		RefreshTTL: d.RefreshTTL,
-
-		Render: d.Render,
+		Admin:          admin,
+		Auth:           auth,
+		Passkeys:       passkeys,
+		Session:        session,
+		Organizations:  organizations,
+		Challenge:      challenge,
+		Features:       features,
+		Verification:   verification,
+		Limiter:        limiter,
+		Logger:         logger,
+		Google:         google,
+		OAuthProviders: oauthProviders,
+		AccessTTL:      accessTTL,
+		RefreshTTL:     refreshTTL,
+		Render:         renderer,
 	}
 }

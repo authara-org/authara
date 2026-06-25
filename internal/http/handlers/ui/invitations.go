@@ -11,10 +11,10 @@ import (
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
-	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/organization"
 	authsession "github.com/authara-org/authara/internal/session"
@@ -308,7 +308,7 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 	}
 
 	password := r.FormValue("password")
-	if !authhandler.IsValidPassword(password) {
+	if !validation.IsValidPassword(password) {
 		h.renderInvitationSignupError(w, r, http.StatusUnprocessableEntity, "Please provide a valid password.", preview, token)
 		return
 	}
@@ -380,7 +380,17 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.finishInvitationSession(w, r, user, token, time.Now())
+	result, err := h.Organizations.AcceptInvitation(r.Context(), organization.AcceptInvitationInput{
+		RawToken: token,
+		UserID:   user.ID,
+		Now:      time.Now().UTC(),
+	})
+	if err != nil {
+		h.renderInvitationError(w, r, err)
+		return
+	}
+
+	h.finishInvitationSessionByID(w, r, user, result.Invitation.ID, time.Now())
 }
 
 func (h *UIHandler) InvitationLoginPage(w http.ResponseWriter, r *http.Request) {
@@ -439,16 +449,17 @@ func (h *UIHandler) InvitationLoginPost(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if _, err := h.Organizations.AcceptInvitation(r.Context(), organization.AcceptInvitationInput{
+	result, err := h.Organizations.AcceptInvitation(r.Context(), organization.AcceptInvitationInput{
 		RawToken: token,
 		UserID:   user.ID,
 		Now:      time.Now().UTC(),
-	}); err != nil {
+	})
+	if err != nil {
 		h.renderInvitationError(w, r, err)
 		return
 	}
 
-	h.finishInvitationSession(w, r, user, token, time.Now())
+	h.finishInvitationSessionByID(w, r, user, result.Invitation.ID, time.Now())
 }
 
 func (h *UIHandler) invitationPreviewFromQuery(w http.ResponseWriter, r *http.Request) (organization.InvitationPreview, string, bool) {
@@ -482,27 +493,6 @@ func (h *UIHandler) invitationPreview(w http.ResponseWriter, r *http.Request, to
 	return preview, token, true
 }
 
-func (h *UIHandler) finishInvitationSession(w http.ResponseWriter, r *http.Request, user domain.User, token string, now time.Time) {
-	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), r.UserAgent(), now)
-	if err != nil {
-		h.renderInternalError(w, r)
-		return
-	}
-	accessToken, refreshToken, err = h.switchSessionToInvitationOrganization(r.Context(), user.ID, accessToken, token, redirect.AudienceForPath("/"), now)
-	if err != nil {
-		h.renderInternalError(w, r)
-		return
-	}
-
-	if currentRefresh, ok := authsession.ReadRefreshToken(r); ok {
-		_ = h.Session.Logout(r.Context(), currentRefresh)
-	}
-	authsession.ClearSessionCookies(w)
-	authsession.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
-	authsession.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
-	redirect.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
 func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.Request, user domain.User, invitationID uuid.UUID, now time.Time) {
 	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), r.UserAgent(), now)
 	if err != nil {
@@ -521,6 +511,10 @@ func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.R
 	authsession.ClearSessionCookies(w)
 	authsession.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	authsession.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
+	if isOAuthCallback(r) {
+		writeOAuthRedirect(w, "/")
+		return
+	}
 	redirect.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -531,6 +525,7 @@ func (h *UIHandler) finishInvitationOAuth(
 	token string,
 	returnTo string,
 	email string,
+	emailVerified bool,
 	oauthID string,
 ) {
 	preview, err := h.Organizations.InvitationByToken(r.Context(), token)
@@ -570,27 +565,42 @@ func (h *UIHandler) finishInvitationOAuth(
 
 	user, err := h.Auth.Login(r.Context(), input)
 	if err != nil {
+		if errors.Is(err, auth.ErrAccountExistsMustLink) && emailVerified {
+			link, linkErr := h.Auth.StartAccountRecoveryProviderLink(r.Context(), auth.OAuthIdentityInput{
+				Provider:              domain.ProviderGoogle,
+				Email:                 preview.Invitation.Email,
+				ProviderUserID:        oauthID,
+				ProviderEmailVerified: true,
+			}, time.Now().UTC())
+			if linkErr == nil {
+				u := url.URL{Path: "/auth/provider-links/confirm"}
+				q := u.Query()
+				q.Set("link_id", link.ID.String())
+				q.Set("return_to", returnTo)
+				u.RawQuery = q.Encode()
+				writeOAuthRedirect(w, u.String())
+				return
+			}
+		}
 		h.redirectInvitationOAuthFailure(w, returnTo)
 		return
 	}
 
-	if path == "/auth/invitations/login" {
-		if _, err := h.Organizations.AcceptInvitation(r.Context(), organization.AcceptInvitationInput{
-			RawToken: token,
-			UserID:   user.ID,
-			Now:      time.Now().UTC(),
-		}); err != nil {
-			h.redirectInvitationOAuthFailure(w, returnTo)
-			return
-		}
+	result, err := h.Organizations.AcceptInvitation(r.Context(), organization.AcceptInvitationInput{
+		RawToken: token,
+		UserID:   user.ID,
+		Now:      time.Now().UTC(),
+	})
+	if err != nil {
+		h.redirectInvitationOAuthFailure(w, returnTo)
+		return
 	}
 
-	h.finishInvitationSession(w, r, user, token, time.Now())
+	h.finishInvitationSessionByID(w, r, user, result.Invitation.ID, time.Now())
 }
 
 func (h *UIHandler) redirectInvitationOAuthFailure(w http.ResponseWriter, returnTo string) {
-	w.Header().Set("X-Authara-Redirect", returnTo)
-	w.WriteHeader(http.StatusOK)
+	writeOAuthRedirect(w, returnTo)
 }
 
 func (h *UIHandler) renderInvitationSignupError(
@@ -686,25 +696,6 @@ func (h *UIHandler) invitationAcceptedByUser(ctx context.Context, token string, 
 	}
 	preview, err := h.Organizations.InvitationByToken(ctx, token)
 	return err == nil && preview.Invitation.AcceptedByUserID != nil && *preview.Invitation.AcceptedByUserID == userID
-}
-
-func (h *UIHandler) switchSessionToInvitationOrganization(
-	ctx context.Context,
-	userID uuid.UUID,
-	accessToken string,
-	invitationToken string,
-	audience token.Audience,
-	now time.Time,
-) (string, string, error) {
-	identity, err := h.Session.ValidateAccessToken(accessToken, audience, now)
-	if err != nil {
-		return "", "", err
-	}
-	preview, err := h.Organizations.InvitationByToken(ctx, invitationToken)
-	if err != nil {
-		return "", "", err
-	}
-	return h.Session.SwitchSessionOrganization(ctx, userID, identity.SessionID, preview.Organization.ID, audience, now)
 }
 
 func (h *UIHandler) switchSessionToInvitationOrganizationByID(

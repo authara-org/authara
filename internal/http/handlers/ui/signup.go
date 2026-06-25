@@ -9,11 +9,11 @@ import (
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
-	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
-	"github.com/authara-org/authara/internal/http/handlers/auth/ui/flow"
+	"github.com/authara-org/authara/internal/http/handlers/ui/flow"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
 	"github.com/authara-org/authara/internal/session"
@@ -48,7 +48,7 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !authhandler.IsValidEmail(form.Email) || !authhandler.IsValidPassword(form.Password) {
+	if !validation.IsValidEmail(form.Email) || !validation.IsValidPassword(form.Password) {
 		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Please provide a valid email and password.", authview.SignupForm())
 		return
 	}

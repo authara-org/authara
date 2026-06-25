@@ -29,13 +29,29 @@ function getGoogleNonce(): string {
   return onload?.dataset.nonce || "";
 }
 
+function getReturnTo(btn: HTMLElement | null): string {
+  const fromButton = btn?.dataset.returnTo || "";
+  if (fromButton && fromButton !== "/") return fromButton;
+
+  const current = `${window.location.pathname}${window.location.search}`;
+  if (
+    (window.location.pathname === "/auth/invitations/login" ||
+      window.location.pathname === "/auth/invitations/signup") &&
+    new URLSearchParams(window.location.search).has("token")
+  ) {
+    return current;
+  }
+
+  return fromButton || "/";
+}
+
 const handleGoogleCredential: GoogleCredentialHandler = async (response) => {
   const credential = response?.credential;
   if (!credential) return;
 
   const btn = getGoogleFlowButton();
   const flow = btn?.dataset.googleFlow || "login";
-  const returnTo = btn?.dataset.returnTo || "/";
+  const returnTo = getReturnTo(btn);
   const provider = btn?.dataset.provider || "google";
   const linkID = btn?.dataset.linkId || "";
 

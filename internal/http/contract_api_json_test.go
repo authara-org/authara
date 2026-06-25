@@ -6,7 +6,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/authara-org/authara/internal/http/handlers/auth/api"
+	"github.com/authara-org/authara/internal/http/handlers/api"
+	"github.com/authara-org/authara/internal/http/handlers/internalapi"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"gopkg.in/yaml.v3"
 )
@@ -92,37 +93,52 @@ func TestAPIContract_ErrorMappings(t *testing.T) {
 	contract := loadAPIContract(t)
 
 	for _, spec := range api.APIRouteSpecs {
-		endpoint := endpointKey(spec.Method, spec.Path)
-
-		t.Run(endpoint, func(t *testing.T) {
-			wantContract := findErrorContract(t, contract, endpoint)
-
-			want := contractErrorSet(wantContract.Errors)
-			got := routeErrorSet(spec.Errors)
-
-			wantKeys := sortedKeys(want)
-			gotKeys := sortedKeys(got)
-
-			if len(gotKeys) != len(wantKeys) {
-				t.Fatalf(
-					"error contract mismatch for %s\nwant: %v\ngot:  %v",
-					endpoint,
-					wantKeys,
-					gotKeys,
-				)
-			}
-
-			for _, key := range wantKeys {
-				if !got[key] {
-					t.Fatalf("missing error %q in implementation for %s", key, endpoint)
-				}
-			}
-
-			for _, key := range gotKeys {
-				if !want[key] {
-					t.Fatalf("undeclared error %q in implementation for %s", key, endpoint)
-				}
-			}
-		})
+		assertRouteErrorMapping(t, contract, spec.Method, spec.Path, spec.Errors)
 	}
+
+	for _, spec := range internalapi.InternalAPIRouteSpecs {
+		assertRouteErrorMapping(t, contract, spec.Method, spec.Path, spec.Errors)
+	}
+}
+
+func assertRouteErrorMapping(
+	t *testing.T,
+	contract apiContract,
+	method string,
+	path string,
+	errors map[response.ErrorCode]response.ErrorSpec,
+) {
+	t.Helper()
+	endpoint := endpointKey(method, path)
+
+	t.Run(endpoint, func(t *testing.T) {
+		wantContract := findErrorContract(t, contract, endpoint)
+
+		want := contractErrorSet(wantContract.Errors)
+		got := routeErrorSet(errors)
+
+		wantKeys := sortedKeys(want)
+		gotKeys := sortedKeys(got)
+
+		if len(gotKeys) != len(wantKeys) {
+			t.Fatalf(
+				"error contract mismatch for %s\nwant: %v\ngot:  %v",
+				endpoint,
+				wantKeys,
+				gotKeys,
+			)
+		}
+
+		for _, key := range wantKeys {
+			if !got[key] {
+				t.Fatalf("missing error %q in implementation for %s", key, endpoint)
+			}
+		}
+
+		for _, key := range gotKeys {
+			if !want[key] {
+				t.Fatalf("undeclared error %q in implementation for %s", key, endpoint)
+			}
+		}
+	})
 }

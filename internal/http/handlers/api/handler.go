@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
-	authhandler "github.com/authara-org/authara/internal/http/handlers/auth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/ratelimiter"
@@ -25,17 +24,26 @@ type APIHandler struct {
 	RefreshTTL       time.Duration
 }
 
-func NewAPIHandler(d authhandler.Deps) *APIHandler {
+func New(
+	auth *auth.Service,
+	session *session.Service,
+	organizations *organization.Service,
+	limiter ratelimiter.AuthLimiter,
+	logger *slog.Logger,
+	google *google.Client,
+	challengeEnabled bool,
+	accessTTL time.Duration,
+	refreshTTL time.Duration,
+) *APIHandler {
 	return &APIHandler{
-		Auth:          d.Auth,
-		Session:       d.Session,
-		Organizations: d.Organizations,
-		Limiter:       d.Limiter,
-		Logger:        d.Logger,
-		Google:        d.Google,
-
-		ChallengeEnabled: d.Features.ChallengeEnabled,
-		AccessTTL:        d.AccessTTL,
-		RefreshTTL:       d.RefreshTTL,
+		Auth:             auth,
+		Session:          session,
+		Organizations:    organizations,
+		Limiter:          limiter,
+		Logger:           logger,
+		Google:           google,
+		ChallengeEnabled: challengeEnabled,
+		AccessTTL:        accessTTL,
+		RefreshTTL:       refreshTTL,
 	}
 }

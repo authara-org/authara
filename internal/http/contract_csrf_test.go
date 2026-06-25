@@ -57,8 +57,9 @@ type errorEnvelope struct {
 }
 
 const (
-	markerBrowserCSRF = 431
-	markerAPICSRF     = 432
+	markerBrowserCSRF      = 431
+	markerAPICSRF          = 432
+	markerInternalAuthCSRF = 433
 )
 
 func loadHTTPContract(t *testing.T) httpContract {
@@ -83,14 +84,15 @@ func newCSRFFocusedContractTestRouter() http.Handler {
 	cfg := ServerConfig{
 		Version: "test",
 		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Render:  render.New(render.Assets{}, false),
 	}
+	cfg.Handlers = newTestHandlers(cfg.Logger, render.New(render.Assets{}, false))
 
 	mw := Middlewares{
 		RedirectIfAuthenticated:           pass,
 		RequireAppAccessAuthWithRefresh:   pass,
 		RequireAppAccessAuthAPI:           pass,
 		RequireAdminAccessAuthWithRefresh: pass,
+		RequireInternalAPIAuth:            pass,
 		RequireAdminRole:                  pass,
 		ReturnTo:                          pass,
 		HTMX:                              pass,
@@ -121,14 +123,15 @@ func newCSRFWiringContractTestRouter() http.Handler {
 	cfg := ServerConfig{
 		Version: "test",
 		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Render:  render.New(render.Assets{}, false),
 	}
+	cfg.Handlers = newTestHandlers(cfg.Logger, render.New(render.Assets{}, false))
 
 	mw := Middlewares{
 		RedirectIfAuthenticated:           pass,
 		RequireAppAccessAuthWithRefresh:   pass,
 		RequireAppAccessAuthAPI:           pass,
 		RequireAdminAccessAuthWithRefresh: pass,
+		RequireInternalAPIAuth:            marker(markerInternalAuthCSRF, "internal-auth"),
 		RequireAdminRole:                  pass,
 		ReturnTo:                          pass,
 		HTMX:                              pass,

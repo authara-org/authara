@@ -7,13 +7,10 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
-	"github.com/authara-org/authara/internal/oauth/google"
-	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 )
@@ -91,23 +88,17 @@ func newContractTestRouter() chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	pass := func(next http.Handler) http.Handler { return next }
+	renderer := render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
+		w.WriteHeader(status)
+		return nil
+	})
 
 	cfg := ServerConfig{
-		Version:         "test",
-		Addr:            ":0",
-		Auth:            nil,
-		Dev:             true,
-		Session:         nil,
-		Logger:          logger,
-		Store:           nil,
-		AuthLimiter:     ratelimiter.AuthLimiter(nil),
-		Google:          google.New("test-client-id"),
-		AccessTokenTTL:  10 * time.Minute,
-		RefreshTokenTTL: 24 * time.Hour,
-		Render: render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
-			w.WriteHeader(status)
-			return nil
-		}),
+		Version:  "test",
+		Addr:     ":0",
+		Dev:      true,
+		Logger:   logger,
+		Handlers: newTestHandlers(logger, renderer),
 	}
 
 	mw := Middlewares{
@@ -116,6 +107,7 @@ func newContractTestRouter() chi.Router {
 		RequireAppAccessAuthAPI:           pass,
 		RequireAdminAccessAuthWithRefresh: pass,
 		RequireAdminAccessAuthAPI:         pass,
+		RequireInternalAPIAuth:            pass,
 		RequireAdminRole:                  pass,
 		RequireCSRF:                       pass,
 		RequireAPICSRF:                    pass,

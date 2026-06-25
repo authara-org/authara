@@ -13,6 +13,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/google/uuid"
 )
@@ -118,6 +119,24 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 	}
 
 	returnTo := httpctx.ReturnToOrDefault(ctx, "/")
+	if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
+		if path != "/auth/invitations/login" {
+			h.renderRequestError(w, r, http.StatusForbidden, "This invitation requires creating a new account.")
+			return
+		}
+		result, err := h.Organizations.AcceptInvitation(ctx, organization.AcceptInvitationInput{
+			RawToken: rawToken,
+			UserID:   user.ID,
+			Now:      time.Now().UTC(),
+		})
+		if err != nil {
+			h.renderInvitationError(w, r, err)
+			return
+		}
+		h.finishInvitationSessionByID(w, r, user, result.Invitation.ID, time.Now())
+		return
+	}
+
 	audience := redirect.AudienceForPath(returnTo)
 	now := time.Now()
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)

@@ -121,7 +121,7 @@ func TestAdminAllowlistRoutesReturnNotFoundWhenDisabled(t *testing.T) {
 			adminRole: passMiddleware,
 			csrf:      markerMiddleware(markerAdminCSRFForAdminRoutes, "admin-csrf"),
 			allowlist: httpmiddleware.RequireAllowlistEnabled(false),
-		}, ServerConfig{
+		}, adminRouteTestConfig{
 			Admin: adminsvc.New(adminsvc.Config{
 				Store: tdb.Store,
 				Tx:    tdb.Tx,
@@ -156,7 +156,7 @@ func TestAdminAllowlistPageAvailableWhenEnabled(t *testing.T) {
 		adminRole: passMiddleware,
 		csrf:      passMiddleware,
 		allowlist: httpmiddleware.RequireAllowlistEnabled(true),
-	}, ServerConfig{
+	}, adminRouteTestConfig{
 		Features: features.Features{AllowlistEnabled: true},
 	})
 
@@ -176,7 +176,7 @@ func TestAdminAllowlistMutationsRequireCSRFWhenEnabled(t *testing.T) {
 		adminRole: passMiddleware,
 		csrf:      markerMiddleware(markerAdminCSRFForAdminRoutes, "admin-csrf"),
 		allowlist: httpmiddleware.RequireAllowlistEnabled(true),
-	}, ServerConfig{
+	}, adminRouteTestConfig{
 		Features: features.Features{AllowlistEnabled: true},
 	})
 
@@ -204,7 +204,7 @@ func TestAdminAllowlistResultsDoesNotRequireCSRF(t *testing.T) {
 			adminRole: passMiddleware,
 			csrf:      markerMiddleware(markerAdminCSRFForAdminRoutes, "admin-csrf"),
 			allowlist: httpmiddleware.RequireAllowlistEnabled(true),
-		}, ServerConfig{
+		}, adminRouteTestConfig{
 			Admin: adminsvc.New(adminsvc.Config{
 				Store:            tdb.Store,
 				Tx:               tdb.Tx,
@@ -234,11 +234,16 @@ type adminRouteMiddlewareConfig struct {
 	allowlist func(http.Handler) http.Handler
 }
 
-func newAdminRouteTestRouter(m adminRouteMiddlewareConfig) chi.Router {
-	return newAdminRouteTestRouterWithConfig(m, ServerConfig{})
+type adminRouteTestConfig struct {
+	Admin    *adminsvc.Service
+	Features features.Features
 }
 
-func newAdminRouteTestRouterWithConfig(m adminRouteMiddlewareConfig, override ServerConfig) chi.Router {
+func newAdminRouteTestRouter(m adminRouteMiddlewareConfig) chi.Router {
+	return newAdminRouteTestRouterWithConfig(m, adminRouteTestConfig{})
+}
+
+func newAdminRouteTestRouterWithConfig(m adminRouteMiddlewareConfig, override adminRouteTestConfig) chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	if m.adminAuth == nil {
 		m.adminAuth = passMiddleware
@@ -255,21 +260,19 @@ func newAdminRouteTestRouterWithConfig(m adminRouteMiddlewareConfig, override Se
 	cfg := ServerConfig{
 		Version: "test",
 		Logger:  logger,
-		Render: render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
-			w.WriteHeader(status)
-			return nil
-		}),
 	}
-	if override.Admin != nil {
-		cfg.Admin = override.Admin
-	}
-	cfg.Features = override.Features
+	renderer := render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
+		w.WriteHeader(status)
+		return nil
+	})
+	cfg.Handlers = newTestHandlersWithAdmin(logger, renderer, override.Admin, override.Features)
 	mw := Middlewares{
 		RedirectIfAuthenticated:           passMiddleware,
 		RequireAppAccessAuthWithRefresh:   passMiddleware,
 		RequireAppAccessAuthAPI:           passMiddleware,
 		RequireAdminAccessAuthWithRefresh: m.adminAuth,
 		RequireAdminAccessAuthAPI:         m.adminAuth,
+		RequireInternalAPIAuth:            passMiddleware,
 		RequireAdminRole:                  m.adminRole,
 		RequireCSRF:                       m.csrf,
 		RequireAPICSRF:                    m.csrf,

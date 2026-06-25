@@ -12,7 +12,6 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
-	"github.com/authara-org/authara/internal/ratelimiter"
 )
 
 func TestSecurityHeadersAreAppliedByRouter(t *testing.T) {
@@ -62,18 +61,18 @@ func TestSecurityHeadersRouterCSPFollowsGoogleOAuthConfig(t *testing.T) {
 func newSecurityHeadersTestRouter(providers oauth.OAuthProviders) http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pass := func(next http.Handler) http.Handler { return next }
+	renderer := render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
+		w.WriteHeader(status)
+		return nil
+	})
 
 	cfg := ServerConfig{
 		Version:        "test",
 		Addr:           ":0",
 		Dev:            true,
 		Logger:         logger,
-		AuthLimiter:    ratelimiter.AuthLimiter(nil),
 		OAuthProviders: providers,
-		Render: render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
-			w.WriteHeader(status)
-			return nil
-		}),
+		Handlers:       newTestHandlers(logger, renderer),
 	}
 
 	mw := Middlewares{
@@ -82,6 +81,7 @@ func newSecurityHeadersTestRouter(providers oauth.OAuthProviders) http.Handler {
 		RequireAppAccessAuthAPI:           pass,
 		RequireAdminAccessAuthWithRefresh: pass,
 		RequireAdminAccessAuthAPI:         pass,
+		RequireInternalAPIAuth:            pass,
 		RequireAdminRole:                  pass,
 		RequireCSRF:                       pass,
 		RequireAPICSRF:                    pass,

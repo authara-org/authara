@@ -6,18 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/authara-org/authara/internal/admin"
-	"github.com/authara-org/authara/internal/auth"
-	"github.com/authara-org/authara/internal/challenge"
-	"github.com/authara-org/authara/internal/features"
-	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/http/handlers/api"
+	"github.com/authara-org/authara/internal/http/handlers/internalapi"
+	"github.com/authara-org/authara/internal/http/handlers/ui"
 	"github.com/authara-org/authara/internal/oauth"
-	"github.com/authara-org/authara/internal/oauth/google"
-	"github.com/authara-org/authara/internal/organization"
-	"github.com/authara-org/authara/internal/passkey"
-	"github.com/authara-org/authara/internal/ratelimiter"
-	"github.com/authara-org/authara/internal/session"
-	"github.com/authara-org/authara/internal/store"
 )
 
 type ServerConfig struct {
@@ -25,23 +17,15 @@ type ServerConfig struct {
 	Addr              string
 	Dev               bool
 	TrustProxyHeaders bool
-	Admin             *admin.Service
-	Auth              *auth.Service
-	Passkeys          *passkey.Service
-	Session           *session.Service
-	Organizations     *organization.Service
-	Challenge         *challenge.Service
-	Features          features.Features
-	Verification      *challenge.VerificationCodeService
 	Logger            *slog.Logger
-	Store             *store.Store
-	AuthLimiter       ratelimiter.AuthLimiter
-	Google            *google.Client
 	OAuthProviders    oauth.OAuthProviders
-	AccessTokenTTL    time.Duration
-	RefreshTokenTTL   time.Duration
-	Render            render.Renderer
-	InternalAPIToken  string
+	Handlers          Handlers
+}
+
+type Handlers struct {
+	UI          *ui.UIHandler
+	API         *api.APIHandler
+	InternalAPI *internalapi.Handler
 }
 
 type Middlewares struct {
@@ -51,6 +35,7 @@ type Middlewares struct {
 	RequireAppAccessAuthAPI           func(http.Handler) http.Handler
 	RequireAdminAccessAuthWithRefresh func(http.Handler) http.Handler
 	RequireAdminAccessAuthAPI         func(http.Handler) http.Handler
+	RequireInternalAPIAuth            func(http.Handler) http.Handler
 	RequireAdminRole                  func(http.Handler) http.Handler
 
 	RequireCSRF    func(http.Handler) http.Handler

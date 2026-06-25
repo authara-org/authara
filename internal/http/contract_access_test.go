@@ -8,13 +8,10 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
-	"github.com/authara-org/authara/internal/oauth/google"
-	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 )
@@ -37,6 +34,7 @@ const (
 	markerAdminUIAuth  = 420
 	markerAdminRole    = 421
 	markerAdminAPIAuth = 422
+	markerInternalAuth = 423
 )
 
 func loadAccessContract(t *testing.T) accessContract {
@@ -119,23 +117,17 @@ func newAccessContractTestRouter() chi.Router {
 			})
 		}
 	}
+	renderer := render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
+		w.WriteHeader(status)
+		return nil
+	})
 
 	cfg := ServerConfig{
-		Version:         "test",
-		Addr:            ":0",
-		Auth:            nil,
-		Dev:             true,
-		Session:         nil,
-		Logger:          logger,
-		Store:           nil,
-		AuthLimiter:     ratelimiter.AuthLimiter(nil),
-		Google:          google.New("test-client-id"),
-		AccessTokenTTL:  10 * time.Minute,
-		RefreshTokenTTL: 24 * time.Hour,
-		Render: render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
-			w.WriteHeader(status)
-			return nil
-		}),
+		Version:  "test",
+		Addr:     ":0",
+		Dev:      true,
+		Logger:   logger,
+		Handlers: newTestHandlers(logger, renderer),
 	}
 
 	mw := Middlewares{
@@ -152,6 +144,7 @@ func newAccessContractTestRouter() chi.Router {
 		RequireAppAccessAuthAPI:           marker(markerUserAPIAuth, "user-api-auth"),
 		RequireAdminAccessAuthWithRefresh: marker(markerAdminUIAuth, "admin-ui-auth"),
 		RequireAdminAccessAuthAPI:         marker(markerAdminAPIAuth, "admin-api-auth"),
+		RequireInternalAPIAuth:            marker(markerInternalAuth, "internal-auth"),
 		RequireAdminRole:                  marker(markerAdminRole, "admin-role"),
 	}
 
@@ -165,6 +158,7 @@ func newAccessContractTestRouter() chi.Router {
 func materializeRoutePath(path string) string {
 	path = strings.ReplaceAll(path, "{userID}", "11111111-1111-1111-1111-111111111111")
 	path = strings.ReplaceAll(path, "{organizationID}", "22222222-2222-2222-2222-222222222222")
+	path = strings.ReplaceAll(path, "{invitationID}", "33333333-3333-3333-3333-333333333333")
 	return path
 }
 

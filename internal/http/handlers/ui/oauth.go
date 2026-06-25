@@ -16,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/google/uuid"
 )
@@ -63,7 +64,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			Message: "Google account linked.",
 		})
 
-		redirect.Redirect(w, r, "/auth/account", http.StatusSeeOther)
+		writeOAuthRedirect(w, "/auth/account")
 		return
 	}
 
@@ -87,6 +88,24 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 
 		returnTo := httpctx.ReturnToOrDefault(ctx, "/")
+		if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
+			if path != "/auth/invitations/login" {
+				h.redirectInvitationOAuthFailure(w, returnTo)
+				return
+			}
+			result, err := h.Organizations.AcceptInvitation(ctx, organization.AcceptInvitationInput{
+				RawToken: rawToken,
+				UserID:   user.ID,
+				Now:      time.Now().UTC(),
+			})
+			if err != nil {
+				h.redirectInvitationOAuthFailure(w, returnTo)
+				return
+			}
+			h.finishInvitationSessionByID(w, r, user, result.Invitation.ID, time.Now())
+			return
+		}
+
 		audience := redirect.AudienceForPath(returnTo)
 		now := time.Now()
 		accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)
@@ -106,14 +125,13 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			Message: "Sign-in provider was connected to your account.",
 		})
 
-		w.Header().Set("X-Authara-Redirect", returnTo)
-		w.WriteHeader(http.StatusOK)
+		writeOAuthRedirect(w, returnTo)
 		return
 	}
 
 	returnTo := httpctx.ReturnToOrDefault(ctx, "/")
 	if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
-		h.finishInvitationOAuth(w, r, path, rawToken, returnTo, identity.Email, identity.OAuthID)
+		h.finishInvitationOAuth(w, r, path, rawToken, returnTo, identity.Email, identity.EmailVerified, identity.OAuthID)
 		return
 	}
 
@@ -144,8 +162,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 				q.Set("return_to", returnTo)
 			}
 			u.RawQuery = q.Encode()
-			w.Header().Set("X-Authara-Redirect", u.String())
-			w.WriteHeader(http.StatusOK)
+			writeOAuthRedirect(w, u.String())
 			return
 		}
 		h.renderError(w, r, ctx)
@@ -166,7 +183,16 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
 
-	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
+	writeOAuthRedirect(w, returnTo)
+}
+
+func writeOAuthRedirect(w http.ResponseWriter, location string) {
+	w.Header().Set("X-Authara-Redirect", location)
+	w.WriteHeader(http.StatusOK)
+}
+
+func isOAuthCallback(r *http.Request) bool {
+	return r.URL.Path == "/auth/oauth/google/callback"
 }
 
 func (h *UIHandler) renderError(w http.ResponseWriter, r *http.Request, ctx context.Context) {

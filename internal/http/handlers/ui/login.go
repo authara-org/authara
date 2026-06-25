@@ -7,7 +7,7 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
-	"github.com/authara-org/authara/internal/http/handlers/auth/ui/flow"
+	"github.com/authara-org/authara/internal/http/handlers/ui/flow"
 	"github.com/authara-org/authara/internal/http/kit/flash"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
