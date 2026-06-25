@@ -114,6 +114,27 @@ routes:
     access: user
     notes: Returns current authenticated user.
 
+  - method: GET
+    path: /auth/api/v1/organizations
+    stability: stable
+    kind: json
+    access: user
+    notes: Returns organizations the current user belongs to.
+
+  - method: GET
+    path: /auth/api/v1/organizations/current
+    stability: stable
+    kind: json
+    access: user
+    notes: Returns the organization from the current access token.
+
+  - method: POST
+    path: /auth/api/v1/organizations/{organizationID}/switch
+    stability: stable
+    kind: json
+    access: user
+    notes: Switches the current session to another organization and rotates tokens.
+
   - method: POST
     path: /auth/api/v1/sessions/refresh
     stability: stable
@@ -138,12 +159,82 @@ routes:
   # ------------------------------------------------------------
   # Internal API v1
   # ------------------------------------------------------------
+  - method: GET
+    path: /auth/internal/v1/capabilities
+    stability: stable
+    kind: json
+    access: internal
+    notes: Returns organization-mode capabilities for internal integrations.
+
+  - method: POST
+    path: /auth/internal/v1/organizations
+    stability: stable
+    kind: json
+    access: internal
+    notes: Creates a team organization with an owner membership.
+
+  - method: GET
+    path: /auth/internal/v1/organizations/{organizationID}
+    stability: stable
+    kind: json
+    access: internal
+    notes: Returns an organization.
+
+  - method: PATCH
+    path: /auth/internal/v1/organizations/{organizationID}
+    stability: stable
+    kind: json
+    access: internal
+    notes: Updates an organization.
+
+  - method: GET
+    path: /auth/internal/v1/organizations/{organizationID}/members
+    stability: stable
+    kind: json
+    access: internal
+    notes: Lists organization members.
+
+  - method: GET
+    path: /auth/internal/v1/organizations/{organizationID}/members/{userID}
+    stability: stable
+    kind: json
+    access: internal
+    notes: Returns one organization member.
+
+  - method: GET
+    path: /auth/internal/v1/organizations/{organizationID}/invitations
+    stability: stable
+    kind: json
+    access: internal
+    notes: Lists organization invitations.
+
   - method: POST
     path: /auth/internal/v1/organizations/{organizationID}/invitations
     stability: stable
     kind: json
     access: internal
     notes: Creates a member organization invitation. Requires AUTHARA_INTERNAL_API_TOKEN bearer auth, requires actor_user_id, and does not use CSRF.
+
+  - method: GET
+    path: /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}
+    stability: stable
+    kind: json
+    access: internal
+    notes: Returns an organization invitation.
+
+  - method: POST
+    path: /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
+    stability: stable
+    kind: json
+    access: internal
+    notes: Revokes a pending organization invitation.
+
+  - method: GET
+    path: /auth/internal/v1/users/{userID}/memberships
+    stability: stable
+    kind: json
+    access: internal
+    notes: Lists organization memberships for a user.
 
 json_success_responses:
   - endpoint: GET /auth/api/v1/csrf
@@ -191,6 +282,32 @@ json_success_responses:
         name: string
         role: string
 
+  - endpoint: GET /auth/api/v1/organizations
+    stability: stable
+    response:
+      organizations:
+        - id: uuid
+          name: string
+          role: string
+
+  - endpoint: GET /auth/api/v1/organizations/current
+    stability: stable
+    response:
+      id: uuid
+      name: string
+      role: string
+
+  - endpoint: POST /auth/api/v1/organizations/{organizationID}/switch
+    stability: stable
+    response:
+      status: 200
+      body:
+        access_token: string
+        refresh_token: string
+      cookies_set:
+        - authara_access
+        - authara_refresh
+
   - endpoint: POST /auth/api/v1/sessions/refresh
     stability: stable
     response:
@@ -217,6 +334,49 @@ json_success_responses:
         - authara_access
         - authara_refresh
 
+  - endpoint: GET /auth/internal/v1/capabilities
+    stability: stable
+    response:
+      organization_mode: string
+      has_visible_organizations: bool
+      allows_invitations: bool
+      allows_org_switching: bool
+      allows_user_created_team_orgs: bool
+      allows_organization_leave: bool
+
+  - endpoint: POST /auth/internal/v1/organizations
+    stability: stable
+    response:
+      status: 201
+      body:
+        organization: object
+        membership: object
+
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}
+    stability: stable
+    response:
+      organization: object
+
+  - endpoint: PATCH /auth/internal/v1/organizations/{organizationID}
+    stability: stable
+    response:
+      organization: object
+
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}/members
+    stability: stable
+    response:
+      members: array
+
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}/members/{userID}
+    stability: stable
+    response:
+      member: object
+
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}/invitations
+    stability: stable
+    response:
+      invitations: array
+
   - endpoint: POST /auth/internal/v1/organizations/{organizationID}/invitations
     stability: stable
     response:
@@ -230,6 +390,21 @@ json_success_responses:
           status: string
           expires_at: rfc3339
           invite_url: string
+
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}
+    stability: stable
+    response:
+      invitation: object
+
+  - endpoint: POST /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
+    stability: stable
+    response:
+      invitation: object
+
+  - endpoint: GET /auth/internal/v1/users/{userID}/memberships
+    stability: stable
+    response:
+      memberships: array
 
 json_error_envelope:
   stability: stable
@@ -277,6 +452,34 @@ json_error_contracts:
       - status: 401
         code: unauthorized
 
+  - endpoint: GET /auth/api/v1/organizations
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 500
+        code: internal_error
+
+  - endpoint: GET /auth/api/v1/organizations/current
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/organizations/{organizationID}/switch
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 403
+        code: forbidden
+      - status: 500
+        code: internal_error
+
   - endpoint: POST /auth/api/v1/sessions/refresh
     stability: stable
     errors:
@@ -301,6 +504,90 @@ json_error_contracts:
     stability: stable
     errors: []
 
+  - endpoint: GET /auth/internal/v1/capabilities
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+
+  - endpoint: POST /auth/internal/v1/organizations
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 403
+        code: forbidden
+      - status: 404
+        code: user_not_found
+      - status: 500
+        code: internal_error
+
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 404
+        code: organization_not_found
+      - status: 500
+        code: internal_error
+
+  - endpoint: PATCH /auth/internal/v1/organizations/{organizationID}
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 404
+        code: organization_not_found
+      - status: 500
+        code: internal_error
+
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}/members
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 404
+        code: organization_not_found
+      - status: 500
+        code: internal_error
+
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}/members/{userID}
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 404
+        code: organization_not_found
+      - status: 404
+        code: membership_not_found
+      - status: 500
+        code: internal_error
+
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}/invitations
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 403
+        code: forbidden
+      - status: 404
+        code: organization_not_found
+      - status: 500
+        code: internal_error
+
   - endpoint: POST /auth/internal/v1/organizations/{organizationID}/invitations
     stability: stable
     errors:
@@ -321,6 +608,56 @@ json_error_contracts:
       - status: 500
         code: internal_error
 
+  - endpoint: GET /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 403
+        code: forbidden
+      - status: 404
+        code: invitation_not_found
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 403
+        code: forbidden
+      - status: 404
+        code: organization_not_found
+      - status: 404
+        code: invitation_not_found
+      - status: 404
+        code: user_not_found
+      - status: 409
+        code: invitation_already_accepted
+      - status: 409
+        code: invitation_revoked
+      - status: 409
+        code: invitation_expired
+      - status: 500
+        code: internal_error
+
+  - endpoint: GET /auth/internal/v1/users/{userID}/memberships
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 404
+        code: user_not_found
+      - status: 500
+        code: internal_error
+
 csrf_contract:
   stability: stable
 
@@ -328,7 +665,9 @@ csrf_contract:
     rule: every stable POST route under /auth requires CSRF
     exceptions:
       - /auth/api/v1/tokens/refresh
+      - /auth/internal/v1/organizations
       - /auth/internal/v1/organizations/{organizationID}/invitations
+      - /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
 
   browser_error:
     status: 403

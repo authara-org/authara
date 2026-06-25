@@ -34,6 +34,16 @@ type Service struct {
 	mode             OrgMode
 }
 
+type UserOrganization struct {
+	Organization domain.Organization
+	Membership   domain.OrganizationMembership
+}
+
+type CreateOrganizationInput struct {
+	Name            string
+	CreatedByUserID uuid.UUID
+}
+
 func New(cfg Config) *Service {
 	pub := cfg.WebhookPublisher
 	if pub == nil {
@@ -52,7 +62,12 @@ func New(cfg Config) *Service {
 }
 
 func (s *Service) EnsureDefaultOrganization(ctx context.Context, user domain.User) (domain.Organization, domain.OrganizationMembership, error) {
-	org, membership, _, err := s.EnsureInitialOrganization(ctx, user, SignupSourceDirect)
+	org, membership, created, err := s.EnsureInitialOrganization(ctx, user, SignupSourceDirect)
+	if err == nil && created {
+		now := time.Now().UTC()
+		s.publishBestEffort(ctx, webhook.NewOrganizationCreated(org, now))
+		s.publishBestEffort(ctx, webhook.NewOrganizationMembershipCreated(membership, now))
+	}
 	return org, membership, err
 }
 
@@ -64,9 +79,10 @@ func (s *Service) EnsureInitialOrganization(ctx context.Context, user domain.Use
 		return org, membership, false, err
 	}
 
+	created := false
 	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		var err error
-		org, membership, err = s.store.EnsureOrganizationForUser(
+		org, membership, created, err = s.store.EnsureOrganizationForUserWithCreated(
 			txCtx,
 			user.ID,
 			defaultOrganizationName(user.Username, user.Email),
@@ -74,7 +90,7 @@ func (s *Service) EnsureInitialOrganization(ctx context.Context, user domain.Use
 		)
 		return err
 	})
-	return org, membership, true, err
+	return org, membership, created, err
 }
 
 func (s *Service) DefaultOrganizationForUser(ctx context.Context, userID uuid.UUID) (domain.Organization, domain.OrganizationMembership, error) {
@@ -103,6 +119,130 @@ func (s *Service) GetOrganization(ctx context.Context, organizationID uuid.UUID)
 	return s.store.GetOrganizationByID(ctx, organizationID)
 }
 
+func (s *Service) CreateOrganization(ctx context.Context, in CreateOrganizationInput) (domain.Organization, domain.OrganizationMembership, error) {
+	if !s.mode.AllowsUserCreatedTeamOrgs() {
+		return domain.Organization{}, domain.OrganizationMembership{}, ErrOrganizationOperationForbidden
+	}
+	if in.CreatedByUserID == uuid.Nil {
+		return domain.Organization{}, domain.OrganizationMembership{}, store.ErrUserNotFound
+	}
+
+	var org domain.Organization
+	var membership domain.OrganizationMembership
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if _, err := s.store.GetUserByID(txCtx, in.CreatedByUserID); err != nil {
+			return err
+		}
+
+		createdBy := in.CreatedByUserID
+		var err error
+		org, err = s.store.CreateOrganization(txCtx, domain.Organization{
+			Name:            in.Name,
+			Kind:            domain.OrganizationKindTeam,
+			CreatedByUserID: &createdBy,
+		})
+		if err != nil {
+			return err
+		}
+
+		membership, err = s.store.CreateOrganizationMembership(txCtx, domain.OrganizationMembership{
+			OrganizationID: org.ID,
+			UserID:         in.CreatedByUserID,
+			Role:           domain.OrganizationRoleOwner,
+		})
+		return err
+	})
+	if err != nil {
+		return domain.Organization{}, domain.OrganizationMembership{}, err
+	}
+
+	now := time.Now().UTC()
+	s.publishBestEffort(ctx, webhook.NewOrganizationCreated(org, now))
+	s.publishBestEffort(ctx, webhook.NewOrganizationMembershipCreated(membership, now))
+
+	return org, membership, nil
+}
+
+func (s *Service) UpdateOrganization(ctx context.Context, organizationID uuid.UUID, name string) (domain.Organization, error) {
+	if organizationID == uuid.Nil {
+		return domain.Organization{}, store.ErrOrganizationNotFound
+	}
+	org, err := s.store.UpdateOrganizationName(ctx, organizationID, name)
+	if err != nil {
+		return domain.Organization{}, err
+	}
+	s.publishBestEffort(ctx, webhook.NewOrganizationUpdated(org, time.Now().UTC()))
+	return org, nil
+}
+
+func (s *Service) ListUserOrganizations(ctx context.Context, userID uuid.UUID) ([]UserOrganization, error) {
+	memberships, err := s.store.ListOrganizationMembershipsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]UserOrganization, 0, len(memberships))
+	for _, membership := range memberships {
+		org, err := s.store.GetOrganizationByID(ctx, membership.OrganizationID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, UserOrganization{Organization: org, Membership: membership})
+	}
+	return out, nil
+}
+
+func (s *Service) ListUserMemberships(ctx context.Context, userID uuid.UUID) ([]UserOrganization, error) {
+	if _, err := s.store.GetUserByID(ctx, userID); err != nil {
+		return nil, err
+	}
+	return s.ListUserOrganizations(ctx, userID)
+}
+
+func (s *Service) ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]domain.OrganizationMembership, error) {
+	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
+		return nil, err
+	}
+	return s.store.ListOrganizationMembershipsByOrganizationID(ctx, organizationID)
+}
+
+func (s *Service) GetOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) (domain.OrganizationMembership, error) {
+	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
+		return domain.OrganizationMembership{}, err
+	}
+	return s.store.GetOrganizationMembership(ctx, organizationID, userID)
+}
+
+func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID, role domain.OrganizationRole) (domain.OrganizationMembership, error) {
+	if !validOrganizationRole(role) {
+		return domain.OrganizationMembership{}, ErrInvalidOrganizationRole
+	}
+	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
+		return domain.OrganizationMembership{}, err
+	}
+	membership, err := s.store.UpdateOrganizationMembershipRole(ctx, organizationID, userID, role)
+	if err != nil {
+		return domain.OrganizationMembership{}, err
+	}
+	s.publishBestEffort(ctx, webhook.NewOrganizationMembershipUpdated(membership, time.Now().UTC()))
+	return membership, nil
+}
+
+func (s *Service) DeleteOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) error {
+	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
+		return err
+	}
+	membership, err := s.store.GetOrganizationMembership(ctx, organizationID, userID)
+	if err != nil {
+		return err
+	}
+	if err := s.store.DeleteOrganizationMembership(ctx, organizationID, userID); err != nil {
+		return err
+	}
+	s.publishBestEffort(ctx, webhook.NewOrganizationMembershipDeleted(membership, time.Now().UTC()))
+	return nil
+}
+
 func (s *Service) Mode() OrgMode {
 	return s.mode
 }
@@ -119,6 +259,15 @@ func defaultOrganizationName(username, email string) string {
 		return local
 	}
 	return "Personal workspace"
+}
+
+func validOrganizationRole(role domain.OrganizationRole) bool {
+	switch role {
+	case domain.OrganizationRoleOwner, domain.OrganizationRoleAdmin, domain.OrganizationRoleMember:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) publishBestEffort(ctx context.Context, evt webhook.Envelope) {

@@ -13,6 +13,8 @@ var (
 	ErrOrganizationInviteEmailMismatch       = errors.New("organization invitation email mismatch")
 	ErrOrganizationSingleMembershipConflict  = errors.New("single organization membership conflict")
 	ErrInvalidOrganizationMode               = errors.New("invalid organization mode")
+	ErrInvalidOrganizationRole               = errors.New("invalid organization role")
+	ErrOrganizationOperationForbidden        = errors.New("organization operation forbidden")
 	ErrInvalidOrganizationInvitationEmail    = errors.New("invalid organization invitation email")
 	ErrInvalidOrganizationInvitationToken    = errors.New("invalid organization invitation token")
 )

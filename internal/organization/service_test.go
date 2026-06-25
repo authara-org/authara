@@ -8,7 +8,17 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/testutil"
+	"github.com/authara-org/authara/internal/webhook"
 )
+
+type recordingPublisher struct {
+	events []webhook.Envelope
+}
+
+func (p *recordingPublisher) Publish(ctx context.Context, evt webhook.Envelope) error {
+	p.events = append(p.events, evt)
+	return nil
+}
 
 func TestInvitationTokenHashing(t *testing.T) {
 	raw, hash, err := generateInvitationToken()
@@ -53,6 +63,52 @@ func TestInviteURLBuildsTokenURL(t *testing.T) {
 	if got != want {
 		t.Fatalf("expected invite URL %q, got %q", want, got)
 	}
+}
+
+func TestOrganizationLifecycleWebhooks(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		pub := &recordingPublisher{}
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "org-webhook@example.com", Username: "org-webhook"})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+
+		svc := New(Config{
+			Store:            tdb.Store,
+			Tx:               tdb.Tx,
+			Mode:             OrgModeMulti,
+			WebhookPublisher: pub,
+		})
+
+		org, membership, err := svc.CreateOrganization(ctx, CreateOrganizationInput{
+			Name:            "Webhook Org",
+			CreatedByUserID: user.ID,
+		})
+		if err != nil {
+			t.Fatalf("CreateOrganization failed: %v", err)
+		}
+		if _, err := svc.UpdateOrganization(ctx, org.ID, "Webhook Org Updated"); err != nil {
+			t.Fatalf("UpdateOrganization failed: %v", err)
+		}
+		if _, err := svc.UpdateOrganizationMember(ctx, org.ID, membership.UserID, domain.OrganizationRoleAdmin); err != nil {
+			t.Fatalf("UpdateOrganizationMember failed: %v", err)
+		}
+		if err := svc.DeleteOrganizationMember(ctx, org.ID, membership.UserID); err != nil {
+			t.Fatalf("DeleteOrganizationMember failed: %v", err)
+		}
+
+		for _, eventType := range []webhook.EventType{
+			webhook.EventOrganizationCreated,
+			webhook.EventOrganizationMembershipCreated,
+			webhook.EventOrganizationUpdated,
+			webhook.EventOrganizationMembershipUpdated,
+			webhook.EventOrganizationMembershipDeleted,
+		} {
+			mustFindWebhookEvent(t, pub.events, eventType)
+		}
+	})
 }
 
 func TestPersonalModeRejectsInvitations(t *testing.T) {
@@ -173,4 +229,16 @@ func TestAcceptInvitationMultiModeAllowsExistingOtherMembership(t *testing.T) {
 			t.Fatalf("expected 2 memberships, got %d", len(memberships))
 		}
 	})
+}
+
+func mustFindWebhookEvent(t *testing.T, events []webhook.Envelope, eventType webhook.EventType) webhook.Envelope {
+	t.Helper()
+
+	for _, evt := range events {
+		if evt.Type == eventType {
+			return evt
+		}
+	}
+	t.Fatalf("expected event %q in %+v", eventType, events)
+	return webhook.Envelope{}
 }

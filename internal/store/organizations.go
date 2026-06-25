@@ -138,6 +138,28 @@ func (s *Store) GetOrganizationByID(ctx context.Context, organizationID uuid.UUI
 	return toDomainOrganization(m), nil
 }
 
+func (s *Store) UpdateOrganizationName(ctx context.Context, organizationID uuid.UUID, name string) (domain.Organization, error) {
+	var m model.Organization
+	name, err := normalizeOrganizationName(name)
+	if err != nil {
+		return domain.Organization{}, err
+	}
+
+	err = scanOrganization(s.queryRow(ctx, `
+		UPDATE organizations
+		SET name = $2
+		WHERE id = $1
+		RETURNING `+organizationColumns,
+		organizationID,
+		name,
+	), &m)
+	if err != nil {
+		return domain.Organization{}, mapNoRows(err, ErrOrganizationNotFound)
+	}
+
+	return toDomainOrganization(m), nil
+}
+
 func (s *Store) CreateOrganizationMembership(ctx context.Context, membership domain.OrganizationMembership) (domain.OrganizationMembership, error) {
 	m := toModelOrganizationMembership(membership)
 
@@ -163,6 +185,48 @@ func (s *Store) GetOrganizationMembership(ctx context.Context, organizationID uu
 		FROM organization_memberships
 		WHERE organization_id = $1 AND user_id = $2
 	`, organizationID, userID), &m)
+	if err != nil {
+		return domain.OrganizationMembership{}, mapNoRows(err, ErrOrganizationMembershipNotFound)
+	}
+
+	return toDomainOrganizationMembership(m), nil
+}
+
+func (s *Store) ListOrganizationMembershipsByOrganizationID(ctx context.Context, organizationID uuid.UUID) ([]domain.OrganizationMembership, error) {
+	rows, err := s.queryRows(ctx, `
+		SELECT `+organizationMembershipColumns+`
+		FROM organization_memberships
+		WHERE organization_id = $1
+		ORDER BY created_at ASC, user_id ASC
+	`, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.OrganizationMembership, 0)
+	for rows.Next() {
+		var m model.OrganizationMembership
+		if err := scanOrganizationMembership(rows, &m); err != nil {
+			return nil, err
+		}
+		out = append(out, toDomainOrganizationMembership(m))
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) UpdateOrganizationMembershipRole(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID, role domain.OrganizationRole) (domain.OrganizationMembership, error) {
+	var m model.OrganizationMembership
+
+	err := scanOrganizationMembership(s.queryRow(ctx, `
+		UPDATE organization_memberships
+		SET role = $3
+		WHERE organization_id = $1 AND user_id = $2
+		RETURNING `+organizationMembershipColumns,
+		organizationID,
+		userID,
+		role,
+	), &m)
 	if err != nil {
 		return domain.OrganizationMembership{}, mapNoRows(err, ErrOrganizationMembershipNotFound)
 	}
@@ -249,10 +313,15 @@ func (s *Store) EnsureDefaultOrganizationForUser(ctx context.Context, userID uui
 }
 
 func (s *Store) EnsureOrganizationForUser(ctx context.Context, userID uuid.UUID, name string, kind domain.OrganizationKind) (domain.Organization, domain.OrganizationMembership, error) {
+	org, membership, _, err := s.EnsureOrganizationForUserWithCreated(ctx, userID, name, kind)
+	return org, membership, err
+}
+
+func (s *Store) EnsureOrganizationForUserWithCreated(ctx context.Context, userID uuid.UUID, name string, kind domain.OrganizationKind) (domain.Organization, domain.OrganizationMembership, bool, error) {
 	var org model.Organization
 	name, err := normalizeOrganizationName(name)
 	if err != nil {
-		return domain.Organization{}, domain.OrganizationMembership{}, err
+		return domain.Organization{}, domain.OrganizationMembership{}, false, err
 	}
 
 	if kind == domain.OrganizationKindPersonal {
@@ -266,10 +335,11 @@ func (s *Store) EnsureOrganizationForUser(ctx context.Context, userID uuid.UUID,
 			userID,
 		), &org)
 		if err != nil && err != sql.ErrNoRows {
-			return domain.Organization{}, domain.OrganizationMembership{}, err
+			return domain.Organization{}, domain.OrganizationMembership{}, false, err
 		}
 		if err == nil {
-			return s.ensureOwnerMembership(ctx, toDomainOrganization(org), userID)
+			org, membership, err := s.ensureOwnerMembership(ctx, toDomainOrganization(org), userID)
+			return org, membership, true, err
 		}
 	}
 
@@ -280,8 +350,9 @@ func (s *Store) EnsureOrganizationForUser(ctx context.Context, userID uuid.UUID,
 			LIMIT 1
 		`, kind, userID), &org)
 	if err != nil && err != sql.ErrNoRows {
-		return domain.Organization{}, domain.OrganizationMembership{}, err
+		return domain.Organization{}, domain.OrganizationMembership{}, false, err
 	}
+	created := false
 	if err == sql.ErrNoRows {
 		err = scanOrganization(s.queryRow(ctx, `
 			INSERT INTO organizations (name, kind, created_by_user_id)
@@ -292,11 +363,13 @@ func (s *Store) EnsureOrganizationForUser(ctx context.Context, userID uuid.UUID,
 			userID,
 		), &org)
 		if err != nil {
-			return domain.Organization{}, domain.OrganizationMembership{}, err
+			return domain.Organization{}, domain.OrganizationMembership{}, false, err
 		}
+		created = true
 	}
 
-	return s.ensureOwnerMembership(ctx, toDomainOrganization(org), userID)
+	orgOut, membership, err := s.ensureOwnerMembership(ctx, toDomainOrganization(org), userID)
+	return orgOut, membership, created, err
 }
 
 func normalizeOrganizationName(name string) (string, error) {

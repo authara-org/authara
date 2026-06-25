@@ -2,16 +2,19 @@ package internalapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/go-chi/chi/v5"
 )
 
 func TestCreateOrganizationInvitationRequiresBearerToken(t *testing.T) {
-	handler := New(nil, "secret-token")
+	handler := New(nil)
 
 	for _, tc := range []struct {
 		name   string
@@ -27,7 +30,7 @@ func TestCreateOrganizationInvitationRequiresBearerToken(t *testing.T) {
 			}
 			rr := httptest.NewRecorder()
 
-			handler.CreateOrganizationInvitation(rr, req)
+			httpmiddleware.RequireInternalAPIAuth("secret-token")(http.HandlerFunc(handler.CreateOrganizationInvitation)).ServeHTTP(rr, req)
 
 			if rr.Code != http.StatusUnauthorized {
 				t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
@@ -37,7 +40,7 @@ func TestCreateOrganizationInvitationRequiresBearerToken(t *testing.T) {
 }
 
 func TestCreateOrganizationInvitationRequiresActorUserID(t *testing.T) {
-	handler := New(nil, "secret-token")
+	handler := New(nil)
 
 	for _, body := range []string{
 		`{"email":"teammate@example.com"}`,
@@ -60,5 +63,46 @@ func TestCreateOrganizationInvitationRequiresActorUserID(t *testing.T) {
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected status %d, got %d for body %s", http.StatusBadRequest, rr.Code, body)
 		}
+	}
+}
+
+func TestCapabilitiesGetReturnsOrganizationMode(t *testing.T) {
+	handler := New(organization.New(organization.Config{Mode: organization.OrgModeMulti}))
+	req := httptest.NewRequest(http.MethodGet, "/auth/internal/v1/capabilities", nil)
+	req.Header.Set("Authorization", "Bearer secret-token")
+	rr := httptest.NewRecorder()
+
+	handler.CapabilitiesGet(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+
+	var got struct {
+		OrganizationMode          string `json:"organization_mode"`
+		AllowsUserCreatedTeamOrgs bool   `json:"allows_user_created_team_orgs"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if got.OrganizationMode != string(organization.OrgModeMulti) || !got.AllowsUserCreatedTeamOrgs {
+		t.Fatalf("unexpected capabilities: %+v", got)
+	}
+}
+
+func TestCreateOrganizationRequiresCreatedByUserID(t *testing.T) {
+	handler := New(nil)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/auth/internal/v1/organizations",
+		strings.NewReader(`{"name":"Team","created_by_user_id":"not-a-uuid"}`),
+	)
+	req.Header.Set("Authorization", "Bearer secret-token")
+	rr := httptest.NewRecorder()
+
+	handler.CreateOrganization(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
 	}
 }

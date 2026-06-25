@@ -44,7 +44,11 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(appSdk.RequireAuthWithRefresh)
 		r.Get("/private", handlers.Private)
+		r.Post("/private/organizations", handlers.CreateOrganizationPost)
+		r.Post("/private/organizations/update", handlers.UpdateOrganizationPost)
+		r.Post("/private/organizations/switch", handlers.SwitchOrganizationPost)
 		r.Post("/private/invitations", handlers.InvitePost)
+		r.Post("/private/invitations/revoke", handlers.RevokeInvitationPost)
 	})
 
 	// --- Webhook endpoint ---

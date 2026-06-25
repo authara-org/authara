@@ -58,6 +58,13 @@ type AcceptInvitationResult struct {
 	MembershipCreated  bool
 }
 
+type RevokeInvitationInput struct {
+	OrganizationID  uuid.UUID
+	InvitationID    uuid.UUID
+	RevokedByUserID *uuid.UUID
+	Now             time.Time
+}
+
 func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput) (InvitationWithToken, error) {
 	now := normalizeNow(in.Now)
 
@@ -213,6 +220,78 @@ func (s *Service) InvitationByID(ctx context.Context, invitationID uuid.UUID) (I
 		Invitation:   invitation,
 		Organization: org,
 	}, nil
+}
+
+func (s *Service) ListInvitations(ctx context.Context, organizationID uuid.UUID) ([]domain.OrganizationInvitation, error) {
+	if !s.mode.AllowsInvitations() {
+		return nil, ErrOrganizationInviteForbidden
+	}
+	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
+		return nil, err
+	}
+	return s.store.ListOrganizationInvitationsByOrganizationID(ctx, organizationID)
+}
+
+func (s *Service) InvitationByOrganizationAndID(ctx context.Context, organizationID uuid.UUID, invitationID uuid.UUID) (InvitationPreview, error) {
+	preview, err := s.InvitationByID(ctx, invitationID)
+	if err != nil {
+		return InvitationPreview{}, err
+	}
+	if preview.Organization.ID != organizationID {
+		return InvitationPreview{}, store.ErrOrganizationInvitationNotFound
+	}
+	return preview, nil
+}
+
+func (s *Service) RevokeInvitation(ctx context.Context, in RevokeInvitationInput) (domain.OrganizationInvitation, error) {
+	if !s.mode.AllowsInvitations() {
+		return domain.OrganizationInvitation{}, ErrOrganizationInviteForbidden
+	}
+	now := normalizeNow(in.Now)
+	var out domain.OrganizationInvitation
+
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if _, err := s.store.GetOrganizationByID(txCtx, in.OrganizationID); err != nil {
+			return err
+		}
+		if in.RevokedByUserID != nil {
+			if _, err := s.store.GetUserByID(txCtx, *in.RevokedByUserID); err != nil {
+				return err
+			}
+		}
+
+		invitation, err := s.store.GetOrganizationInvitationByIDForUpdate(txCtx, in.InvitationID)
+		if err != nil {
+			return err
+		}
+		if invitation.OrganizationID != in.OrganizationID {
+			return store.ErrOrganizationInvitationNotFound
+		}
+
+		switch invitation.Status(now) {
+		case domain.OrganizationInvitationStatusAccepted:
+			return ErrOrganizationInvitationAlreadyAccepted
+		case domain.OrganizationInvitationStatusRevoked:
+			return ErrOrganizationInvitationRevoked
+		case domain.OrganizationInvitationStatusExpired:
+			return ErrOrganizationInvitationExpired
+		}
+
+		if err := s.store.MarkOrganizationInvitationRevoked(txCtx, invitation.ID, in.RevokedByUserID, now); err != nil {
+			return err
+		}
+		invitation.RevokedAt = &now
+		invitation.RevokedByUserID = in.RevokedByUserID
+		out = invitation
+		return nil
+	})
+	if err != nil {
+		return domain.OrganizationInvitation{}, err
+	}
+
+	s.publishBestEffort(ctx, webhook.NewOrganizationInvitationRevoked(out, now))
+
+	return out, nil
 }
 
 func (s *Service) AcceptInvitation(ctx context.Context, in AcceptInvitationInput) (AcceptInvitationResult, error) {
