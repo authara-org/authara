@@ -18,7 +18,7 @@ MAILHOG_IMAGE     = mailhog/mailhog
 
 TEST_DB_NAME       ?= authara_test
 TEST_DB_HOST       ?= postgres
-TEST_DB_PORT       ?= 5433
+TEST_DB_PORT       ?= 5432
 TEST_DB_SCHEMA     ?= authara
 TEST_DB_TIMEZONE   ?= UTC
 TEST_DB_LOG_SQL    ?= false
