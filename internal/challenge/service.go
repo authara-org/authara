@@ -7,6 +7,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
+	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
 )
 
@@ -17,6 +18,7 @@ type Config struct {
 	MaxAttempts       int
 	MaxResends        int
 	MinResendInterval time.Duration
+	WebhookPublisher  webhook.Publisher
 }
 
 type Service struct {
@@ -26,9 +28,15 @@ type Service struct {
 	maxAttempts       int
 	maxResends        int
 	minResendInterval time.Duration
+	webhookPublisher  webhook.Publisher
 }
 
 func New(cfg Config) *Service {
+	pub := cfg.WebhookPublisher
+	if pub == nil {
+		pub = webhook.NoopPublisher{}
+	}
+
 	return &Service{
 		store:             cfg.Store,
 		tx:                cfg.Tx,
@@ -36,6 +44,7 @@ func New(cfg Config) *Service {
 		maxAttempts:       cfg.MaxAttempts,
 		maxResends:        cfg.MaxResends,
 		minResendInterval: cfg.MinResendInterval,
+		webhookPublisher:  pub,
 	}
 }
 

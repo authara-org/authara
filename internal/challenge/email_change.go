@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
 )
 
@@ -73,7 +74,7 @@ func (s *Service) ExecuteEmailChange(
 	action domain.PendingEmailChange,
 	now time.Time,
 ) error {
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.UpdateUserEmail(txCtx, action.UserID, action.NewEmail); err != nil {
 			return err
 		}
@@ -81,5 +82,10 @@ func (s *Service) ExecuteEmailChange(
 			return err
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	_ = s.webhookPublisher.Publish(ctx, webhook.NewUserUpdated(action.UserID, now))
+	return nil
 }

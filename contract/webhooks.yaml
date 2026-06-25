@@ -14,6 +14,19 @@ events:
       data:
         user_id: uuid
 
+  - type: user.updated
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: user.updated
+      created_at: rfc3339
+      data:
+        user_id: uuid
+
   - type: user.deleted
     stability: stable
     headers:
@@ -27,7 +40,7 @@ events:
       data:
         user_id: uuid
 
-  - type: organization_invitation.created
+  - type: organization.created
     stability: stable
     headers:
       - X-Authara-Event
@@ -35,7 +48,100 @@ events:
       - X-Authara-Signature
     payload:
       id: string
-      type: organization_invitation.created
+      type: organization.created
+      created_at: rfc3339
+      data:
+        organization_id: uuid
+        name: string
+        kind: string
+        created_by_user_id: uuid|null
+
+  - type: organization.updated
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: organization.updated
+      created_at: rfc3339
+      data:
+        organization_id: uuid
+        name: string
+        kind: string
+        created_by_user_id: uuid|null
+
+  - type: organization.deleted
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: organization.deleted
+      created_at: rfc3339
+      data:
+        organization_id: uuid
+        name: string
+        kind: string
+        created_by_user_id: uuid|null
+
+  - type: organization.membership.created
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: organization.membership.created
+      created_at: rfc3339
+      data:
+        organization_id: uuid
+        user_id: uuid
+        role: string
+
+  - type: organization.membership.updated
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: organization.membership.updated
+      created_at: rfc3339
+      data:
+        organization_id: uuid
+        user_id: uuid
+        role: string
+
+  - type: organization.membership.deleted
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: organization.membership.deleted
+      created_at: rfc3339
+      data:
+        organization_id: uuid
+        user_id: uuid
+        role: string
+
+  - type: organization.invitation.created
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: organization.invitation.created
       created_at: rfc3339
       data:
         invitation_id: uuid
@@ -45,7 +151,7 @@ events:
         invited_by_user_id: uuid|null
         expires_at: rfc3339
 
-  - type: organization_invitation.accepted
+  - type: organization.invitation.accepted
     stability: stable
     headers:
       - X-Authara-Event
@@ -53,7 +159,7 @@ events:
       - X-Authara-Signature
     payload:
       id: string
-      type: organization_invitation.accepted
+      type: organization.invitation.accepted
       created_at: rfc3339
       data:
         invitation_id: uuid
@@ -63,7 +169,7 @@ events:
         accepted_by_user_id: uuid
         accepted_at: rfc3339
 
-  - type: organization_membership.created
+  - type: organization.invitation.revoked
     stability: stable
     headers:
       - X-Authara-Event
@@ -71,12 +177,15 @@ events:
       - X-Authara-Signature
     payload:
       id: string
-      type: organization_membership.created
+      type: organization.invitation.revoked
       created_at: rfc3339
       data:
+        invitation_id: uuid
         organization_id: uuid
-        user_id: uuid
+        email: string
         role: string
+        revoked_by_user_id: uuid|null
+        revoked_at: rfc3339
 
 signature:
   header: X-Authara-Signature

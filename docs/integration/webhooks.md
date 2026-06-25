@@ -13,10 +13,17 @@ When configured, Authara sends HTTP POST requests to your webhook endpoint.
 Supported events:
 
 - `user.created`
+- `user.updated`
 - `user.deleted`
-- `organization_invitation.created`
-- `organization_invitation.accepted`
-- `organization_membership.created`
+- `organization.created`
+- `organization.updated`
+- `organization.deleted`
+- `organization.membership.created`
+- `organization.membership.updated`
+- `organization.membership.deleted`
+- `organization.invitation.created`
+- `organization.invitation.accepted`
+- `organization.invitation.revoked`
 
 ---
 
@@ -34,7 +41,7 @@ AUTHARA_WEBHOOK_SECRET=your-secret
 ## Optional
 
 ```env
-AUTHARA_WEBHOOK_ENABLED_EVENTS=user.created,user.deleted,organization_invitation.created
+AUTHARA_WEBHOOK_ENABLED_EVENTS=user.created,user.deleted,organization.invitation.created
 AUTHARA_WEBHOOK_TIMEOUT=5s
 ```
 
@@ -115,7 +122,7 @@ X-Authara-Signature: sha256=...
 }
 ```
 
-Organization invitation events include the invitation id, organization id, invited email, role, and acceptance metadata when available. Membership events include the organization id, user id, and role so your app can update its own projection.
+Organization events include the organization id, name, kind, and creator when available. Membership events include the organization id, user id, and role. Invitation events include the invitation id, organization id, invited email, role, and status metadata.
 
 ---
 
@@ -154,7 +161,7 @@ Always verify signatures before processing webhook events.
 
 - Webhooks are sent **after the action succeeds**
 - Delivery is **best-effort**
-- Failed deliveries are **not retried** (current version)
+- Network errors, HTTP 429, and HTTP 5xx responses are retried
 
 This means:
 
@@ -213,14 +220,28 @@ http.HandleFunc("/webhooks/authara", func(w http.ResponseWriter, r *http.Request
 	switch evt.Event {
 	case "user.created":
 		// handle user creation
+	case "user.updated":
+		// handle user updates
 	case "user.deleted":
 		// handle user deletion
-	case "organization_invitation.created":
-		// track pending invitation
-	case "organization_invitation.accepted":
-		// mark invitation accepted
-	case "organization_membership.created":
+	case "organization.created":
+		// project organization creation
+	case "organization.updated":
+		// update organization projection
+	case "organization.deleted":
+		// delete organization projection
+	case "organization.membership.created":
 		// project organization membership
+	case "organization.membership.updated":
+		// update organization membership
+	case "organization.membership.deleted":
+		// delete organization membership
+	case "organization.invitation.created":
+		// track pending invitation
+	case "organization.invitation.accepted":
+		// mark invitation accepted
+	case "organization.invitation.revoked":
+		// mark invitation revoked
 	}
 
 	w.WriteHeader(http.StatusNoContent)

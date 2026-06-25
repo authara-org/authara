@@ -192,6 +192,9 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, erro
 
 func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domain.User, error) {
 	var user domain.User
+	var initialOrg domain.Organization
+	var initialMembership domain.OrganizationMembership
+	initialOrgCreated := false
 
 	plan, source, err := s.signupOrganizationPlan(in.InvitationToken, in.InvitationID)
 	if err != nil {
@@ -213,7 +216,8 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 		}
 		user = created
 		if plan.CreateInitialOrg {
-			if _, _, _, err := s.organizations.EnsureInitialOrganization(txCtx, user, source); err != nil {
+			initialOrg, initialMembership, initialOrgCreated, err = s.organizations.EnsureInitialOrganization(txCtx, user, source)
+			if err != nil {
 				return err
 			}
 		}
@@ -241,6 +245,12 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 
 	if err != nil {
 		return domain.User{}, err
+	}
+
+	if initialOrgCreated {
+		now := time.Now().UTC()
+		s.publishBestEffort(ctx, webhook.NewOrganizationCreated(initialOrg, now))
+		s.publishBestEffort(ctx, webhook.NewOrganizationMembershipCreated(initialMembership, now))
 	}
 
 	return user, nil
@@ -306,6 +316,9 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 
 	var user domain.User
 	createdUser := false
+	var initialOrg domain.Organization
+	var initialMembership domain.OrganizationMembership
+	initialOrgCreated := false
 
 	plan, source, err := s.signupOrganizationPlan(in.InvitationToken, uuid.Nil)
 	if err != nil {
@@ -355,7 +368,8 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 		}
 		createdUser = true
 		if plan.CreateInitialOrg {
-			if _, _, _, err := s.organizations.EnsureInitialOrganization(txCtx, user, source); err != nil {
+			initialOrg, initialMembership, initialOrgCreated, err = s.organizations.EnsureInitialOrganization(txCtx, user, source)
+			if err != nil {
 				return err
 			}
 		}
@@ -384,7 +398,12 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 	}
 
 	if createdUser {
-		s.publishBestEffort(ctx, webhook.NewUserCreated(user.ID, time.Now()))
+		now := time.Now().UTC()
+		if initialOrgCreated {
+			s.publishBestEffort(ctx, webhook.NewOrganizationCreated(initialOrg, now))
+			s.publishBestEffort(ctx, webhook.NewOrganizationMembershipCreated(initialMembership, now))
+		}
+		s.publishBestEffort(ctx, webhook.NewUserCreated(user.ID, now))
 	}
 
 	return user, nil
@@ -784,7 +803,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 	now := time.Now()
 
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.DisableUser(txCtx, userID, now); err != nil {
 			return err
 		}
@@ -792,7 +811,12 @@ func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 			return err
 		}
 		return s.store.DeleteRefreshTokensByUserID(txCtx, userID)
-	})
+	}); err != nil {
+		return err
+	}
+
+	s.publishBestEffort(ctx, webhook.NewUserUpdated(userID, now))
+	return nil
 }
 
 func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username string) error {
@@ -810,6 +834,7 @@ func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username
 		return err
 	}
 
+	s.publishBestEffort(ctx, webhook.NewUserUpdated(userID, time.Now()))
 	return nil
 }
 

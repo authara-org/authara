@@ -41,11 +41,11 @@ func TestSignup_EmitsUserCreated(t *testing.T) {
 			t.Fatalf("Signup failed: %v", err)
 		}
 
-		if len(pub.events) != 1 {
-			t.Fatalf("expected 1 event, got %d", len(pub.events))
+		if len(pub.events) != 3 {
+			t.Fatalf("expected 3 events, got %d", len(pub.events))
 		}
 
-		evt := pub.events[0]
+		evt := mustFindWebhookEvent(t, pub.events, webhook.EventUserCreated)
 		if evt.Type != webhook.EventUserCreated {
 			t.Fatalf("expected event %q, got %q", webhook.EventUserCreated, evt.Type)
 		}
@@ -63,6 +63,42 @@ func TestSignup_EmitsUserCreated(t *testing.T) {
 		}
 		if evt.CreatedAt.IsZero() {
 			t.Fatal("expected non-zero occurred_at")
+		}
+	})
+}
+
+func TestChangeUsername_EmitsUserUpdated(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		pub := &recordingPublisher{}
+
+		svc := New(Config{
+			Store:            tdb.Store,
+			Tx:               tdb.Tx,
+			WebhookPublisher: pub,
+		})
+
+		createdUser, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "webhook-update@example.com",
+			Username: "webhook-update",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+
+		if err := svc.ChangeUsername(ctx, createdUser.ID, "webhook-updated"); err != nil {
+			t.Fatalf("ChangeUsername failed: %v", err)
+		}
+
+		evt := mustFindWebhookEvent(t, pub.events, webhook.EventUserUpdated)
+		data, ok := evt.Data.(webhook.UserData)
+		if !ok {
+			t.Fatalf("expected event data type webhook.UserData, got %T", evt.Data)
+		}
+
+		if data.UserID != createdUser.ID {
+			t.Fatalf("expected user_id %q, got %q", createdUser.ID, data.UserID)
 		}
 	})
 }
@@ -109,4 +145,16 @@ func TestDeleteUser_EmitsUserDeleted(t *testing.T) {
 			t.Fatalf("expected user_id %q, got %q", createdUser.ID, data.UserID)
 		}
 	})
+}
+
+func mustFindWebhookEvent(t *testing.T, events []webhook.Envelope, eventType webhook.EventType) webhook.Envelope {
+	t.Helper()
+
+	for _, evt := range events {
+		if evt.Type == eventType {
+			return evt
+		}
+	}
+	t.Fatalf("expected event %q in %+v", eventType, events)
+	return webhook.Envelope{}
 }

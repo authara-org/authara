@@ -151,55 +151,42 @@ func TestWebhookContract_RetrySemanticsMatchCode(t *testing.T) {
 	}
 }
 
-func TestWebhookContract_UserCreatedPayloadShape(t *testing.T) {
+func TestWebhookContract_PayloadShapes(t *testing.T) {
 	contract := loadWebhookContract(t)
-	spec := mustFindEventSpec(t, contract, string(EventUserCreated))
 
-	evt := NewUserCreated(uuid.New(), time.Now())
-	assertEnvelopeMatchesContract(t, evt, spec)
-}
-
-func TestWebhookContract_UserDeletedPayloadShape(t *testing.T) {
-	contract := loadWebhookContract(t)
-	spec := mustFindEventSpec(t, contract, string(EventUserDeleted))
-
-	evt := NewUserDeleted(uuid.New(), time.Now())
-	assertEnvelopeMatchesContract(t, evt, spec)
-}
-
-func TestWebhookContract_OrganizationInvitationCreatedPayloadShape(t *testing.T) {
-	contract := loadWebhookContract(t)
-	spec := mustFindEventSpec(t, contract, string(EventOrganizationInvitationCreated))
-
+	userID := uuid.New()
 	actorID := uuid.New()
-	evt := NewOrganizationInvitationCreated(fakeInvitation(&actorID), time.Now())
-	assertEnvelopeMatchesContract(t, evt, spec)
-}
-
-func TestWebhookContract_OrganizationInvitationAcceptedPayloadShape(t *testing.T) {
-	contract := loadWebhookContract(t)
-	spec := mustFindEventSpec(t, contract, string(EventOrganizationInvitationAccepted))
-
 	acceptedBy := uuid.New()
 	acceptedAt := time.Now().UTC()
-	invitation := fakeInvitation(nil)
-	invitation.AcceptedAt = &acceptedAt
-	invitation.AcceptedByUserID = &acceptedBy
+	revokedBy := uuid.New()
+	revokedAt := time.Now().UTC()
+	createdInvitation := fakeInvitation(&actorID)
+	acceptedInvitation := fakeInvitation(nil)
+	acceptedInvitation.AcceptedAt = &acceptedAt
+	acceptedInvitation.AcceptedByUserID = &acceptedBy
+	revokedInvitation := fakeInvitation(nil)
+	revokedInvitation.RevokedAt = &revokedAt
+	revokedInvitation.RevokedByUserID = &revokedBy
 
-	evt := NewOrganizationInvitationAccepted(invitation, time.Now())
-	assertEnvelopeMatchesContract(t, evt, spec)
-}
+	events := []Envelope{
+		NewUserCreated(userID, time.Now()),
+		NewUserUpdated(userID, time.Now()),
+		NewUserDeleted(userID, time.Now()),
+		NewOrganizationCreated(fakeOrganization(), time.Now()),
+		NewOrganizationUpdated(fakeOrganization(), time.Now()),
+		NewOrganizationDeleted(fakeOrganization(), time.Now()),
+		NewOrganizationMembershipCreated(fakeMembership(), time.Now()),
+		NewOrganizationMembershipUpdated(fakeMembership(), time.Now()),
+		NewOrganizationMembershipDeleted(fakeMembership(), time.Now()),
+		NewOrganizationInvitationCreated(createdInvitation, time.Now()),
+		NewOrganizationInvitationAccepted(acceptedInvitation, time.Now()),
+		NewOrganizationInvitationRevoked(revokedInvitation, time.Now()),
+	}
 
-func TestWebhookContract_OrganizationMembershipCreatedPayloadShape(t *testing.T) {
-	contract := loadWebhookContract(t)
-	spec := mustFindEventSpec(t, contract, string(EventOrganizationMembershipCreated))
-
-	evt := NewOrganizationMembershipCreated(domain.OrganizationMembership{
-		OrganizationID: uuid.New(),
-		UserID:         uuid.New(),
-		Role:           domain.OrganizationRoleMember,
-	}, time.Now())
-	assertEnvelopeMatchesContract(t, evt, spec)
+	for _, evt := range events {
+		spec := mustFindEventSpec(t, contract, string(evt.Type))
+		assertEnvelopeMatchesContract(t, evt, spec)
+	}
 }
 
 func loadWebhookContract(t *testing.T) webhookContract {
@@ -347,5 +334,23 @@ func fakeInvitation(invitedBy *uuid.UUID) domain.OrganizationInvitation {
 		Role:            domain.OrganizationRoleMember,
 		InvitedByUserID: invitedBy,
 		ExpiresAt:       time.Now().UTC().Add(24 * time.Hour),
+	}
+}
+
+func fakeOrganization() domain.Organization {
+	createdBy := uuid.New()
+	return domain.Organization{
+		ID:              uuid.New(),
+		Name:            "Example Org",
+		Kind:            domain.OrganizationKindTeam,
+		CreatedByUserID: &createdBy,
+	}
+}
+
+func fakeMembership() domain.OrganizationMembership {
+	return domain.OrganizationMembership{
+		OrganizationID: uuid.New(),
+		UserID:         uuid.New(),
+		Role:           domain.OrganizationRoleMember,
 	}
 }

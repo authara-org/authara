@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/authara-org/authara/internal/session/roles"
+	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
 )
 
@@ -58,7 +59,7 @@ func (s *Service) DisableUser(ctx context.Context, actor Actor, userID uuid.UUID
 	}
 
 	now := s.now()
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.LockPlatformRoleByName(txCtx, roles.DBAdminRoleName); err != nil {
 			return err
 		}
@@ -92,11 +93,17 @@ func (s *Service) DisableUser(ctx context.Context, actor Actor, userID uuid.UUID
 			return err
 		}
 		return s.audit(txCtx, actor, ActionUserDisabled, &userID, user.Email, map[string]any{}, meta)
-	})
+	}); err != nil {
+		return err
+	}
+
+	_ = s.webhookPublisher.Publish(ctx, webhook.NewUserUpdated(userID, now))
+	return nil
 }
 
 func (s *Service) EnableUser(ctx context.Context, actor Actor, userID uuid.UUID, meta RequestMeta) error {
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	now := s.now()
+	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		user, err := s.store.GetUserByID(txCtx, userID)
 		if err != nil {
 			return err
@@ -105,7 +112,12 @@ func (s *Service) EnableUser(ctx context.Context, actor Actor, userID uuid.UUID,
 			return err
 		}
 		return s.audit(txCtx, actor, ActionUserEnabled, &userID, user.Email, map[string]any{}, meta)
-	})
+	}); err != nil {
+		return err
+	}
+
+	_ = s.webhookPublisher.Publish(ctx, webhook.NewUserUpdated(userID, now))
+	return nil
 }
 
 func (s *Service) userDetailActions(ctx context.Context, actor Actor, user UserSummary) (UserDetailActions, error) {

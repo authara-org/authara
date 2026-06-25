@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/authara-org/authara/internal/webhook"
 )
 
 type Webhook struct {
@@ -44,18 +46,21 @@ func (w *Webhook) validate() error {
 		}
 		seen[ev] = struct{}{}
 
-		switch ev {
-		case "user.created",
-			"user.deleted",
-			"organization_invitation.created",
-			"organization_invitation.accepted",
-			"organization_membership.created":
-		default:
+		if !supportedWebhookEvent(ev) {
 			return fmt.Errorf("unsupported AUTHARA_WEBHOOK_ENABLED_EVENTS value %q", ev)
 		}
 	}
 
 	return nil
+}
+
+func supportedWebhookEvent(name string) bool {
+	for _, eventType := range webhook.SupportedEventTypes {
+		if name == string(eventType) {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *Webhook) parse() error {

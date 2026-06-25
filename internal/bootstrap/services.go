@@ -77,6 +77,7 @@ func NewServices(app *App) (Services, error) {
 		Tx:               txManager,
 		AllowlistEnabled: app.Config.AccessPolicy.AllowedEmailEnabled,
 		AuditRetention:   time.Duration(app.Config.Admin.AuditRetentionDays) * 24 * time.Hour,
+		WebhookPublisher: webhookPublisher,
 	})
 
 	passkeyService, err := newPasskeyService(app, txManager)
@@ -92,6 +93,7 @@ func NewServices(app *App) (Services, error) {
 		MaxAttempts:       app.Config.Challenge.MaxAttempts,
 		MaxResends:        app.Config.Challenge.MaxResends,
 		MinResendInterval: app.Config.Challenge.MinResendInterval,
+		WebhookPublisher:  webhookPublisher,
 	})
 
 	emailWorker := challenge.NewWorker(

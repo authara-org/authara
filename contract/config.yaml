@@ -408,7 +408,17 @@ variables:
     type: csv
     allowed_values:
       - user.created
+      - user.updated
       - user.deleted
+      - organization.created
+      - organization.updated
+      - organization.deleted
+      - organization.membership.created
+      - organization.membership.updated
+      - organization.membership.deleted
+      - organization.invitation.created
+      - organization.invitation.accepted
+      - organization.invitation.revoked
 
   - name: AUTHARA_WEBHOOK_TIMEOUT
     stability: stable
