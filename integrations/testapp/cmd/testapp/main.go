@@ -49,6 +49,7 @@ func main() {
 		r.Post("/private/organizations/switch", handlers.SwitchOrganizationPost)
 		r.Post("/private/invitations", handlers.InvitePost)
 		r.Post("/private/invitations/revoke", handlers.RevokeInvitationPost)
+		r.Post("/private/invitations/resend", handlers.ResendInvitationPost)
 	})
 
 	// --- Webhook endpoint ---

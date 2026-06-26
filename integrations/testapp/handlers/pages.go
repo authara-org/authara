@@ -314,6 +314,30 @@ func RevokeInvitationPost(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/private?notice=invitation+revoked", http.StatusSeeOther)
 }
 
+func ResendInvitationPost(w http.ResponseWriter, r *http.Request) {
+	user, err := getCurrentUser(r.Context(), r)
+	if err != nil || user == nil {
+		http.Redirect(w, r, "/auth/login?return_to=/private", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		redirectPrivateError(w, r, "invalid form")
+		return
+	}
+
+	orgID := strings.TrimSpace(r.FormValue("organization_id"))
+	invitationID := strings.TrimSpace(r.FormValue("invitation_id"))
+	inv, err := resendInvitation(r.Context(), orgID, invitationID)
+	if err != nil {
+		redirectPrivateError(w, r, err.Error())
+		return
+	}
+
+	recordInvitationRevoked(orgID, invitationID)
+	recordInternalInvitation(inv.Invitation)
+	http.Redirect(w, r, "/private?notice=invitation+resent", http.StatusSeeOther)
+}
+
 func RecordWebhook(evt *authara.WebhookEvent) error {
 	switch evt.Type {
 	case "organization.deleted":
@@ -642,6 +666,22 @@ func revokeInvitation(ctx context.Context, orgID, invitationID, revokedByUserID 
 		"/auth/internal/v1/organizations/"+url.PathEscape(orgID)+"/invitations/"+url.PathEscape(invitationID)+"/revoke",
 		map[string]string{"revoked_by_user_id": revokedByUserID},
 		http.StatusOK,
+		&out,
+	)
+	return &out, err
+}
+
+func resendInvitation(ctx context.Context, orgID, invitationID string) (*internalInvitationResponse, error) {
+	if orgID == "" || invitationID == "" {
+		return nil, fmt.Errorf("organization and invitation required")
+	}
+	var out internalInvitationResponse
+	err := internalJSON(
+		ctx,
+		http.MethodPost,
+		"/auth/internal/v1/organizations/"+url.PathEscape(orgID)+"/invitations/"+url.PathEscape(invitationID)+"/resend",
+		nil,
+		http.StatusCreated,
 		&out,
 	)
 	return &out, err
@@ -1074,6 +1114,13 @@ func renderInternalAPI(
 					<input type="hidden" name="organization_id" value="%s">
 					<input type="hidden" name="invitation_id" value="%s">
 					<button type="submit">Revoke</button>
+				</form>`, html.EscapeString(org.Organization.ID), html.EscapeString(inv.ID))
+			}
+			if inv.Status == "pending" || inv.Status == "expired" {
+				fmt.Fprintf(&b, ` <form method="post" action="/private/invitations/resend" style="display:inline">
+					<input type="hidden" name="organization_id" value="%s">
+					<input type="hidden" name="invitation_id" value="%s">
+					<button type="submit">Resend</button>
 				</form>`, html.EscapeString(org.Organization.ID), html.EscapeString(inv.ID))
 			}
 			b.WriteString(`</li>`)

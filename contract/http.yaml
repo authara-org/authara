@@ -236,6 +236,13 @@ routes:
     access: internal
     notes: Revokes a pending organization invitation.
 
+  - method: POST
+    path: /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend
+    stability: stable
+    kind: json
+    access: internal
+    notes: Revokes an existing pending or expired organization invitation and creates a fresh invitation link.
+
   - method: GET
     path: /auth/internal/v1/users/{userID}/memberships
     stability: stable
@@ -433,6 +440,20 @@ json_success_responses:
     stability: stable
     response:
       invitation: object
+
+  - endpoint: POST /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend
+    stability: stable
+    response:
+      status: 201
+      body:
+        invitation:
+          id: uuid
+          organization_id: uuid
+          email: string
+          role: string
+          status: string
+          expires_at: rfc3339
+          invite_url: string
 
   - endpoint: GET /auth/internal/v1/users/{userID}/memberships
     stability: stable
@@ -689,6 +710,30 @@ json_error_contracts:
       - status: 500
         code: internal_error
 
+  - endpoint: POST /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 400
+        code: invalid_request
+      - status: 403
+        code: forbidden
+      - status: 404
+        code: organization_not_found
+      - status: 404
+        code: invitation_not_found
+      - status: 409
+        code: already_member
+      - status: 409
+        code: invitation_already_pending
+      - status: 409
+        code: invitation_already_accepted
+      - status: 409
+        code: invitation_revoked
+      - status: 500
+        code: internal_error
+
   - endpoint: GET /auth/internal/v1/users/{userID}/memberships
     stability: stable
     errors:
@@ -711,6 +756,7 @@ csrf_contract:
       - /auth/internal/v1/organizations
       - /auth/internal/v1/organizations/{organizationID}/invitations
       - /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
+      - /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend
 
   browser_error:
     status: 403

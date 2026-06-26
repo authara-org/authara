@@ -132,6 +132,79 @@ func TestPersonalModeRejectsInvitations(t *testing.T) {
 	}
 }
 
+func TestResendInvitationRevokesOldAndCreatesFreshInvite(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "resend-owner@example.com", Username: "resend-owner"})
+		if err != nil {
+			t.Fatalf("CreateUser owner failed: %v", err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, owner.Username, domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatalf("EnsureOrganizationForUser owner failed: %v", err)
+		}
+
+		svc := New(Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			Mode:          OrgModeMulti,
+			InvitationTTL: time.Hour,
+			PublicURL:     "https://auth.example.com",
+		})
+		now := time.Now().UTC()
+		first, err := svc.CreateInvitation(ctx, CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			Email:          "resend-invitee@example.com",
+			Now:            now,
+		})
+		if err != nil {
+			t.Fatalf("CreateInvitation failed: %v", err)
+		}
+
+		resent, err := svc.ResendInvitation(ctx, ResendInvitationInput{
+			OrganizationID: org.ID,
+			InvitationID:   first.Invitation.ID,
+			Now:            now.Add(time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("ResendInvitation failed: %v", err)
+		}
+		if resent.Invitation.ID == first.Invitation.ID {
+			t.Fatal("expected resend to create a new invitation")
+		}
+		if resent.RawToken == "" || resent.RawToken == first.RawToken {
+			t.Fatalf("expected fresh token, got %q", resent.RawToken)
+		}
+		if resent.InviteURL == "" {
+			t.Fatal("expected fresh invite URL")
+		}
+
+		old, err := tdb.Store.GetOrganizationInvitationByID(ctx, first.Invitation.ID)
+		if err != nil {
+			t.Fatalf("GetOrganizationInvitationByID old failed: %v", err)
+		}
+		if old.Status(now.Add(time.Minute)) != domain.OrganizationInvitationStatusRevoked {
+			t.Fatalf("expected old invitation revoked, got %+v", old)
+		}
+		if old.RevokedByUserID == nil || *old.RevokedByUserID != owner.ID {
+			t.Fatalf("expected old invitation revoked by owner, got %+v", old.RevokedByUserID)
+		}
+
+		preview, err := svc.InvitationByToken(ctx, resent.RawToken)
+		if err != nil {
+			t.Fatalf("InvitationByToken resent failed: %v", err)
+		}
+		if preview.Invitation.ID != resent.Invitation.ID ||
+			preview.Invitation.Email != first.Invitation.Email ||
+			preview.Invitation.Role != first.Invitation.Role ||
+			preview.Invitation.Status(now.Add(time.Minute)) != domain.OrganizationInvitationStatusPending {
+			t.Fatalf("unexpected resent invitation: %+v", preview.Invitation)
+		}
+	})
+}
+
 func TestAcceptInvitationSingleModeRejectsExistingOtherMembership(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

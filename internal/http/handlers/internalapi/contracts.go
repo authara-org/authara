@@ -100,6 +100,19 @@ var RevokeOrganizationInvitationErrors = map[response.ErrorCode]response.ErrorSp
 	response.CodeInternalError:    {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
 }
 
+var ResendOrganizationInvitationErrors = map[response.ErrorCode]response.ErrorSpec{
+	response.CodeUnauthorized:     {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
+	response.CodeInvalidRequest:   {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
+	response.CodeForbidden:        {Status: http.StatusForbidden, Code: response.CodeForbidden},
+	codeOrganizationNotFound:      {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
+	codeInvitationNotFound:        {Status: http.StatusNotFound, Code: codeInvitationNotFound},
+	codeAlreadyMember:             {Status: http.StatusConflict, Code: codeAlreadyMember},
+	codeInvitationAlreadyPending:  {Status: http.StatusConflict, Code: codeInvitationAlreadyPending},
+	codeInvitationAlreadyAccepted: {Status: http.StatusConflict, Code: codeInvitationAlreadyAccepted},
+	codeInvitationRevoked:         {Status: http.StatusConflict, Code: codeInvitationRevoked},
+	response.CodeInternalError:    {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
+}
+
 var UserMembershipsGetErrors = map[response.ErrorCode]response.ErrorSpec{
 	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
 	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
@@ -118,5 +131,6 @@ var InternalAPIRouteSpecs = []RouteContractSpec{
 	{Method: http.MethodPost, Path: "/auth/internal/v1/organizations/{organizationID}/invitations", Errors: CreateOrganizationInvitationErrors},
 	{Method: http.MethodGet, Path: "/auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}", Errors: OrganizationInvitationGetErrors},
 	{Method: http.MethodPost, Path: "/auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/revoke", Errors: RevokeOrganizationInvitationErrors},
+	{Method: http.MethodPost, Path: "/auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend", Errors: ResendOrganizationInvitationErrors},
 	{Method: http.MethodGet, Path: "/auth/internal/v1/users/{userID}/memberships", Errors: UserMembershipsGetErrors},
 }

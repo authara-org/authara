@@ -74,6 +74,28 @@ func (h *Handler) CreateOrganizationInvitation(w http.ResponseWriter, r *http.Re
 	})
 }
 
+func (h *Handler) ResendOrganizationInvitation(w http.ResponseWriter, r *http.Request) {
+	organizationID, invitationID, ok := parseOrganizationAndInvitationParams(w, r, ResendOrganizationInvitationErrors)
+	if !ok {
+		return
+	}
+
+	now := time.Now().UTC()
+	out, err := h.Organizations.ResendInvitation(r.Context(), organization.ResendInvitationInput{
+		OrganizationID: organizationID,
+		InvitationID:   invitationID,
+		Now:            now,
+	})
+	if err != nil {
+		h.writeResendInvitationError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusCreated, invitationResponse{
+		Invitation: toInvitationDTO(out.Invitation, out.InviteURL, now),
+	})
+}
+
 func (h *Handler) writeCreateInvitationError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrOrganizationNotFound):
@@ -90,6 +112,27 @@ func (h *Handler) writeCreateInvitationError(w http.ResponseWriter, err error) {
 		writeRouteError(w, CreateOrganizationInvitationErrors, response.CodeInvalidRequest, "Invalid invitation request")
 	default:
 		writeRouteError(w, CreateOrganizationInvitationErrors, response.CodeInternalError, "Internal server error")
+	}
+}
+
+func (h *Handler) writeResendInvitationError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, store.ErrOrganizationNotFound):
+		writeRouteError(w, ResendOrganizationInvitationErrors, codeOrganizationNotFound, "Organization not found")
+	case errors.Is(err, store.ErrOrganizationInvitationNotFound):
+		writeRouteError(w, ResendOrganizationInvitationErrors, codeInvitationNotFound, "Invitation not found")
+	case errors.Is(err, organization.ErrOrganizationInviteForbidden):
+		writeRouteError(w, ResendOrganizationInvitationErrors, response.CodeForbidden, "Organization operation forbidden")
+	case errors.Is(err, organization.ErrOrganizationMemberAlreadyExists):
+		writeRouteError(w, ResendOrganizationInvitationErrors, codeAlreadyMember, "User is already a member")
+	case errors.Is(err, organization.ErrOrganizationInvitationAlreadyPending):
+		writeRouteError(w, ResendOrganizationInvitationErrors, codeInvitationAlreadyPending, "Invitation already pending")
+	case errors.Is(err, organization.ErrOrganizationInvitationAlreadyAccepted):
+		writeRouteError(w, ResendOrganizationInvitationErrors, codeInvitationAlreadyAccepted, "Invitation already accepted")
+	case errors.Is(err, organization.ErrOrganizationInvitationRevoked):
+		writeRouteError(w, ResendOrganizationInvitationErrors, codeInvitationRevoked, "Invitation already revoked")
+	default:
+		writeRouteError(w, ResendOrganizationInvitationErrors, response.CodeInternalError, "Internal server error")
 	}
 }
 

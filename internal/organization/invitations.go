@@ -65,6 +65,12 @@ type RevokeInvitationInput struct {
 	Now             time.Time
 }
 
+type ResendInvitationInput struct {
+	OrganizationID uuid.UUID
+	InvitationID   uuid.UUID
+	Now            time.Time
+}
+
 func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput) (InvitationWithToken, error) {
 	now := normalizeNow(in.Now)
 
@@ -109,19 +115,8 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 			return ErrOrganizationInviteForbidden
 		}
 
-		target, err := s.store.GetUserByEmail(txCtx, email)
-		if err != nil && !errors.Is(err, store.ErrUserNotFound) {
+		if err := s.ensureInvitationTargetNotMember(txCtx, in.OrganizationID, email); err != nil {
 			return err
-		}
-		if err == nil {
-			_, err = s.store.GetOrganizationMembership(txCtx, in.OrganizationID, target.ID)
-			switch {
-			case err == nil:
-				return ErrOrganizationMemberAlreadyExists
-			case errors.Is(err, store.ErrOrganizationMembershipNotFound):
-			default:
-				return err
-			}
 		}
 
 		existing, err := s.store.GetActiveOrganizationInvitationByOrganizationAndEmail(txCtx, in.OrganizationID, email)
@@ -169,6 +164,87 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 		return InvitationWithToken{}, err
 	}
 
+	s.publishBestEffort(ctx, webhook.NewOrganizationInvitationCreated(out.Invitation, now))
+
+	return out, nil
+}
+
+func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput) (InvitationWithToken, error) {
+	if !s.mode.AllowsInvitations() {
+		return InvitationWithToken{}, ErrOrganizationInviteForbidden
+	}
+	now := normalizeNow(in.Now)
+
+	rawToken, tokenHash, err := generateInvitationToken()
+	if err != nil {
+		return InvitationWithToken{}, err
+	}
+	inviteURL := s.inviteURL(rawToken)
+
+	var out InvitationWithToken
+	var revoked domain.OrganizationInvitation
+	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		org, err := s.store.GetOrganizationByID(txCtx, in.OrganizationID)
+		if err != nil {
+			return err
+		}
+
+		old, err := s.store.GetOrganizationInvitationByIDForUpdate(txCtx, in.InvitationID)
+		if err != nil {
+			return err
+		}
+		if old.OrganizationID != in.OrganizationID {
+			return store.ErrOrganizationInvitationNotFound
+		}
+
+		switch old.Status(now) {
+		case domain.OrganizationInvitationStatusAccepted:
+			return ErrOrganizationInvitationAlreadyAccepted
+		case domain.OrganizationInvitationStatusRevoked:
+			return ErrOrganizationInvitationRevoked
+		}
+		if err := s.ensureInvitationTargetNotMember(txCtx, old.OrganizationID, old.Email); err != nil {
+			return err
+		}
+
+		if err := s.store.MarkOrganizationInvitationRevoked(txCtx, old.ID, old.InvitedByUserID, now); err != nil {
+			return err
+		}
+		old.RevokedAt = &now
+		old.RevokedByUserID = old.InvitedByUserID
+		revoked = old
+
+		created, err := s.store.CreateOrganizationInvitation(txCtx, domain.OrganizationInvitation{
+			OrganizationID:  old.OrganizationID,
+			Email:           old.Email,
+			Role:            old.Role,
+			TokenHash:       tokenHash,
+			InvitedByUserID: old.InvitedByUserID,
+			ExpiresAt:       now.Add(s.invitationTTL),
+		})
+		if err != nil {
+			if store.IsUniqueViolation(err, store.ConstraintActiveInvitation) {
+				return ErrOrganizationInvitationAlreadyPending
+			}
+			return err
+		}
+
+		if err := s.enqueueInvitationEmail(txCtx, created, org, inviteURL, now); err != nil {
+			return err
+		}
+
+		out = InvitationWithToken{
+			Invitation: created,
+			RawToken:   rawToken,
+			InviteURL:  inviteURL,
+		}
+		return nil
+	})
+	if err != nil {
+		return InvitationWithToken{}, err
+	}
+
+	s.publishBestEffort(ctx, webhook.NewOrganizationInvitationRevoked(revoked, now))
 	s.publishBestEffort(ctx, webhook.NewOrganizationInvitationCreated(out.Invitation, now))
 
 	return out, nil
@@ -435,6 +511,24 @@ func (s *Service) acceptInvitation(
 
 func canInvite(role domain.OrganizationRole) bool {
 	return role == domain.OrganizationRoleOwner || role == domain.OrganizationRoleAdmin
+}
+
+func (s *Service) ensureInvitationTargetNotMember(ctx context.Context, organizationID uuid.UUID, email string) error {
+	target, err := s.store.GetUserByEmail(ctx, email)
+	if err != nil && !errors.Is(err, store.ErrUserNotFound) {
+		return err
+	}
+	if err == nil {
+		_, err = s.store.GetOrganizationMembership(ctx, organizationID, target.ID)
+		switch {
+		case err == nil:
+			return ErrOrganizationMemberAlreadyExists
+		case errors.Is(err, store.ErrOrganizationMembershipNotFound):
+		default:
+			return err
+		}
+	}
+	return nil
 }
 
 func normalizeInvitationEmail(raw string) (string, error) {

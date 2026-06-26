@@ -253,6 +253,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Post("/organizations/{organizationID}/invitations", internalh.CreateOrganizationInvitation)
 			r.Get("/organizations/{organizationID}/invitations/{invitationID}", internalh.GetOrganizationInvitation)
 			r.Post("/organizations/{organizationID}/invitations/{invitationID}/revoke", internalh.RevokeOrganizationInvitation)
+			r.Post("/organizations/{organizationID}/invitations/{invitationID}/resend", internalh.ResendOrganizationInvitation)
 			r.Get("/users/{userID}/memberships", internalh.ListUserMemberships)
 		})
 	})
