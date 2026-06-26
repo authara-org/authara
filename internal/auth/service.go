@@ -38,6 +38,10 @@ type Service struct {
 	organizations    *organization.Service
 }
 
+type emailAllowPolicy interface {
+	AllowEmail(ctx context.Context, email string) error
+}
+
 func New(cfg Config) *Service {
 	pub := cfg.WebhookPublisher
 	if pub == nil {
@@ -139,12 +143,8 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error) {
 
-	allowed, err := s.accessPolicy.IsEmailAllowed(ctx, in.Email)
-	if err != nil {
+	if err := s.ensureEmailAllowed(ctx, in.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
 		return domain.User{}, err
-	}
-	if !allowed {
-		return domain.User{}, ErrEmailNotAllowed
 	}
 
 	switch in.Provider {
@@ -168,12 +168,11 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, erro
 	}
 	in.Username = uname
 
-	allowed, err := s.accessPolicy.IsEmailAllowed(ctx, in.Email)
-	if err != nil {
+	if err := s.ensureEmailAllowed(ctx, in.Email, invitationSource{
+		Token: in.InvitationToken,
+		ID:    in.InvitationID,
+	}); err != nil {
 		return domain.User{}, err
-	}
-	if !allowed {
-		return domain.User{}, ErrEmailNotAllowed
 	}
 
 	switch in.Provider {
@@ -267,6 +266,87 @@ func signupSource(invitationToken string, invitationID uuid.UUID) organization.S
 		return organization.SignupSourceInvite
 	}
 	return organization.SignupSourceDirect
+}
+
+type invitationSource struct {
+	Token string
+	ID    uuid.UUID
+}
+
+func (s invitationSource) present() bool {
+	return strings.TrimSpace(s.Token) != "" || s.ID != uuid.Nil
+}
+
+func (s *Service) ensureEmailAllowed(ctx context.Context, email string, source invitationSource) error {
+	allowed, err := s.accessPolicy.IsEmailAllowed(ctx, email)
+	if err != nil {
+		return err
+	}
+	if allowed {
+		return nil
+	}
+	if !source.present() {
+		return ErrEmailNotAllowed
+	}
+
+	if err := s.requirePendingInvitationForEmail(ctx, email, source); err != nil {
+		return err
+	}
+
+	allowPolicy, ok := s.accessPolicy.(emailAllowPolicy)
+	if !ok {
+		return ErrEmailNotAllowed
+	}
+	if err := allowPolicy.AllowEmail(ctx, email); err != nil {
+		return err
+	}
+
+	allowed, err = s.accessPolicy.IsEmailAllowed(ctx, email)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrEmailNotAllowed
+	}
+	return nil
+}
+
+func (s *Service) requirePendingInvitationForEmail(ctx context.Context, email string, source invitationSource) error {
+	if s.organizations == nil {
+		return organization.ErrOrganizationInviteForbidden
+	}
+
+	var preview organization.InvitationPreview
+	var err error
+	if source.ID != uuid.Nil {
+		preview, err = s.organizations.InvitationByID(ctx, source.ID)
+	} else {
+		preview, err = s.organizations.InvitationByToken(ctx, source.Token)
+	}
+	if err != nil {
+		return err
+	}
+
+	if normalizeAuthEmail(preview.Invitation.Email) != normalizeAuthEmail(email) {
+		return organization.ErrOrganizationInviteEmailMismatch
+	}
+
+	switch preview.Invitation.Status(time.Now().UTC()) {
+	case domain.OrganizationInvitationStatusPending:
+		return nil
+	case domain.OrganizationInvitationStatusAccepted:
+		return organization.ErrOrganizationInvitationAlreadyAccepted
+	case domain.OrganizationInvitationStatusRevoked:
+		return organization.ErrOrganizationInvitationRevoked
+	case domain.OrganizationInvitationStatusExpired:
+		return organization.ErrOrganizationInvitationExpired
+	default:
+		return organization.ErrOrganizationInviteForbidden
+	}
+}
+
+func normalizeAuthEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func (s *Service) acceptSignupInvitation(ctx context.Context, invitationToken string, invitationID uuid.UUID, userID uuid.UUID) error {

@@ -38,6 +38,19 @@ func (s *Service) IsEmailAllowed(ctx context.Context, email string) (bool, error
 	return s.store.IsEmailAllowed(ctx, email)
 }
 
+func (s *Service) AllowEmail(ctx context.Context, email string) error {
+	if !s.enabled {
+		return nil
+	}
+
+	email = normalize(email)
+	if email == "" {
+		return nil
+	}
+
+	return s.store.EnsureAllowedEmail(ctx, email)
+}
+
 func normalize(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }

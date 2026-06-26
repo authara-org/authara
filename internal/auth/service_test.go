@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
@@ -328,6 +329,128 @@ func TestSignup_WithInvitationInMultiCreatesPersonalAndJoinsInvite(t *testing.T)
 	})
 }
 
+func TestSignup_WithInvitationAddsEmailToAllowlist(t *testing.T) {
+	tests := []struct {
+		name  string
+		useID bool
+	}{
+		{name: "token", useID: false},
+		{name: "id", useID: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tdb := testutil.OpenTestDB(t)
+
+			testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+				owner, err := tdb.Store.CreateUser(ctx, domain.User{
+					Email:    "allowlist-invite-owner-" + tt.name + "@example.com",
+					Username: "allowlist-invite-owner-" + tt.name,
+				})
+				if err != nil {
+					t.Fatalf("CreateUser owner failed: %v", err)
+				}
+				org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, owner.ID, owner.Username)
+				if err != nil {
+					t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+				}
+
+				orgs := organization.New(organization.Config{
+					Store:         tdb.Store,
+					Tx:            tdb.Tx,
+					Mode:          organization.OrgModeSingle,
+					InvitationTTL: time.Hour,
+				})
+				invitedEmail := "allowlist-invited-" + tt.name + "@example.com"
+				invite, err := orgs.CreateInvitation(ctx, organization.CreateInvitationInput{
+					OrganizationID: org.ID,
+					ActorUserID:    owner.ID,
+					Email:          invitedEmail,
+					Now:            time.Now().UTC(),
+				})
+				if err != nil {
+					t.Fatalf("CreateInvitation failed: %v", err)
+				}
+
+				input := SignupInput{
+					Provider:     domain.ProviderPassword,
+					Email:        invitedEmail,
+					Username:     "allowlist-invited-" + tt.name,
+					PasswordHash: "hashed-password",
+				}
+				if tt.useID {
+					input.InvitationID = invite.Invitation.ID
+				} else {
+					input.InvitationToken = invite.RawToken
+				}
+
+				svc := New(Config{
+					Store:         tdb.Store,
+					Tx:            tdb.Tx,
+					AccessPolicy:  accesspolicy.New(accesspolicy.Config{Store: tdb.Store, Enabled: true}),
+					Organizations: orgs,
+				})
+
+				user, err := svc.Signup(ctx, input)
+				if err != nil {
+					t.Fatalf("Signup failed: %v", err)
+				}
+
+				allowed, err := tdb.Store.IsEmailAllowed(ctx, invitedEmail)
+				if err != nil {
+					t.Fatalf("IsEmailAllowed failed: %v", err)
+				}
+				if !allowed {
+					t.Fatal("expected invited email to be allowlisted")
+				}
+
+				if _, err := tdb.Store.GetOrganizationMembership(ctx, org.ID, user.ID); err != nil {
+					t.Fatalf("expected invitation membership to be created: %v", err)
+				}
+			})
+		})
+	}
+}
+
+func TestSignup_WithInvalidInvitationDoesNotAddEmailToAllowlist(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		orgs := organization.New(organization.Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			Mode:          organization.OrgModeSingle,
+			InvitationTTL: time.Hour,
+		})
+		svc := New(Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  accesspolicy.New(accesspolicy.Config{Store: tdb.Store, Enabled: true}),
+			Organizations: orgs,
+		})
+
+		email := "invalid-invite-allowlist@example.com"
+		_, err := svc.Signup(ctx, SignupInput{
+			Provider:        domain.ProviderPassword,
+			Email:           email,
+			Username:        "invalid-invite-allowlist",
+			PasswordHash:    "hashed-password",
+			InvitationToken: "not-a-real-token",
+		})
+		if !errors.Is(err, store.ErrOrganizationInvitationNotFound) {
+			t.Fatalf("expected ErrOrganizationInvitationNotFound, got %v", err)
+		}
+
+		allowed, err := tdb.Store.IsEmailAllowed(ctx, email)
+		if err != nil {
+			t.Fatalf("IsEmailAllowed failed: %v", err)
+		}
+		if allowed {
+			t.Fatal("expected invalid invitation email not to be allowlisted")
+		}
+	})
+}
+
 func TestSignup_GeneratesUsernameWhenEmpty(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -553,6 +676,73 @@ func TestLoginWithExternalIdentity_CreatesUserWhenMissing(t *testing.T) {
 		org, membership := userOnlyOrganization(t, ctx, tdb, user.ID)
 		if org.Kind != domain.OrganizationKindTeam || membership.Role != domain.OrganizationRoleOwner {
 			t.Fatalf("expected team owner org, got org=%+v membership=%+v", org, membership)
+		}
+	})
+}
+
+func TestLoginWithExternalIdentity_WithInvitationAddsEmailToAllowlist(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "oauth-invite-owner@example.com", Username: "oauth-invite-owner"})
+		if err != nil {
+			t.Fatalf("CreateUser owner failed: %v", err)
+		}
+		org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, owner.ID, owner.Username)
+		if err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+
+		orgs := organization.New(organization.Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			Mode:          organization.OrgModeSingle,
+			InvitationTTL: time.Hour,
+		})
+		invitedEmail := "oauth-invited@example.com"
+		invite, err := orgs.CreateInvitation(ctx, organization.CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			Email:          invitedEmail,
+			Now:            time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatalf("CreateInvitation failed: %v", err)
+		}
+
+		svc := New(Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			AccessPolicy:  accesspolicy.New(accesspolicy.Config{Store: tdb.Store, Enabled: true}),
+			Organizations: orgs,
+			OAuthProviders: oauth.OAuthProviders{
+				Providers: []oauth.OAuthProvider{
+					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
+				},
+			},
+		})
+
+		user, err := svc.Login(ctx, LoginInput{
+			Provider:        domain.ProviderGoogle,
+			Email:           invitedEmail,
+			Username:        "oauth-invited",
+			OAuthID:         "google-oauth-invited-id",
+			InvitationToken: invite.RawToken,
+		})
+		if err != nil {
+			t.Fatalf("Login failed: %v", err)
+		}
+
+		allowed, err := tdb.Store.IsEmailAllowed(ctx, invitedEmail)
+		if err != nil {
+			t.Fatalf("IsEmailAllowed failed: %v", err)
+		}
+		if !allowed {
+			t.Fatal("expected invited email to be allowlisted")
+		}
+
+		if _, err := tdb.Store.GetOrganizationMembership(ctx, org.ID, user.ID); err != nil {
+			t.Fatalf("expected invitation membership to be created: %v", err)
 		}
 	})
 }

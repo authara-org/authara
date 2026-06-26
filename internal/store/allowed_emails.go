@@ -58,6 +58,20 @@ func (s *Store) CreateAllowedEmail(ctx context.Context, allowedEmail domain.Allo
 	return err
 }
 
+func (s *Store) EnsureAllowedEmail(ctx context.Context, email string) error {
+	email = normalizeEmail(email)
+	if email == "" {
+		return nil
+	}
+
+	_, err := s.exec(ctx, `
+		INSERT INTO allowed_emails (email)
+		VALUES ($1)
+		ON CONFLICT (email) DO NOTHING
+	`, email)
+	return err
+}
+
 func (s *Store) DeleteAllowedEmail(ctx context.Context, email string) error {
 	res, err := s.exec(ctx, `DELETE FROM allowed_emails WHERE email = $1`, email)
 	if err != nil {
