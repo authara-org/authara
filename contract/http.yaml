@@ -128,6 +128,13 @@ routes:
     access: user
     notes: Returns the organization from the current access token.
 
+  - method: GET
+    path: /auth/api/v1/organizations/current/members
+    stability: stable
+    kind: json
+    access: user
+    notes: Lists members of the organization from the current access token.
+
   - method: POST
     path: /auth/api/v1/organizations/{organizationID}/switch
     stability: stable
@@ -297,6 +304,16 @@ json_success_responses:
       name: string
       role: string
 
+  - endpoint: GET /auth/api/v1/organizations/current/members
+    stability: stable
+    response:
+      members:
+        - user_id: uuid
+          email: string
+          username: string
+          role: string
+          created_at: string
+
   - endpoint: POST /auth/api/v1/organizations/{organizationID}/switch
     stability: stable
     response:
@@ -365,12 +382,28 @@ json_success_responses:
   - endpoint: GET /auth/internal/v1/organizations/{organizationID}/members
     stability: stable
     response:
-      members: array
+      members:
+        - organization_id: uuid
+          user_id: uuid
+          email: string
+          username: string
+          role: string
+          created_at: string
+          updated_at: string
+          disabled: bool
 
   - endpoint: GET /auth/internal/v1/organizations/{organizationID}/members/{userID}
     stability: stable
     response:
-      member: object
+      member:
+        organization_id: uuid
+        user_id: uuid
+        email: string
+        username: string
+        role: string
+        created_at: string
+        updated_at: string
+        disabled: bool
 
   - endpoint: GET /auth/internal/v1/organizations/{organizationID}/invitations
     stability: stable
@@ -465,6 +498,16 @@ json_error_contracts:
     errors:
       - status: 401
         code: unauthorized
+      - status: 500
+        code: internal_error
+
+  - endpoint: GET /auth/api/v1/organizations/current/members
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 403
+        code: forbidden
       - status: 500
         code: internal_error
 

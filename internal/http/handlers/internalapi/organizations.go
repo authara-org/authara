@@ -50,11 +50,11 @@ type organizationsResponse struct {
 }
 
 type membersResponse struct {
-	Members []membershipDTO `json:"members"`
+	Members []organizationMemberDTO `json:"members"`
 }
 
 type memberResponse struct {
-	Member membershipDTO `json:"member"`
+	Member organizationMemberDTO `json:"member"`
 }
 
 type invitationsResponse struct {
@@ -80,6 +80,17 @@ type membershipDTO struct {
 	Role           string    `json:"role"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type organizationMemberDTO struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	Email          string    `json:"email"`
+	Username       string    `json:"username"`
+	Role           string    `json:"role"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	Disabled       bool      `json:"disabled"`
 }
 
 type membershipWithOrganizationDTO struct {
@@ -169,9 +180,9 @@ func (h *Handler) ListOrganizationMembers(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	out := make([]membershipDTO, 0, len(members))
+	out := make([]organizationMemberDTO, 0, len(members))
 	for _, member := range members {
-		out = append(out, toMembershipDTO(member))
+		out = append(out, toOrganizationMemberDTO(member))
 	}
 	response.JSON(w, http.StatusOK, membersResponse{Members: out})
 }
@@ -187,7 +198,7 @@ func (h *Handler) GetOrganizationMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	response.JSON(w, http.StatusOK, memberResponse{Member: toMembershipDTO(member)})
+	response.JSON(w, http.StatusOK, memberResponse{Member: toOrganizationMemberDTO(member)})
 }
 
 func (h *Handler) ListOrganizationInvitations(w http.ResponseWriter, r *http.Request) {
@@ -383,5 +394,20 @@ func toMembershipDTO(membership domain.OrganizationMembership) membershipDTO {
 		Role:           string(membership.Role),
 		CreatedAt:      membership.CreatedAt,
 		UpdatedAt:      membership.UpdatedAt,
+	}
+}
+
+func toOrganizationMemberDTO(member domain.OrganizationMember) organizationMemberDTO {
+	membership := member.Membership
+	user := member.User
+	return organizationMemberDTO{
+		OrganizationID: membership.OrganizationID,
+		UserID:         user.ID,
+		Email:          user.Email,
+		Username:       user.Username,
+		Role:           string(membership.Role),
+		CreatedAt:      membership.CreatedAt,
+		UpdatedAt:      membership.UpdatedAt,
+		Disabled:       user.DisabledAt != nil,
 	}
 }

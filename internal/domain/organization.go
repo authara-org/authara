@@ -50,6 +50,11 @@ type OrganizationMembership struct {
 	UpdatedAt time.Time
 }
 
+type OrganizationMember struct {
+	User       User
+	Membership OrganizationMembership
+}
+
 type OrganizationInvitation struct {
 	ID        uuid.UUID
 	CreatedAt time.Time

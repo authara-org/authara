@@ -221,6 +221,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/user", apih.UserGet)
 				r.Get("/organizations", apih.OrganizationsGet)
 				r.Get("/organizations/current", apih.OrganizationCurrentGet)
+				r.Get("/organizations/current/members", apih.OrganizationCurrentMembersGet)
 				// r.Post("/user/username", apih.ChangeUsername)
 				// r.Post("/user/delete", apih.DeleteUser)
 

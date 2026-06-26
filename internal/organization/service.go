@@ -199,18 +199,28 @@ func (s *Service) ListUserMemberships(ctx context.Context, userID uuid.UUID) ([]
 	return s.ListUserOrganizations(ctx, userID)
 }
 
-func (s *Service) ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]domain.OrganizationMembership, error) {
+func (s *Service) ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]domain.OrganizationMember, error) {
 	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
 		return nil, err
 	}
-	return s.store.ListOrganizationMembershipsByOrganizationID(ctx, organizationID)
+	return s.store.ListOrganizationMembersByOrganizationID(ctx, organizationID)
 }
 
-func (s *Service) GetOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) (domain.OrganizationMembership, error) {
-	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
-		return domain.OrganizationMembership{}, err
+func (s *Service) ListCurrentOrganizationMembers(ctx context.Context, userID uuid.UUID, organizationID uuid.UUID) ([]domain.OrganizationMember, error) {
+	if !s.mode.HasVisibleOrganizations() {
+		return nil, ErrOrganizationOperationForbidden
 	}
-	return s.store.GetOrganizationMembership(ctx, organizationID, userID)
+	if _, err := s.store.GetOrganizationMembership(ctx, organizationID, userID); err != nil {
+		return nil, err
+	}
+	return s.ListOrganizationMembers(ctx, organizationID)
+}
+
+func (s *Service) GetOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) (domain.OrganizationMember, error) {
+	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
+		return domain.OrganizationMember{}, err
+	}
+	return s.store.GetOrganizationMember(ctx, organizationID, userID)
 }
 
 func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID, role domain.OrganizationRole) (domain.OrganizationMembership, error) {

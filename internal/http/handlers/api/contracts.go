@@ -30,6 +30,21 @@ var OrganizationsGetErrors = map[response.ErrorCode]response.ErrorSpec{
 	},
 }
 
+var OrganizationMembersGetErrors = map[response.ErrorCode]response.ErrorSpec{
+	response.CodeUnauthorized: {
+		Status: http.StatusUnauthorized,
+		Code:   response.CodeUnauthorized,
+	},
+	response.CodeForbidden: {
+		Status: http.StatusForbidden,
+		Code:   response.CodeForbidden,
+	},
+	response.CodeInternalError: {
+		Status: http.StatusInternalServerError,
+		Code:   response.CodeInternalError,
+	},
+}
+
 var OrganizationSwitchPostErrors = map[response.ErrorCode]response.ErrorSpec{
 	response.CodeUnauthorized: {
 		Status: http.StatusUnauthorized,
@@ -145,6 +160,11 @@ var APIRouteSpecs = []RouteContractSpec{
 		Method: http.MethodGet,
 		Path:   "/auth/api/v1/organizations/current",
 		Errors: OrganizationsGetErrors,
+	},
+	{
+		Method: http.MethodGet,
+		Path:   "/auth/api/v1/organizations/current/members",
+		Errors: OrganizationMembersGetErrors,
 	},
 	{
 		Method: http.MethodPost,

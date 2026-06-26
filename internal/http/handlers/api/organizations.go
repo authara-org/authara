@@ -9,6 +9,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/response"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,18 @@ import (
 
 type organizationsResponse struct {
 	Organizations []response.Organization `json:"organizations"`
+}
+
+type organizationMembersResponse struct {
+	Members []organizationMemberDTO `json:"members"`
+}
+
+type organizationMemberDTO struct {
+	UserID    string    `json:"user_id"`
+	Email     string    `json:"email"`
+	Username  string    `json:"username"`
+	Role      string    `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (h *APIHandler) OrganizationsGet(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +83,52 @@ func (h *APIHandler) OrganizationCurrentGet(w http.ResponseWriter, r *http.Reque
 	}
 
 	response.JSON(w, http.StatusOK, organizationResponse(org, organizationRole))
+}
+
+func (h *APIHandler) OrganizationCurrentMembersGet(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID, ok := httpctx.UserID(ctx)
+	if !ok {
+		writeOrganizationUnauthorized(w, OrganizationMembersGetErrors)
+		return
+	}
+	organizationID, ok := httpctx.OrganizationID(ctx)
+	if !ok {
+		writeOrganizationUnauthorized(w, OrganizationMembersGetErrors)
+		return
+	}
+	if _, ok := httpctx.OrganizationRole(ctx); !ok {
+		writeOrganizationUnauthorized(w, OrganizationMembersGetErrors)
+		return
+	}
+
+	members, err := h.Organizations.ListCurrentOrganizationMembers(ctx, userID, organizationID)
+	switch {
+	case errors.Is(err, organization.ErrOrganizationOperationForbidden):
+		response.WriteError(
+			w,
+			mustRouteError(OrganizationMembersGetErrors, response.CodeForbidden),
+			"Organization members are not visible.",
+		)
+		return
+	case errors.Is(err, store.ErrOrganizationMembershipNotFound),
+		errors.Is(err, store.ErrOrganizationNotFound):
+		writeOrganizationUnauthorized(w, OrganizationMembersGetErrors)
+		return
+	case err != nil:
+		response.WriteError(
+			w,
+			mustRouteError(OrganizationMembersGetErrors, response.CodeInternalError),
+			"Organization error",
+		)
+		return
+	}
+
+	out := make([]organizationMemberDTO, 0, len(members))
+	for _, member := range members {
+		out = append(out, organizationMemberResponse(member))
+	}
+	response.JSON(w, http.StatusOK, organizationMembersResponse{Members: out})
 }
 
 func (h *APIHandler) OrganizationSwitchPost(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +212,16 @@ func organizationResponse(org domain.Organization, role domain.OrganizationRole)
 		ID:   org.ID.String(),
 		Name: org.Name,
 		Role: role,
+	}
+}
+
+func organizationMemberResponse(member domain.OrganizationMember) organizationMemberDTO {
+	return organizationMemberDTO{
+		UserID:    member.User.ID.String(),
+		Email:     member.User.Email,
+		Username:  member.User.Username,
+		Role:      string(member.Membership.Role),
+		CreatedAt: member.Membership.CreatedAt,
 	}
 }
 

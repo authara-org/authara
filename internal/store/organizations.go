@@ -104,6 +104,23 @@ func scanOrganizationMembership(row rowScanner, m *model.OrganizationMembership)
 	)
 }
 
+func scanOrganizationMember(row rowScanner, u *model.User, m *model.OrganizationMembership) error {
+	return row.Scan(
+		&u.ID,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+		&u.DisabledAt,
+		&u.Username,
+		&u.UsernameNormalized,
+		&u.Email,
+		&m.OrganizationID,
+		&m.UserID,
+		&m.Role,
+		&m.CreatedAt,
+		&m.UpdatedAt,
+	)
+}
+
 func (s *Store) CreateOrganization(ctx context.Context, org domain.Organization) (domain.Organization, error) {
 	var err error
 	org.Name, err = normalizeOrganizationName(org.Name)
@@ -213,6 +230,58 @@ func (s *Store) ListOrganizationMembershipsByOrganizationID(ctx context.Context,
 		out = append(out, toDomainOrganizationMembership(m))
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) ListOrganizationMembersByOrganizationID(ctx context.Context, organizationID uuid.UUID) ([]domain.OrganizationMember, error) {
+	rows, err := s.queryRows(ctx, `
+		SELECT
+			u.id, u.created_at, u.updated_at, u.disabled_at, u.username, u.username_normalized, u.email,
+			om.organization_id, om.user_id, om.role, om.created_at, om.updated_at
+		FROM organization_memberships om
+		JOIN users u ON u.id = om.user_id
+		WHERE om.organization_id = $1
+		ORDER BY om.created_at ASC, om.user_id ASC
+	`, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.OrganizationMember, 0)
+	for rows.Next() {
+		var user model.User
+		var membership model.OrganizationMembership
+		if err := scanOrganizationMember(rows, &user, &membership); err != nil {
+			return nil, err
+		}
+		out = append(out, domain.OrganizationMember{
+			User:       toDomainUser(user),
+			Membership: toDomainOrganizationMembership(membership),
+		})
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) (domain.OrganizationMember, error) {
+	var user model.User
+	var membership model.OrganizationMembership
+
+	err := scanOrganizationMember(s.queryRow(ctx, `
+		SELECT
+			u.id, u.created_at, u.updated_at, u.disabled_at, u.username, u.username_normalized, u.email,
+			om.organization_id, om.user_id, om.role, om.created_at, om.updated_at
+		FROM organization_memberships om
+		JOIN users u ON u.id = om.user_id
+		WHERE om.organization_id = $1 AND om.user_id = $2
+	`, organizationID, userID), &user, &membership)
+	if err != nil {
+		return domain.OrganizationMember{}, mapNoRows(err, ErrOrganizationMembershipNotFound)
+	}
+
+	return domain.OrganizationMember{
+		User:       toDomainUser(user),
+		Membership: toDomainOrganizationMembership(membership),
+	}, nil
 }
 
 func (s *Store) UpdateOrganizationMembershipRole(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID, role domain.OrganizationRole) (domain.OrganizationMembership, error) {

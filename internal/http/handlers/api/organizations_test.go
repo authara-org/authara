@@ -74,6 +74,66 @@ func TestOrganizationsGetAndCurrentGet(t *testing.T) {
 	})
 }
 
+func TestOrganizationCurrentMembersGet(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, _, _, teamOrg, teamMembership := createAPIOrganizationUser(t, ctx, tdb)
+		teammate, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "api-org-member@example.com",
+			Username: "api-org-member",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser teammate failed: %v", err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+			OrganizationID: teamOrg.ID,
+			UserID:         teammate.ID,
+			Role:           domain.OrganizationRoleAdmin,
+		}); err != nil {
+			t.Fatalf("CreateOrganizationMembership teammate failed: %v", err)
+		}
+
+		h := &APIHandler{
+			Organizations: organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti}),
+		}
+		reqCtx := httpctx.WithUserID(ctx, user.ID)
+		reqCtx = httpctx.WithOrganizationID(reqCtx, teamOrg.ID)
+		reqCtx = httpctx.WithOrganizationRole(reqCtx, teamMembership.Role)
+		req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/organizations/current/members", nil).WithContext(reqCtx)
+		rr := httptest.NewRecorder()
+
+		h.OrganizationCurrentMembersGet(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+
+		var got struct {
+			Members []map[string]any `json:"members"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode members body: %v", err)
+		}
+		assertAPIMemberListContains(t, got.Members, teammate.ID.String(), teammate.Email, teammate.Username, string(domain.OrganizationRoleAdmin))
+		for _, member := range got.Members {
+			if _, ok := member["disabled"]; ok {
+				t.Fatalf("public member response exposed disabled: %+v", member)
+			}
+			if _, ok := member["updated_at"]; ok {
+				t.Fatalf("public member response exposed updated_at: %+v", member)
+			}
+		}
+
+		h.Organizations = organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModePersonal})
+		rr = httptest.NewRecorder()
+		h.OrganizationCurrentMembersGet(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected status %d in personal mode, got %d body=%s", http.StatusForbidden, rr.Code, rr.Body.String())
+		}
+	})
+}
+
 func TestOrganizationSwitchPostReturnsSwitchedTokens(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -196,6 +256,23 @@ func assertOrganizationListContains(t *testing.T, got []struct {
 		}
 	}
 	t.Fatalf("expected organization %q in %+v", wantID, got)
+}
+
+func assertAPIMemberListContains(t *testing.T, got []map[string]any, wantID, wantEmail, wantUsername, wantRole string) {
+	t.Helper()
+
+	for _, member := range got {
+		if member["user_id"] == wantID {
+			if member["email"] != wantEmail || member["username"] != wantUsername || member["role"] != wantRole {
+				t.Fatalf("expected member %q %q %q %q, got %+v", wantID, wantEmail, wantUsername, wantRole, member)
+			}
+			if _, ok := member["created_at"]; !ok {
+				t.Fatalf("expected created_at in member %+v", member)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected member %q in %+v", wantID, got)
 }
 
 func withAPIURLParam(req *http.Request, key, value string) *http.Request {
