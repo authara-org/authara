@@ -734,9 +734,15 @@ func loadLiveOrganizations(ctx context.Context, userID string, publicOrgs []orga
 			live.Errors = append(live.Errors, err.Error())
 		} else {
 			for _, inv := range invitations.Invitations {
+				if inv.Status != "pending" {
+					continue
+				}
 				var one internalInvitationResponse
 				if err := internalJSON(ctx, http.MethodGet, "/auth/internal/v1/organizations/"+url.PathEscape(orgID)+"/invitations/"+url.PathEscape(inv.ID), nil, http.StatusOK, &one); err == nil {
 					inv = one.Invitation
+				}
+				if inv.Status != "pending" {
+					continue
 				}
 				live.Invitations = append(live.Invitations, inv)
 			}
@@ -1100,7 +1106,7 @@ func renderInternalAPI(
 		for _, member := range org.Members {
 			fmt.Fprintf(&b, `<li><code>%s</code> <small>%s</small></li>`, html.EscapeString(member.UserID), html.EscapeString(member.Role))
 		}
-		b.WriteString(`</ul><h5>Invitations</h5><ul>`)
+		b.WriteString(`</ul><h5>Pending invitations</h5><ul>`)
 		if len(org.Invitations) == 0 {
 			b.WriteString(`<li>None</li>`)
 		}
