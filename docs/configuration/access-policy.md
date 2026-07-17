@@ -64,6 +64,15 @@ If an email is not present in the allowlist:
 - login is rejected
 - session refresh is rejected
 
+### Organization invitations
+
+A valid pending organization invitation acts as an admission credential for its
+email address. During invitation signup or login, Authara verifies that the
+invitation is pending and that its email matches before adding the email to the
+allowlist. Creating, viewing, revoking, or expiring an invitation does not add or
+remove an allowlist entry; administrators must remove an admitted email
+explicitly when access should be withdrawn.
+
 ---
 
 ## Use cases

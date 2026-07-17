@@ -440,9 +440,10 @@ func (h *UIHandler) InvitationLoginPost(w http.ResponseWriter, r *http.Request) 
 	}
 
 	user, err := h.Auth.Login(r.Context(), auth.LoginInput{
-		Provider: domain.ProviderPassword,
-		Email:    preview.Invitation.Email,
-		Password: password,
+		Provider:        domain.ProviderPassword,
+		Email:           preview.Invitation.Email,
+		Password:        password,
+		InvitationToken: token,
 	})
 	if err != nil {
 		h.renderInvitationLoginError(w, r, http.StatusUnprocessableEntity, "Invalid email or password.", preview, token)
@@ -555,12 +556,10 @@ func (h *UIHandler) finishInvitationOAuth(
 	}
 
 	input := auth.LoginInput{
-		Provider: domain.ProviderGoogle,
-		Email:    preview.Invitation.Email,
-		OAuthID:  oauthID,
-	}
-	if path == "/auth/invitations/signup" {
-		input.InvitationToken = token
+		Provider:        domain.ProviderGoogle,
+		Email:           preview.Invitation.Email,
+		OAuthID:         oauthID,
+		InvitationToken: token,
 	}
 
 	user, err := h.Auth.Login(r.Context(), input)
