@@ -94,3 +94,64 @@ func TestSignupChallengeStoresInvitationID(t *testing.T) {
 		}
 	})
 }
+
+func TestExecuteEmailChangeMovesAllowlistEntryWhenEnabled(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
+		oldEmail := "email-change-old@example.com"
+		newEmail := "email-change-new@example.com"
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: oldEmail, Username: "email-change-allowlist"})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if err := tdb.Store.EnsureAllowedEmail(ctx, oldEmail); err != nil {
+			t.Fatalf("EnsureAllowedEmail failed: %v", err)
+		}
+
+		svc := New(Config{
+			Store:            tdb.Store,
+			Tx:               tdb.Tx,
+			AllowlistEnabled: true,
+			ChallengeTTL:     30 * time.Minute,
+			MaxAttempts:      5,
+			MaxResends:       3,
+		})
+		challengeID, err := svc.CreateEmailChangeChallenge(ctx, CreateEmailChangeChallengeInput{
+			UserID:   user.ID,
+			OldEmail: oldEmail,
+			NewEmail: newEmail,
+		}, now)
+		if err != nil {
+			t.Fatalf("CreateEmailChangeChallenge failed: %v", err)
+		}
+		action, err := tdb.Store.GetPendingEmailChangeByChallengeID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetPendingEmailChangeByChallengeID failed: %v", err)
+		}
+
+		if err := svc.ExecuteEmailChange(ctx, action, now); err != nil {
+			t.Fatalf("ExecuteEmailChange failed: %v", err)
+		}
+
+		updatedUser, err := tdb.Store.GetUserByID(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("GetUserByID failed: %v", err)
+		}
+		if updatedUser.Email != newEmail {
+			t.Fatalf("expected user email %q, got %q", newEmail, updatedUser.Email)
+		}
+		oldAllowed, err := tdb.Store.IsEmailAllowed(ctx, oldEmail)
+		if err != nil {
+			t.Fatalf("IsEmailAllowed(old) failed: %v", err)
+		}
+		newAllowed, err := tdb.Store.IsEmailAllowed(ctx, newEmail)
+		if err != nil {
+			t.Fatalf("IsEmailAllowed(new) failed: %v", err)
+		}
+		if oldAllowed || !newAllowed {
+			t.Fatalf("expected allowlist to move from old to new email, old=%t new=%t", oldAllowed, newAllowed)
+		}
+	})
+}

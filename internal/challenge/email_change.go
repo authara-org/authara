@@ -78,6 +78,14 @@ func (s *Service) ExecuteEmailChange(
 		if err := s.store.UpdateUserEmail(txCtx, action.UserID, action.NewEmail); err != nil {
 			return err
 		}
+		if s.allowlistEnabled {
+			if err := s.store.DeleteAllowedEmail(txCtx, action.OldEmail); err != nil {
+				return err
+			}
+			if err := s.store.EnsureAllowedEmail(txCtx, action.NewEmail); err != nil {
+				return err
+			}
+		}
 		if err := s.store.DeletePendingEmailChangeByChallengeID(txCtx, action.ChallengeID); err != nil {
 			return err
 		}

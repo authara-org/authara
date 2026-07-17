@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Store             *store.Store
 	Tx                *tx.Manager
+	AllowlistEnabled  bool
 	ChallengeTTL      time.Duration
 	MaxAttempts       int
 	MaxResends        int
@@ -24,6 +25,7 @@ type Config struct {
 type Service struct {
 	store             *store.Store
 	tx                *tx.Manager
+	allowlistEnabled  bool
 	challengeTTL      time.Duration
 	maxAttempts       int
 	maxResends        int
@@ -40,6 +42,7 @@ func New(cfg Config) *Service {
 	return &Service{
 		store:             cfg.Store,
 		tx:                cfg.Tx,
+		allowlistEnabled:  cfg.AllowlistEnabled,
 		challengeTTL:      cfg.ChallengeTTL,
 		maxAttempts:       cfg.MaxAttempts,
 		maxResends:        cfg.MaxResends,

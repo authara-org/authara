@@ -89,6 +89,7 @@ func NewServices(app *App) (Services, error) {
 	challengeService := challenge.New(challenge.Config{
 		Store:             app.Store,
 		Tx:                txManager,
+		AllowlistEnabled:  app.Config.AccessPolicy.AllowedEmailEnabled,
 		ChallengeTTL:      app.Config.Challenge.TTL,
 		MaxAttempts:       app.Config.Challenge.MaxAttempts,
 		MaxResends:        app.Config.Challenge.MaxResends,
