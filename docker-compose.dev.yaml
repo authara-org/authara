@@ -57,10 +57,19 @@ services:
     environment:
       GATEWAY_BIND: :3000
       AUTHARA_UPSTREAM: authara:8080
-      APP_UPSTREAM: testapp:8080
+      APP_UPSTREAM: app-router:80
     depends_on:
       - authara
-      - testapp
+      - app-router
+
+  app-router:
+    image: nginx:1.29-alpine
+    volumes:
+      - ./integrations/dev-router.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - ssr-app
+      - spa-app
+    restart: unless-stopped
 
   authara:
     build:
@@ -76,9 +85,9 @@ services:
       redis:
         condition: service_healthy
 
-  testapp:
+  ssr-app:
     build:
-      context: ./integrations/testapp/
+      context: ./integrations/ssr-app/
     environment:
       AUTHARA_AUDIENCE: app
       AUTHARA_BASE_URL: http://authara:8080
@@ -87,7 +96,16 @@ services:
       AUTHARA_WEBHOOK_SECRET: ${AUTHARA_WEBHOOK_SECRET}
       AUTHARA_INTERNAL_API_TOKEN: ${AUTHARA_INTERNAL_API_TOKEN:-dev-internal-token}
     volumes:
-      - ./integrations/testapp:/app
+      - ./integrations/ssr-app:/app
+    restart: unless-stopped
+
+  spa-app:
+    build:
+      context: ./integrations/spa-app/
+      target: dev
+    volumes:
+      - ./integrations/spa-app:/app
+      - /app/node_modules
     restart: unless-stopped
 
 volumes:

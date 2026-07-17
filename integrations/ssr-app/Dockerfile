@@ -9,4 +9,4 @@ RUN go mod download
 
 COPY . .
 
-CMD ["wgo", "go", "run", "./cmd/testapp/main.go"]
+CMD ["wgo", "go", "run", "./cmd/ssr-app/main.go"]

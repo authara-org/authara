@@ -1,4 +1,4 @@
-module github.com/authara-org/authara-testapp
+module github.com/authara-org/authara-ssr-app
 
 go 1.25
 

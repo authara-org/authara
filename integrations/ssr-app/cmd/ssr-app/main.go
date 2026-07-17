@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/authara-org/authara-go/authara"
-	"github.com/authara-org/authara-testapp/handlers"
+	"github.com/authara-org/authara-ssr-app/handlers"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 	// --- Webhook handler from env ---
 	webhookHandler, err := authara.RequireWebhookHandlerFromEnv()
 	if err != nil {
-		log.Fatalf("webhook handler not staritng. Check AUTHARA_WEBHOOK_SECRET : %v", err)
+		log.Fatalf("webhook handler not starting; check AUTHARA_WEBHOOK_SECRET: %v", err)
 	}
 
 	// --- Middleware ---
@@ -76,6 +76,6 @@ func main() {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	log.Println("testapp listening on :8080")
+	log.Println("ssr-app listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
 }

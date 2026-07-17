@@ -100,6 +100,18 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
+      - name: Vet SSR app
+        working-directory: integrations/ssr-app
+        run: go vet ./...
+
+      - name: Test SSR app
+        working-directory: integrations/ssr-app
+        run: go test ./...
+
+      - name: Build SSR app
+        working-directory: integrations/ssr-app
+        run: go build ./cmd/ssr-app
+
   # ------------------------------------------------------------
   # Frontend: format + build
   # ------------------------------------------------------------
@@ -115,7 +127,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            integrations/spa-app/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -132,6 +146,18 @@ jobs:
       - name: Build frontend bundle
         working-directory: frontend
         run: npm run build:webpack
+
+      - name: Install SPA app dependencies
+        working-directory: integrations/spa-app
+        run: npm ci
+
+      - name: Test SPA app
+        working-directory: integrations/spa-app
+        run: npm test
+
+      - name: Build SPA app
+        working-directory: integrations/spa-app
+        run: npm run build
 
   # ------------------------------------------------------------
   # Docker build (main branch only)
