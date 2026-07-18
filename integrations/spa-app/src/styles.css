@@ -24,12 +24,14 @@ body {
 }
 
 button,
-a {
+a,
+input {
   font: inherit;
 }
 
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+input:focus-visible {
   outline: 3px solid #176b52;
   outline-offset: 3px;
 }
@@ -273,6 +275,53 @@ td span {
   font-size: 0.88rem;
 }
 
+.management-form {
+  display: flex;
+  align-items: end;
+  margin-top: 1.25rem;
+  gap: 0.75rem;
+}
+
+.management-form label {
+  display: grid;
+  flex: 1;
+  gap: 0.4rem;
+  color: #69756f;
+  font-size: 0.88rem;
+}
+
+.management-form input {
+  min-height: 2.75rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #b7c9c0;
+  border-radius: 0.7rem;
+  color: #17201d;
+  background: #fff;
+}
+
+.accent-form {
+  padding-top: 1rem;
+  border-top: 1px solid rgb(255 255 255 / 18%);
+}
+
+.accent-form label {
+  color: #c6e5d8;
+}
+
+.route-result {
+  margin: 1.25rem 0 0;
+  padding: 0.8rem 1rem;
+  border-radius: 0.7rem;
+  color: #315148;
+  background: #eef5f1;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .table-wrap {
   margin-top: 1rem;
   overflow-x: auto;
@@ -323,6 +372,11 @@ th {
   .topbar .actions,
   .topbar .button {
     width: 100%;
+  }
+
+  .management-form {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .details div {

@@ -51,7 +51,10 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Config.Session.RefreshTokenTTL,
 			time.Now,
 		),
-		RequireInternalAPIAuth:    httpmiddleware.RequireInternalAPIAuth(app.Config.InternalAPI.Token),
+		RequireInternalAPIAuth: httpmiddleware.RequireInternalAPIAuth(app.Config.InternalAPI.Token),
+		RequirePublicOrganizationManagement: httpmiddleware.RequirePublicOrganizationManagement(
+			app.Config.Organization.PublicOrganizationManagementEnabled,
+		),
 		RequireAdminRole:          httpmiddleware.RequireAdmin,
 		RequireCSRF:               httpmiddleware.RequireCSRF,
 		RequireAPICSRF:            httpmiddleware.RequireAPICSRF,
@@ -98,7 +101,10 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Config.Token.AccessTokenTTL,
 			app.Config.Session.RefreshTokenTTL,
 		),
-		InternalAPI: internalapi.New(app.Services.Organizations),
+		InternalAPI: internalapi.New(
+			app.Services.Organizations,
+			app.Config.Organization.PublicOrganizationManagementEnabled,
+		),
 	}
 
 	server := httpserver.NewServer(httpserver.ServerConfig{

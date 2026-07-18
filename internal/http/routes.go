@@ -219,6 +219,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Use(mw.RequireAppAccessAuthAPI)
 
 				r.Get("/user", apih.UserGet)
+				r.Get("/capabilities", internalh.CapabilitiesGet)
 				r.Get("/organizations", apih.OrganizationsGet)
 				r.Get("/organizations/current", apih.OrganizationCurrentGet)
 				r.Get("/organizations/current/members", apih.OrganizationCurrentMembersGet)
@@ -228,6 +229,28 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireAPICSRF)
 					r.Post("/organizations/{organizationID}/switch", apih.OrganizationSwitchPost)
+				})
+
+				// Optional direct organization management for authenticated apps.
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequirePublicOrganizationManagement)
+
+					r.Get("/organizations/{organizationID}", internalh.GetOrganization)
+					r.Get("/organizations/{organizationID}/members", internalh.ListOrganizationMembers)
+					r.Get("/organizations/{organizationID}/members/{userID}", internalh.GetOrganizationMember)
+					r.Get("/organizations/{organizationID}/invitations", internalh.ListOrganizationInvitations)
+					r.Get("/organizations/{organizationID}/invitations/{invitationID}", internalh.GetOrganizationInvitation)
+					r.Get("/users/{userID}/memberships", internalh.ListUserMemberships)
+
+					r.Group(func(r chi.Router) {
+						r.Use(mw.RequireAPICSRF)
+
+						r.Post("/organizations", internalh.CreateOrganization)
+						r.Patch("/organizations/{organizationID}", internalh.UpdateOrganization)
+						r.Post("/organizations/{organizationID}/invitations", internalh.CreateOrganizationInvitation)
+						r.Post("/organizations/{organizationID}/invitations/{invitationID}/revoke", internalh.RevokeOrganizationInvitation)
+						r.Post("/organizations/{organizationID}/invitations/{invitationID}/resend", internalh.ResendOrganizationInvitation)
+					})
 				})
 			})
 
@@ -239,7 +262,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 		})
 
-		// Internal server-to-server API
+		// Internal server-to-server organization management.
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(mw.RequireInternalAPIAuth)
 

@@ -267,20 +267,21 @@ func newAdminRouteTestRouterWithConfig(m adminRouteMiddlewareConfig, override ad
 	})
 	cfg.Handlers = newTestHandlersWithAdmin(logger, renderer, override.Admin, override.Features)
 	mw := Middlewares{
-		RedirectIfAuthenticated:           passMiddleware,
-		RequireAppAccessAuthWithRefresh:   passMiddleware,
-		RequireAppAccessAuthAPI:           passMiddleware,
-		RequireAdminAccessAuthWithRefresh: m.adminAuth,
-		RequireAdminAccessAuthAPI:         m.adminAuth,
-		RequireInternalAPIAuth:            passMiddleware,
-		RequireAdminRole:                  m.adminRole,
-		RequireCSRF:                       m.csrf,
-		RequireAPICSRF:                    m.csrf,
-		ReturnTo:                          passMiddleware,
-		HTMX:                              passMiddleware,
-		RequireChallengeEnabled:           passMiddleware,
-		RequireAllowlistEnabled:           m.allowlist,
-		OptionalAppAccessIdentity:         passMiddleware,
+		RedirectIfAuthenticated:             passMiddleware,
+		RequireAppAccessAuthWithRefresh:     passMiddleware,
+		RequireAppAccessAuthAPI:             passMiddleware,
+		RequireAdminAccessAuthWithRefresh:   m.adminAuth,
+		RequireAdminAccessAuthAPI:           m.adminAuth,
+		RequireInternalAPIAuth:              passMiddleware,
+		RequirePublicOrganizationManagement: passMiddleware,
+		RequireAdminRole:                    m.adminRole,
+		RequireCSRF:                         m.csrf,
+		RequireAPICSRF:                      m.csrf,
+		ReturnTo:                            passMiddleware,
+		HTMX:                                passMiddleware,
+		RequireChallengeEnabled:             passMiddleware,
+		RequireAllowlistEnabled:             m.allowlist,
+		OptionalAppAccessIdentity:           passMiddleware,
 	}
 
 	r := chi.NewRouter()

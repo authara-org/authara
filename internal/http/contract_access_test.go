@@ -140,12 +140,13 @@ func newAccessContractTestRouter() chi.Router {
 		RequireAPICSRF:            pass,
 		OptionalAppAccessIdentity: pass,
 
-		RequireAppAccessAuthWithRefresh:   marker(markerUserUIAuth, "user-ui-auth"),
-		RequireAppAccessAuthAPI:           marker(markerUserAPIAuth, "user-api-auth"),
-		RequireAdminAccessAuthWithRefresh: marker(markerAdminUIAuth, "admin-ui-auth"),
-		RequireAdminAccessAuthAPI:         marker(markerAdminAPIAuth, "admin-api-auth"),
-		RequireInternalAPIAuth:            marker(markerInternalAuth, "internal-auth"),
-		RequireAdminRole:                  marker(markerAdminRole, "admin-role"),
+		RequireAppAccessAuthWithRefresh:     marker(markerUserUIAuth, "user-ui-auth"),
+		RequireAppAccessAuthAPI:             marker(markerUserAPIAuth, "user-api-auth"),
+		RequireAdminAccessAuthWithRefresh:   marker(markerAdminUIAuth, "admin-ui-auth"),
+		RequireAdminAccessAuthAPI:           marker(markerAdminAPIAuth, "admin-api-auth"),
+		RequireInternalAPIAuth:              marker(markerInternalAuth, "internal-auth"),
+		RequirePublicOrganizationManagement: pass,
+		RequireAdminRole:                    marker(markerAdminRole, "admin-role"),
 	}
 
 	r := chi.NewRouter()

@@ -8,13 +8,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 func TestCreateOrganizationInvitationRequiresBearerToken(t *testing.T) {
-	handler := New(nil)
+	handler := New(nil, false)
 
 	for _, tc := range []struct {
 		name   string
@@ -40,7 +42,7 @@ func TestCreateOrganizationInvitationRequiresBearerToken(t *testing.T) {
 }
 
 func TestCreateOrganizationInvitationRequiresActorUserID(t *testing.T) {
-	handler := New(nil)
+	handler := New(nil, false)
 
 	for _, body := range []string{
 		`{"email":"teammate@example.com"}`,
@@ -66,8 +68,47 @@ func TestCreateOrganizationInvitationRequiresActorUserID(t *testing.T) {
 	}
 }
 
+func TestInvitationActorUsesAuthenticatedUserInCurrentOrganization(t *testing.T) {
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	organizationID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	ctx := httpctx.WithUserID(context.Background(), userID)
+	ctx = httpctx.WithOrganizationID(ctx, organizationID)
+	req := httptest.NewRequest(http.MethodPost, "/", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+
+	got, ok := invitationActorUserID(
+		rr,
+		req,
+		organizationID,
+		"33333333-3333-3333-3333-333333333333",
+	)
+
+	if !ok || got != userID {
+		t.Fatalf("expected authenticated user %s, got %s", userID, got)
+	}
+}
+
+func TestInvitationActorRejectsDifferentCurrentOrganization(t *testing.T) {
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	ctx := httpctx.WithUserID(context.Background(), userID)
+	ctx = httpctx.WithOrganizationID(ctx, uuid.MustParse("22222222-2222-2222-2222-222222222222"))
+	req := httptest.NewRequest(http.MethodPost, "/", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+
+	_, ok := invitationActorUserID(
+		rr,
+		req,
+		uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+		"",
+	)
+
+	if ok || rr.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden, got ok=%v status=%d", ok, rr.Code)
+	}
+}
+
 func TestCapabilitiesGetReturnsOrganizationMode(t *testing.T) {
-	handler := New(organization.New(organization.Config{Mode: organization.OrgModeMulti}))
+	handler := New(organization.New(organization.Config{Mode: organization.OrgModeMulti}), true)
 	req := httptest.NewRequest(http.MethodGet, "/auth/internal/v1/capabilities", nil)
 	req.Header.Set("Authorization", "Bearer secret-token")
 	rr := httptest.NewRecorder()
@@ -79,19 +120,22 @@ func TestCapabilitiesGetReturnsOrganizationMode(t *testing.T) {
 	}
 
 	var got struct {
-		OrganizationMode          string `json:"organization_mode"`
-		AllowsUserCreatedTeamOrgs bool   `json:"allows_user_created_team_orgs"`
+		OrganizationMode                   string `json:"organization_mode"`
+		AllowsUserCreatedTeamOrgs          bool   `json:"allows_user_created_team_orgs"`
+		AllowsPublicOrganizationManagement bool   `json:"allows_public_organization_management"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if got.OrganizationMode != string(organization.OrgModeMulti) || !got.AllowsUserCreatedTeamOrgs {
+	if got.OrganizationMode != string(organization.OrgModeMulti) ||
+		!got.AllowsUserCreatedTeamOrgs ||
+		!got.AllowsPublicOrganizationManagement {
 		t.Fatalf("unexpected capabilities: %+v", got)
 	}
 }
 
 func TestCreateOrganizationRequiresCreatedByUserID(t *testing.T) {
-	handler := New(nil)
+	handler := New(nil, false)
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/auth/internal/v1/organizations",

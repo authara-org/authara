@@ -24,10 +24,17 @@ as `/spa/private`; the gateway must continue routing `/auth/*` to Authara.
 
 - Authara-hosted login and signup, returning to `/spa/private`
 - cookie-session refresh followed by a single retry
-- current user, organization memberships, active organization, and member list
+- current user, organization memberships, active organization, member list, and
+  the signed-in user's member detail through the public organization API
+- organization creation and renaming when allowed by the configured mode
+- invitation listing, detail lookup, creation, revocation, and resending
 - active-organization switching, API logout, and a link to Authara's account page
-- a graceful unavailable state when the current organization mode hides members
+- graceful unavailable states when the current role cannot see members or manage
+  invitations
 
 All requests use relative URLs. API mutations fetch `/auth/api/v1/csrf` first and send its value as `X-CSRF-Token`; access and refresh tokens stay in Authara's cookies and returned token strings are ignored.
 
-Organization creation, organization updates, invitations, and capability discovery are intentionally absent. Those routes currently belong to Authara's internal API and require a server-side bearer secret that must never be shipped to a browser bundle.
+Direct organization management is opt-in through
+`AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED`. The SPA never receives the
+internal API token; Authara derives the actor and current organization from the
+browser session.

@@ -106,9 +106,15 @@ Examples:
 
 ```
 AUTHARA_ORG_MODE
+AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED
 AUTHARA_ORGANIZATION_INVITATION_TTL
 AUTHARA_INTERNAL_API_TOKEN
 ```
+
+`AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED` allows authenticated clients
+to manage their own organization directly through Authara. Disable it when
+organization changes must pass through the application backend for billing,
+seat limits, approval, or other business rules.
 
 ---
 

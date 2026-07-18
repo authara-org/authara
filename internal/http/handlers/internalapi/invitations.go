@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/store"
@@ -13,12 +14,14 @@ import (
 )
 
 type Handler struct {
-	Organizations *organization.Service
+	Organizations                       *organization.Service
+	PublicOrganizationManagementEnabled bool
 }
 
-func New(organizations *organization.Service) *Handler {
+func New(organizations *organization.Service, publicOrganizationManagementEnabled bool) *Handler {
 	return &Handler{
-		Organizations: organizations,
+		Organizations:                       organizations,
+		PublicOrganizationManagementEnabled: publicOrganizationManagementEnabled,
 	}
 }
 
@@ -52,7 +55,7 @@ func (h *Handler) CreateOrganizationInvitation(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	actorUserID, ok := parseUUIDString(w, req.ActorUserID, "Invalid actor_user_id", CreateOrganizationInvitationErrors)
+	actorUserID, ok := invitationActorUserID(w, r, organizationID, req.ActorUserID)
 	if !ok {
 		return
 	}
@@ -74,9 +77,32 @@ func (h *Handler) CreateOrganizationInvitation(w http.ResponseWriter, r *http.Re
 	})
 }
 
+func invitationActorUserID(
+	w http.ResponseWriter,
+	r *http.Request,
+	organizationID uuid.UUID,
+	requestedActor string,
+) (uuid.UUID, bool) {
+	actorUserID, publicRequest := httpctx.UserID(r.Context())
+	if !publicRequest {
+		return parseUUIDString(w, requestedActor, "Invalid actor_user_id", CreateOrganizationInvitationErrors)
+	}
+
+	currentOrganizationID, ok := httpctx.OrganizationID(r.Context())
+	if !ok || currentOrganizationID != organizationID {
+		writeRouteError(w, CreateOrganizationInvitationErrors, codeActorNotMember, "Actor is not a member of this organization")
+		return uuid.Nil, false
+	}
+
+	return actorUserID, true
+}
+
 func (h *Handler) ResendOrganizationInvitation(w http.ResponseWriter, r *http.Request) {
 	organizationID, invitationID, ok := parseOrganizationAndInvitationParams(w, r, ResendOrganizationInvitationErrors)
 	if !ok {
+		return
+	}
+	if _, ok := h.authorizePublicOrganization(w, r, organizationID, ResendOrganizationInvitationErrors, true); !ok {
 		return
 	}
 

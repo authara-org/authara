@@ -24,6 +24,11 @@ Internal server-to-server endpoints are available under:
 
 These endpoints are intended for your application backend, not browsers.
 
+When `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED=true`, authenticated
+clients can use matching organization-management endpoints under
+`/auth/api/v1`. The public and internal routes use the same handlers, but public
+requests derive the actor, current organization, and role from the access token.
+
 ---
 
 # Authentication
@@ -191,6 +196,42 @@ See [Errors](errors.md).
 
 ---
 
+# Organization Management
+
+Set `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED=true` to allow authenticated
+clients to manage their own organization directly through Authara. Disable it
+when organization changes must pass through the application backend for billing,
+seat limits, approval, or other business rules.
+
+Public organization routes require the `authara_access` cookie. State-changing
+requests also require the API CSRF token. Organization-scoped routes only accept
+the organization from the current access token. Authara ignores client-supplied
+actor IDs and applies current membership and owner/admin checks.
+
+Available routes:
+
+```text
+GET   /auth/api/v1/capabilities
+POST  /auth/api/v1/organizations
+GET   /auth/api/v1/organizations/{organizationID}
+PATCH /auth/api/v1/organizations/{organizationID}
+GET   /auth/api/v1/organizations/{organizationID}/members
+GET   /auth/api/v1/organizations/{organizationID}/members/{userID}
+GET   /auth/api/v1/organizations/{organizationID}/invitations
+POST  /auth/api/v1/organizations/{organizationID}/invitations
+GET   /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}
+POST  /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
+POST  /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}/resend
+GET   /auth/api/v1/users/{userID}/memberships
+```
+
+The capabilities route remains available to authenticated clients when direct
+management is disabled and reports
+`allows_public_organization_management: false`. The other routes return `404`
+while the feature is disabled.
+
+---
+
 # Internal Endpoints
 
 ## Create organization invitation
@@ -265,6 +306,7 @@ Future versions may introduce new endpoints under `/auth/api/v2`.
 Authara exposes a minimal API focused on:
 
 - retrieving the authenticated user
+- managing the authenticated user's organization when enabled
 - refreshing sessions
 
 Additional endpoints may be introduced in future versions.

@@ -13,6 +13,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/authara-org/authara/internal/organization"
 )
 
 func newTestHandlers(logger *slog.Logger, renderer render.Renderer) Handlers {
@@ -62,6 +63,6 @@ func newTestHandlersWithAdmin(
 			10*time.Minute,
 			24*time.Hour,
 		),
-		InternalAPI: internalapi.New(nil),
+		InternalAPI: internalapi.New(organization.New(organization.Config{Mode: organization.OrgModeMulti}), false),
 	}
 }

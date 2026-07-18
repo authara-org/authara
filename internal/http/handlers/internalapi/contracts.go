@@ -41,6 +41,7 @@ var CreateOrganizationErrors = map[response.ErrorCode]response.ErrorSpec{
 var OrganizationErrors = map[response.ErrorCode]response.ErrorSpec{
 	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
 	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
+	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
 	codeOrganizationNotFound:    {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
 	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
 }
@@ -48,6 +49,7 @@ var OrganizationErrors = map[response.ErrorCode]response.ErrorSpec{
 var OrganizationMembersGetErrors = map[response.ErrorCode]response.ErrorSpec{
 	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
 	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
+	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
 	codeOrganizationNotFound:    {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
 	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
 }
@@ -55,6 +57,7 @@ var OrganizationMembersGetErrors = map[response.ErrorCode]response.ErrorSpec{
 var OrganizationMemberErrors = map[response.ErrorCode]response.ErrorSpec{
 	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
 	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
+	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
 	codeOrganizationNotFound:    {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
 	codeMembershipNotFound:      {Status: http.StatusNotFound, Code: codeMembershipNotFound},
 	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
@@ -116,6 +119,7 @@ var ResendOrganizationInvitationErrors = map[response.ErrorCode]response.ErrorSp
 var UserMembershipsGetErrors = map[response.ErrorCode]response.ErrorSpec{
 	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
 	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
+	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
 	codeUserNotFound:            {Status: http.StatusNotFound, Code: codeUserNotFound},
 	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
 }

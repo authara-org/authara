@@ -3,10 +3,15 @@ import { createRoot } from "react-dom/client";
 
 import {
   APIError,
+  createOrganization,
+  inviteMember,
   loadDashboard,
   logout,
   refreshSession,
+  resendInvitation,
+  revokeInvitation,
   switchOrganization,
+  updateOrganization,
 } from "./api.js";
 import "./styles.css";
 
@@ -69,8 +74,42 @@ function ErrorView({ message, onRetry }) {
   );
 }
 
-function Dashboard({ data, busy, onRefresh, onSwitch, onLogout }) {
-  const { user, organizations, currentOrganization, members } = data;
+function Dashboard({
+  data,
+  busy,
+  onRefresh,
+  onSwitch,
+  onCreateOrganization,
+  onUpdateOrganization,
+  onInvite,
+  onRevokeInvitation,
+  onResendInvitation,
+  onLogout,
+}) {
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [newOrganizationName, setNewOrganizationName] = useState("");
+  const [organizationName, setOrganizationName] = useState(
+    data.currentOrganization.name,
+  );
+  const {
+    user,
+    organizations,
+    currentOrganization,
+    members,
+    currentMember,
+    invitations,
+    capabilities,
+  } = data;
+  const canManageOrganization =
+    capabilities.allows_public_organization_management &&
+    ["owner", "admin"].includes(currentOrganization.role);
+  const canInvite =
+    canManageOrganization &&
+    capabilities.allows_invitations &&
+    invitations !== null;
+  const canCreateOrganization =
+    capabilities.allows_public_organization_management &&
+    capabilities.allows_user_created_team_orgs;
 
   return (
     <main className="shell">
@@ -100,7 +139,7 @@ function Dashboard({ data, busy, onRefresh, onSwitch, onLogout }) {
       </header>
 
       <p className="status" aria-live="polite">
-        {busy || "All data below comes from Authara's public browser API."}
+        {busy || "All data below comes from Authara's browser APIs."}
       </p>
 
       <div className="grid">
@@ -148,6 +187,32 @@ function Dashboard({ data, busy, onRefresh, onSwitch, onLogout }) {
             You are a {currentOrganization.role} in this organization.
           </p>
           <p className="mono subdued">{currentOrganization.id}</p>
+          {canManageOrganization && (
+            <form
+              className="management-form accent-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onUpdateOrganization(organizationName);
+              }}
+            >
+              <label htmlFor="organization-name">
+                <span>Organization name</span>
+                <input
+                  id="organization-name"
+                  value={organizationName}
+                  onChange={(event) => setOrganizationName(event.target.value)}
+                  required
+                />
+              </label>
+              <button
+                className="button secondary"
+                type="submit"
+                disabled={busy || organizationName === currentOrganization.name}
+              >
+                Update
+              </button>
+            </form>
+          )}
         </section>
 
         <section className="card full" aria-labelledby="organizations-title">
@@ -179,6 +244,32 @@ function Dashboard({ data, busy, onRefresh, onSwitch, onLogout }) {
               );
             })}
           </ul>
+          {canCreateOrganization && (
+            <form
+              className="management-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onCreateOrganization(newOrganizationName);
+                setNewOrganizationName("");
+              }}
+            >
+              <label htmlFor="new-organization-name">
+                <span>Create a team organization</span>
+                <input
+                  id="new-organization-name"
+                  value={newOrganizationName}
+                  onChange={(event) =>
+                    setNewOrganizationName(event.target.value)
+                  }
+                  placeholder="Acme team"
+                  required
+                />
+              </label>
+              <button className="button primary" type="submit" disabled={busy}>
+                Create organization
+              </button>
+            </form>
+          )}
         </section>
 
         <section className="card full" aria-labelledby="members-title">
@@ -189,6 +280,12 @@ function Dashboard({ data, busy, onRefresh, onSwitch, onLogout }) {
             </div>
             {members && <span className="count">{members.length}</span>}
           </div>
+          {currentMember && (
+            <p className="route-result">
+              Member detail: <strong>{currentMember.email}</strong> ·{" "}
+              {currentMember.role}
+            </p>
+          )}
           {members === null ? (
             <p className="subdued">
               Member listing is unavailable in the current organization mode.
@@ -214,6 +311,101 @@ function Dashboard({ data, busy, onRefresh, onSwitch, onLogout }) {
                       </td>
                       <td>{member.role}</td>
                       <td>{formatDate(member.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="card full" aria-labelledby="invitations-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Current organization</p>
+              <h2 id="invitations-title">Invitations</h2>
+            </div>
+            {invitations && <span className="count">{invitations.length}</span>}
+          </div>
+          {canInvite && (
+            <form
+              className="management-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onInvite(inviteEmail);
+                setInviteEmail("");
+              }}
+            >
+              <label htmlFor="invite-email">
+                <span>Invite by email</span>
+                <input
+                  id="invite-email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  placeholder="teammate@example.com"
+                  required
+                />
+              </label>
+              <button className="button primary" type="submit" disabled={busy}>
+                Send invitation
+              </button>
+            </form>
+          )}
+          {invitations === null ? (
+            <p className="subdued">
+              Invitation management requires an owner or admin role.
+            </p>
+          ) : invitations.length === 0 ? (
+            <p className="subdued">No invitations were returned.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Email</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Expires</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invitations.map((invitation) => (
+                    <tr key={invitation.id}>
+                      <td>
+                        <strong>{invitation.email}</strong>
+                        <span className="mono">{invitation.id}</span>
+                      </td>
+                      <td>{invitation.role}</td>
+                      <td>{invitation.status}</td>
+                      <td>{formatDate(invitation.expires_at)}</td>
+                      <td>
+                        <div className="inline-actions">
+                          {invitation.status === "pending" && (
+                            <button
+                              className="button small quiet"
+                              type="button"
+                              onClick={() => onRevokeInvitation(invitation.id)}
+                              disabled={busy}
+                            >
+                              Revoke
+                            </button>
+                          )}
+                          {["pending", "expired"].includes(
+                            invitation.status,
+                          ) && (
+                            <button
+                              className="button small secondary"
+                              type="button"
+                              onClick={() => onResendInvitation(invitation.id)}
+                              disabled={busy}
+                            >
+                              Resend
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -284,11 +476,35 @@ function App() {
 
   return (
     <Dashboard
+      key={`${view.data.currentOrganization.id}:${view.data.currentOrganization.name}`}
       data={view.data}
       busy={busy}
       onRefresh={() => run("Refreshing session…", refreshSession)}
       onSwitch={(id) =>
         run("Switching organization…", () => switchOrganization(id))
+      }
+      onCreateOrganization={(name) =>
+        run("Creating organization…", () => createOrganization(name))
+      }
+      onUpdateOrganization={(name) =>
+        run("Updating organization…", () =>
+          updateOrganization(view.data.currentOrganization.id, name),
+        )
+      }
+      onInvite={(email) =>
+        run("Sending invitation…", () =>
+          inviteMember(view.data.currentOrganization.id, email),
+        )
+      }
+      onRevokeInvitation={(id) =>
+        run("Revoking invitation…", () =>
+          revokeInvitation(view.data.currentOrganization.id, id),
+        )
+      }
+      onResendInvitation={(id) =>
+        run("Resending invitation…", () =>
+          resendInvitation(view.data.currentOrganization.id, id),
+        )
       }
       onLogout={() =>
         run(

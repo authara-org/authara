@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 func TestListOrganizationMembersIncludesUserFields(t *testing.T) {
@@ -47,7 +49,7 @@ func TestListOrganizationMembersIncludesUserFields(t *testing.T) {
 			t.Fatalf("DisableUser failed: %v", err)
 		}
 
-		handler := New(organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}))
+		handler := New(organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}), false)
 		req := httptest.NewRequest(http.MethodGet, "/auth/internal/v1/organizations/"+org.ID.String()+"/members", nil).WithContext(ctx)
 		req = withInternalURLParam(req, "organizationID", org.ID.String())
 		rr := httptest.NewRecorder()
@@ -88,6 +90,62 @@ func TestListOrganizationMembersIncludesUserFields(t *testing.T) {
 			}
 		}
 		t.Fatalf("expected teammate member in %+v", got.Members)
+	})
+}
+
+func TestPublicOrganizationAuthorizationUsesCurrentMembership(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "public-org-owner@example.com", Username: "public-org-owner"})
+		if err != nil {
+			t.Fatalf("CreateUser owner failed: %v", err)
+		}
+		org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, owner.ID, owner.Username)
+		if err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+		member, err := tdb.Store.CreateUser(ctx, domain.User{Email: "public-org-member@example.com", Username: "public-org-member"})
+		if err != nil {
+			t.Fatalf("CreateUser member failed: %v", err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+			OrganizationID: org.ID,
+			UserID:         member.ID,
+			Role:           domain.OrganizationRoleMember,
+		}); err != nil {
+			t.Fatalf("CreateOrganizationMembership failed: %v", err)
+		}
+
+		handler := New(organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}), true)
+		for _, tc := range []struct {
+			name           string
+			userID         uuid.UUID
+			currentOrgID   uuid.UUID
+			managerOnly    bool
+			wantAuthorized bool
+		}{
+			{name: "owner may manage", userID: owner.ID, currentOrgID: org.ID, managerOnly: true, wantAuthorized: true},
+			{name: "member may read", userID: member.ID, currentOrgID: org.ID, wantAuthorized: true},
+			{name: "member may not manage", userID: member.ID, currentOrgID: org.ID, managerOnly: true},
+			{name: "different current organization is rejected", userID: owner.ID, currentOrgID: uuid.New()},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				reqCtx := httpctx.WithUserID(ctx, tc.userID)
+				reqCtx = httpctx.WithOrganizationID(reqCtx, tc.currentOrgID)
+				req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(reqCtx)
+				rr := httptest.NewRecorder()
+
+				_, authorized := handler.authorizePublicOrganization(rr, req, org.ID, OrganizationErrors, tc.managerOnly)
+
+				if authorized != tc.wantAuthorized {
+					t.Fatalf("expected authorized=%v, got %v", tc.wantAuthorized, authorized)
+				}
+				if !authorized && rr.Code != http.StatusForbidden {
+					t.Fatalf("expected status %d, got %d", http.StatusForbidden, rr.Code)
+				}
+			})
+		}
 	})
 }
 

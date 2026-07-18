@@ -102,20 +102,21 @@ func newContractTestRouter() chi.Router {
 	}
 
 	mw := Middlewares{
-		RedirectIfAuthenticated:           pass,
-		RequireAppAccessAuthWithRefresh:   pass,
-		RequireAppAccessAuthAPI:           pass,
-		RequireAdminAccessAuthWithRefresh: pass,
-		RequireAdminAccessAuthAPI:         pass,
-		RequireInternalAPIAuth:            pass,
-		RequireAdminRole:                  pass,
-		RequireCSRF:                       pass,
-		RequireAPICSRF:                    pass,
-		ReturnTo:                          pass,
-		HTMX:                              pass,
-		RequireChallengeEnabled:           pass,
-		RequireAllowlistEnabled:           pass,
-		OptionalAppAccessIdentity:         pass,
+		RedirectIfAuthenticated:             pass,
+		RequireAppAccessAuthWithRefresh:     pass,
+		RequireAppAccessAuthAPI:             pass,
+		RequireAdminAccessAuthWithRefresh:   pass,
+		RequireAdminAccessAuthAPI:           pass,
+		RequireInternalAPIAuth:              pass,
+		RequirePublicOrganizationManagement: pass,
+		RequireAdminRole:                    pass,
+		RequireCSRF:                         pass,
+		RequireAPICSRF:                      pass,
+		ReturnTo:                            pass,
+		HTMX:                                pass,
+		RequireChallengeEnabled:             pass,
+		RequireAllowlistEnabled:             pass,
+		OptionalAppAccessIdentity:           pass,
 	}
 
 	r := chi.NewRouter()

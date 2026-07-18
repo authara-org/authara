@@ -104,11 +104,17 @@ Example:
 
 ```
 AUTHARA_ORG_MODE
+AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED
 AUTHARA_ORGANIZATION_INVITATION_TTL
 AUTHARA_INTERNAL_API_TOKEN
 ```
 
 `AUTHARA_INTERNAL_API_TOKEN` is required for calls to `/auth/internal/v1`.
+`AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED` allows authenticated clients
+to manage their own organization through matching `/auth/api/v1` routes. Disable
+it when organization changes must pass through the application backend for
+billing, seat limits, approval, or other business rules. Internal routes remain
+available through bearer authentication in either mode.
 
 ---
 

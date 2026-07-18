@@ -38,11 +38,15 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-async function mutate(path) {
+async function mutate(path, body, method = "POST") {
   const { csrf_token: csrfToken } = await request(`${API}/csrf`);
+  const headers = { "X-CSRF-Token": csrfToken };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+
   return request(path, {
-    method: "POST",
-    headers: { "X-CSRF-Token": csrfToken },
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 
@@ -74,26 +78,109 @@ export async function getUserWithRefresh() {
 
 export async function loadDashboard() {
   const user = await getUserWithRefresh();
+  const capabilities = await request(`${API}/capabilities`);
 
-  const [organizationList, currentOrganization, memberList] = await Promise.all(
-    [
-      request(`${API}/organizations`),
-      request(`${API}/organizations/current`),
-      request(`${API}/organizations/current/members`).catch((error) => {
-        if (error instanceof APIError && error.status === 403) {
-          return null;
-        }
-        throw error;
-      }),
-    ],
-  );
+  if (!capabilities.allows_public_organization_management) {
+    throw new APIError(
+      "Public organization management is disabled in Authara.",
+      404,
+      "public_organization_management_disabled",
+    );
+  }
+
+  const organizationID = user.organization?.id;
+  if (!organizationID) {
+    throw new APIError("The session has no current organization.", 401);
+  }
+
+  const encodedOrganizationID = encodeURIComponent(organizationID);
+  const allowForbidden = (promise) =>
+    promise.catch((error) => {
+      if (error instanceof APIError && error.status === 403) return null;
+      throw error;
+    });
+
+  const [
+    organizationResult,
+    memberList,
+    currentMemberResult,
+    invitationList,
+    membershipList,
+  ] = await Promise.all([
+    request(`${API}/organizations/${encodedOrganizationID}`),
+    allowForbidden(
+      request(`${API}/organizations/${encodedOrganizationID}/members`),
+    ),
+    allowForbidden(
+      request(
+        `${API}/organizations/${encodedOrganizationID}/members/${encodeURIComponent(user.id)}`,
+      ),
+    ),
+    allowForbidden(
+      request(`${API}/organizations/${encodedOrganizationID}/invitations`),
+    ),
+    request(`${API}/users/${encodeURIComponent(user.id)}/memberships`),
+  ]);
+
+  const invitationDetails = invitationList
+    ? await Promise.all(
+        invitationList.invitations.map(async (invitation) => {
+          const result = await request(
+            `${API}/organizations/${encodedOrganizationID}/invitations/${encodeURIComponent(invitation.id)}`,
+          );
+          return result.invitation;
+        }),
+      )
+    : null;
 
   return {
     user,
-    organizations: organizationList.organizations,
-    currentOrganization,
+    organizations: membershipList.memberships.map(
+      ({ organization, membership }) => ({
+        ...organization,
+        role: membership.role,
+      }),
+    ),
+    currentOrganization: {
+      ...organizationResult.organization,
+      role: user.organization.role,
+    },
     members: memberList?.members ?? null,
+    currentMember: currentMemberResult?.member ?? null,
+    invitations: invitationDetails,
+    capabilities,
   };
+}
+
+export function createOrganization(name) {
+  return mutate(`${API}/organizations`, { name });
+}
+
+export function updateOrganization(organizationID, name) {
+  return mutate(
+    `${API}/organizations/${encodeURIComponent(organizationID)}`,
+    { name },
+    "PATCH",
+  );
+}
+
+export function inviteMember(organizationID, email) {
+  return mutate(
+    `${API}/organizations/${encodeURIComponent(organizationID)}/invitations`,
+    { email },
+  );
+}
+
+export function revokeInvitation(organizationID, invitationID) {
+  return mutate(
+    `${API}/organizations/${encodeURIComponent(organizationID)}/invitations/${encodeURIComponent(invitationID)}/revoke`,
+  );
+}
+
+export function resendInvitation(organizationID, invitationID) {
+  return mutate(
+    `${API}/organizations/${encodeURIComponent(organizationID)}/invitations/${encodeURIComponent(invitationID)}/resend`,
+  );
 }
 
 export async function switchOrganization(organizationID) {

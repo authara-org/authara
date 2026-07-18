@@ -88,17 +88,18 @@ func newCSRFFocusedContractTestRouter() http.Handler {
 	cfg.Handlers = newTestHandlers(cfg.Logger, render.New(render.Assets{}, false))
 
 	mw := Middlewares{
-		RedirectIfAuthenticated:           pass,
-		RequireAppAccessAuthWithRefresh:   pass,
-		RequireAppAccessAuthAPI:           pass,
-		RequireAdminAccessAuthWithRefresh: pass,
-		RequireInternalAPIAuth:            pass,
-		RequireAdminRole:                  pass,
-		ReturnTo:                          pass,
-		HTMX:                              pass,
-		RequireChallengeEnabled:           pass,
-		RequireAllowlistEnabled:           pass,
-		OptionalAppAccessIdentity:         pass,
+		RedirectIfAuthenticated:             pass,
+		RequireAppAccessAuthWithRefresh:     pass,
+		RequireAppAccessAuthAPI:             pass,
+		RequireAdminAccessAuthWithRefresh:   pass,
+		RequireInternalAPIAuth:              pass,
+		RequirePublicOrganizationManagement: pass,
+		RequireAdminRole:                    pass,
+		ReturnTo:                            pass,
+		HTMX:                                pass,
+		RequireChallengeEnabled:             pass,
+		RequireAllowlistEnabled:             pass,
+		OptionalAppAccessIdentity:           pass,
 
 		// real CSRF middlewares
 		RequireCSRF:    middleware.RequireCSRF,
@@ -110,6 +111,15 @@ func newCSRFFocusedContractTestRouter() http.Handler {
 
 func newCSRFWiringContractTestRouter() http.Handler {
 	pass := func(next http.Handler) http.Handler { return next }
+	publicManagement := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet || r.Method == http.MethodHead {
+				w.WriteHeader(http.StatusAlreadyReported)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 
 	marker := func(status int, body string) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
@@ -127,17 +137,18 @@ func newCSRFWiringContractTestRouter() http.Handler {
 	cfg.Handlers = newTestHandlers(cfg.Logger, render.New(render.Assets{}, false))
 
 	mw := Middlewares{
-		RedirectIfAuthenticated:           pass,
-		RequireAppAccessAuthWithRefresh:   pass,
-		RequireAppAccessAuthAPI:           pass,
-		RequireAdminAccessAuthWithRefresh: pass,
-		RequireInternalAPIAuth:            marker(markerInternalAuthCSRF, "internal-auth"),
-		RequireAdminRole:                  pass,
-		ReturnTo:                          pass,
-		HTMX:                              pass,
-		RequireChallengeEnabled:           pass,
-		RequireAllowlistEnabled:           pass,
-		OptionalAppAccessIdentity:         pass,
+		RedirectIfAuthenticated:             pass,
+		RequireAppAccessAuthWithRefresh:     pass,
+		RequireAppAccessAuthAPI:             pass,
+		RequireAdminAccessAuthWithRefresh:   pass,
+		RequireInternalAPIAuth:              marker(markerInternalAuthCSRF, "internal-auth"),
+		RequirePublicOrganizationManagement: publicManagement,
+		RequireAdminRole:                    pass,
+		ReturnTo:                            pass,
+		HTMX:                                pass,
+		RequireChallengeEnabled:             pass,
+		RequireAllowlistEnabled:             pass,
+		OptionalAppAccessIdentity:           pass,
 
 		RequireCSRF:    marker(markerBrowserCSRF, "browser-csrf"),
 		RequireAPICSRF: marker(markerAPICSRF, "api-csrf"),
@@ -150,7 +161,7 @@ func routeShouldHaveCSRF(route contractRoute, exceptions []string) bool {
 	if route.Stability != "stable" {
 		return false
 	}
-	if route.Method != http.MethodPost {
+	if route.Method != http.MethodPost && route.Method != http.MethodPut && route.Method != http.MethodPatch && route.Method != http.MethodDelete {
 		return false
 	}
 	if !strings.HasPrefix(route.Path, "/auth") {

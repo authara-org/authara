@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/store"
@@ -19,12 +20,13 @@ import (
 const maxInternalJSONBytes = 4096
 
 type capabilitiesResponse struct {
-	OrganizationMode          string `json:"organization_mode"`
-	HasVisibleOrganizations   bool   `json:"has_visible_organizations"`
-	AllowsInvitations         bool   `json:"allows_invitations"`
-	AllowsOrgSwitching        bool   `json:"allows_org_switching"`
-	AllowsUserCreatedTeamOrgs bool   `json:"allows_user_created_team_orgs"`
-	AllowsOrganizationLeave   bool   `json:"allows_organization_leave"`
+	OrganizationMode                   string `json:"organization_mode"`
+	HasVisibleOrganizations            bool   `json:"has_visible_organizations"`
+	AllowsInvitations                  bool   `json:"allows_invitations"`
+	AllowsPublicOrganizationManagement bool   `json:"allows_public_organization_management"`
+	AllowsOrgSwitching                 bool   `json:"allows_org_switching"`
+	AllowsUserCreatedTeamOrgs          bool   `json:"allows_user_created_team_orgs"`
+	AllowsOrganizationLeave            bool   `json:"allows_organization_leave"`
 }
 
 type createOrganizationRequest struct {
@@ -101,12 +103,13 @@ type membershipWithOrganizationDTO struct {
 func (h *Handler) CapabilitiesGet(w http.ResponseWriter, r *http.Request) {
 	mode := h.Organizations.Mode()
 	response.JSON(w, http.StatusOK, capabilitiesResponse{
-		OrganizationMode:          string(mode),
-		HasVisibleOrganizations:   mode.HasVisibleOrganizations(),
-		AllowsInvitations:         mode.AllowsInvitations(),
-		AllowsOrgSwitching:        mode.AllowsOrgSwitching(),
-		AllowsUserCreatedTeamOrgs: mode.AllowsUserCreatedTeamOrgs(),
-		AllowsOrganizationLeave:   mode.AllowsLeaveOrg(),
+		OrganizationMode:                   string(mode),
+		HasVisibleOrganizations:            mode.HasVisibleOrganizations(),
+		AllowsInvitations:                  mode.AllowsInvitations(),
+		AllowsPublicOrganizationManagement: h.PublicOrganizationManagementEnabled,
+		AllowsOrgSwitching:                 mode.AllowsOrgSwitching(),
+		AllowsUserCreatedTeamOrgs:          mode.AllowsUserCreatedTeamOrgs(),
+		AllowsOrganizationLeave:            mode.AllowsLeaveOrg(),
 	})
 }
 
@@ -115,9 +118,13 @@ func (h *Handler) CreateOrganization(w http.ResponseWriter, r *http.Request) {
 	if !readInternalJSON(w, r, &req, CreateOrganizationErrors) {
 		return
 	}
-	createdByUserID, ok := parseUUIDString(w, req.CreatedByUserID, "Invalid created_by_user_id", CreateOrganizationErrors)
-	if !ok {
-		return
+	createdByUserID, publicRequest := httpctx.UserID(r.Context())
+	if !publicRequest {
+		var ok bool
+		createdByUserID, ok = parseUUIDString(w, req.CreatedByUserID, "Invalid created_by_user_id", CreateOrganizationErrors)
+		if !ok {
+			return
+		}
 	}
 
 	org, membership, err := h.Organizations.CreateOrganization(r.Context(), organization.CreateOrganizationInput{
@@ -141,6 +148,9 @@ func (h *Handler) GetOrganization(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if _, ok := h.authorizePublicOrganization(w, r, organizationID, OrganizationErrors, false); !ok {
+		return
+	}
 	org, err := h.Organizations.GetOrganization(r.Context(), organizationID)
 	if err != nil {
 		writeInternalOrganizationError(w, OrganizationErrors, err)
@@ -153,6 +163,9 @@ func (h *Handler) GetOrganization(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateOrganization(w http.ResponseWriter, r *http.Request) {
 	organizationID, ok := parseUUIDParam(w, r, "organizationID", OrganizationErrors)
 	if !ok {
+		return
+	}
+	if _, ok := h.authorizePublicOrganization(w, r, organizationID, OrganizationErrors, true); !ok {
 		return
 	}
 	var req updateOrganizationRequest
@@ -174,6 +187,14 @@ func (h *Handler) ListOrganizationMembers(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	publicUserID, ok := h.authorizePublicOrganization(w, r, organizationID, OrganizationMembersGetErrors, false)
+	if !ok {
+		return
+	}
+	if publicUserID != uuid.Nil && !h.Organizations.Mode().HasVisibleOrganizations() {
+		writeRouteError(w, OrganizationMembersGetErrors, response.CodeForbidden, "Organization members are not visible")
+		return
+	}
 	members, err := h.Organizations.ListOrganizationMembers(r.Context(), organizationID)
 	if err != nil {
 		writeInternalOrganizationError(w, OrganizationMembersGetErrors, err)
@@ -192,6 +213,14 @@ func (h *Handler) GetOrganizationMember(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	publicUserID, ok := h.authorizePublicOrganization(w, r, organizationID, OrganizationMemberErrors, false)
+	if !ok {
+		return
+	}
+	if publicUserID != uuid.Nil && !h.Organizations.Mode().HasVisibleOrganizations() {
+		writeRouteError(w, OrganizationMemberErrors, response.CodeForbidden, "Organization members are not visible")
+		return
+	}
 	member, err := h.Organizations.GetOrganizationMember(r.Context(), organizationID, userID)
 	if err != nil {
 		writeInternalOrganizationError(w, OrganizationMemberErrors, err)
@@ -204,6 +233,9 @@ func (h *Handler) GetOrganizationMember(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) ListOrganizationInvitations(w http.ResponseWriter, r *http.Request) {
 	organizationID, ok := parseUUIDParam(w, r, "organizationID", OrganizationInvitationsGetErrors)
 	if !ok {
+		return
+	}
+	if _, ok := h.authorizePublicOrganization(w, r, organizationID, OrganizationInvitationsGetErrors, true); !ok {
 		return
 	}
 	now := time.Now().UTC()
@@ -225,6 +257,9 @@ func (h *Handler) GetOrganizationInvitation(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
+	if _, ok := h.authorizePublicOrganization(w, r, organizationID, OrganizationInvitationGetErrors, true); !ok {
+		return
+	}
 	preview, err := h.Organizations.InvitationByOrganizationAndID(r.Context(), organizationID, invitationID)
 	if err != nil {
 		writeInternalOrganizationError(w, OrganizationInvitationGetErrors, err)
@@ -239,13 +274,19 @@ func (h *Handler) RevokeOrganizationInvitation(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
+	publicActorUserID, ok := h.authorizePublicOrganization(w, r, organizationID, RevokeOrganizationInvitationErrors, true)
+	if !ok {
+		return
+	}
 
 	var req revokeInvitationRequest
 	if !readOptionalInternalJSON(w, r, &req, RevokeOrganizationInvitationErrors) {
 		return
 	}
 	var revokedBy *uuid.UUID
-	if strings.TrimSpace(req.RevokedByUserID) != "" {
+	if publicActorUserID != uuid.Nil {
+		revokedBy = &publicActorUserID
+	} else if strings.TrimSpace(req.RevokedByUserID) != "" {
 		id, ok := parseUUIDString(w, req.RevokedByUserID, "Invalid revoked_by_user_id", RevokeOrganizationInvitationErrors)
 		if !ok {
 			return
@@ -273,6 +314,10 @@ func (h *Handler) ListUserMemberships(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if currentUserID, publicRequest := httpctx.UserID(r.Context()); publicRequest && currentUserID != userID {
+		writeRouteError(w, UserMembershipsGetErrors, response.CodeForbidden, "Organization operation forbidden")
+		return
+	}
 	memberships, err := h.Organizations.ListUserMemberships(r.Context(), userID)
 	if err != nil {
 		writeInternalOrganizationError(w, UserMembershipsGetErrors, err)
@@ -287,6 +332,41 @@ func (h *Handler) ListUserMemberships(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	response.JSON(w, http.StatusOK, membershipsResponse{Memberships: out})
+}
+
+func (h *Handler) authorizePublicOrganization(
+	w http.ResponseWriter,
+	r *http.Request,
+	organizationID uuid.UUID,
+	routeErrors map[response.ErrorCode]response.ErrorSpec,
+	managerOnly bool,
+) (uuid.UUID, bool) {
+	userID, publicRequest := httpctx.UserID(r.Context())
+	if !publicRequest {
+		return uuid.Nil, true
+	}
+
+	currentOrganizationID, ok := httpctx.OrganizationID(r.Context())
+	if !ok || currentOrganizationID != organizationID {
+		writeRouteError(w, routeErrors, response.CodeForbidden, "Organization operation forbidden")
+		return uuid.Nil, false
+	}
+
+	membership, err := h.Organizations.RequireMembership(r.Context(), userID, organizationID)
+	if errors.Is(err, store.ErrOrganizationMembershipNotFound) {
+		writeRouteError(w, routeErrors, response.CodeForbidden, "Organization operation forbidden")
+		return uuid.Nil, false
+	}
+	if err != nil {
+		writeRouteError(w, routeErrors, response.CodeInternalError, "Internal server error")
+		return uuid.Nil, false
+	}
+	if managerOnly && membership.Role != domain.OrganizationRoleOwner && membership.Role != domain.OrganizationRoleAdmin {
+		writeRouteError(w, routeErrors, response.CodeForbidden, "Organization operation forbidden")
+		return uuid.Nil, false
+	}
+
+	return userID, true
 }
 
 func readInternalJSON(w http.ResponseWriter, r *http.Request, dst any, routeErrors map[response.ErrorCode]response.ErrorSpec) bool {
