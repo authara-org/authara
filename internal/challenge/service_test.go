@@ -95,6 +95,166 @@ func TestSignupChallengeStoresInvitationID(t *testing.T) {
 	})
 }
 
+func TestVerifyChallengeWrongPurposeDoesNotConsumeIt(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+		svc := New(Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			ChallengeTTL: 30 * time.Minute,
+			MaxAttempts:  5,
+			MaxResends:   3,
+		})
+		verifier := NewVerificationCodeService(
+			tdb.Store,
+			10*time.Minute,
+			[]byte("01234567890123456789012345678901"),
+		)
+
+		challengeID, err := svc.CreateSignupChallenge(ctx, CreateSignupChallengeInput{
+			Email:        "wrong-purpose@example.com",
+			PasswordHash: "hash",
+		}, now)
+		if err != nil {
+			t.Fatalf("CreateSignupChallenge failed: %v", err)
+		}
+		row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		code, err := verifier.GenerateCode(ctx, row, now)
+		if err != nil {
+			t.Fatalf("GenerateCode failed: %v", err)
+		}
+
+		_, err = svc.VerifyPasswordResetChallenge(ctx, challengeID, code, verifier, now)
+		if !errors.Is(err, ErrUnsupportedChallengePurpose) {
+			t.Fatalf("expected ErrUnsupportedChallengePurpose, got %v", err)
+		}
+
+		row, err = tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		if row.ConsumedAt != nil || row.AttemptCount != 0 {
+			t.Fatalf("wrong purpose changed challenge: consumed_at=%v attempt_count=%d", row.ConsumedAt, row.AttemptCount)
+		}
+	})
+}
+
+func TestSignupCompletionFailureDoesNotConsumeChallenge(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+		svc := New(Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			ChallengeTTL: 30 * time.Minute,
+			MaxAttempts:  5,
+			MaxResends:   3,
+		})
+		verifier := NewVerificationCodeService(
+			tdb.Store,
+			10*time.Minute,
+			[]byte("01234567890123456789012345678901"),
+		)
+
+		challengeID, err := svc.CreateSignupChallenge(ctx, CreateSignupChallengeInput{
+			Email:        "retry-signup@example.com",
+			PasswordHash: "hash",
+		}, now)
+		if err != nil {
+			t.Fatalf("CreateSignupChallenge failed: %v", err)
+		}
+		row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		code, err := verifier.GenerateCode(ctx, row, now)
+		if err != nil {
+			t.Fatalf("GenerateCode failed: %v", err)
+		}
+
+		completionErr := errors.New("signup completion failed")
+		_, err = svc.VerifySignupChallenge(
+			ctx,
+			challengeID,
+			code,
+			verifier,
+			now,
+			func(context.Context, domain.PendingSignupAction) error { return completionErr },
+		)
+		if !errors.Is(err, completionErr) {
+			t.Fatalf("expected completion error, got %v", err)
+		}
+
+		row, err = tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		if row.ConsumedAt != nil || row.AttemptCount != 0 {
+			t.Fatalf("completion failure changed challenge: consumed_at=%v attempt_count=%d", row.ConsumedAt, row.AttemptCount)
+		}
+
+		if _, err := svc.VerifySignupChallenge(ctx, challengeID, code, verifier, now, nil); err != nil {
+			t.Fatalf("valid retry failed: %v", err)
+		}
+	})
+}
+
+func TestVerificationServiceFailureDoesNotIncrementAttempts(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+		svc := New(Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			ChallengeTTL: 30 * time.Minute,
+			MaxAttempts:  5,
+			MaxResends:   3,
+		})
+		verifier := NewVerificationCodeService(
+			tdb.Store,
+			10*time.Minute,
+			[]byte("01234567890123456789012345678901"),
+		)
+
+		challengeID, err := svc.CreateSignupChallenge(ctx, CreateSignupChallengeInput{
+			Email:        "verification-service-error@example.com",
+			PasswordHash: "hash",
+		}, now)
+		if err != nil {
+			t.Fatalf("CreateSignupChallenge failed: %v", err)
+		}
+		row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		code, err := verifier.GenerateCode(ctx, row, now)
+		if err != nil {
+			t.Fatalf("GenerateCode failed: %v", err)
+		}
+
+		unconfiguredVerifier := NewVerificationCodeService(tdb.Store, 10*time.Minute)
+		_, err = svc.VerifySignupChallenge(ctx, challengeID, code, unconfiguredVerifier, now, nil)
+		if err == nil {
+			t.Fatal("expected verification service error")
+		}
+
+		row, err = tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		if row.ConsumedAt != nil || row.AttemptCount != 0 {
+			t.Fatalf("service failure changed challenge: consumed_at=%v attempt_count=%d", row.ConsumedAt, row.AttemptCount)
+		}
+	})
+}
+
 func TestExecuteEmailChangeMovesAllowlistEntryWhenEnabled(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

@@ -55,6 +55,16 @@ func (l *CacheLimiter) AllowPasskeyLoginAttempt(ctx context.Context, ip net.IP) 
 	)
 }
 
+func (l *CacheLimiter) AllowPasskeyLoginFinishAttempt(ctx context.Context, ip net.IP) (bool, error) {
+	return l.allowIP(
+		ctx,
+		ip,
+		l.cfg.PasskeyLoginIPLimit,
+		l.cfg.PasskeyLoginIPWindow,
+		"passkey_login_finish",
+	)
+}
+
 func (l *CacheLimiter) AllowChallengeVerifyAttempt(ctx context.Context, ip net.IP) (bool, error) {
 	return l.allowIP(
 		ctx,

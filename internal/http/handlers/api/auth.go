@@ -54,14 +54,6 @@ func (h *APIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	if h.ChallengeEnabled {
-		response.WriteError(
-			w,
-			mustRouteError(SignupPostErrors, response.CodeInvalidRequest),
-			"API signup verification is not available.",
-		)
-		return
-	}
 	audience, ok := readAudience(w, r, SignupPostErrors)
 	if !ok {
 		return
@@ -92,6 +84,10 @@ func (h *APIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 			mustRouteError(SignupPostErrors, response.CodeInternalError),
 			"Password error",
 		)
+		return
+	}
+	if h.ChallengeEnabled {
+		h.startSignupChallenge(w, r, in.Email, passwordHash)
 		return
 	}
 
@@ -246,17 +242,15 @@ func (h *APIHandler) createSessionResponse(
 		r.UserAgent(),
 		time.Now(),
 	)
-	switch {
-	case errors.Is(err, session.ErrForbidden),
-		errors.Is(err, session.ErrUserDisabled),
-		errors.Is(err, session.ErrUserNotAllowed):
+	switch sessionErrorCode(err) {
+	case response.CodeForbidden:
 		response.WriteError(
 			w,
 			mustRouteError(routeErrors, response.CodeForbidden),
 			"Account cannot access requested audience.",
 		)
 		return
-	case err != nil:
+	case response.CodeInternalError:
 		response.WriteError(
 			w,
 			mustRouteError(routeErrors, response.CodeInternalError),
@@ -265,6 +259,28 @@ func (h *APIHandler) createSessionResponse(
 		return
 	}
 
+	h.writeSessionResponse(w, user, status, accessToken, refreshToken)
+}
+
+func sessionErrorCode(err error) response.ErrorCode {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, session.ErrForbidden) ||
+		errors.Is(err, session.ErrUserDisabled) ||
+		errors.Is(err, session.ErrUserNotAllowed) {
+		return response.CodeForbidden
+	}
+	return response.CodeInternalError
+}
+
+func (h *APIHandler) writeSessionResponse(
+	w http.ResponseWriter,
+	user domain.User,
+	status int,
+	accessToken string,
+	refreshToken string,
+) {
 	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
 

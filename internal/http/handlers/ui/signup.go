@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -239,6 +240,18 @@ func (h *UIHandler) finishSignup(
 		return
 	}
 
+	h.finishSignupSession(w, r, user, returnTo, errorRenderForm)
+}
+
+func (h *UIHandler) finishSignupSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	user domain.User,
+	returnTo string,
+	errorRenderForm templ.Component,
+) {
+	ctx := r.Context()
+
 	ua := r.UserAgent()
 	now := time.Now()
 
@@ -254,6 +267,16 @@ func (h *UIHandler) finishSignup(
 		return
 	}
 
+	h.writeSignupSession(w, r, accessToken, refreshToken, returnTo)
+}
+
+func (h *UIHandler) writeSignupSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	accessToken string,
+	refreshToken string,
+	returnTo string,
+) {
 	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
 
@@ -281,57 +304,63 @@ func (h *UIHandler) verifySignupChallengePost(
 	code string,
 ) {
 	ctx := r.Context()
+	errorForm := challengeview.VerifyChallengeForm(
+		challengeIDStr,
+		VerifyChallengeActionSignup.Path(),
+		true,
+	)
+	returnTo, ok := h.requireSignupAppAudience(w, r, errorForm)
+	if !ok {
+		return
+	}
+	now := time.Now().UTC()
+	var user domain.User
+	completionFailed := false
 
 	result, err := h.Challenge.VerifySignupChallenge(
 		ctx,
 		challengeID,
 		code,
 		h.Verification,
-		time.Now().UTC(),
+		now,
+		func(txCtx context.Context, action domain.PendingSignupAction) error {
+			input := auth.SignupInput{
+				Provider:     domain.ProviderPassword,
+				Username:     action.Username,
+				Email:        action.Email,
+				PasswordHash: action.PasswordHash,
+			}
+			if action.InvitationID != nil {
+				input.InvitationID = *action.InvitationID
+			}
+
+			var err error
+			user, err = h.Auth.Signup(txCtx, input)
+			if err != nil {
+				completionFailed = true
+			}
+			return err
+		},
 	)
 	if err != nil {
+		message := h.verifyChallengeErrorMessage(err)
+		if completionFailed {
+			message = "Could not create account. Please try again."
+		}
 		h.renderVerifyChallengeError(
 			w,
 			r,
 			VerifyChallengeActionSignup,
 			challengeIDStr,
-			h.verifyChallengeErrorMessage(err),
+			message,
 		)
 		return
 	}
 
-	input := auth.SignupInput{
-		Provider:     domain.ProviderPassword,
-		Username:     result.Action.Username,
-		Email:        result.Action.Email,
-		PasswordHash: result.Action.PasswordHash,
-	}
 	if result.Action.InvitationID != nil {
-		input.InvitationID = *result.Action.InvitationID
-		user, err := h.Auth.Signup(ctx, input)
-		if err != nil {
-			h.renderVerifyChallengeError(
-				w,
-				r,
-				VerifyChallengeActionSignup,
-				challengeIDStr,
-				"Could not create account for this invitation. Please start again.",
-			)
-			return
-		}
-
 		h.finishInvitationSessionByID(w, r, user, *result.Action.InvitationID, time.Now())
 		return
 	}
 
-	h.finishSignup(
-		w,
-		r,
-		input,
-		challengeview.VerifyChallengeForm(
-			challengeIDStr,
-			VerifyChallengeActionSignup.Path(),
-			true,
-		),
-	)
+	h.finishSignupSession(w, r, user, returnTo, errorForm)
 }

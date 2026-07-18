@@ -10,6 +10,7 @@ type AuthLimiter interface {
 	AllowSignupAttempt(ctx context.Context, ip net.IP, email string) (bool, error)
 	AllowPasswordResetAttempt(ctx context.Context, ip net.IP, email string) (bool, error)
 	AllowPasskeyLoginAttempt(ctx context.Context, ip net.IP) (bool, error)
+	AllowPasskeyLoginFinishAttempt(ctx context.Context, ip net.IP) (bool, error)
 	AllowChallengeVerifyAttempt(ctx context.Context, ip net.IP) (bool, error)
 	AllowChallengeResendAttempt(ctx context.Context, ip net.IP) (bool, error)
 }

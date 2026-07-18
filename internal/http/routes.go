@@ -209,6 +209,10 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Post("/login", apih.LoginPost)
 				r.Post("/signup", apih.SignupPost)
+				r.Post("/signup/verify", apih.SignupVerifyPost)
+				r.Post("/challenges/resend", apih.ChallengeResendPost)
+				r.Post("/passkeys/authenticate/options", apih.PasskeyAuthenticateOptionsPost)
+				r.Post("/passkeys/authenticate/finish", apih.PasskeyAuthenticateFinishPost)
 				r.Post("/sessions/logout", apih.LogoutPost)
 				r.Post("/sessions/refresh", apih.RefreshPost)
 
@@ -228,6 +232,8 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireAPICSRF)
+					r.Post("/passkeys/register/options", apih.PasskeyRegisterOptionsPost)
+					r.Post("/passkeys/register/finish", apih.PasskeyRegisterFinishPost)
 					r.Post("/organizations/{organizationID}/switch", apih.OrganizationSwitchPost)
 				})
 

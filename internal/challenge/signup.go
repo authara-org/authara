@@ -49,17 +49,28 @@ func (s *Service) VerifySignupChallenge(
 	code string,
 	verifier *VerificationCodeService,
 	now time.Time,
+	complete func(context.Context, domain.PendingSignupAction) error,
 ) (*VerifySignupChallengeResult, error) {
-	challenge, err := s.verifyChallenge(ctx, challengeID, code, verifier, now)
-	if err != nil {
-		return nil, err
-	}
-
-	if challenge.Purpose != domain.ChallengePurposeSignup {
-		return nil, ErrUnsupportedChallengePurpose
-	}
-
-	action, err := s.store.GetPendingSignupActionByChallengeID(ctx, challenge.ID)
+	var action domain.PendingSignupAction
+	challenge, err := s.verifyChallenge(
+		ctx,
+		challengeID,
+		domain.ChallengePurposeSignup,
+		code,
+		verifier,
+		now,
+		func(txCtx context.Context, challenge domain.Challenge) error {
+			var err error
+			action, err = s.store.GetPendingSignupActionByChallengeID(txCtx, challenge.ID)
+			if err != nil {
+				return err
+			}
+			if complete != nil {
+				return complete(txCtx, action)
+			}
+			return nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

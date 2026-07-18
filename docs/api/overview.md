@@ -24,11 +24,8 @@ This contract covers:
 - error envelope format
 - versioning rules
 
-The contract is defined in the repository:
-
-**APICONTRACT.md**
-
-https://github.com/authara-org/authara/blob/main/APICONTRACT.md
+The contract is defined in
+[`contract/http.yaml`](../../contract/http.yaml).
 
 Applications and SDKs may rely on this document when integrating with Authara.
 
@@ -67,14 +64,17 @@ A full list of available endpoints can be found in the **[Endpoints](endpoints.m
 
 # Authentication Model
 
-API endpoints rely on the **Authara session cookies**:
+Authenticated API endpoints rely on the **Authara session cookies**:
 
 - `authara_access`
 - `authara_refresh`
 
 These cookies are automatically sent by the browser with each request.
 
-Applications do not need to manually attach tokens.
+Password and passkey login endpoints also return the access and refresh tokens
+in JSON. Authenticated v1 endpoints currently read the access token from the
+`authara_access` cookie; they do not accept an `Authorization: Bearer` header.
+Non-browser clients therefore need a cookie-aware HTTP client.
 
 Authentication is performed using the **access token** contained in the `authara_access` cookie.
 
@@ -126,7 +126,9 @@ The structure and available error codes are documented in **[Errors](errors.md)*
 
 # CSRF Protection
 
-Some endpoints require a **CSRF token** for protection against cross-site request forgery.
+State-changing browser-session endpoints require a **CSRF token** for
+protection against cross-site request forgery. This includes password auth,
+signup challenges, and passkey ceremonies under `/auth/api/v1`.
 
 For browser requests, the token must be provided either:
 
@@ -159,6 +161,9 @@ The API currently includes endpoints for:
 
 | Category | Purpose |
 |------|------|
+| Authentication | Log in and sign up with passwords or passkeys |
+| Challenges | Verify signup email codes and request another code |
+| Passkeys | Authenticate with or register WebAuthn credentials |
 | User | Retrieve the authenticated user |
 | Session | Refresh the current session |
 
@@ -177,14 +182,15 @@ The API is primarily used by:
 Most applications will interact with Authara through:
 
 - session cookies
-- redirect-based login flows
+- hosted redirect-based flows or the versioned JSON authentication API
 - the `/auth/api/v1/user` endpoint
 
 ---
 
 # Summary
 
-Authara provides a small, stable HTTP API for retrieving authentication state and managing sessions.
+Authara provides a stable HTTP API for authentication, signup verification,
+passkeys, user state, organizations, and sessions.
 
 For detailed information see:
 

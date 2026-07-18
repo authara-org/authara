@@ -14,7 +14,8 @@ These endpoints are primarily intended for:
 - SDKs
 - browser helpers
 
-Browser login flows use HTML endpoints under `/auth`.
+Authara also provides hosted HTML flows under `/auth`; applications that own
+their authentication UI can use the JSON endpoints documented here.
 
 Internal server-to-server endpoints are available under:
 
@@ -33,7 +34,8 @@ requests derive the actor, current organization, and role from the access token.
 
 # Authentication
 
-Most endpoints require a valid session.
+Public authentication endpoints do not require a session. Passkey registration
+and user or organization endpoints require a valid session.
 
 Authentication is performed using the `authara_access` cookie.
 
@@ -45,9 +47,223 @@ If the access token is missing or invalid, Authara returns:
 
 See [Cookies](cookies.md) for details.
 
+All state-changing API routes require the `authara_csrf` cookie and a matching
+`X-CSRF-Token` header, except `POST /auth/api/v1/tokens/refresh`. Obtain both by
+calling `GET /auth/api/v1/csrf` first.
+
 ---
 
 # Endpoints
+
+## Get a CSRF token
+
+```text
+GET /auth/api/v1/csrf
+```
+
+Returns `200 OK`, sets the `authara_csrf` cookie, and returns its value:
+
+```json
+{
+  "csrf_token": "<csrf-token>"
+}
+```
+
+Send this value as `X-CSRF-Token` on the POST requests below while preserving
+the cookie.
+
+---
+
+## Log in with a password
+
+```text
+POST /auth/api/v1/login?audience=app
+```
+
+`audience` is optional and defaults to `app`; supported values are `app` and
+`admin`.
+
+```json
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+
+On success Authara returns `200 OK`, sets `authara_access` and
+`authara_refresh`, and returns:
+
+```json
+{
+  "user": {
+    "id": "a8f7c1f5-5d2b-4a3a-91c5-1c87b6e19c41",
+    "email": "user@example.com",
+    "username": "user",
+    "disabled": false,
+    "created_at": "2026-01-01T12:00:00Z"
+  },
+  "access_token": "<access-token>",
+  "refresh_token": "<refresh-token>"
+}
+```
+
+Errors: `400 invalid_request`, `401 unauthorized`, `403 forbidden`,
+`429 rate_limited`, or `500 internal_error`.
+
+---
+
+## Sign up with a password
+
+```text
+POST /auth/api/v1/signup
+```
+
+The request body is the same email-and-password object used for login. Signup
+only creates app-audience sessions.
+
+When challenges are disabled, Authara creates the account immediately, returns
+`201 Created` with the authentication response shown above, and sets both
+session cookies.
+
+When `AUTHARA_CHALLENGE_ENABLED=true`, Authara starts email verification and
+returns `202 Accepted` without creating a session:
+
+```json
+{
+  "challenge_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba"
+}
+```
+
+Errors: `400 invalid_request`, `403 forbidden`, `429 rate_limited`, or
+`500 internal_error`.
+
+---
+
+## Verify signup
+
+```text
+POST /auth/api/v1/signup/verify
+```
+
+```json
+{
+  "challenge_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+  "code": "123456"
+}
+```
+
+On success Authara creates the account, returns `201 Created` with the
+authentication response, and sets both session cookies.
+
+Errors: `400 invalid_request`, `403 forbidden`, `404 not_found` when challenges
+are disabled, `429 rate_limited`, or `500 internal_error`.
+
+---
+
+## Resend a verification code
+
+```text
+POST /auth/api/v1/challenges/resend
+```
+
+```json
+{
+  "challenge_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba"
+}
+```
+
+Returns `204 No Content`. Unknown, expired, consumed, too-recent, and
+resend-exhausted challenges also return `204`; this intentionally
+prevents clients from using resend responses to discover account or challenge
+state.
+
+Malformed requests return `400 invalid_request`; failed CSRF validation returns
+`403 forbidden`; a disabled challenge feature returns `404 not_found`; IP rate
+limiting returns `429 rate_limited`; unexpected failures return
+`500 internal_error`.
+
+---
+
+## Authenticate with a passkey
+
+Start a WebAuthn authentication ceremony:
+
+```text
+POST /auth/api/v1/passkeys/authenticate/options
+```
+
+The request body is empty. Authara returns `200 OK` with WebAuthn options:
+
+```json
+{
+  "challenge_id": "7e9cbd7c-a532-4b35-bf1b-3c5237bfb760",
+  "options": {
+    "publicKey": {}
+  }
+}
+```
+
+Before calling `navigator.credentials.get()`, convert the base64url-encoded
+`challenge` and credential IDs in `options.publicKey` to `BufferSource` values.
+After the browser ceremony, serialize the credential's binary fields back to
+base64url strings and submit it:
+
+```text
+POST /auth/api/v1/passkeys/authenticate/finish?audience=app
+```
+
+```json
+{
+  "challenge_id": "7e9cbd7c-a532-4b35-bf1b-3c5237bfb760",
+  "credential": {}
+}
+```
+
+`audience` is optional and defaults to `app`. On success Authara returns
+`200 OK` with the authentication response and sets both session cookies.
+
+Both endpoints require a valid API CSRF token and may return `403 forbidden`.
+The options endpoint may also return `429 rate_limited` or `500 internal_error`.
+The finish endpoint may return `400 invalid_request`, `401 unauthorized`,
+`429 rate_limited`, or `500 internal_error`.
+
+---
+
+## Register a passkey
+
+Both registration endpoints require an authenticated app session.
+
+```text
+POST /auth/api/v1/passkeys/register/options
+```
+
+The request body is empty. Authara returns the same `challenge_id` and `options`
+envelope shown above. Decode its base64url binary fields before passing
+`options.publicKey` to `navigator.credentials.create()`, then encode the
+credential's binary response fields as base64url before submitting it:
+
+```text
+POST /auth/api/v1/passkeys/register/finish
+```
+
+```json
+{
+  "challenge_id": "7e9cbd7c-a532-4b35-bf1b-3c5237bfb760",
+  "credential": {},
+  "name": "Work laptop",
+  "platform_hint": "macOS"
+}
+```
+
+`name` and `platform_hint` are optional. Success returns `204 No Content`.
+
+Both endpoints require the access and CSRF cookies. The options endpoint may
+return `401 unauthorized`, `403 forbidden`, or `500 internal_error`.
+The finish endpoint may return `400 invalid_request`, `401 unauthorized`,
+`403 forbidden`, `409 passkey_already_exists`,
+`422 passkey_registration_invalid`, or `500 internal_error`.
+
+---
 
 ## Get current user
 

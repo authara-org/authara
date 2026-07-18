@@ -49,13 +49,9 @@ func (s *Service) VerifyEmailChangeChallenge(
 	verifier *VerificationCodeService,
 	now time.Time,
 ) (*VerifyEmailChangeChallengeResult, error) {
-	challenge, err := s.verifyChallenge(ctx, challengeID, code, verifier, now)
+	challenge, err := s.verifyChallenge(ctx, challengeID, domain.ChallengePurposeEmailChange, code, verifier, now, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	if challenge.Purpose != domain.ChallengePurposeEmailChange {
-		return nil, ErrUnsupportedChallengePurpose
 	}
 
 	action, err := s.store.GetPendingEmailChangeByChallengeID(ctx, challenge.ID)

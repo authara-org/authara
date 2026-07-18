@@ -24,6 +24,12 @@ func JSON(w http.ResponseWriter, status int, v any) {
 	_, _ = w.Write(append(body, '\n'))
 }
 
+func RawJSON(w http.ResponseWriter, status int, body []byte) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
+}
+
 func ErrorJSON(w http.ResponseWriter, status int, code ErrorCode, message string) {
 	JSON(w, status, ErrorResponse{
 		Error: Error{

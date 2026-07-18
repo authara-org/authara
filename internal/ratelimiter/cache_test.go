@@ -88,6 +88,21 @@ func TestCacheLimiterPasskeyLoginIsIPOnly(t *testing.T) {
 	assertRateLimited(t, allowed, err, "passkey_login:ip")
 }
 
+func TestCacheLimiterPasskeyLoginFinishUsesIndependentBucket(t *testing.T) {
+	limiter := NewCacheLimiter(newFakeCounterCache(), LimiterConfig{
+		PasskeyLoginIPLimit:  1,
+		PasskeyLoginIPWindow: time.Minute,
+	})
+	ip := net.ParseIP("192.0.2.1")
+
+	assertPasskeyLoginAllowed(t, limiter, ip)
+	allowed, err := limiter.AllowPasskeyLoginFinishAttempt(context.Background(), ip)
+	assertAllowed(t, allowed, err)
+
+	allowed, err = limiter.AllowPasskeyLoginFinishAttempt(context.Background(), ip)
+	assertRateLimited(t, allowed, err, "passkey_login_finish:ip")
+}
+
 func assertLoginAllowed(t *testing.T, limiter AuthLimiter, ip net.IP, email string) {
 	t.Helper()
 

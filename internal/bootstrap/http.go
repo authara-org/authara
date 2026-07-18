@@ -92,8 +92,11 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		),
 		API: api.New(
 			app.Services.Auth,
+			app.Services.Passkeys,
 			app.Services.Session,
 			app.Services.Organizations,
+			app.Services.Challenge,
+			app.Services.Verification,
 			authLimiter,
 			app.Logger,
 			googleClient,

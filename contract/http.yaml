@@ -105,7 +105,49 @@ routes:
     stability: stable
     kind: json
     access: public
-    notes: Creates an account with email and password.
+    notes: Creates an account with email and password, or starts signup verification when challenges are enabled.
+
+  - method: POST
+    path: /auth/api/v1/signup/verify
+    stability: stable
+    kind: json
+    access: public
+    notes: Verifies a signup challenge and creates the account.
+
+  - method: POST
+    path: /auth/api/v1/challenges/resend
+    stability: stable
+    kind: json
+    access: public
+    notes: Requests another verification code without disclosing challenge state.
+
+  - method: POST
+    path: /auth/api/v1/passkeys/authenticate/options
+    stability: stable
+    kind: json
+    access: public
+    notes: Starts a passkey authentication ceremony.
+
+  - method: POST
+    path: /auth/api/v1/passkeys/authenticate/finish
+    stability: stable
+    kind: json
+    access: public
+    notes: Finishes a passkey authentication ceremony and creates a session.
+
+  - method: POST
+    path: /auth/api/v1/passkeys/register/options
+    stability: stable
+    kind: json
+    access: user
+    notes: Starts passkey registration for the authenticated user.
+
+  - method: POST
+    path: /auth/api/v1/passkeys/register/finish
+    stability: stable
+    kind: json
+    access: user
+    notes: Finishes passkey registration for the authenticated user.
 
   - method: GET
     path: /auth/api/v1/user
@@ -356,6 +398,7 @@ json_success_responses:
 
   - endpoint: POST /auth/api/v1/signup
     stability: stable
+    condition: challenge_disabled
     response:
       status: 201
       body:
@@ -365,6 +408,66 @@ json_success_responses:
       cookies_set:
         - authara_access
         - authara_refresh
+
+  - endpoint: POST /auth/api/v1/signup
+    stability: stable
+    condition: challenge_enabled
+    response:
+      status: 202
+      body:
+        challenge_id: uuid
+
+  - endpoint: POST /auth/api/v1/signup/verify
+    stability: stable
+    response:
+      status: 201
+      body:
+        user: object
+        access_token: string
+        refresh_token: string
+      cookies_set:
+        - authara_access
+        - authara_refresh
+
+  - endpoint: POST /auth/api/v1/challenges/resend
+    stability: stable
+    response:
+      status: 204
+      body: none
+
+  - endpoint: POST /auth/api/v1/passkeys/authenticate/options
+    stability: stable
+    response:
+      status: 200
+      body:
+        challenge_id: uuid
+        options: object
+
+  - endpoint: POST /auth/api/v1/passkeys/authenticate/finish
+    stability: stable
+    response:
+      status: 200
+      body:
+        user: object
+        access_token: string
+        refresh_token: string
+      cookies_set:
+        - authara_access
+        - authara_refresh
+
+  - endpoint: POST /auth/api/v1/passkeys/register/options
+    stability: stable
+    response:
+      status: 200
+      body:
+        challenge_id: uuid
+        options: object
+
+  - endpoint: POST /auth/api/v1/passkeys/register/finish
+    stability: stable
+    response:
+      status: 204
+      body: none
 
   - endpoint: GET /auth/api/v1/user
     stability: stable
@@ -685,6 +788,84 @@ json_error_contracts:
         code: forbidden
       - status: 429
         code: rate_limited
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/signup/verify
+    stability: stable
+    errors:
+      - status: 400
+        code: invalid_request
+      - status: 403
+        code: forbidden
+      - status: 404
+        code: not_found
+      - status: 429
+        code: rate_limited
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/challenges/resend
+    stability: stable
+    errors:
+      - status: 400
+        code: invalid_request
+      - status: 403
+        code: forbidden
+      - status: 404
+        code: not_found
+      - status: 429
+        code: rate_limited
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/passkeys/authenticate/options
+    stability: stable
+    errors:
+      - status: 403
+        code: forbidden
+      - status: 429
+        code: rate_limited
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/passkeys/authenticate/finish
+    stability: stable
+    errors:
+      - status: 400
+        code: invalid_request
+      - status: 401
+        code: unauthorized
+      - status: 403
+        code: forbidden
+      - status: 429
+        code: rate_limited
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/passkeys/register/options
+    stability: stable
+    errors:
+      - status: 401
+        code: unauthorized
+      - status: 403
+        code: forbidden
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/passkeys/register/finish
+    stability: stable
+    errors:
+      - status: 400
+        code: invalid_request
+      - status: 401
+        code: unauthorized
+      - status: 403
+        code: forbidden
+      - status: 409
+        code: passkey_already_exists
+      - status: 422
+        code: passkey_registration_invalid
       - status: 500
         code: internal_error
 

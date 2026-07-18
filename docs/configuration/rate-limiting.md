@@ -121,7 +121,9 @@ Default:
 
 ### AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT
 
-Maximum passkey login option requests per IP.
+Maximum passkey login option requests and finish requests per IP. Options and
+finishes use independent counters, so one complete ceremony consumes one slot
+from each counter.
 
 Default:
 
@@ -133,7 +135,8 @@ Default:
 
 ### AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW
 
-Time window for IP-based passkey login option requests.
+Time window for the independent IP-based passkey login option and finish
+counters.
 
 Default:
 

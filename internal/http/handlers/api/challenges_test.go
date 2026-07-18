@@ -1,0 +1,240 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/ratelimiter"
+	"github.com/authara-org/authara/internal/store"
+	"github.com/authara-org/authara/internal/testutil"
+	"github.com/google/uuid"
+)
+
+func TestSignupChallengeVerificationCreatesSession(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		h := newAPIChallengeTestHandler(t, tdb)
+
+		signupReq := apiJSONRequest(
+			ctx,
+			http.MethodPost,
+			"/auth/api/v1/signup",
+			`{"email":"challenge-api@example.com","password":"password123"}`,
+		)
+		signupRR := httptest.NewRecorder()
+		h.SignupPost(signupRR, signupReq)
+
+		if signupRR.Code != http.StatusAccepted {
+			t.Fatalf("expected signup status %d, got %d body=%s", http.StatusAccepted, signupRR.Code, signupRR.Body.String())
+		}
+		if hasCookie(signupRR.Result().Cookies(), "authara_access") || hasCookie(signupRR.Result().Cookies(), "authara_refresh") {
+			t.Fatal("expected challenge start not to create a session")
+		}
+
+		challengeID := decodeChallengeID(t, signupRR.Body.Bytes())
+		row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		if _, err := tdb.Store.GetPendingSignupActionByChallengeID(ctx, challengeID); err != nil {
+			t.Fatalf("expected pending signup action: %v", err)
+		}
+		code, err := h.Verification.GenerateCode(ctx, row, time.Now().UTC())
+		if err != nil {
+			t.Fatalf("GenerateCode failed: %v", err)
+		}
+
+		verifyBody, err := json.Marshal(signupVerifyRequest{
+			ChallengeID: challengeID.String(),
+			Code:        code,
+		})
+		if err != nil {
+			t.Fatalf("marshal verify request: %v", err)
+		}
+		verifyReq := apiJSONRequest(
+			ctx,
+			http.MethodPost,
+			"/auth/api/v1/signup/verify",
+			string(verifyBody),
+		)
+		verifyRR := httptest.NewRecorder()
+		h.SignupVerifyPost(verifyRR, verifyReq)
+
+		if verifyRR.Code != http.StatusCreated {
+			t.Fatalf("expected verify status %d, got %d body=%s", http.StatusCreated, verifyRR.Code, verifyRR.Body.String())
+		}
+		if !hasCookie(verifyRR.Result().Cookies(), "authara_access") || !hasCookie(verifyRR.Result().Cookies(), "authara_refresh") {
+			t.Fatal("expected verification to create session cookies")
+		}
+		assertResponseTokens(t, verifyRR.Body.Bytes())
+		if _, err := h.Auth.GetUserByEmail(ctx, "challenge-api@example.com"); err != nil {
+			t.Fatalf("expected verified user: %v", err)
+		}
+	})
+}
+
+func TestSignupChallengeExistingEmailIsOpaque(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		h := newAPIChallengeTestHandler(t, tdb)
+		hash, err := auth.Hash("password123")
+		if err != nil {
+			t.Fatalf("Hash failed: %v", err)
+		}
+		if _, err := h.Auth.Signup(ctx, auth.SignupInput{
+			Provider:     domain.ProviderPassword,
+			Email:        "opaque-api@example.com",
+			PasswordHash: hash,
+		}); err != nil {
+			t.Fatalf("create existing user: %v", err)
+		}
+
+		req := apiJSONRequest(
+			ctx,
+			http.MethodPost,
+			"/auth/api/v1/signup",
+			`{"email":"opaque-api@example.com","password":"password123"}`,
+		)
+		rr := httptest.NewRecorder()
+		h.SignupPost(rr, req)
+
+		if rr.Code != http.StatusAccepted {
+			t.Fatalf("expected status %d, got %d body=%s", http.StatusAccepted, rr.Code, rr.Body.String())
+		}
+		challengeID := decodeChallengeID(t, rr.Body.Bytes())
+		row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		if row.MaxResends != 0 {
+			t.Fatalf("expected opaque challenge, max_resends=%d", row.MaxResends)
+		}
+		if _, err := tdb.Store.GetPendingSignupActionByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingSignupActionNotFound) {
+			t.Fatalf("expected no pending signup action, got %v", err)
+		}
+	})
+}
+
+func TestChallengeResendKeepsChallengeStateOpaque(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		h := newAPIChallengeTestHandler(t, tdb)
+		now := time.Now().UTC()
+		realID, err := h.Challenge.CreateSignupChallenge(ctx, challenge.CreateSignupChallengeInput{
+			Email:        "resend-real@example.com",
+			PasswordHash: "hash",
+		}, now)
+		if err != nil {
+			t.Fatalf("CreateSignupChallenge failed: %v", err)
+		}
+		opaqueID, err := h.Challenge.CreateOpaqueChallenge(
+			ctx,
+			now,
+			domain.ChallengePurposeSignup,
+			"resend-opaque@example.com",
+		)
+		if err != nil {
+			t.Fatalf("CreateOpaqueChallenge failed: %v", err)
+		}
+
+		for _, challengeID := range []uuid.UUID{realID, opaqueID, uuid.New()} {
+			body, err := json.Marshal(challengeResendRequest{ChallengeID: challengeID.String()})
+			if err != nil {
+				t.Fatalf("marshal resend request: %v", err)
+			}
+			req := apiJSONRequest(
+				ctx,
+				http.MethodPost,
+				"/auth/api/v1/challenges/resend",
+				string(body),
+			)
+			rr := httptest.NewRecorder()
+			h.ChallengeResendPost(rr, req)
+
+			if rr.Code != http.StatusNoContent || rr.Body.Len() != 0 {
+				t.Fatalf("expected opaque 204 response for %s, got %d body=%s", challengeID, rr.Code, rr.Body.String())
+			}
+		}
+	})
+}
+
+func TestSignupVerifyRejectsInvalidCodeShape(t *testing.T) {
+	h := &APIHandler{ChallengeEnabled: true, Challenge: &challenge.Service{}, Verification: &challenge.VerificationCodeService{}}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/auth/api/v1/signup/verify",
+		strings.NewReader(`{"challenge_id":"`+uuid.NewString()+`","code":"abcdef"}`),
+	)
+	rr := httptest.NewRecorder()
+
+	h.SignupVerifyPost(rr, req)
+
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "invalid_request") {
+		t.Fatalf("expected invalid_request, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func newAPIChallengeTestHandler(t *testing.T, tdb *testutil.TestDB) *APIHandler {
+	t.Helper()
+
+	organizations := organization.New(organization.Config{
+		Store: tdb.Store,
+		Tx:    tdb.Tx,
+		Mode:  organization.OrgModeSingle,
+	})
+	challengeService := challenge.New(challenge.Config{
+		Store:             tdb.Store,
+		Tx:                tdb.Tx,
+		ChallengeTTL:      30 * time.Minute,
+		MaxAttempts:       5,
+		MaxResends:        3,
+		MinResendInterval: 0,
+	})
+	verification := challenge.NewVerificationCodeService(
+		tdb.Store,
+		10*time.Minute,
+		[]byte("01234567890123456789012345678901"),
+	)
+
+	return &APIHandler{
+		Auth: auth.New(auth.Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			Organizations: organizations,
+		}),
+		Session:          newAPIHandlerTestSessionService(t, tdb),
+		Challenge:        challengeService,
+		Verification:     verification,
+		Limiter:          ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{}),
+		ChallengeEnabled: true,
+		AccessTTL:        time.Minute,
+		RefreshTTL:       time.Hour,
+	}
+}
+
+func decodeChallengeID(t *testing.T, body []byte) uuid.UUID {
+	t.Helper()
+
+	var got challengeStartedResponse
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode challenge response: %v", err)
+	}
+	challengeID, err := uuid.Parse(got.ChallengeID)
+	if err != nil {
+		t.Fatalf("parse challenge id: %v", err)
+	}
+	return challengeID
+}

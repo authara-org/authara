@@ -2,6 +2,7 @@ package challenge
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
@@ -167,9 +168,11 @@ func (s *Service) ResendChallenge(
 func (s *Service) verifyChallenge(
 	ctx context.Context,
 	challengeID uuid.UUID,
+	purpose domain.ChallengePurpose,
 	code string,
 	verifier *VerificationCodeService,
 	now time.Time,
+	afterVerify func(context.Context, domain.Challenge) error,
 ) (*domain.Challenge, error) {
 	var challenge domain.Challenge
 	var resultErr error
@@ -185,13 +188,24 @@ func (s *Service) verifyChallenge(
 			resultErr = err
 			return nil
 		}
+		if challenge.Purpose != purpose {
+			resultErr = ErrUnsupportedChallengePurpose
+			return nil
+		}
 
 		if err := verifier.VerifyCode(txCtx, challengeID, code, now); err != nil {
-			if incErr := s.store.IncrementChallengeAttemptCount(txCtx, challengeID); incErr != nil {
-				return incErr
+			if errors.Is(err, ErrInvalidVerificationCode) {
+				if incErr := s.store.IncrementChallengeAttemptCount(txCtx, challengeID); incErr != nil {
+					return incErr
+				}
 			}
 			resultErr = err
 			return nil
+		}
+		if afterVerify != nil {
+			if err := afterVerify(txCtx, challenge); err != nil {
+				return err
+			}
 		}
 
 		if err := s.store.ConsumeChallenge(txCtx, challengeID, now); err != nil {

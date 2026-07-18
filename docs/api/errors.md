@@ -44,6 +44,8 @@ Common status codes include:
 | `401` | Authentication required or invalid session |
 | `403` | Access forbidden |
 | `404` | Resource not found |
+| `409` | Request conflicts with existing state |
+| `422` | Well-formed input could not be verified |
 | `429` | Rate limit exceeded |
 | `500` | Internal server error |
 
@@ -57,7 +59,10 @@ The following error codes may be returned by Authara.
 |------|-------------|-------------|
 | `unauthorized` | 401 | The request does not contain a valid authenticated session |
 | `invalid_request` | 400 | The request is malformed or missing required parameters |
-| `csrf_invalid` | 403 | CSRF token is missing or invalid |
+| `forbidden` | 403 | The request is not allowed, including CSRF validation failures |
+| `not_found` | 404 | The requested resource or enabled feature is not available |
+| `passkey_already_exists` | 409 | The passkey is already linked to an account |
+| `passkey_registration_invalid` | 422 | The passkey registration ceremony could not be verified |
 | `rate_limited` | 429 | Too many requests were made in a given time window |
 | `internal_error` | 500 | An unexpected internal error occurred |
 
@@ -91,7 +96,7 @@ Example:
 
 # CSRF Errors
 
-### `csrf_invalid`
+### `forbidden`
 
 Returned when a request requiring CSRF protection does not provide a valid token.
 
@@ -105,8 +110,8 @@ Example:
 ```json
 {
   "error": {
-    "code": "csrf_invalid",
-    "message": "Invalid CSRF token"
+    "code": "forbidden",
+    "message": "CSRF validation failed"
   }
 }
 ```
@@ -169,6 +174,4 @@ The **error envelope format** and **error codes** are part of the Authara API co
 
 Applications may rely on these codes remaining stable within a given API version.
 
-See the full API contract:
-
-https://github.com/authara-org/authara/blob/main/APICONTRACT.md
+See the full [`contract/http.yaml`](../../contract/http.yaml) API contract.

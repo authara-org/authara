@@ -68,7 +68,7 @@ func (h *UIHandler) PasskeyRegisterOptionsPost(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	writeRawJSON(w, http.StatusOK, optionsJSON)
+	response.RawJSON(w, http.StatusOK, optionsJSON)
 }
 
 func (h *UIHandler) PasskeyRegisterFinishPost(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +162,7 @@ func (h *UIHandler) PasskeyAuthenticateOptionsPost(w http.ResponseWriter, r *htt
 		return
 	}
 
-	writeRawJSON(w, http.StatusOK, optionsJSON)
+	response.RawJSON(w, http.StatusOK, optionsJSON)
 }
 
 func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http.Request) {
@@ -171,6 +171,13 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 	if h.Passkeys == nil {
 		response.ErrorJSON(w, http.StatusServiceUnavailable, response.CodeInternalError, "Passkeys are not available.")
 		return
+	}
+	if h.Limiter != nil {
+		allowed, err := h.Limiter.AllowPasskeyLoginFinishAttempt(ctx, httputil.ClientIP(r))
+		if err != nil || !allowed {
+			response.ErrorJSON(w, http.StatusTooManyRequests, response.CodeRateLimited, "Too many attempts. Please try again later.")
+			return
+		}
 	}
 
 	in, err := decodePasskeyFinishRequest(r)
@@ -315,12 +322,6 @@ func decodePasskeyFinishRequest(r *http.Request) (passkeyFinishRequest, error) {
 	}
 
 	return in, nil
-}
-
-func writeRawJSON(w http.ResponseWriter, status int, body []byte) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_, _ = w.Write(body)
 }
 
 func normalizedReturnTo(raw string, fallback string) string {
