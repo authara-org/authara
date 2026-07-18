@@ -76,6 +76,27 @@ export async function getUserWithRefresh() {
   return request(`${API}/user`);
 }
 
+export function login(email, password) {
+  return mutate(`${API}/login?audience=app`, { email, password });
+}
+
+export function signup(email, password) {
+  return mutate(`${API}/signup?audience=app`, { email, password });
+}
+
+export function verifySignup(challengeID, code) {
+  return mutate(`${API}/signup/verify?audience=app`, {
+    challenge_id: challengeID,
+    code,
+  });
+}
+
+export function resendSignupChallenge(challengeID) {
+  return mutate(`${API}/challenges/resend`, {
+    challenge_id: challengeID,
+  });
+}
+
 export async function loadDashboard() {
   const user = await getUserWithRefresh();
   const capabilities = await request(`${API}/capabilities`);

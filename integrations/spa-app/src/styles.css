@@ -38,6 +38,7 @@ input:focus-visible {
 
 .centered {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 100vh;
   place-items: center;
   padding: 2rem;
@@ -100,6 +101,96 @@ h2 {
 .hero .actions {
   justify-content: flex-start;
   margin-top: 2rem;
+}
+
+.auth-card {
+  max-width: 34rem;
+}
+
+.auth-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 2rem 0 1.5rem;
+  padding: 0.3rem;
+  border-radius: 0.8rem;
+  background: #edf2ee;
+}
+
+.auth-switch button,
+.text-button {
+  border: 0;
+  cursor: pointer;
+  color: #52615b;
+  background: transparent;
+}
+
+.auth-switch button {
+  padding: 0.65rem;
+  border-radius: 0.6rem;
+  font-weight: 750;
+}
+
+.auth-switch button.active {
+  color: #176b52;
+  background: #fff;
+  box-shadow: 0 0.2rem 0.8rem rgb(31 62 50 / 8%);
+}
+
+.auth-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: #52615b;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.auth-form input {
+  min-height: 3rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #b7c9c0;
+  border-radius: 0.7rem;
+  color: #17201d;
+  background: #fff;
+}
+
+.auth-form .button {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.auth-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  gap: 1rem;
+}
+
+.text-button {
+  padding: 0;
+  color: #176b52;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+
+.auth-switch button:disabled,
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.auth-feedback {
+  min-height: 1.5rem;
+  margin-top: 1rem;
+}
+
+.auth-feedback p {
+  margin-bottom: 0;
 }
 
 .button {

@@ -6,12 +6,16 @@ import {
   createOrganization,
   inviteMember,
   loadDashboard,
+  login,
   logout,
   refreshSession,
+  resendSignupChallenge,
   resendInvitation,
   revokeInvitation,
+  signup,
   switchOrganization,
   updateOrganization,
+  verifySignup,
 } from "./api.js";
 import "./styles.css";
 
@@ -28,29 +32,206 @@ function formatDate(value) {
       }).format(date);
 }
 
-function SignedOut() {
+function AuthScreen({ onAuthenticated }) {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [challengeID, setChallengeID] = useState("");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  function selectMode(nextMode) {
+    setMode(nextMode);
+    setPassword("");
+    setChallengeID("");
+    setCode("");
+    setNotice("");
+    setError("");
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setNotice("");
+    setError("");
+
+    try {
+      if (mode === "verify") {
+        await verifySignup(challengeID, code);
+        await onAuthenticated();
+        return;
+      }
+
+      const result =
+        mode === "login"
+          ? await login(email, password)
+          : await signup(email, password);
+      if (result?.challenge_id) {
+        setChallengeID(result.challenge_id);
+        setPassword("");
+        setMode("verify");
+        setNotice("Check your email for the six-digit verification code.");
+        return;
+      }
+
+      await onAuthenticated();
+    } catch (requestError) {
+      setError(requestError.message || "Authentication failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendCode() {
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      await resendSignupChallenge(challengeID);
+      setNotice("If the challenge is still valid, a new code is on its way.");
+    } catch (requestError) {
+      setError(requestError.message || "Could not resend the code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const verifying = mode === "verify";
+
   return (
     <main className="centered">
-      <section className="hero" aria-labelledby="welcome-title">
-        <p className="eyebrow">Authara API example</p>
-        <h1 id="welcome-title">A private page, without an app backend.</h1>
+      <section className="hero auth-card" aria-labelledby="auth-title">
+        <p className="eyebrow">Authara browser API</p>
+        <h1 id="auth-title">
+          {verifying
+            ? "Verify your email."
+            : mode === "login"
+              ? "Welcome back."
+              : "Create your account."}
+        </h1>
         <p className="lede">
-          Sign in through Authara. This React app reads the resulting browser
-          session only through the public API.
+          {verifying
+            ? `Enter the code sent for ${email}.`
+            : "This custom SPA form talks directly to Authara and keeps the session in secure cookies."}
         </p>
-        <div className="actions">
-          <a
-            className="button primary"
-            href={`/auth/login?return_to=${returnTo}`}
-          >
-            Log in
-          </a>
-          <a
-            className="button secondary"
-            href={`/auth/signup?return_to=${returnTo}`}
-          >
-            Create account
-          </a>
+
+        {!verifying && (
+          <div className="auth-switch" aria-label="Authentication method">
+            <button
+              className={mode === "login" ? "active" : ""}
+              type="button"
+              aria-pressed={mode === "login"}
+              onClick={() => selectMode("login")}
+              disabled={busy}
+            >
+              Log in
+            </button>
+            <button
+              className={mode === "signup" ? "active" : ""}
+              type="button"
+              aria-pressed={mode === "signup"}
+              onClick={() => selectMode("signup")}
+              disabled={busy}
+            >
+              Sign up
+            </button>
+          </div>
+        )}
+
+        <form className="auth-form" onSubmit={submit}>
+          {verifying ? (
+            <label htmlFor="verification-code">
+              <span>Verification code</span>
+              <input
+                id="verification-code"
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                placeholder="123456"
+                required
+                autoFocus
+                disabled={busy}
+              />
+            </label>
+          ) : (
+            <>
+              <label htmlFor="auth-email">
+                <span>Email</span>
+                <input
+                  id="auth-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  required
+                  autoFocus
+                  disabled={busy}
+                />
+              </label>
+              <label htmlFor="auth-password">
+                <span>Password</span>
+                <input
+                  id="auth-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={
+                    mode === "login" ? "current-password" : "new-password"
+                  }
+                  minLength={8}
+                  maxLength={128}
+                  required
+                  disabled={busy}
+                />
+              </label>
+            </>
+          )}
+
+          <button className="button primary" type="submit" disabled={busy}>
+            {busy
+              ? "Please wait…"
+              : verifying
+                ? "Verify and continue"
+                : mode === "login"
+                  ? "Log in"
+                  : "Create account"}
+          </button>
+        </form>
+
+        {verifying && (
+          <div className="auth-actions">
+            <button
+              className="text-button"
+              type="button"
+              onClick={resendCode}
+              disabled={busy}
+            >
+              Resend code
+            </button>
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => selectMode("signup")}
+              disabled={busy}
+            >
+              Use another email
+            </button>
+          </div>
+        )}
+
+        <div className="auth-feedback" aria-live="polite">
+          {notice && <p>{notice}</p>}
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
         </div>
       </section>
     </main>
@@ -470,7 +651,8 @@ function App() {
       </main>
     );
   }
-  if (view.kind === "signed-out") return <SignedOut />;
+  if (view.kind === "signed-out")
+    return <AuthScreen onAuthenticated={load} />;
   if (view.kind === "error")
     return <ErrorView message={view.message} onRetry={load} />;
 

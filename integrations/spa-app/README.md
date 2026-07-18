@@ -1,6 +1,8 @@
 # Authara SPA integration
 
-A minimal React application that uses Authara's public browser API directly. It has no application backend and deliberately delegates login, signup, and account management to Authara's hosted pages.
+A minimal React application that uses Authara's public browser API directly. It
+has no application backend and implements its own password login, signup, and
+signup-verification forms. Account management still uses Authara's hosted page.
 
 ## Run with the repository
 
@@ -22,7 +24,8 @@ as `/spa/private`; the gateway must continue routing `/auth/*` to Authara.
 
 ## Included behavior
 
-- Authara-hosted login and signup, returning to `/spa/private`
+- custom password login and signup through `/auth/api/v1`
+- signup email-code verification and opaque challenge resending
 - cookie-session refresh followed by a single retry
 - current user, organization memberships, active organization, member list, and
   the signed-in user's member detail through the public organization API
@@ -33,6 +36,12 @@ as `/spa/private`; the gateway must continue routing `/auth/*` to Authara.
   invitations
 
 All requests use relative URLs. API mutations fetch `/auth/api/v1/csrf` first and send its value as `X-CSRF-Token`; access and refresh tokens stay in Authara's cookies and returned token strings are ignored.
+
+To exercise signup verification locally, run `make mailhog-up`, use the SMTP
+development configuration, and read the code at
+[http://localhost:8025](http://localhost:8025). With the `noop` email provider,
+disable challenges to test immediate signup because verification codes are not
+exposed.
 
 Direct organization management is opt-in through
 `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED`. The SPA never receives the
