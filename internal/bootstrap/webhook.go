@@ -35,8 +35,15 @@ func newWebhookWorker(cfg *config.Config, store *store.Store, logger *slog.Logge
 		sender,
 		logger,
 		webhook.WorkerConfig{
-			WorkerCount:  cfg.Webhook.WorkerCount,
-			PollInterval: webhook.DeliveryPoll,
+			WorkerCount:          cfg.Webhook.WorkerCount,
+			PollInterval:         webhook.DeliveryPoll,
+			MaxDeliveryAttempts:  cfg.Webhook.MaxDeliveryAttempts,
+			ProcessingStaleAfter: cfg.Webhook.ProcessingStaleAfter,
+			StaleReaperInterval:  cfg.Webhook.StaleReaperInterval,
+			DeliveredRetention:   cfg.Webhook.DeliveredRetention,
+			FailedRetention:      cfg.Webhook.FailedRetention,
+			CleanupInterval:      cfg.Webhook.CleanupInterval,
+			MaintenanceBatchSize: cfg.Webhook.MaintenanceBatchSize,
 		},
 	)
 }

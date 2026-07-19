@@ -12,6 +12,7 @@ type WebhookEvent struct {
 	Status    string `db:"status"`
 
 	AttemptCount        int        `db:"attempt_count"`
+	NextAttemptAt       time.Time  `db:"next_attempt_at"`
 	ProcessingStartedAt *time.Time `db:"processing_started_at"`
 	LastError           *string    `db:"last_error"`
 	DeliveredAt         *time.Time `db:"delivered_at"`

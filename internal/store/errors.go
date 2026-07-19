@@ -16,6 +16,7 @@ var (
 	ErrorVerificationCodeNotFound       = errors.New("verification code not found")
 	ErrorEmailJobNotFound               = errors.New("email job not found")
 	ErrorWebhookEventNotFound           = errors.New("webhook event not found")
+	ErrorWebhookEventLeaseLost          = errors.New("webhook event processing lease lost")
 	ErrorPendingSignupActionNotFound    = errors.New("pending signup action not found")
 	ErrorPendingPasswordResetNotFound   = errors.New("pending password reset not found")
 	ErrorPendingEmailChangeNotFound     = errors.New("pending email change not found")

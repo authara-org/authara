@@ -21,6 +21,7 @@ type WebhookEvent struct {
 	Status    WebhookEventStatus
 
 	AttemptCount        int
+	NextAttemptAt       time.Time
 	ProcessingStartedAt *time.Time
 	LastError           *string
 	DeliveredAt         *time.Time

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"testing"
 	"time"
 
@@ -19,7 +20,6 @@ func TestSender_Publish_ReturnsErrorOnNon2xx(t *testing.T) {
 	defer srv.Close()
 
 	sender := NewSender(srv.URL, "secret", srv.Client())
-	sender.Backoff = []time.Duration{0, 0}
 
 	err := sender.Publish(context.Background(), NewUserCreated(uuid.New(), time.Now()))
 	if err == nil {
@@ -27,29 +27,24 @@ func TestSender_Publish_ReturnsErrorOnNon2xx(t *testing.T) {
 	}
 }
 
-func TestSender_Publish_RetriesOnServerError(t *testing.T) {
+func TestSender_Publish_ReturnsServerErrorWithoutInlineRetry(t *testing.T) {
 	var calls int
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		if calls < 3 {
-			w.WriteHeader(http.StatusBadGateway)
-			_, _ = w.Write([]byte("temporary"))
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("temporary"))
 	}))
 	defer srv.Close()
 
 	sender := NewSender(srv.URL, "secret", srv.Client())
-	sender.Backoff = []time.Duration{0, 0}
 
 	err := sender.Publish(context.Background(), NewUserCreated(uuid.New(), time.Now()))
-	if err != nil {
-		t.Fatalf("expected success after retry, got %v", err)
+	if err == nil {
+		t.Fatal("expected server error")
 	}
-	if calls != 3 {
-		t.Fatalf("expected 3 calls, got %d", calls)
+	if calls != 1 {
+		t.Fatalf("expected one HTTP call, got %d", calls)
 	}
 }
 
@@ -64,7 +59,6 @@ func TestSender_Publish_DoesNotRetryOnBadRequest(t *testing.T) {
 	defer srv.Close()
 
 	sender := NewSender(srv.URL, "secret", srv.Client())
-	sender.Backoff = []time.Duration{0, 0}
 
 	err := sender.Publish(context.Background(), NewUserCreated(uuid.New(), time.Now()))
 	if err == nil {
@@ -72,6 +66,30 @@ func TestSender_Publish_DoesNotRetryOnBadRequest(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("expected 1 call, got %d", calls)
+	}
+}
+
+func TestSender_Publish_DrainsResponseBodyForConnectionReuse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("response body"))
+	}))
+	defer srv.Close()
+
+	var connections []httptrace.GotConnInfo
+	ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) {
+			connections = append(connections, info)
+		},
+	})
+	sender := NewSender(srv.URL, "secret", srv.Client())
+	for range 2 {
+		if err := sender.Publish(ctx, NewUserCreated(uuid.New(), time.Now())); err != nil {
+			t.Fatalf("Publish failed: %v", err)
+		}
+	}
+
+	if len(connections) != 2 || !connections[1].Reused {
+		t.Fatalf("expected second delivery to reuse its connection, got %+v", connections)
 	}
 }
 

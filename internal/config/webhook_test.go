@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestWebhook_EventEnabled(t *testing.T) {
 	w := Webhook{
@@ -46,13 +49,10 @@ func TestWebhook_EventEnabled_DefaultsToAllWhenConfiguredAndNoExplicitEvents(t *
 }
 
 func TestWebhook_ParseBuildsEnabledEventSet(t *testing.T) {
-	w := Webhook{
-		URLRaw:        "https://example.com/webhooks/authara",
-		Secret:        "secret",
-		EnabledEvents: []string{"user.created", " user.deleted "},
-		TimeoutRaw:    "5s",
-		WorkerCount:   2,
-	}
+	w := validWebhookConfig()
+	w.URLRaw = "https://example.com/webhooks/authara"
+	w.Secret = "secret"
+	w.EnabledEvents = []string{"user.created", " user.deleted "}
 
 	if err := w.validate(); err != nil {
 		t.Fatalf("validate failed: %v", err)
@@ -73,9 +73,33 @@ func TestWebhook_ParseBuildsEnabledEventSet(t *testing.T) {
 }
 
 func TestWebhook_ValidateRejectsInvalidWorkerCount(t *testing.T) {
-	w := Webhook{WorkerCount: 0}
+	w := validWebhookConfig()
+	w.WorkerCount = 0
 
 	if err := w.validate(); err == nil {
 		t.Fatal("expected zero webhook workers to be rejected")
+	}
+}
+
+func TestWebhook_ValidateRejectsTimeoutAtStaleThreshold(t *testing.T) {
+	w := validWebhookConfig()
+	w.Timeout = w.ProcessingStaleAfter
+
+	if err := w.validate(); err == nil {
+		t.Fatal("expected webhook timeout at the stale threshold to be rejected")
+	}
+}
+
+func validWebhookConfig() Webhook {
+	return Webhook{
+		Timeout:              5 * time.Second,
+		WorkerCount:          2,
+		MaxDeliveryAttempts:  3,
+		ProcessingStaleAfter: 2 * time.Minute,
+		StaleReaperInterval:  time.Minute,
+		DeliveredRetention:   24 * time.Hour,
+		FailedRetention:      30 * 24 * time.Hour,
+		CleanupInterval:      time.Hour,
+		MaintenanceBatchSize: 1000,
 	}
 }

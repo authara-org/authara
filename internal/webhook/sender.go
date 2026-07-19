@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"time"
@@ -38,11 +39,9 @@ type Publisher interface {
 }
 
 type Sender struct {
-	URL      string
-	Secret   string
-	Client   *http.Client
-	Attempts int
-	Backoff  []time.Duration
+	URL    string
+	Secret string
+	Client *http.Client
 }
 
 func NewSender(url, secret string, client *http.Client) *Sender {
@@ -51,11 +50,9 @@ func NewSender(url, secret string, client *http.Client) *Sender {
 	}
 
 	return &Sender{
-		URL:      url,
-		Secret:   secret,
-		Client:   client,
-		Attempts: 3,
-		Backoff:  []time.Duration{1 * time.Second, 3 * time.Second},
+		URL:    url,
+		Secret: secret,
+		Client: client,
 	}
 }
 
@@ -68,29 +65,8 @@ func (s *Sender) Publish(ctx context.Context, evt Envelope) error {
 }
 
 func (s *Sender) PublishPayload(ctx context.Context, eventType EventType, deliveryID string, body []byte) error {
-	var lastErr error
-
-	for attempt := 1; attempt <= s.Attempts; attempt++ {
-		retryable, err := s.sendOnce(ctx, eventType, deliveryID, body)
-		if err == nil {
-			return nil
-		}
-		lastErr = err
-
-		if attempt == s.Attempts {
-			break
-		}
-		if !retryable {
-			break
-		}
-
-		backoff := s.backoffForAttempt(attempt)
-		if err := sleepWithContext(ctx, backoff); err != nil {
-			return fmt.Errorf("webhook delivery aborted during backoff: %w", err)
-		}
-	}
-
-	return lastErr
+	_, err := s.sendOnce(ctx, eventType, deliveryID, body)
+	return err
 }
 
 func (s *Sender) sendOnce(ctx context.Context, eventType EventType, deliveryID string, body []byte) (bool, error) {
@@ -109,7 +85,10 @@ func (s *Sender) sendOnce(ctx context.Context, eventType EventType, deliveryID s
 		reason := retryReason(nil, err)
 		return shouldRetryReason(reason), fmt.Errorf("send webhook request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return false, nil
@@ -126,35 +105,6 @@ func (s *Sender) sendOnce(ctx context.Context, eventType EventType, deliveryID s
 	}
 
 	return false, fmt.Errorf("webhook endpoint returned status %d", resp.StatusCode)
-}
-
-func (s *Sender) backoffForAttempt(attempt int) time.Duration {
-	if len(s.Backoff) == 0 {
-		return 0
-	}
-
-	index := attempt - 1
-	if index < len(s.Backoff) {
-		return s.Backoff[index]
-	}
-
-	return s.Backoff[len(s.Backoff)-1]
-}
-
-func sleepWithContext(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return nil
-	}
-
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }
 
 func retryReason(resp *http.Response, err error) string {

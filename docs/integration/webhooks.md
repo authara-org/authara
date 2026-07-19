@@ -86,6 +86,8 @@ If unset, **all supported events are sent**.
 
 HTTP timeout for webhook delivery.
 
+It must be shorter than `AUTHARA_WEBHOOK_PROCESSING_STALE_AFTER`.
+
 Default:
 
 ```env
@@ -101,6 +103,18 @@ Default:
 ```env
 2
 ```
+
+### Queue reliability settings
+
+| Variable | Default |
+|---|---:|
+| `AUTHARA_WEBHOOK_MAX_DELIVERY_ATTEMPTS` | `3` |
+| `AUTHARA_WEBHOOK_PROCESSING_STALE_AFTER` | `2m` |
+| `AUTHARA_WEBHOOK_STALE_REAPER_INTERVAL` | `1m` |
+| `AUTHARA_WEBHOOK_DELIVERED_RETENTION` | `24h` |
+| `AUTHARA_WEBHOOK_FAILED_RETENTION` | `720h` |
+| `AUTHARA_WEBHOOK_CLEANUP_INTERVAL` | `1h` |
+| `AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE` | `1000` |
 
 ---
 
@@ -177,12 +191,18 @@ Always verify signatures before processing webhook events.
 - Workers drain available work immediately and poll again after one second only
   when the queue is empty
 - Delivery is **best-effort**
-- Network errors, HTTP 429, and HTTP 5xx responses are retried
-- Delivered and failed events remain recorded in the table
+- Network errors, HTTP 429, and HTTP 5xx responses are retried after 30 seconds,
+  then every two minutes up to `AUTHARA_WEBHOOK_MAX_DELIVERY_ATTEMPTS`
+- Other HTTP 4xx responses fail immediately
+- A reaper restores stale processing events according to the configured interval
+  and threshold
+- Cleanup applies the configured delivered and failed retention periods in
+  configured batch sizes
 
 This means:
 
 - committed actions have a durable webhook event even if the endpoint is down
+- the same delivery ID can be sent more than once after stale-job recovery
 - your handler should be idempotent
 
 ---

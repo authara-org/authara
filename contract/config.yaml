@@ -439,6 +439,48 @@ variables:
     type: int
     default: 2
 
+  - name: AUTHARA_WEBHOOK_MAX_DELIVERY_ATTEMPTS
+    stability: stable
+    required: false
+    type: int
+    default: 3
+
+  - name: AUTHARA_WEBHOOK_PROCESSING_STALE_AFTER
+    stability: stable
+    required: false
+    type: duration
+    default: 2m
+
+  - name: AUTHARA_WEBHOOK_STALE_REAPER_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 1m
+
+  - name: AUTHARA_WEBHOOK_DELIVERED_RETENTION
+    stability: stable
+    required: false
+    type: duration
+    default: 24h
+
+  - name: AUTHARA_WEBHOOK_FAILED_RETENTION
+    stability: stable
+    required: false
+    type: duration
+    default: 720h
+
+  - name: AUTHARA_WEBHOOK_CLEANUP_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 1h
+
+  - name: AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE
+    stability: stable
+    required: false
+    type: int
+    default: 1000
+
   # ------------------------------------------------------------
   # Access Policy
   # ------------------------------------------------------------
