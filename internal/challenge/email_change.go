@@ -85,11 +85,9 @@ func (s *Service) ExecuteEmailChange(
 		if err := s.store.DeletePendingEmailChangeByChallengeID(txCtx, action.ChallengeID); err != nil {
 			return err
 		}
-		return nil
+		return s.webhookPublisher.Publish(txCtx, webhook.NewUserUpdated(action.UserID, now))
 	}); err != nil {
 		return err
 	}
-
-	_ = s.webhookPublisher.Publish(ctx, webhook.NewUserUpdated(action.UserID, now))
 	return nil
 }

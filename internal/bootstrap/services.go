@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store/tx"
+	"github.com/authara-org/authara/internal/webhook"
 )
 
 type Services struct {
@@ -25,6 +26,7 @@ type Services struct {
 	Challenge      *challenge.Service
 	Verification   *challenge.VerificationCodeService
 	EmailWorker    *challenge.Worker
+	WebhookWorker  *webhook.Worker
 	OAuthProviders oauth.OAuthProviders
 }
 
@@ -32,7 +34,8 @@ func NewServices(app *App) (Services, error) {
 	txManager := tx.New(app.Store)
 	accessPolicy := newAccessPolicy(app)
 	oauthProviders := newOAuthProviders(app.Config)
-	webhookPublisher := newWebhookPublisher(app.Config)
+	webhookPublisher := newWebhookPublisher(app.Config, app.Store)
+	webhookWorker := newWebhookWorker(app.Config, app.Store, app.Logger)
 
 	accessTokenService := token.NewAccessTokenService(
 		app.Config.Token.KeySet,
@@ -122,6 +125,7 @@ func NewServices(app *App) (Services, error) {
 		Challenge:      challengeService,
 		Verification:   verificationCodeService,
 		EmailWorker:    emailWorker,
+		WebhookWorker:  webhookWorker,
 		OAuthProviders: oauthProviders,
 	}, nil
 }

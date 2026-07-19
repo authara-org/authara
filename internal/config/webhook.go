@@ -14,6 +14,7 @@ type Webhook struct {
 	Secret        string   `env:"AUTHARA_WEBHOOK_SECRET"`
 	EnabledEvents []string `env:"AUTHARA_WEBHOOK_ENABLED_EVENTS"`
 	TimeoutRaw    string   `env:"AUTHARA_WEBHOOK_TIMEOUT,default=5s"`
+	WorkerCount   int      `env:"AUTHARA_WEBHOOK_WORKER_COUNT,default=2"`
 
 	URL             string
 	Timeout         time.Duration
@@ -21,6 +22,10 @@ type Webhook struct {
 }
 
 func (w *Webhook) validate() error {
+	if w.WorkerCount <= 0 {
+		return fmt.Errorf("AUTHARA_WEBHOOK_WORKER_COUNT must be > 0")
+	}
+
 	if (w.URLRaw == "") != (w.Secret == "") {
 		return fmt.Errorf("AUTHARA_WEBHOOK_URL and AUTHARA_WEBHOOK_SECRET must be set together")
 	}

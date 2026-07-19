@@ -40,10 +40,13 @@ type webhookSignatureSpec struct {
 }
 
 type webhookDeliverySpec struct {
-	Method      string               `yaml:"method"`
-	ContentType string               `yaml:"content_type"`
-	Semantics   string               `yaml:"semantics"`
-	Retries     webhookRetryContract `yaml:"retries"`
+	Method        string               `yaml:"method"`
+	ContentType   string               `yaml:"content_type"`
+	Semantics     string               `yaml:"semantics"`
+	Mode          string               `yaml:"mode"`
+	PollInterval  string               `yaml:"poll_interval"`
+	DrainWhenBusy bool                 `yaml:"drain_when_busy"`
+	Retries       webhookRetryContract `yaml:"retries"`
 }
 
 type webhookRetryContract struct {
@@ -102,6 +105,15 @@ func TestWebhookContract_DeliverySettingsMatchCode(t *testing.T) {
 	}
 	if contract.Delivery.ContentType != "application/json" {
 		t.Fatalf("expected content type application/json, got %q", contract.Delivery.ContentType)
+	}
+	if contract.Delivery.Mode != DeliveryMode {
+		t.Fatalf("expected delivery mode %q, got %q", DeliveryMode, contract.Delivery.Mode)
+	}
+	if contract.Delivery.PollInterval != DeliveryPoll.String() {
+		t.Fatalf("expected poll interval %q, got %q", DeliveryPoll, contract.Delivery.PollInterval)
+	}
+	if !contract.Delivery.DrainWhenBusy {
+		t.Fatal("expected worker to drain queued webhook events before polling again")
 	}
 }
 

@@ -92,12 +92,13 @@ func (s *Service) DisableUser(ctx context.Context, actor Actor, userID uuid.UUID
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
 			return err
 		}
-		return s.audit(txCtx, actor, ActionUserDisabled, &userID, user.Email, map[string]any{}, meta)
+		if err := s.audit(txCtx, actor, ActionUserDisabled, &userID, user.Email, map[string]any{}, meta); err != nil {
+			return err
+		}
+		return s.webhookPublisher.Publish(txCtx, webhook.NewUserUpdated(userID, now))
 	}); err != nil {
 		return err
 	}
-
-	_ = s.webhookPublisher.Publish(ctx, webhook.NewUserUpdated(userID, now))
 	return nil
 }
 
@@ -111,12 +112,13 @@ func (s *Service) EnableUser(ctx context.Context, actor Actor, userID uuid.UUID,
 		if err := s.store.EnableUser(txCtx, userID); err != nil {
 			return err
 		}
-		return s.audit(txCtx, actor, ActionUserEnabled, &userID, user.Email, map[string]any{}, meta)
+		if err := s.audit(txCtx, actor, ActionUserEnabled, &userID, user.Email, map[string]any{}, meta); err != nil {
+			return err
+		}
+		return s.webhookPublisher.Publish(txCtx, webhook.NewUserUpdated(userID, now))
 	}); err != nil {
 		return err
 	}
-
-	_ = s.webhookPublisher.Publish(ctx, webhook.NewUserUpdated(userID, now))
 	return nil
 }
 

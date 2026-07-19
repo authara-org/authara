@@ -196,6 +196,9 @@ delivery:
   method: POST
   content_type: application/json
   semantics: best_effort
+  mode: database_queue
+  poll_interval: 1s
+  drain_when_busy: true
   retries:
     on:
       - network_error

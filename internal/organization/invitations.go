@@ -158,13 +158,11 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 			RawToken:   rawToken,
 			InviteURL:  inviteURL,
 		}
-		return nil
+		return s.publish(txCtx, webhook.NewOrganizationInvitationCreated(out.Invitation, now))
 	})
 	if err != nil {
 		return InvitationWithToken{}, err
 	}
-
-	s.publishBestEffort(ctx, webhook.NewOrganizationInvitationCreated(out.Invitation, now))
 
 	return out, nil
 }
@@ -238,14 +236,14 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 			RawToken:   rawToken,
 			InviteURL:  inviteURL,
 		}
-		return nil
+		if err := s.publish(txCtx, webhook.NewOrganizationInvitationRevoked(revoked, now)); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewOrganizationInvitationCreated(out.Invitation, now))
 	})
 	if err != nil {
 		return InvitationWithToken{}, err
 	}
-
-	s.publishBestEffort(ctx, webhook.NewOrganizationInvitationRevoked(revoked, now))
-	s.publishBestEffort(ctx, webhook.NewOrganizationInvitationCreated(out.Invitation, now))
 
 	return out, nil
 }
@@ -359,13 +357,11 @@ func (s *Service) RevokeInvitation(ctx context.Context, in RevokeInvitationInput
 		invitation.RevokedAt = &now
 		invitation.RevokedByUserID = in.RevokedByUserID
 		out = invitation
-		return nil
+		return s.publish(txCtx, webhook.NewOrganizationInvitationRevoked(out, now))
 	})
 	if err != nil {
 		return domain.OrganizationInvitation{}, err
 	}
-
-	s.publishBestEffort(ctx, webhook.NewOrganizationInvitationRevoked(out, now))
 
 	return out, nil
 }
@@ -493,17 +489,16 @@ func (s *Service) acceptInvitation(
 		result.Organization = org
 		result.Membership = membership
 		result.InvitationAccepted = true
+		if err := s.publish(txCtx, webhook.NewOrganizationInvitationAccepted(result.Invitation, now)); err != nil {
+			return err
+		}
+		if result.MembershipCreated {
+			return s.publish(txCtx, webhook.NewOrganizationMembershipCreated(result.Membership, now))
+		}
 		return nil
 	})
 	if err != nil {
 		return AcceptInvitationResult{}, err
-	}
-
-	if result.InvitationAccepted {
-		s.publishBestEffort(ctx, webhook.NewOrganizationInvitationAccepted(result.Invitation, now))
-	}
-	if result.MembershipCreated {
-		s.publishBestEffort(ctx, webhook.NewOrganizationMembershipCreated(result.Membership, now))
 	}
 
 	return result, nil

@@ -107,7 +107,7 @@ func (s *Service) UserExistsByEmail(ctx context.Context, email string) (bool, er
 }
 
 func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
-	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.LockPlatformRoleByName(txCtx, roles.DBAdminRoleName); err != nil {
 			return err
 		}
@@ -131,14 +131,11 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 			}
 		}
 
-		return s.store.DeleteUser(txCtx, userID)
-	}); err != nil {
-		return err
-	}
-
-	s.publishBestEffort(ctx, webhook.NewUserDeleted(userID, time.Now()))
-
-	return nil
+		if err := s.store.DeleteUser(txCtx, userID); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewUserDeleted(userID, time.Now()))
+	})
 }
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error) {
@@ -152,7 +149,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error)
 		return s.loginWithPassword(ctx, in)
 
 	case domain.ProviderGoogle:
-		return s.loginWithExternalIdentity(ctx, in)
+		var user domain.User
+		err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+			var err error
+			user, err = s.loginWithExternalIdentity(txCtx, in)
+			return err
+		})
+		return user, err
 
 	default:
 		return domain.User{}, ErrUnsupportedProvider
@@ -177,12 +180,16 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, erro
 
 	switch in.Provider {
 	case domain.ProviderPassword:
-		user, err := s.signupWithPassword(ctx, in)
-		if err != nil {
-			return domain.User{}, err
-		}
-		s.publishBestEffort(ctx, webhook.NewUserCreated(user.ID, time.Now()))
-		return user, nil
+		var user domain.User
+		err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+			var err error
+			user, err = s.signupWithPassword(txCtx, in)
+			if err != nil {
+				return err
+			}
+			return s.publish(txCtx, webhook.NewUserCreated(user.ID, time.Now()))
+		})
+		return user, err
 
 	default:
 		return domain.User{}, ErrUnsupportedProvider
@@ -248,8 +255,12 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 
 	if initialOrgCreated {
 		now := time.Now().UTC()
-		s.publishBestEffort(ctx, webhook.NewOrganizationCreated(initialOrg, now))
-		s.publishBestEffort(ctx, webhook.NewOrganizationMembershipCreated(initialMembership, now))
+		if err := s.publish(ctx, webhook.NewOrganizationCreated(initialOrg, now)); err != nil {
+			return domain.User{}, err
+		}
+		if err := s.publish(ctx, webhook.NewOrganizationMembershipCreated(initialMembership, now)); err != nil {
+			return domain.User{}, err
+		}
 	}
 
 	return user, nil
@@ -480,10 +491,16 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 	if createdUser {
 		now := time.Now().UTC()
 		if initialOrgCreated {
-			s.publishBestEffort(ctx, webhook.NewOrganizationCreated(initialOrg, now))
-			s.publishBestEffort(ctx, webhook.NewOrganizationMembershipCreated(initialMembership, now))
+			if err := s.publish(ctx, webhook.NewOrganizationCreated(initialOrg, now)); err != nil {
+				return domain.User{}, err
+			}
+			if err := s.publish(ctx, webhook.NewOrganizationMembershipCreated(initialMembership, now)); err != nil {
+				return domain.User{}, err
+			}
 		}
-		s.publishBestEffort(ctx, webhook.NewUserCreated(user.ID, now))
+		if err := s.publish(ctx, webhook.NewUserCreated(user.ID, now)); err != nil {
+			return domain.User{}, err
+		}
 	}
 
 	return user, nil
@@ -883,20 +900,18 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 	now := time.Now()
 
-	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.DisableUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		if err := s.store.RevokeAllSessionsForUser(txCtx, userID, now); err != nil {
 			return err
 		}
-		return s.store.DeleteRefreshTokensByUserID(txCtx, userID)
-	}); err != nil {
-		return err
-	}
-
-	s.publishBestEffort(ctx, webhook.NewUserUpdated(userID, now))
-	return nil
+		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewUserUpdated(userID, now))
+	})
 }
 
 func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username string) error {
@@ -905,8 +920,12 @@ func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username
 		return err
 	}
 
-	err = s.store.UpdateUsername(ctx, userID, username)
-
+	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.UpdateUsername(txCtx, userID, username); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewUserUpdated(userID, time.Now()))
+	})
 	if err != nil {
 		if store.IsUniqueViolation(err, store.ConstraintUserUsername) {
 			return ErrUsernameTaken
@@ -914,15 +933,15 @@ func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username
 		return err
 	}
 
-	s.publishBestEffort(ctx, webhook.NewUserUpdated(userID, time.Now()))
 	return nil
 }
 
-func (s *Service) publishBestEffort(ctx context.Context, evt webhook.Envelope) {
+func (s *Service) publish(ctx context.Context, evt webhook.Envelope) error {
 	err := s.webhookPublisher.Publish(ctx, evt)
 	if err != nil && s.logger != nil {
 		s.logger.Error("webhook publish failed", "event", evt.Type, "event_id", evt.ID, "err", err)
 	}
+	return err
 }
 
 func (s *Service) IsProviderEnabled(provider domain.Provider) bool {

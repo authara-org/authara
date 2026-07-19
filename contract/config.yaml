@@ -433,6 +433,12 @@ variables:
     type: duration
     default: 5s
 
+  - name: AUTHARA_WEBHOOK_WORKER_COUNT
+    stability: stable
+    required: false
+    type: int
+    default: 2
+
   # ------------------------------------------------------------
   # Access Policy
   # ------------------------------------------------------------

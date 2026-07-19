@@ -8,7 +8,8 @@ This allows your application to stay in sync with Authara without polling or tig
 
 # Overview
 
-When configured, Authara sends HTTP POST requests to your webhook endpoint.
+When configured, Authara stores webhook events in its database and a background
+worker pool sends HTTP POST requests to your webhook endpoint.
 
 Supported events:
 
@@ -91,6 +92,16 @@ Default:
 5s
 ```
 
+### `AUTHARA_WEBHOOK_WORKER_COUNT`
+
+Number of webhook events that can be delivered concurrently.
+
+Default:
+
+```env
+2
+```
+
 ---
 
 # Event Delivery
@@ -159,13 +170,19 @@ Always verify signatures before processing webhook events.
 
 # Delivery Semantics
 
-- Webhooks are sent **after the action succeeds**
+- The event type and complete JSON payload are inserted into `webhook_events`
+  in the same transaction as the action
+- Application requests never wait for webhook HTTP delivery
+- Workers claim the oldest pending events using `FOR UPDATE SKIP LOCKED`
+- Workers drain available work immediately and poll again after one second only
+  when the queue is empty
 - Delivery is **best-effort**
 - Network errors, HTTP 429, and HTTP 5xx responses are retried
+- Delivered and failed events remain recorded in the table
 
 This means:
 
-- your endpoint must be reliable
+- committed actions have a durable webhook event even if the endpoint is down
 - your handler should be idempotent
 
 ---

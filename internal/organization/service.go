@@ -62,12 +62,21 @@ func New(cfg Config) *Service {
 }
 
 func (s *Service) EnsureDefaultOrganization(ctx context.Context, user domain.User) (domain.Organization, domain.OrganizationMembership, error) {
-	org, membership, created, err := s.EnsureInitialOrganization(ctx, user, SignupSourceDirect)
-	if err == nil && created {
+	var org domain.Organization
+	var membership domain.OrganizationMembership
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		var created bool
+		var err error
+		org, membership, created, err = s.EnsureInitialOrganization(txCtx, user, SignupSourceDirect)
+		if err != nil || !created {
+			return err
+		}
 		now := time.Now().UTC()
-		s.publishBestEffort(ctx, webhook.NewOrganizationCreated(org, now))
-		s.publishBestEffort(ctx, webhook.NewOrganizationMembershipCreated(membership, now))
-	}
+		if err := s.publish(txCtx, webhook.NewOrganizationCreated(org, now)); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewOrganizationMembershipCreated(membership, now))
+	})
 	return org, membership, err
 }
 
@@ -150,15 +159,19 @@ func (s *Service) CreateOrganization(ctx context.Context, in CreateOrganizationI
 			UserID:         in.CreatedByUserID,
 			Role:           domain.OrganizationRoleOwner,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		if err := s.publish(txCtx, webhook.NewOrganizationCreated(org, now)); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewOrganizationMembershipCreated(membership, now))
 	})
 	if err != nil {
 		return domain.Organization{}, domain.OrganizationMembership{}, err
 	}
-
-	now := time.Now().UTC()
-	s.publishBestEffort(ctx, webhook.NewOrganizationCreated(org, now))
-	s.publishBestEffort(ctx, webhook.NewOrganizationMembershipCreated(membership, now))
 
 	return org, membership, nil
 }
@@ -167,11 +180,18 @@ func (s *Service) UpdateOrganization(ctx context.Context, organizationID uuid.UU
 	if organizationID == uuid.Nil {
 		return domain.Organization{}, store.ErrOrganizationNotFound
 	}
-	org, err := s.store.UpdateOrganizationName(ctx, organizationID, name)
+	var org domain.Organization
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		var err error
+		org, err = s.store.UpdateOrganizationName(txCtx, organizationID, name)
+		if err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewOrganizationUpdated(org, time.Now().UTC()))
+	})
 	if err != nil {
 		return domain.Organization{}, err
 	}
-	s.publishBestEffort(ctx, webhook.NewOrganizationUpdated(org, time.Now().UTC()))
 	return org, nil
 }
 
@@ -227,30 +247,38 @@ func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID u
 	if !validOrganizationRole(role) {
 		return domain.OrganizationMembership{}, ErrInvalidOrganizationRole
 	}
-	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
-		return domain.OrganizationMembership{}, err
-	}
-	membership, err := s.store.UpdateOrganizationMembershipRole(ctx, organizationID, userID, role)
+	var membership domain.OrganizationMembership
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if _, err := s.store.GetOrganizationByID(txCtx, organizationID); err != nil {
+			return err
+		}
+		var err error
+		membership, err = s.store.UpdateOrganizationMembershipRole(txCtx, organizationID, userID, role)
+		if err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewOrganizationMembershipUpdated(membership, time.Now().UTC()))
+	})
 	if err != nil {
 		return domain.OrganizationMembership{}, err
 	}
-	s.publishBestEffort(ctx, webhook.NewOrganizationMembershipUpdated(membership, time.Now().UTC()))
 	return membership, nil
 }
 
 func (s *Service) DeleteOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) error {
-	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
-		return err
-	}
-	membership, err := s.store.GetOrganizationMembership(ctx, organizationID, userID)
-	if err != nil {
-		return err
-	}
-	if err := s.store.DeleteOrganizationMembership(ctx, organizationID, userID); err != nil {
-		return err
-	}
-	s.publishBestEffort(ctx, webhook.NewOrganizationMembershipDeleted(membership, time.Now().UTC()))
-	return nil
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if _, err := s.store.GetOrganizationByID(txCtx, organizationID); err != nil {
+			return err
+		}
+		membership, err := s.store.GetOrganizationMembership(txCtx, organizationID, userID)
+		if err != nil {
+			return err
+		}
+		if err := s.store.DeleteOrganizationMembership(txCtx, organizationID, userID); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewOrganizationMembershipDeleted(membership, time.Now().UTC()))
+	})
 }
 
 func (s *Service) Mode() OrgMode {
@@ -280,9 +308,10 @@ func validOrganizationRole(role domain.OrganizationRole) bool {
 	}
 }
 
-func (s *Service) publishBestEffort(ctx context.Context, evt webhook.Envelope) {
+func (s *Service) publish(ctx context.Context, evt webhook.Envelope) error {
 	err := s.webhookPublisher.Publish(ctx, evt)
 	if err != nil && s.logger != nil {
 		s.logger.Error("webhook publish failed", "event", evt.Type, "event_id", evt.ID, "err", err)
 	}
+	return err
 }

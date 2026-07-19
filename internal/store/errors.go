@@ -15,6 +15,7 @@ var (
 	ErrorChallengeAlreadyConsumed       = errors.New("challenge already consumed")
 	ErrorVerificationCodeNotFound       = errors.New("verification code not found")
 	ErrorEmailJobNotFound               = errors.New("email job not found")
+	ErrorWebhookEventNotFound           = errors.New("webhook event not found")
 	ErrorPendingSignupActionNotFound    = errors.New("pending signup action not found")
 	ErrorPendingPasswordResetNotFound   = errors.New("pending password reset not found")
 	ErrorPendingEmailChangeNotFound     = errors.New("pending email change not found")

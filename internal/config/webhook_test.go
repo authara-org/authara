@@ -51,6 +51,7 @@ func TestWebhook_ParseBuildsEnabledEventSet(t *testing.T) {
 		Secret:        "secret",
 		EnabledEvents: []string{"user.created", " user.deleted "},
 		TimeoutRaw:    "5s",
+		WorkerCount:   2,
 	}
 
 	if err := w.validate(); err != nil {
@@ -68,5 +69,13 @@ func TestWebhook_ParseBuildsEnabledEventSet(t *testing.T) {
 	}
 	if w.EventEnabled("user.disabled") {
 		t.Fatal("expected user.disabled to be disabled")
+	}
+}
+
+func TestWebhook_ValidateRejectsInvalidWorkerCount(t *testing.T) {
+	w := Webhook{WorkerCount: 0}
+
+	if err := w.validate(); err == nil {
+		t.Fatal("expected zero webhook workers to be rejected")
 	}
 }

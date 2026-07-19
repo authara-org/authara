@@ -14,6 +14,8 @@ const (
 	EventHeader       = "X-Authara-Event"
 	DeliveryHeader    = "X-Authara-Delivery"
 	DeliverySemantics = "best_effort"
+	DeliveryMode      = "database_queue"
+	DeliveryPoll      = time.Second
 
 	RetryReasonNetworkError = "network_error"
 	RetryReasonHTTP429      = "http_429"
@@ -62,11 +64,14 @@ func (s *Sender) Publish(ctx context.Context, evt Envelope) error {
 	if err != nil {
 		return fmt.Errorf("marshal webhook event: %w", err)
 	}
+	return s.PublishPayload(ctx, evt.Type, evt.ID, body)
+}
 
+func (s *Sender) PublishPayload(ctx context.Context, eventType EventType, deliveryID string, body []byte) error {
 	var lastErr error
 
 	for attempt := 1; attempt <= s.Attempts; attempt++ {
-		retryable, err := s.sendOnce(ctx, evt, body)
+		retryable, err := s.sendOnce(ctx, eventType, deliveryID, body)
 		if err == nil {
 			return nil
 		}
@@ -88,15 +93,15 @@ func (s *Sender) Publish(ctx context.Context, evt Envelope) error {
 	return lastErr
 }
 
-func (s *Sender) sendOnce(ctx context.Context, evt Envelope, body []byte) (bool, error) {
+func (s *Sender) sendOnce(ctx context.Context, eventType EventType, deliveryID string, body []byte) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.URL, bytes.NewReader(body))
 	if err != nil {
 		return false, fmt.Errorf("build webhook request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(EventHeader, string(evt.Type))
-	req.Header.Set(DeliveryHeader, evt.ID)
+	req.Header.Set(EventHeader, string(eventType))
+	req.Header.Set(DeliveryHeader, deliveryID)
 	req.Header.Set(SignatureHeader, Sign(s.Secret, body))
 
 	resp, err := s.Client.Do(req)
