@@ -13,9 +13,48 @@ type RouteContractSpec struct {
 }
 
 const (
+	codeAccountLinkRequired        response.ErrorCode = "account_link_required"
 	codePasskeyAlreadyExists       response.ErrorCode = "passkey_already_exists"
 	codePasskeyRegistrationInvalid response.ErrorCode = "passkey_registration_invalid"
 )
+
+var GoogleOptionsGetErrors = map[response.ErrorCode]response.ErrorSpec{
+	response.CodeNotFound: {
+		Status: http.StatusNotFound,
+		Code:   response.CodeNotFound,
+	},
+	response.CodeInternalError: {
+		Status: http.StatusInternalServerError,
+		Code:   response.CodeInternalError,
+	},
+}
+
+var GoogleLoginPostErrors = map[response.ErrorCode]response.ErrorSpec{
+	response.CodeInvalidRequest: {
+		Status: http.StatusBadRequest,
+		Code:   response.CodeInvalidRequest,
+	},
+	response.CodeUnauthorized: {
+		Status: http.StatusUnauthorized,
+		Code:   response.CodeUnauthorized,
+	},
+	response.CodeForbidden: {
+		Status: http.StatusForbidden,
+		Code:   response.CodeForbidden,
+	},
+	response.CodeNotFound: {
+		Status: http.StatusNotFound,
+		Code:   response.CodeNotFound,
+	},
+	codeAccountLinkRequired: {
+		Status: http.StatusConflict,
+		Code:   codeAccountLinkRequired,
+	},
+	response.CodeInternalError: {
+		Status: http.StatusInternalServerError,
+		Code:   response.CodeInternalError,
+	},
+}
 
 var UserGetErrors = map[response.ErrorCode]response.ErrorSpec{
 	response.CodeUnauthorized: {
@@ -266,6 +305,16 @@ var APIRouteSpecs = []RouteContractSpec{
 		Method: http.MethodGet,
 		Path:   "/auth/api/v1/csrf",
 		Errors: CSRFGetErrors,
+	},
+	{
+		Method: http.MethodGet,
+		Path:   "/auth/api/v1/oauth/google/options",
+		Errors: GoogleOptionsGetErrors,
+	},
+	{
+		Method: http.MethodPost,
+		Path:   "/auth/api/v1/oauth/google",
+		Errors: GoogleLoginPostErrors,
 	},
 	{
 		Method: http.MethodPost,

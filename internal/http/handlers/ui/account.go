@@ -370,7 +370,7 @@ func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	err := h.Auth.DeleteUser(ctx, userID)
 	if err != nil {
 		message := "Error deleting Account"
-		status := http.StatusTooManyRequests
+		status := http.StatusInternalServerError
 		if errors.Is(err, auth.ErrCannotDeleteLastAdmin) {
 			message = "You cannot delete the last active admin account."
 			status = http.StatusUnprocessableEntity

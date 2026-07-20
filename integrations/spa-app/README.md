@@ -1,8 +1,9 @@
 # Authara SPA integration
 
 A minimal React application that uses Authara's public browser API directly. It
-has no application backend and implements its own password login, signup, and
-signup-verification forms. Account management still uses Authara's hosted page.
+has no application backend and implements its own password and Google login,
+signup, and signup-verification forms. Account management still uses Authara's
+hosted page.
 
 ## Run with the repository
 
@@ -18,6 +19,17 @@ available at [http://localhost:3001](http://localhost:3001), and Authara owns
 `/auth/*` on that same origin. Vite runs inside Compose, so React source changes
 are applied without rebuilding or restarting the stack.
 
+To show the Google button, set:
+
+```sh
+AUTHARA_OAUTH_PROVIDERS=google
+AUTHARA_OAUTH_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+```
+
+Add the gateway origin (for example `http://localhost:3001`) to the Google OAuth
+client's authorized JavaScript origins. The SPA does not load Google's script
+when the provider is disabled.
+
 For production, build the Docker image and serve it at `/spa/` behind an Authara
 Gateway. The nginx configuration serves `index.html` for client-side paths such
 as `/spa/private`; the gateway must continue routing `/auth/*` to Authara.
@@ -25,6 +37,8 @@ as `/spa/private`; the gateway must continue routing `/auth/*` to Authara.
 ## Included behavior
 
 - custom password login and signup through `/auth/api/v1`
+- custom Google login through the Google Identity Services button and Authara's
+  nonce-bound `/auth/api/v1/oauth/google` flow when Google is enabled
 - signup email-code verification and opaque challenge resending
 - cookie-session refresh followed by a single retry
 - current user, organization memberships, active organization, member list, and

@@ -59,6 +59,7 @@ The following error codes may be returned by Authara.
 |------|-------------|-------------|
 | `unauthorized` | 401 | The request does not contain a valid authenticated session |
 | `invalid_request` | 400 | The request is malformed or missing required parameters |
+| `account_link_required` | 409 | The external identity matches an existing account and must be linked explicitly |
 | `forbidden` | 403 | The request is not allowed, including CSRF validation failures |
 | `not_found` | 404 | The requested resource or enabled feature is not available |
 | `passkey_already_exists` | 409 | The passkey is already linked to an account |

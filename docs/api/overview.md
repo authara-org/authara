@@ -71,10 +71,10 @@ Authenticated API endpoints rely on the **Authara session cookies**:
 
 These cookies are automatically sent by the browser with each request.
 
-Password and passkey login endpoints also return the access and refresh tokens
-in JSON. Authenticated v1 endpoints currently read the access token from the
-`authara_access` cookie; they do not accept an `Authorization: Bearer` header.
-Non-browser clients therefore need a cookie-aware HTTP client.
+Password, passkey, and Google login endpoints also return the access and refresh
+tokens in JSON. Authenticated v1 endpoints currently read the access token from
+the `authara_access` cookie; they do not accept an `Authorization: Bearer`
+header. Non-browser clients therefore need a cookie-aware HTTP client.
 
 Authentication is performed using the **access token** contained in the `authara_access` cookie.
 

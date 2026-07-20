@@ -80,6 +80,14 @@ export function login(email, password) {
   return mutate(`${API}/login?audience=app`, { email, password });
 }
 
+export function getGoogleOptions() {
+  return request(`${API}/oauth/google/options`);
+}
+
+export function loginWithGoogle(credential, nonce) {
+  return mutate(`${API}/oauth/google?audience=app`, { credential, nonce });
+}
+
 export function signup(email, password) {
   return mutate(`${API}/signup?audience=app`, { email, password });
 }

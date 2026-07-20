@@ -203,10 +203,12 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 		// API
 		r.Route("/api/v1", func(r chi.Router) {
 			r.Get("/csrf", apih.CSRFGet)
+			r.Get("/oauth/google/options", apih.GoogleOptionsGet)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAPICSRF)
 
+				r.Post("/oauth/google", apih.GoogleLoginPost)
 				r.Post("/login", apih.LoginPost)
 				r.Post("/signup", apih.SignupPost)
 				r.Post("/signup/verify", apih.SignupVerifyPost)

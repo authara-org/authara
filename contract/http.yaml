@@ -93,6 +93,20 @@ routes:
     access: public
     notes: Returns a CSRF token and sets authara_csrf.
 
+  - method: GET
+    path: /auth/api/v1/oauth/google/options
+    stability: stable
+    kind: json
+    access: public
+    notes: Returns the enabled Google client ID and a login nonce, and sets authara_oauth_nonce.
+
+  - method: POST
+    path: /auth/api/v1/oauth/google
+    stability: stable
+    kind: json
+    access: public
+    notes: Verifies a Google ID token and creates a session.
+
   - method: POST
     path: /auth/api/v1/login
     stability: stable
@@ -383,6 +397,28 @@ json_success_responses:
       csrf_token: string
       cookies_set:
         - authara_csrf
+
+  - endpoint: GET /auth/api/v1/oauth/google/options
+    stability: stable
+    response:
+      status: 200
+      body:
+        client_id: string
+        nonce: string
+      cookies_set:
+        - authara_oauth_nonce
+
+  - endpoint: POST /auth/api/v1/oauth/google
+    stability: stable
+    response:
+      status: 200
+      body:
+        user: object
+        access_token: string
+        refresh_token: string
+      cookies_set:
+        - authara_access
+        - authara_refresh
 
   - endpoint: POST /auth/api/v1/login
     stability: stable
@@ -762,6 +798,30 @@ json_error_contracts:
   - endpoint: GET /auth/api/v1/csrf
     stability: stable
     errors:
+      - status: 500
+        code: internal_error
+
+  - endpoint: GET /auth/api/v1/oauth/google/options
+    stability: stable
+    errors:
+      - status: 404
+        code: not_found
+      - status: 500
+        code: internal_error
+
+  - endpoint: POST /auth/api/v1/oauth/google
+    stability: stable
+    errors:
+      - status: 400
+        code: invalid_request
+      - status: 401
+        code: unauthorized
+      - status: 403
+        code: forbidden
+      - status: 404
+        code: not_found
+      - status: 409
+        code: account_link_required
       - status: 500
         code: internal_error
 

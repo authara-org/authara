@@ -6,6 +6,7 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
@@ -14,15 +15,16 @@ import (
 )
 
 type APIHandler struct {
-	Auth          *auth.Service
-	Passkeys      *passkey.Service
-	Session       *session.Service
-	Organizations *organization.Service
-	Challenge     *challenge.Service
-	Verification  *challenge.VerificationCodeService
-	Limiter       ratelimiter.AuthLimiter
-	Logger        *slog.Logger
-	Google        *google.Client
+	Auth           *auth.Service
+	Passkeys       *passkey.Service
+	Session        *session.Service
+	Organizations  *organization.Service
+	Challenge      *challenge.Service
+	Verification   *challenge.VerificationCodeService
+	Limiter        ratelimiter.AuthLimiter
+	Logger         *slog.Logger
+	Google         *google.Client
+	OAuthProviders oauth.OAuthProviders
 
 	ChallengeEnabled bool
 	AccessTTL        time.Duration
@@ -39,6 +41,7 @@ func New(
 	limiter ratelimiter.AuthLimiter,
 	logger *slog.Logger,
 	google *google.Client,
+	oauthProviders oauth.OAuthProviders,
 	challengeEnabled bool,
 	accessTTL time.Duration,
 	refreshTTL time.Duration,
@@ -53,6 +56,7 @@ func New(
 		Limiter:          limiter,
 		Logger:           logger,
 		Google:           google,
+		OAuthProviders:   oauthProviders,
 		ChallengeEnabled: challengeEnabled,
 		AccessTTL:        accessTTL,
 		RefreshTTL:       refreshTTL,

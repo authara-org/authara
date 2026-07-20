@@ -3,9 +3,11 @@ import { afterEach, test } from "node:test";
 
 import {
   createOrganization,
+  getGoogleOptions,
   getUserWithRefresh,
   inviteMember,
   login,
+  loginWithGoogle,
   loadDashboard,
   resendSignupChallenge,
   resendInvitation,
@@ -257,5 +259,37 @@ test("custom authentication uses CSRF and the signup challenge API", async () =>
   assert.deepEqual(JSON.parse(mutations[3].options.body), {
     challenge_id: "challenge-1",
     code: "123456",
+  });
+});
+
+test("Google authentication initializes a nonce and exchanges the credential", async () => {
+  const calls = [];
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/oauth/google/options")) {
+      return json({ client_id: "google-client", nonce: "google-nonce" });
+    }
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    return json({ user: { id: "user-1" } });
+  };
+
+  const options = await getGoogleOptions();
+  await loginWithGoogle("google-id-token", options.nonce);
+
+  assert.deepEqual(
+    calls.map(({ url, options: requestOptions }) =>
+      `${requestOptions.method || "GET"} ${url}`,
+    ),
+    [
+      "GET /auth/api/v1/oauth/google/options",
+      "GET /auth/api/v1/csrf",
+      "POST /auth/api/v1/oauth/google?audience=app",
+    ],
+  );
+  assert.equal(calls[2].options.headers["X-CSRF-Token"], "csrf-token");
+  assert.deepEqual(JSON.parse(calls[2].options.body), {
+    credential: "google-id-token",
+    nonce: "google-nonce",
   });
 });

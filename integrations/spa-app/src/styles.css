@@ -163,6 +163,39 @@ h2 {
   margin-top: 0.35rem;
 }
 
+.google-auth.pending {
+  visibility: hidden;
+}
+
+.google-auth.disabled {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 1.25rem 0;
+  gap: 0.75rem;
+  color: #69756f;
+  font-size: 0.85rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  flex: 1;
+  height: 1px;
+  background: #d6ded8;
+  content: "";
+}
+
+.google-button {
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  place-items: center;
+}
+
 .auth-actions {
   display: flex;
   justify-content: space-between;

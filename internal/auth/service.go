@@ -131,6 +131,9 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 			}
 		}
 
+		if err := s.store.DeleteUserEmailReferences(txCtx, userID, user.Email); err != nil {
+			return err
+		}
 		if err := s.store.DeleteUser(txCtx, userID); err != nil {
 			return err
 		}

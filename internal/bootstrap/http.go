@@ -100,6 +100,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			authLimiter,
 			app.Logger,
 			googleClient,
+			app.Services.OAuthProviders,
 			enabledFeatures.ChallengeEnabled,
 			app.Config.Token.AccessTokenTTL,
 			app.Config.Session.RefreshTokenTTL,

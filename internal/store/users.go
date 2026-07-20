@@ -257,6 +257,33 @@ func (s *Store) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 	return err
 }
 
+func (s *Store) DeleteUserEmailReferences(ctx context.Context, userID uuid.UUID, email string) error {
+	email = normalizeEmail(email)
+	if email == "" {
+		return nil
+	}
+
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`DELETE FROM organization_invitations WHERE lower(email) = $1 OR accepted_by_user_id = $2`, []any{email, userID}},
+		{`DELETE FROM allowed_emails WHERE lower(email) = $1`, []any{email}},
+		{`DELETE FROM email_jobs WHERE lower(to_email) = $1`, []any{email}},
+		{`DELETE FROM pending_signup_actions WHERE lower(email) = $1`, []any{email}},
+		{`DELETE FROM pending_email_changes WHERE user_id = $1 OR lower(old_email) = $2 OR lower(new_email) = $2`, []any{userID, email}},
+		{`DELETE FROM pending_provider_links WHERE user_id = $1 OR lower(coalesce(provider_email, '')) = $2`, []any{userID, email}},
+		{`DELETE FROM challenges WHERE lower(email) = $1`, []any{email}},
+		{`UPDATE admin_audit_events SET target_email = NULL WHERE lower(target_email) = $1`, []any{email}},
+	}
+	for _, stmt := range statements {
+		if _, err := s.exec(ctx, stmt.query, stmt.args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func normalizeEmail(e string) string {
 	return strings.ToLower(strings.TrimSpace(e))
 }

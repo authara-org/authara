@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import {
   APIError,
   createOrganization,
+  getGoogleOptions,
   inviteMember,
   loadDashboard,
   login,
+  loginWithGoogle,
   logout,
   refreshSession,
   resendSignupChallenge,
@@ -21,6 +23,27 @@ import "./styles.css";
 
 const privatePath = "/spa/private";
 const returnTo = encodeURIComponent(privatePath);
+const googleIdentityURL = "https://accounts.google.com/gsi/client";
+
+let googleIdentityPromise;
+
+function loadGoogleIdentity() {
+  if (window.google?.accounts?.id) return Promise.resolve(window.google);
+  if (googleIdentityPromise) return googleIdentityPromise;
+
+  googleIdentityPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = googleIdentityURL;
+    script.async = true;
+    script.onload = () =>
+      window.google?.accounts?.id
+        ? resolve(window.google)
+        : reject(new Error("Google login did not initialize."));
+    script.onerror = () => reject(new Error("Could not load Google login."));
+    document.head.append(script);
+  });
+  return googleIdentityPromise;
+}
 
 function formatDate(value) {
   const date = new Date(value);
@@ -30,6 +53,67 @@ function formatDate(value) {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(date);
+}
+
+function GoogleLogin({ busy, onAuthenticated, setBusy, setError }) {
+  const buttonRef = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    getGoogleOptions()
+      .then(async (options) => [options, await loadGoogleIdentity()])
+      .then(([options, google]) => {
+        if (!active || !buttonRef.current) return;
+
+        google.accounts.id.initialize({
+          client_id: options.client_id,
+          nonce: options.nonce,
+          callback: async ({ credential }) => {
+            if (!credential) return;
+            setBusy(true);
+            setError("");
+            try {
+              await loginWithGoogle(credential, options.nonce);
+              await onAuthenticated();
+            } catch (error) {
+              setError(error.message || "Google login failed.");
+            } finally {
+              setBusy(false);
+            }
+          },
+        });
+        google.accounts.id.renderButton(buttonRef.current, {
+          type: "standard",
+          theme: "outline",
+          size: "large",
+          text: "continue_with",
+          width: Math.min(buttonRef.current.clientWidth, 400),
+        });
+        setVisible(true);
+      })
+      .catch((error) => {
+        if (active && (!(error instanceof APIError) || error.status !== 404)) {
+          setError(error.message || "Google login is unavailable.");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [onAuthenticated, setBusy, setError]);
+
+  return (
+    <div
+      className={`google-auth ${visible ? "" : "pending"} ${busy ? "disabled" : ""}`}
+    >
+      <div className="auth-divider" aria-hidden="true">
+        <span>or</span>
+      </div>
+      <div className="google-button" ref={buttonRef} />
+    </div>
+  );
 }
 
 function AuthScreen({ onAuthenticated }) {
@@ -203,6 +287,15 @@ function AuthScreen({ onAuthenticated }) {
                   : "Create account"}
           </button>
         </form>
+
+        {!verifying && (
+          <GoogleLogin
+            busy={busy}
+            onAuthenticated={onAuthenticated}
+            setBusy={setBusy}
+            setError={setError}
+          />
+        )}
 
         {verifying && (
           <div className="auth-actions">

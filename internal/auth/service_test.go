@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -979,6 +981,157 @@ func TestDeleteUser_RemovesUser(t *testing.T) {
 			t.Fatal("expected deleted user lookup to fail")
 		}
 	})
+}
+
+func TestDeleteUser_RemovesEmailReferences(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "delete-invite-owner@example.com",
+			Username: "delete-invite-owner",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser owner failed: %v", err)
+		}
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "delete-invite-user@example.com",
+			Username: "delete-invite-user",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser user failed: %v", err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, owner.Username, domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatalf("EnsureOrganizationForUser failed: %v", err)
+		}
+		invitation, err := tdb.Store.CreateOrganizationInvitation(ctx, domain.OrganizationInvitation{
+			OrganizationID:  org.ID,
+			Email:           user.Email,
+			Role:            domain.OrganizationRoleMember,
+			TokenHash:       "delete-invite-user-token",
+			InvitedByUserID: &owner.ID,
+			ExpiresAt:       time.Now().Add(time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("CreateOrganizationInvitation failed: %v", err)
+		}
+		if err := tdb.Store.MarkOrganizationInvitationAccepted(ctx, invitation.ID, user.ID, time.Now()); err != nil {
+			t.Fatalf("MarkOrganizationInvitationAccepted failed: %v", err)
+		}
+		if err := tdb.Store.CreateAllowedEmail(ctx, domain.AllowedEmail{Email: user.Email}); err != nil {
+			t.Fatalf("CreateAllowedEmail failed: %v", err)
+		}
+		if _, err := tdb.Store.CreateEmailJob(ctx, domain.EmailJob{
+			ToEmail:       user.Email,
+			Template:      domain.EmailTemplateOrganizationInvite,
+			Status:        domain.EmailJobStatusPending,
+			NextAttemptAt: time.Now(),
+		}); err != nil {
+			t.Fatalf("CreateEmailJob failed: %v", err)
+		}
+		targetEmail := user.Email
+		if _, err := tdb.Store.CreateAdminAuditEvent(ctx, domain.AdminAuditEvent{
+			Action:       "test",
+			TargetUserID: &user.ID,
+			TargetEmail:  &targetEmail,
+			Metadata:     json.RawMessage(`{}`),
+		}); err != nil {
+			t.Fatalf("CreateAdminAuditEvent failed: %v", err)
+		}
+		createPendingEmailReferences(t, ctx, user.ID, user.Email)
+
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+		})
+
+		if err := svc.DeleteUser(ctx, user.ID); err != nil {
+			t.Fatalf("DeleteUser failed: %v", err)
+		}
+
+		if _, err := tdb.Store.GetOrganizationInvitationByID(ctx, invitation.ID); !errors.Is(err, store.ErrOrganizationInvitationNotFound) {
+			t.Fatalf("expected invitation email history to be removed, got %v", err)
+		}
+		allowed, err := tdb.Store.IsEmailAllowed(ctx, user.Email)
+		if err != nil {
+			t.Fatalf("IsEmailAllowed failed: %v", err)
+		}
+		if allowed {
+			t.Fatal("expected deleted user email to be removed from allowlist")
+		}
+		if refs := countEmailReferences(t, ctx, user.Email); refs != 0 {
+			t.Fatalf("expected deleted user email to be removed from direct references, got %d", refs)
+		}
+	})
+}
+
+type txQueryer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func queryerFromTxContext(t *testing.T, ctx context.Context) txQueryer {
+	t.Helper()
+
+	q, ok := ctx.Value(store.DbKey).(txQueryer)
+	if !ok {
+		t.Fatal("expected transaction queryer in context")
+	}
+	return q
+}
+
+func createPendingEmailReferences(t *testing.T, ctx context.Context, userID uuid.UUID, email string) {
+	t.Helper()
+
+	q := queryerFromTxContext(t, ctx)
+	var challengeID uuid.UUID
+	if err := q.QueryRowContext(ctx, `
+		INSERT INTO challenges (purpose, email, expires_at)
+		VALUES ('signup', $1, now() + interval '1 hour')
+		RETURNING id
+	`, email).Scan(&challengeID); err != nil {
+		t.Fatalf("insert challenge failed: %v", err)
+	}
+	if _, err := q.ExecContext(ctx, `
+		INSERT INTO pending_signup_actions (challenge_id, email, username, password_hash)
+		VALUES ($1, $2, 'deleted-email-pending', 'hash')
+	`, challengeID, email); err != nil {
+		t.Fatalf("insert pending signup failed: %v", err)
+	}
+	if _, err := q.ExecContext(ctx, `
+		INSERT INTO pending_email_changes (challenge_id, user_id, old_email, new_email)
+		VALUES ($1, $2, $3, $3)
+	`, challengeID, userID, email); err != nil {
+		t.Fatalf("insert pending email change failed: %v", err)
+	}
+	if _, err := q.ExecContext(ctx, `
+		INSERT INTO pending_provider_links (user_id, provider, expires_at, provider_email)
+		VALUES ($1, 'google', now() + interval '1 hour', $2)
+	`, userID, email); err != nil {
+		t.Fatalf("insert pending provider link failed: %v", err)
+	}
+}
+
+func countEmailReferences(t *testing.T, ctx context.Context, email string) int {
+	t.Helper()
+
+	var count int
+	err := queryerFromTxContext(t, ctx).QueryRowContext(ctx, `
+		SELECT
+			(SELECT count(*) FROM organization_invitations WHERE lower(email) = lower($1)) +
+			(SELECT count(*) FROM allowed_emails WHERE lower(email) = lower($1)) +
+			(SELECT count(*) FROM email_jobs WHERE lower(to_email) = lower($1)) +
+			(SELECT count(*) FROM challenges WHERE lower(email) = lower($1)) +
+			(SELECT count(*) FROM pending_signup_actions WHERE lower(email) = lower($1)) +
+			(SELECT count(*) FROM pending_email_changes WHERE lower(old_email) = lower($1) OR lower(new_email) = lower($1)) +
+			(SELECT count(*) FROM pending_provider_links WHERE lower(coalesce(provider_email, '')) = lower($1)) +
+			(SELECT count(*) FROM admin_audit_events WHERE lower(target_email) = lower($1))
+	`, email).Scan(&count)
+	if err != nil {
+		t.Fatalf("count email references failed: %v", err)
+	}
+	return count
 }
 
 func TestDeleteUserRejectsLastActiveAdmin(t *testing.T) {

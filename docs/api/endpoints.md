@@ -74,6 +74,60 @@ the cookie.
 
 ---
 
+## Log in with Google
+
+Google login must be enabled with `AUTHARA_OAUTH_PROVIDERS=google`.
+
+First initialize the login attempt:
+
+```text
+GET /auth/api/v1/oauth/google/options
+```
+
+The response sets the HttpOnly `authara_oauth_nonce` cookie and returns:
+
+```json
+{
+  "client_id": "<google-client-id>",
+  "nonce": "<nonce>"
+}
+```
+
+Pass both values to Google Identity Services. After Google returns its ID-token
+credential, exchange it while preserving the nonce cookie:
+
+```text
+POST /auth/api/v1/oauth/google?audience=app
+X-CSRF-Token: <csrf-token>
+Content-Type: application/json
+```
+
+```json
+{
+  "credential": "<google-id-token>",
+  "nonce": "<nonce>"
+}
+```
+
+`audience` is optional and defaults to `app`; supported values are `app` and
+`admin`. On success Authara returns the same user, access-token, and
+refresh-token response as password login and sets both session cookies.
+
+React clients should call both the CSRF and Google-options endpoints with
+credentials enabled. Mobile clients must likewise preserve and return the
+cookies set by these endpoints; the returned access and refresh tokens can
+then be stored by the client.
+
+If the Google email belongs to an existing account that has not linked Google,
+the endpoint returns `409 account_link_required`. The user must sign in using
+an existing method and link Google from the account page; Authara never links
+accounts based only on a matching email address.
+
+Errors: `400 invalid_request`, `401 unauthorized`, `403 forbidden`,
+`404 not_found`, `409 account_link_required`, or `500 internal_error`.
+
+---
+
 ## Log in with a password
 
 ```text
