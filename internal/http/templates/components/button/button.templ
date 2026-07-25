@@ -135,10 +135,12 @@ templ LinkButton(cfg LinkButtonConfig) {
 	</a>
 }
 
-templ Back() {
+templ Back(fallback string) {
 	<button
+		type="button"
+		data-back-fallback={ fallback }
 		class="text-grey-600 dark:text-grey-300 hover:text-grey-800 dark:hover:text-grey-100 cursor-pointer transition-colors"
-		onclick="window.history.back();"
+		onclick="const fallback = this.dataset.backFallback || '/'; if (document.referrer) { try { const referrer = new URL(document.referrer); if (referrer.origin === window.location.origin) { window.history.back(); return; } } catch (_) {} } window.location.href = fallback;"
 	>
 		<span class="btn-label flex items-center justify-center gap-1.5">
 			<span class="h-5 w-5 stroke-[1.5]">

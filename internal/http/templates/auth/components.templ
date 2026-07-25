@@ -3,6 +3,7 @@ package auth
 import "github.com/authara-org/authara/internal/http/templates/components/card"
 import "github.com/authara-org/authara/internal/http/templates/components/button"
 import "github.com/authara-org/authara/internal/http/templates/components/theme"
+import "github.com/authara-org/authara/internal/http/kit/httpctx"
 
 templ AuthLayout() {
 	<div class="flex w-full min-h-screen bg-background-light dark:bg-background-dark">
@@ -18,7 +19,7 @@ templ AuthLayout() {
 
 templ CardHeader() {
 	<div class="flex justify-between mb-6 sm:mb-10">
-		@button.Back()
+		@button.Back(httpctx.ReturnToOrDefault(ctx))
 		<div class="block sm:hidden">
 			@theme.ThemeToggle()
 		</div>
