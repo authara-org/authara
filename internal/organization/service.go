@@ -15,23 +15,25 @@ import (
 )
 
 type Config struct {
-	Store            *store.Store
-	Tx               *tx.Manager
-	WebhookPublisher webhook.Publisher
-	Logger           *slog.Logger
-	InvitationTTL    time.Duration
-	PublicURL        string
-	Mode             OrgMode
+	Store              *store.Store
+	Tx                 *tx.Manager
+	WebhookPublisher   webhook.Publisher
+	Logger             *slog.Logger
+	InvitationTTL      time.Duration
+	PublicURL          string
+	Mode               OrgMode
+	IncludeCodeInEmail bool
 }
 
 type Service struct {
-	store            *store.Store
-	tx               *tx.Manager
-	webhookPublisher webhook.Publisher
-	logger           *slog.Logger
-	invitationTTL    time.Duration
-	publicURL        string
-	mode             OrgMode
+	store              *store.Store
+	tx                 *tx.Manager
+	webhookPublisher   webhook.Publisher
+	logger             *slog.Logger
+	invitationTTL      time.Duration
+	publicURL          string
+	mode               OrgMode
+	includeCodeInEmail bool
 }
 
 type UserOrganization struct {
@@ -51,13 +53,14 @@ func New(cfg Config) *Service {
 	}
 
 	return &Service{
-		store:            cfg.Store,
-		tx:               cfg.Tx,
-		webhookPublisher: pub,
-		logger:           cfg.Logger,
-		invitationTTL:    cfg.InvitationTTL,
-		publicURL:        strings.TrimRight(cfg.PublicURL, "/"),
-		mode:             cfg.Mode,
+		store:              cfg.Store,
+		tx:                 cfg.Tx,
+		webhookPublisher:   pub,
+		logger:             cfg.Logger,
+		invitationTTL:      cfg.InvitationTTL,
+		publicURL:          strings.TrimRight(cfg.PublicURL, "/"),
+		mode:               cfg.Mode,
+		includeCodeInEmail: cfg.IncludeCodeInEmail,
 	}
 }
 

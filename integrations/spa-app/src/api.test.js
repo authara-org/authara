@@ -226,7 +226,7 @@ test("custom authentication uses CSRF and the signup challenge API", async () =>
   };
 
   await login("user@example.com", "password123");
-  const started = await signup("new@example.com", "password123");
+  const started = await signup("new@example.com", "password123", "invite-code");
   await resendSignupChallenge(started.challenge_id);
   await verifySignup(started.challenge_id, "123456");
 
@@ -251,6 +251,7 @@ test("custom authentication uses CSRF and the signup challenge API", async () =>
   });
   assert.deepEqual(JSON.parse(mutations[1].options.body), {
     email: "new@example.com",
+    invitation_code: "invite-code",
     password: "password123",
   });
   assert.deepEqual(JSON.parse(mutations[2].options.body), {

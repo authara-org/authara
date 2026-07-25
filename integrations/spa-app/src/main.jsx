@@ -120,6 +120,7 @@ function AuthScreen({ onAuthenticated }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [invitationCode, setInvitationCode] = useState("");
   const [challengeID, setChallengeID] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -129,6 +130,7 @@ function AuthScreen({ onAuthenticated }) {
   function selectMode(nextMode) {
     setMode(nextMode);
     setPassword("");
+    setInvitationCode("");
     setChallengeID("");
     setCode("");
     setNotice("");
@@ -151,7 +153,11 @@ function AuthScreen({ onAuthenticated }) {
       const result =
         mode === "login"
           ? await login(email, password)
-          : await signup(email, password);
+          : await signup(
+              email,
+              password,
+              mode === "invite" ? invitationCode : "",
+            );
       if (result?.challenge_id) {
         setChallengeID(result.challenge_id);
         setPassword("");
@@ -193,7 +199,9 @@ function AuthScreen({ onAuthenticated }) {
             ? "Verify your email."
             : mode === "login"
               ? "Welcome back."
-              : "Create your account."}
+              : mode === "invite"
+                ? "Join with an invitation."
+                : "Create your account."}
         </h1>
         <p className="lede">
           {verifying
@@ -220,6 +228,15 @@ function AuthScreen({ onAuthenticated }) {
               disabled={busy}
             >
               Sign up
+            </button>
+            <button
+              className={mode === "invite" ? "active" : ""}
+              type="button"
+              aria-pressed={mode === "invite"}
+              onClick={() => selectMode("invite")}
+              disabled={busy}
+            >
+              Invite
             </button>
           </div>
         )}
@@ -274,6 +291,21 @@ function AuthScreen({ onAuthenticated }) {
                   disabled={busy}
                 />
               </label>
+              {mode === "invite" && (
+                <label htmlFor="invitation-code">
+                  <span>Invitation code</span>
+                  <input
+                    id="invitation-code"
+                    value={invitationCode}
+                    onChange={(event) => setInvitationCode(event.target.value)}
+                    autoComplete="one-time-code"
+                    spellCheck="false"
+                    className="mono-input"
+                    required
+                    disabled={busy}
+                  />
+                </label>
+              )}
             </>
           )}
 
@@ -284,7 +316,9 @@ function AuthScreen({ onAuthenticated }) {
                 ? "Verify and continue"
                 : mode === "login"
                   ? "Log in"
-                  : "Create account"}
+                  : mode === "invite"
+                    ? "Join organization"
+                    : "Create account"}
           </button>
         </form>
 

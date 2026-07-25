@@ -127,6 +127,48 @@ func TestSignupChallengeExistingEmailIsOpaque(t *testing.T) {
 	})
 }
 
+func TestSignupChallengeWithInvitationCodeRejectsWrongEmail(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		h := newAPIChallengeTestHandler(t, tdb)
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "challenge-invite-owner@example.com",
+			Username: "challenge-invite-owner",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser owner failed: %v", err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, owner.Username, domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatalf("EnsureOrganizationForUser owner failed: %v", err)
+		}
+		invite, err := h.Organizations.CreateInvitation(ctx, organization.CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			Email:          "challenge-right-invited@example.com",
+			Now:            time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatalf("CreateInvitation failed: %v", err)
+		}
+
+		req := apiJSONRequest(
+			ctx,
+			http.MethodPost,
+			"/auth/api/v1/signup",
+			`{"email":"challenge-wrong-invited@example.com","password":"password123","invitation_code":"`+invite.RawToken+`"}`,
+		)
+		rr := httptest.NewRecorder()
+		h.SignupPost(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected signup status %d, got %d body=%s", http.StatusBadRequest, rr.Code, rr.Body.String())
+		}
+		assertErrorMessage(t, rr.Body.Bytes(), "Invitation code does not match this email.")
+	})
+}
+
 func TestChallengeResendKeepsChallengeStateOpaque(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -215,6 +257,7 @@ func newAPIChallengeTestHandler(t *testing.T, tdb *testutil.TestDB) *APIHandler 
 			Tx:            tdb.Tx,
 			Organizations: organizations,
 		}),
+		Organizations:    organizations,
 		Session:          newAPIHandlerTestSessionService(t, tdb),
 		Challenge:        challengeService,
 		Verification:     verification,

@@ -54,6 +54,7 @@ func BuildEmailChangeCodeMessage(code string) (Message, error) {
 type OrganizationInvitationPayload struct {
 	OrganizationName string `json:"organization_name"`
 	InviteURL        string `json:"invite_url"`
+	InvitationCode   string `json:"invitation_code,omitempty"`
 	Role             string `json:"role"`
 	ExpiresAt        string `json:"expires_at"`
 }
@@ -64,14 +65,14 @@ func BuildOrganizationInvitationMessage(payload OrganizationInvitationPayload) (
 		return Message{}, ErrInvalidOrganizationName
 	}
 
-	htmlBody, err := RenderOrganizationInvitationHTML(orgName, payload.InviteURL, payload.Role, payload.ExpiresAt)
+	htmlBody, err := RenderOrganizationInvitationHTML(orgName, payload.InviteURL, payload.InvitationCode, payload.Role, payload.ExpiresAt)
 	if err != nil {
 		return Message{}, err
 	}
 
 	return Message{
 		Subject: "You're invited to " + orgName,
-		Text:    templates.OrganizationInvitationText(orgName, payload.InviteURL, payload.Role, payload.ExpiresAt),
+		Text:    templates.OrganizationInvitationText(orgName, payload.InviteURL, payload.InvitationCode, payload.Role, payload.ExpiresAt),
 		HTML:    htmlBody,
 	}, nil
 }

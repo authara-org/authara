@@ -149,7 +149,7 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 			return err
 		}
 
-		if err := s.enqueueInvitationEmail(txCtx, created, org, inviteURL, now); err != nil {
+		if err := s.enqueueInvitationEmail(txCtx, created, org, inviteURL, rawToken, now); err != nil {
 			return err
 		}
 
@@ -227,7 +227,7 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 			return err
 		}
 
-		if err := s.enqueueInvitationEmail(txCtx, created, org, inviteURL, now); err != nil {
+		if err := s.enqueueInvitationEmail(txCtx, created, org, inviteURL, rawToken, now); err != nil {
 			return err
 		}
 
@@ -578,13 +578,18 @@ func (s *Service) inviteURL(rawToken string) string {
 	return u.String()
 }
 
-func (s *Service) enqueueInvitationEmail(ctx context.Context, invitation domain.OrganizationInvitation, org domain.Organization, inviteURL string, now time.Time) error {
-	data, err := json.Marshal(map[string]string{
+func (s *Service) enqueueInvitationEmail(ctx context.Context, invitation domain.OrganizationInvitation, org domain.Organization, inviteURL, rawToken string, now time.Time) error {
+	templateData := map[string]string{
 		"organization_name": org.Name,
 		"invite_url":        inviteURL,
 		"role":              string(invitation.Role),
 		"expires_at":        invitation.ExpiresAt.UTC().Format(time.RFC3339),
-	})
+	}
+	if s.includeCodeInEmail {
+		templateData["invitation_code"] = rawToken
+	}
+
+	data, err := json.Marshal(templateData)
 	if err != nil {
 		return fmt.Errorf("marshal invitation email template data: %w", err)
 	}

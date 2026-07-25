@@ -1,15 +1,19 @@
 package templates
 
-func OrganizationInvitationText(orgName, inviteURL, role, expiresAt string) string {
-	return "You're invited to " + orgName + "\n\n" +
+func OrganizationInvitationText(orgName, inviteURL, invitationCode, role, expiresAt string) string {
+	body := "You're invited to " + orgName + "\n\n" +
 		"Accept the invitation: " + inviteURL + "\n\n" +
-		"Role: " + role + "\n" +
+		"Role: " + role + "\n"
+	if invitationCode != "" {
+		body += "Invitation code: " + invitationCode + "\n"
+	}
+	return body +
 		"Expires at: " + expiresAt + "\n\n" +
 		"If you did not expect this invitation, you can ignore this email.\n\n" +
 		"Authara"
 }
 
-templ OrganizationInvitationEmail(orgName, inviteURL, role, expiresAt string) {
+templ OrganizationInvitationEmail(orgName, inviteURL, invitationCode, role, expiresAt string) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -58,6 +62,14 @@ templ OrganizationInvitationEmail(orgName, inviteURL, role, expiresAt string) {
 															<div style="font-size:16px;line-height:1.4;font-weight:600;color:#111827;">{ role }</div>
 														</td>
 													</tr>
+													if invitationCode != "" {
+														<tr>
+															<td style="padding:16px 18px;text-align:left;border-bottom:1px solid #e5e7eb;">
+																<div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:6px;">Invitation code</div>
+																<div style="font-size:16px;line-height:1.4;font-weight:600;color:#111827;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Courier New',monospace;word-break:break-all;">{ invitationCode }</div>
+															</td>
+														</tr>
+													}
 													<tr>
 														<td style="padding:16px 18px;text-align:left;">
 															<div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:6px;">Expires at</div>

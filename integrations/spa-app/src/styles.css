@@ -109,7 +109,7 @@ h2 {
 
 .auth-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 2rem 0 1.5rem;
   padding: 0.3rem;
   border-radius: 0.8rem;
@@ -156,6 +156,11 @@ h2 {
   border-radius: 0.7rem;
   color: #17201d;
   background: #fff;
+}
+
+.mono-input {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.92rem;
 }
 
 .auth-form .button {

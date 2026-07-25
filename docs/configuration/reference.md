@@ -107,6 +107,7 @@ Example:
 AUTHARA_ORG_MODE
 AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED
 AUTHARA_ORGANIZATION_INVITATION_TTL
+AUTHARA_INVITATION_EMAIL_INCLUDE_CODE
 AUTHARA_INTERNAL_API_TOKEN
 ```
 
@@ -116,6 +117,10 @@ to manage their own organization through matching `/auth/api/v1` routes. Disable
 it when organization changes must pass through the application backend for
 billing, seat limits, approval, or other business rules. Internal routes remain
 available through bearer authentication in either mode.
+
+`AUTHARA_INVITATION_EMAIL_INCLUDE_CODE` includes the raw invitation code in
+Authara's built-in invitation emails for custom app signup screens. The hosted
+invitation link remains unchanged.
 
 ---
 

@@ -14,6 +14,7 @@ const (
 type Organization struct {
 	Mode                                string `env:"AUTHARA_ORG_MODE,default=single"`
 	PublicOrganizationManagementEnabled bool   `env:"AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED,default=false"`
+	InvitationEmailIncludeCode          bool   `env:"AUTHARA_INVITATION_EMAIL_INCLUDE_CODE,default=false"`
 	InvitationTTLRaw                    string `env:"AUTHARA_ORGANIZATION_INVITATION_TTL,default=168h"`
 
 	InvitationTTL time.Duration

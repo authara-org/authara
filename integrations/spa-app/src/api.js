@@ -88,8 +88,10 @@ export function loginWithGoogle(credential, nonce) {
   return mutate(`${API}/oauth/google?audience=app`, { credential, nonce });
 }
 
-export function signup(email, password) {
-  return mutate(`${API}/signup?audience=app`, { email, password });
+export function signup(email, password, invitationCode = "") {
+  const body = { email, password };
+  if (invitationCode.trim()) body.invitation_code = invitationCode.trim();
+  return mutate(`${API}/signup?audience=app`, body);
 }
 
 export function verifySignup(challengeID, code) {

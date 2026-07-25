@@ -37,6 +37,7 @@ as `/spa/private`; the gateway must continue routing `/auth/*` to Authara.
 ## Included behavior
 
 - custom password login and signup through `/auth/api/v1`
+- invitation-code signup through the same public signup API
 - custom Google login through the Google Identity Services button and Authara's
   nonce-bound `/auth/api/v1/oauth/google` flow when Google is enabled
 - signup email-code verification and opaque challenge resending

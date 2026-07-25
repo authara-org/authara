@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,16 +14,19 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/http/kit/validation"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
+	"github.com/google/uuid"
 )
 
 const maxCredentialsBodyBytes = 4096 // ponytail: credential JSON only; raise if this endpoint grows.
 
 type credentialsRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email          string `json:"email"`
+	Password       string `json:"password"`
+	InvitationCode string `json:"invitation_code,omitempty"`
 }
 
 type authResponse struct {
@@ -87,25 +91,22 @@ func (h *APIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.ChallengeEnabled {
-		h.startSignupChallenge(w, r, in.Email, passwordHash)
+		h.startSignupChallenge(w, r, in.Email, passwordHash, in.InvitationCode)
 		return
 	}
 
 	user, err := h.Auth.Signup(ctx, auth.SignupInput{
-		Provider:     domain.ProviderPassword,
-		Email:        in.Email,
-		PasswordHash: passwordHash,
+		Provider:        domain.ProviderPassword,
+		Email:           in.Email,
+		PasswordHash:    passwordHash,
+		InvitationToken: in.InvitationCode,
 	})
 	if err != nil {
 		code := authSignupErrorCode(err)
-		message := "Could not create account. Please check your details."
-		if code == response.CodeInternalError {
-			message = "Signup error."
-		}
 		response.WriteError(
 			w,
 			mustRouteError(SignupPostErrors, code),
-			message,
+			authSignupErrorMessage(err, code),
 		)
 		return
 	}
@@ -173,6 +174,7 @@ func readCredentials(
 	}
 
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+	in.InvitationCode = strings.TrimSpace(in.InvitationCode)
 	if in.Email == "" || in.Password == "" {
 		response.WriteError(
 			w,
@@ -191,11 +193,69 @@ func authSignupErrorCode(err error) response.ErrorCode {
 		return response.CodeForbidden
 	case errors.Is(err, auth.ErrUserAlreadyExists),
 		errors.Is(err, auth.ErrInvalidUsername),
-		errors.Is(err, auth.ErrUnsupportedProvider):
+		errors.Is(err, auth.ErrUnsupportedProvider),
+		errors.Is(err, store.ErrOrganizationInvitationNotFound),
+		errors.Is(err, organization.ErrInvalidOrganizationInvitationToken),
+		errors.Is(err, organization.ErrOrganizationInvitationExpired),
+		errors.Is(err, organization.ErrOrganizationInvitationAlreadyAccepted),
+		errors.Is(err, organization.ErrOrganizationInvitationRevoked),
+		errors.Is(err, organization.ErrOrganizationInviteEmailMismatch),
+		errors.Is(err, organization.ErrOrganizationInviteForbidden),
+		errors.Is(err, organization.ErrOrganizationSingleMembershipConflict):
 		return response.CodeInvalidRequest
 	default:
 		return response.CodeInternalError
 	}
+}
+
+func authSignupErrorMessage(err error, code response.ErrorCode) string {
+	if code == response.CodeInternalError {
+		return "Signup error."
+	}
+	switch {
+	case errors.Is(err, organization.ErrOrganizationInviteEmailMismatch):
+		return "Invitation code does not match this email."
+	case errors.Is(err, store.ErrOrganizationInvitationNotFound),
+		errors.Is(err, organization.ErrInvalidOrganizationInvitationToken):
+		return "Invalid invitation code."
+	case errors.Is(err, organization.ErrOrganizationInvitationExpired):
+		return "This invitation has expired."
+	case errors.Is(err, organization.ErrOrganizationInvitationAlreadyAccepted):
+		return "This invitation has already been accepted."
+	case errors.Is(err, organization.ErrOrganizationInvitationRevoked):
+		return "This invitation has been revoked."
+	default:
+		return "Could not create account. Please check your details."
+	}
+}
+
+func (h *APIHandler) invitationIDForSignupCode(ctx context.Context, email, invitationCode string) (*uuid.UUID, error) {
+	if invitationCode == "" {
+		return nil, nil
+	}
+	if h.Organizations == nil {
+		return nil, organization.ErrOrganizationInviteForbidden
+	}
+	preview, err := h.Organizations.InvitationByToken(ctx, invitationCode)
+	if err != nil {
+		return nil, err
+	}
+	if strings.ToLower(strings.TrimSpace(preview.Invitation.Email)) != email {
+		return nil, organization.ErrOrganizationInviteEmailMismatch
+	}
+	switch preview.Invitation.Status(time.Now().UTC()) {
+	case domain.OrganizationInvitationStatusPending:
+	case domain.OrganizationInvitationStatusAccepted:
+		return nil, organization.ErrOrganizationInvitationAlreadyAccepted
+	case domain.OrganizationInvitationStatusRevoked:
+		return nil, organization.ErrOrganizationInvitationRevoked
+	case domain.OrganizationInvitationStatusExpired:
+		return nil, organization.ErrOrganizationInvitationExpired
+	default:
+		return nil, organization.ErrOrganizationInviteForbidden
+	}
+	id := preview.Invitation.ID
+	return &id, nil
 }
 
 func authLoginErrorCode(err error) response.ErrorCode {

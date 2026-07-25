@@ -38,6 +38,7 @@ func (h *APIHandler) startSignupChallenge(
 	r *http.Request,
 	email string,
 	passwordHash string,
+	invitationCode string,
 ) {
 	if h.Challenge == nil {
 		response.WriteError(
@@ -68,11 +69,21 @@ func (h *APIHandler) startSignupChallenge(
 			email,
 		)
 	} else {
+		invitationID, err := h.invitationIDForSignupCode(r.Context(), email, invitationCode)
+		if err != nil {
+			response.WriteError(
+				w,
+				mustRouteError(SignupPostErrors, authSignupErrorCode(err)),
+				authSignupErrorMessage(err, authSignupErrorCode(err)),
+			)
+			return
+		}
 		challengeID, err = h.Challenge.CreateSignupChallenge(
 			r.Context(),
 			challenge.CreateSignupChallengeInput{
 				Email:        email,
 				PasswordHash: passwordHash,
+				InvitationID: invitationID,
 			},
 			now,
 		)

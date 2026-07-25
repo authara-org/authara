@@ -2,11 +2,14 @@ package organization
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/authara-org/authara/internal/webhook"
 )
@@ -205,6 +208,67 @@ func TestResendInvitationRevokesOldAndCreatesFreshInvite(t *testing.T) {
 	})
 }
 
+func TestCreateInvitationEmailCodeIsConfigurable(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	for _, tt := range []struct {
+		name        string
+		suffix      string
+		includeCode bool
+		wantCode    bool
+	}{
+		{name: "hidden by default", suffix: "hidden"},
+		{name: "included when enabled", suffix: "included", includeCode: true, wantCode: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+				owner, err := tdb.Store.CreateUser(ctx, domain.User{
+					Email:    "invite-code-owner-" + tt.suffix + "@example.com",
+					Username: "invite-code-owner-" + tt.suffix,
+				})
+				if err != nil {
+					t.Fatalf("CreateUser owner failed: %v", err)
+				}
+				org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, owner.Username, domain.OrganizationKindTeam)
+				if err != nil {
+					t.Fatalf("EnsureOrganizationForUser owner failed: %v", err)
+				}
+
+				svc := New(Config{
+					Store:              tdb.Store,
+					Tx:                 tdb.Tx,
+					Mode:               OrgModeMulti,
+					InvitationTTL:      time.Hour,
+					PublicURL:          "https://auth.example.com",
+					IncludeCodeInEmail: tt.includeCode,
+				})
+				inviteeEmail := "invite-code-" + tt.suffix + "@example.com"
+				invite, err := svc.CreateInvitation(ctx, CreateInvitationInput{
+					OrganizationID: org.ID,
+					ActorUserID:    owner.ID,
+					Email:          inviteeEmail,
+					Now:            time.Now().UTC(),
+				})
+				if err != nil {
+					t.Fatalf("CreateInvitation failed: %v", err)
+				}
+
+				var data map[string]string
+				if err := json.Unmarshal(loadInvitationEmailTemplateData(t, ctx, inviteeEmail), &data); err != nil {
+					t.Fatalf("unmarshal template data: %v", err)
+				}
+				gotCode, hasCode := data["invitation_code"]
+				if hasCode != tt.wantCode {
+					t.Fatalf("expected invitation_code present=%v, got data %+v", tt.wantCode, data)
+				}
+				if tt.wantCode && gotCode != invite.RawToken {
+					t.Fatalf("expected invitation code %q, got %q", invite.RawToken, gotCode)
+				}
+			})
+		})
+	}
+}
+
 func TestAcceptInvitationSingleModeRejectsExistingOtherMembership(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -314,4 +378,25 @@ func mustFindWebhookEvent(t *testing.T, events []webhook.Envelope, eventType web
 	}
 	t.Fatalf("expected event %q in %+v", eventType, events)
 	return webhook.Envelope{}
+}
+
+func loadInvitationEmailTemplateData(t *testing.T, ctx context.Context, email string) []byte {
+	t.Helper()
+
+	db, ok := ctx.Value(store.DbKey).(*sql.Tx)
+	if !ok {
+		t.Fatal("expected transaction context")
+	}
+
+	var data []byte
+	if err := db.QueryRowContext(ctx, `
+		SELECT template_data
+		FROM email_jobs
+		WHERE to_email = $1 AND template = $2
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, email, string(domain.EmailTemplateOrganizationInvite)).Scan(&data); err != nil {
+		t.Fatalf("load invitation email job: %v", err)
+	}
+	return data
 }
