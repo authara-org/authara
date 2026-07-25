@@ -86,7 +86,7 @@ Example:
 4. Authara serves the login interface
 5. The user logs in
 6. Authara creates a session and sets authentication cookies
-7. The user is redirected back to the value of `return_to` (or `/` if not provided)
+7. The user is redirected back to the value of `return_to` (or `AUTHARA_DEFAULT_RETURN_TO` if not provided)
 
 With Authara, application developers do **not** need to implement:
 
@@ -109,7 +109,8 @@ Example:
 /auth/login?return_to=/settings
 ```
 
-If the parameter is not provided, Authara redirects to `/`.
+If the parameter is not provided, Authara redirects to `AUTHARA_DEFAULT_RETURN_TO`.
+The default is `/`.
 
 For security reasons, Authara only allows **relative paths** to prevent open redirect vulnerabilities.
 

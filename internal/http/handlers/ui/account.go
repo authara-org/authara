@@ -294,7 +294,7 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 		r,
 		VerifyChallengeActionEmailChange,
 		challengeID.String(),
-		httpctx.ReturnToOrDefault(ctx, "/auth/account"),
+		httpctx.ReturnToOrManualDefault(ctx, "/auth/account"),
 	)
 }
 
@@ -353,7 +353,7 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 		w,
 		r,
 		http.StatusOK,
-		httpctx.ReturnToOrDefault(ctx, "/auth/account"),
+		httpctx.ReturnToOrManualDefault(ctx, "/auth/account"),
 		c,
 	)
 }

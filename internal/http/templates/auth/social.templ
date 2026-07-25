@@ -38,7 +38,7 @@ templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFl
 			"data-provider":    "google",
 			"data-google-flow": flow,
 			"data-link-id":     linkID,
-			"data-return-to":   httpctx.ReturnToOrDefault(ctx, "/"),
+			"data-return-to":   httpctx.ReturnToOrDefault(ctx),
 		},
 	}) {
 		<div

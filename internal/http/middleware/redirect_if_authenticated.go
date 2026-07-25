@@ -31,10 +31,7 @@ func RedirectIfAuthenticated(sessionService *session.Service, now func() time.Ti
 				now(),
 			)
 			if err == nil {
-				returnTo, ok := httpctx.ReturnTo(r.Context())
-				if !ok {
-					returnTo = "/"
-				}
+				returnTo := httpctx.ReturnToOrDefault(r.Context())
 
 				_, err = csrf.EnsureCookie(w, r)
 				if err != nil {

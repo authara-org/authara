@@ -8,17 +8,31 @@ import (
 )
 
 func ReturnTo(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 1. Explicit return_to query parameter (highest priority)
-		rt := redirect.QueryParam(r)
-		if rt != "" {
-			if normalized, ok := redirect.NormalizeReturnTo(rt); ok {
-				r = r.WithContext(
-					httpctx.WithReturnTo(r.Context(), normalized),
-				)
-			}
-		}
+	return ReturnToWithDefault("/")(next)
+}
 
-		next.ServeHTTP(w, r)
-	})
+func ReturnToWithDefault(defaultReturnTo string) func(http.Handler) http.Handler {
+	if normalized, ok := redirect.NormalizeReturnTo(defaultReturnTo); ok {
+		defaultReturnTo = normalized
+	} else {
+		defaultReturnTo = "/"
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(httpctx.WithDefaultReturnTo(r.Context(), defaultReturnTo))
+
+			// 1. Explicit return_to query parameter (highest priority)
+			rt := redirect.QueryParam(r)
+			if rt != "" {
+				if normalized, ok := redirect.NormalizeReturnTo(rt); ok {
+					r = r.WithContext(
+						httpctx.WithReturnTo(r.Context(), normalized),
+					)
+				}
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

@@ -70,10 +70,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	returnTo, ok := httpctx.ReturnTo(r.Context())
-	if !ok {
-		returnTo = "/"
-	}
+	returnTo := httpctx.ReturnToOrDefault(r.Context())
 
 	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()

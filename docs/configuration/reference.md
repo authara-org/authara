@@ -25,6 +25,7 @@ Examples:
 ```
 APP_ENV
 LOG_LEVEL
+AUTHARA_DEFAULT_RETURN_TO
 ```
 
 ---

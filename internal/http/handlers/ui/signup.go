@@ -151,7 +151,7 @@ func (h *UIHandler) startSignupChallenge(
 			r,
 			VerifyChallengeActionSignup,
 			challengeID.String(),
-			httpctx.ReturnToOrDefault(ctx, "/"),
+			httpctx.ReturnToOrDefault(ctx),
 		)
 		return
 	}
@@ -171,7 +171,7 @@ func (h *UIHandler) startSignupChallenge(
 		r,
 		VerifyChallengeActionSignup,
 		challengeID.String(),
-		httpctx.ReturnToOrDefault(ctx, "/"),
+		httpctx.ReturnToOrDefault(ctx),
 	)
 }
 
@@ -288,7 +288,7 @@ func (h *UIHandler) requireSignupAppAudience(
 	r *http.Request,
 	errorRenderForm templ.Component,
 ) (string, bool) {
-	returnTo := httpctx.ReturnToOrDefault(r.Context(), "/")
+	returnTo := httpctx.ReturnToOrDefault(r.Context())
 	if redirect.AudienceForPath(returnTo) != token.AudienceApp {
 		h.renderFormError(w, r, http.StatusForbidden, "Signup only supports app access.", errorRenderForm)
 		return "", false

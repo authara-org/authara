@@ -12,6 +12,7 @@ type Config struct {
 	DB           DB
 	Cache        Cache
 	Logging      Logging
+	UI           UI
 	OAuth        OAuth
 	Token        Token
 	Session      Session
@@ -42,6 +43,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.Logging.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.UI.validate(); err != nil {
 		return nil, err
 	}
 	if err := cfg.OAuth.validate(); err != nil {

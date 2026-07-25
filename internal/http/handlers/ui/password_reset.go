@@ -135,7 +135,7 @@ func (h *UIHandler) PasswordResetRequestPost(w http.ResponseWriter, r *http.Requ
 		r,
 		VerifyChallengeActionPasswordReset,
 		challengeID,
-		httpctx.ReturnToOrDefault(ctx, "/auth/login"),
+		httpctx.ReturnToOrManualDefault(ctx, "/auth/login"),
 	)
 }
 
@@ -203,7 +203,7 @@ func (h *UIHandler) verifyPasswordResetChallengePost(
 		w,
 		r,
 		http.StatusOK,
-		httpctx.ReturnToOrDefault(ctx, "/auth/login"),
+		httpctx.ReturnToOrManualDefault(ctx, "/auth/login"),
 		c,
 	)
 }

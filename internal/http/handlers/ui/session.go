@@ -30,10 +30,7 @@ func (h *UIHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 
 	session.ClearSessionCookies(w)
 
-	returnTo, ok := httpctx.ReturnTo(r.Context())
-	if !ok {
-		returnTo = "/"
-	}
+	returnTo := httpctx.ReturnToOrDefault(r.Context())
 
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }

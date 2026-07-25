@@ -38,6 +38,9 @@ Example:
 
 After successful authentication, Authara redirects the user to the provided path.
 
+If `return_to` is not provided, Authara redirects to `AUTHARA_DEFAULT_RETURN_TO`.
+The default is `/`.
+
 ---
 
 # Example flow
@@ -105,5 +108,5 @@ To redirect users to login:
 
 1. Detect that the user is not authenticated
 2. Redirect to `/auth/login`
-3. Include a `return_to` parameter
+3. Include a `return_to` parameter, or configure `AUTHARA_DEFAULT_RETURN_TO`
 4. Authara handles the login flow and redirects back

@@ -58,7 +58,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		RequireAdminRole:          httpmiddleware.RequireAdmin,
 		RequireCSRF:               httpmiddleware.RequireCSRF,
 		RequireAPICSRF:            httpmiddleware.RequireAPICSRF,
-		ReturnTo:                  httpmiddleware.ReturnTo,
+		ReturnTo:                  httpmiddleware.ReturnToWithDefault(app.Config.UI.DefaultReturnTo),
 		HTMX:                      httpmiddleware.HTMXMiddleware,
 		RequireChallengeEnabled:   httpmiddleware.RequireChallengeEnabled(enabledFeatures.ChallengeEnabled),
 		RequireAllowlistEnabled:   httpmiddleware.RequireAllowlistEnabled(enabledFeatures.AllowlistEnabled),

@@ -78,10 +78,7 @@ func RequireAccessAuthWithRefresh(
 			}
 
 			// 3) Not authenticated -> redirect to login (HTMX-safe)
-			returnTo, ok := httpctx.ReturnTo(ctx)
-			if !ok || returnTo == "" {
-				returnTo = "/"
-			}
+			returnTo := httpctx.ReturnToOrDefault(ctx)
 
 			loginURL := redirect.WithReturnTo("/auth/login", returnTo)
 			redirect.Redirect(w, r, loginURL, http.StatusSeeOther)

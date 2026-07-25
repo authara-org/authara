@@ -142,6 +142,13 @@ variables:
     type: url
     notes: Must not include /auth
 
+  - name: AUTHARA_DEFAULT_RETURN_TO
+    stability: stable
+    required: false
+    type: string
+    default: /
+    notes: Safe relative path used after auth flows when return_to is not provided.
+
   - name: AUTHARA_TRUST_PROXY_HEADERS
     stability: stable
     required: false

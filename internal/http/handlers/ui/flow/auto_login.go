@@ -29,7 +29,7 @@ func TryRedirectAuthenticated(
 		if !strings.HasPrefix(current, "/auth/") {
 			returnTo = current
 		} else {
-			returnTo = "/"
+			returnTo = httpctx.ReturnToOrDefault(r.Context())
 		}
 	}
 

@@ -10,7 +10,7 @@ import (
 templ AccountFooterActions() {
 	<div class="p-4 sm:p-6 bg-grey-50 dark:bg-grey-950 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
 		<form
-			hx-post={ templ.SafeURL(redirect.WithReturnTo("/auth/sessions/logout", httpctx.ReturnToOrDefault(ctx, "/"))) }
+			hx-post={ templ.SafeURL(redirect.WithReturnTo("/auth/sessions/logout", httpctx.ReturnToOrDefault(ctx))) }
 			class="w-full sm:w-auto"
 		>
 			@CSRFInput()

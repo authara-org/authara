@@ -59,7 +59,7 @@ func (h *UIHandler) redirectInvalidProviderLink(w http.ResponseWriter, r *http.R
 	redirect.Redirect(
 		w,
 		r,
-		redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(r.Context(), "/")),
+		redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(r.Context())),
 		http.StatusSeeOther,
 	)
 }
@@ -118,7 +118,7 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	returnTo := httpctx.ReturnToOrDefault(ctx, "/")
+	returnTo := httpctx.ReturnToOrDefault(ctx)
 	if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
 		if path != "/auth/invitations/login" {
 			h.renderRequestError(w, r, http.StatusForbidden, "This invitation requires creating a new account.")

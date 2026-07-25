@@ -36,7 +36,7 @@ type passkeyFinishRequest struct {
 const passkeyResponseLinkedProvidersSection = "linked-providers-section"
 
 func (h *UIHandler) PasskeySetupPage(w http.ResponseWriter, r *http.Request) {
-	returnTo := httpctx.ReturnToOrDefault(r.Context(), "/")
+	returnTo := httpctx.ReturnToOrDefault(r.Context())
 
 	_ = h.Render(
 		w,
@@ -133,7 +133,7 @@ func (h *UIHandler) PasskeyRegisterFinishPost(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	returnTo := normalizedReturnTo(in.ReturnTo, httpctx.ReturnToOrDefault(ctx, "/auth/account"))
+	returnTo := normalizedReturnTo(in.ReturnTo, httpctx.ReturnToOrManualDefault(ctx, "/auth/account"))
 	response.JSON(w, http.StatusOK, map[string]any{
 		"ok":        true,
 		"return_to": returnTo,
@@ -202,7 +202,7 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 		return
 	}
 
-	returnTo := normalizedReturnTo(in.ReturnTo, httpctx.ReturnToOrDefault(ctx, "/"))
+	returnTo := normalizedReturnTo(in.ReturnTo, httpctx.ReturnToOrDefault(ctx))
 	audience := redirect.AudienceForPath(returnTo)
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)
 	if err != nil {

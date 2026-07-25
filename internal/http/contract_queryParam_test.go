@@ -49,7 +49,14 @@ func loadStableQueryParameter(t *testing.T, name string) contractQueryParameter 
 
 func newReturnToHandler() http.Handler {
 	return middleware.ReturnTo(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		target := httpctx.ReturnToOrDefault(r.Context(), "/")
+		target := httpctx.ReturnToOrDefault(r.Context())
+		redir.Redirect(w, r, target, http.StatusSeeOther)
+	}))
+}
+
+func newReturnToHandlerWithDefault(defaultReturnTo string) http.Handler {
+	return middleware.ReturnToWithDefault(defaultReturnTo)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target := httpctx.ReturnToOrDefault(r.Context())
 		redir.Redirect(w, r, target, http.StatusSeeOther)
 	}))
 }
@@ -121,6 +128,22 @@ func TestRedirectContract_ReturnTo_NoValueFallsBackToDefault(t *testing.T) {
 				t.Fatalf("expected Location=/, got %q", got)
 			}
 		})
+	}
+}
+
+func TestRedirectContract_ReturnTo_NoValueUsesConfiguredDefault(t *testing.T) {
+	handler := newReturnToHandlerWithDefault("/dashboard")
+	req := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+
+	if got := rr.Header().Get("Location"); got != "/dashboard" {
+		t.Fatalf("expected Location=/dashboard, got %q", got)
 	}
 }
 

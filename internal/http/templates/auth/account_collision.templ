@@ -38,7 +38,7 @@ templ AccountCollision(linkID string, email string, provider string, proofOption
 			</div>
 			<div class="text-center mt-6">
 				<a
-					hx-get={ redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/")) }
+					hx-get={ redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx)) }
 					hx-target="#body"
 					hx-swap="innerHTML"
 					hx-replace-url="true"
@@ -55,7 +55,7 @@ templ AccountCollisionForm(linkID string, email string, provider string) {
 	<form
 		x-data
 		autocomplete="on"
-		hx-post={ redirect.WithReturnTo("/auth/provider-links/confirm", httpctx.ReturnToOrDefault(ctx, "/")) }
+		hx-post={ redirect.WithReturnTo("/auth/provider-links/confirm", httpctx.ReturnToOrDefault(ctx)) }
 		hx-target="this"
 		hx-swap="outerHTML"
 	>

@@ -35,7 +35,7 @@ templ Signup(oauthProviders []oauth.OAuthProvider) {
 				<p class="text-grey-800 dark:text-grey-200">
 					Already have an account?
 					<a
-						hx-get={ redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/")) }
+						hx-get={ redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx)) }
 						hx-target="#body"
 						hx-swap="innerHTML"
 						hx-replace-url="true"
@@ -55,7 +55,7 @@ templ SignupForm() {
 		x-show="open"
 		x-data="{password: '', confirm: ''}"
 		autocomplete="on"
-		hx-post={ redirect.WithReturnTo("/auth/signup", httpctx.ReturnToOrDefault(ctx, "/")) }
+		hx-post={ redirect.WithReturnTo("/auth/signup", httpctx.ReturnToOrDefault(ctx)) }
 		hx-target="this"
 		hx-swap="outerHTML"
 	>

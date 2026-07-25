@@ -80,8 +80,10 @@ Example:
 If `return_to` is not provided, the user is redirected to:
 
 ```
-/
+AUTHARA_DEFAULT_RETURN_TO
 ```
+
+The default is `/`.
 
 ---
 

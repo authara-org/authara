@@ -55,7 +55,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 				Kind:    "error",
 				Message: "Google login failed. Please try again.",
 			})
-			redirect.Redirect(w, r, redirect.WithReturnTo("/auth/account", httpctx.ReturnToOrDefault(ctx, "/")), http.StatusSeeOther)
+			redirect.Redirect(w, r, redirect.WithReturnTo("/auth/account", httpctx.ReturnToOrDefault(ctx)), http.StatusSeeOther)
 			return
 		}
 
@@ -87,7 +87,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		returnTo := httpctx.ReturnToOrDefault(ctx, "/")
+		returnTo := httpctx.ReturnToOrDefault(ctx)
 		if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
 			if path != "/auth/invitations/login" {
 				h.redirectInvitationOAuthFailure(w, returnTo)
@@ -129,7 +129,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	returnTo := httpctx.ReturnToOrDefault(ctx, "/")
+	returnTo := httpctx.ReturnToOrDefault(ctx)
 	if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
 		h.finishInvitationOAuth(w, r, path, rawToken, returnTo, identity.Email, identity.EmailVerified, identity.OAuthID)
 		return
@@ -158,7 +158,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			u := url.URL{Path: "/auth/provider-links/confirm"}
 			q := u.Query()
 			q.Set("link_id", link.ID.String())
-			if returnTo := httpctx.ReturnToOrDefault(ctx, "/"); returnTo != "" {
+			if returnTo := httpctx.ReturnToOrDefault(ctx); returnTo != "" {
 				q.Set("return_to", returnTo)
 			}
 			u.RawQuery = q.Encode()
@@ -200,5 +200,5 @@ func (h *UIHandler) renderError(w http.ResponseWriter, r *http.Request, ctx cont
 		Kind:    "error",
 		Message: "Google login failed. Please try again.",
 	})
-	redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/")), http.StatusSeeOther)
+	redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx)), http.StatusSeeOther)
 }

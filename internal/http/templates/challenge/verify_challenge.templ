@@ -47,7 +47,7 @@ templ VerifyChallenge(challengeID string, action string, header string) {
 templ VerifyChallengeForm(challengeID string, action string, incorrect bool) {
 	<form
 		id="verification-code-input-form"
-		hx-post={ redirect.WithReturnTo("/auth/verify-challenge/"+action, httpctx.ReturnToOrDefault(ctx, "/")) }
+		hx-post={ redirect.WithReturnTo("/auth/verify-challenge/"+action, httpctx.ReturnToOrDefault(ctx)) }
 		hx-target="this"
 		hx-swap="outerHTML"
 		autocomplete="one-time-code"

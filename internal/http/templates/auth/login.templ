@@ -23,7 +23,7 @@ templ Login(oauthProviders []oauth.OAuthProvider) {
 				<p class="text-grey-800 dark:text-grey-200">
 					Don't have an Account?
 					<a
-						hx-get={ redirect.WithReturnTo("/auth/signup", httpctx.ReturnToOrDefault(ctx, "/")) }
+						hx-get={ redirect.WithReturnTo("/auth/signup", httpctx.ReturnToOrDefault(ctx)) }
 						hx-target="#body"
 						hx-swap="innerHTML"
 						hx-replace-url="true"
@@ -47,7 +47,7 @@ templ PasskeyLoginButton() {
 			Icon:    icons.Key(),
 			Attrs: templ.Attributes{
 				"data-passkey-login": "",
-				"data-return-to":     httpctx.ReturnToOrDefault(ctx, "/"),
+				"data-return-to":     httpctx.ReturnToOrDefault(ctx),
 			},
 		})
 	</div>
@@ -58,9 +58,9 @@ templ LoginForm() {
 		x-data
 		data-login-form
 		data-passkey-conditional-login="true"
-		data-return-to={ httpctx.ReturnToOrDefault(ctx, "/") }
+		data-return-to={ httpctx.ReturnToOrDefault(ctx) }
 		autocomplete="on"
-		hx-post={ redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/")) }
+		hx-post={ redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx)) }
 		hx-target="this"
 		hx-swap="outerHTML"
 	>
@@ -119,7 +119,7 @@ templ LoginForm() {
 			</label>
 			if httpctx.ChallengeEnabledOrDefault(ctx, false) {
 				<a
-					hx-get={ redirect.WithReturnTo("/auth/password-reset", redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx, "/"))) }
+					hx-get={ redirect.WithReturnTo("/auth/password-reset", redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx))) }
 					hx-target="#body"
 					hx-swap="innerHTML"
 					hx-push-url="true"

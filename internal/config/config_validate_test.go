@@ -61,3 +61,11 @@ func TestAdminValidateRejectsInvalidAuditRetention(t *testing.T) {
 		t.Fatal("expected admin audit retention validation error")
 	}
 }
+
+func TestUIValidateRejectsUnsafeDefaultReturnTo(t *testing.T) {
+	cfg := UI{DefaultReturnTo: "//evil.example"}
+
+	if err := cfg.validate(); err == nil {
+		t.Fatal("expected unsafe default return_to validation error")
+	}
+}
