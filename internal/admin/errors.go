@@ -6,6 +6,7 @@ var (
 	ErrSelfDisable              = errors.New("admin cannot disable themselves")
 	ErrSelfRevokeAdmin          = errors.New("admin cannot remove their own admin role")
 	ErrSelfRevokeSessions       = errors.New("admin cannot revoke all sessions for themselves")
+	ErrSelfRemoveAllowedEmail   = errors.New("admin cannot remove their own allowlisted email")
 	ErrLastAdmin                = errors.New("operation would leave no active admins")
 	ErrAllowlistDisabled        = errors.New("allowlist feature disabled")
 	ErrAllowedEmailAlreadyAdded = errors.New("allowed email already exists")

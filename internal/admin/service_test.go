@@ -366,6 +366,38 @@ func TestAllowlistAddNormalizesAndRemoveAudits(t *testing.T) {
 	})
 }
 
+func TestAllowlistRemoveRejectsOwnEmail(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		actor := createAdminTestUser(t, ctx, tdb, "allowlist-self@example.com", "allowlist-self", true)
+		svc := newAdminTestService(tdb)
+
+		if err := svc.AddAllowedEmail(ctx, Actor{UserID: actor.ID}, actor.Email, RequestMeta{}); err != nil {
+			t.Fatalf("AddAllowedEmail setup failed: %v", err)
+		}
+		page, err := svc.ListAllowedEmails(ctx, actor.Email, Page{Page: 1, Size: 10})
+		if err != nil {
+			t.Fatalf("ListAllowedEmails failed: %v", err)
+		}
+		if len(page.Emails) != 1 {
+			t.Fatalf("expected one allowlisted email, got %+v", page.Emails)
+		}
+
+		err = svc.RemoveAllowedEmail(ctx, Actor{UserID: actor.ID}, page.Emails[0].ID, RequestMeta{})
+		if !errors.Is(err, ErrSelfRemoveAllowedEmail) {
+			t.Fatalf("expected ErrSelfRemoveAllowedEmail, got %v", err)
+		}
+		allowed, err := tdb.Store.IsEmailAllowed(ctx, actor.Email)
+		if err != nil {
+			t.Fatalf("IsEmailAllowed failed: %v", err)
+		}
+		if !allowed {
+			t.Fatal("expected actor email to remain allowlisted")
+		}
+	})
+}
+
 func TestListAllowedEmailsLiveSearchRules(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

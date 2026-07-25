@@ -69,7 +69,24 @@ func (s *Service) RemoveAllowedEmail(ctx context.Context, actor Actor, allowedEm
 	}
 
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		allowedEmail, err := s.store.DeleteAllowedEmailByID(txCtx, allowedEmailID)
+		actorEmail := normalizeEmail(actor.Email)
+		if actorEmail == "" {
+			user, err := s.store.GetUserByID(txCtx, actor.UserID)
+			if err != nil {
+				return err
+			}
+			actorEmail = normalizeEmail(user.Email)
+		}
+
+		allowedEmail, err := s.store.GetAllowedEmailByID(txCtx, allowedEmailID)
+		if err != nil {
+			return err
+		}
+		if normalizeEmail(allowedEmail.Email) == actorEmail {
+			return ErrSelfRemoveAllowedEmail
+		}
+
+		allowedEmail, err = s.store.DeleteAllowedEmailByID(txCtx, allowedEmailID)
 		if err != nil {
 			return err
 		}

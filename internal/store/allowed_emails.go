@@ -87,6 +87,18 @@ func (s *Store) DeleteAllowedEmail(ctx context.Context, email string) error {
 	return nil
 }
 
+func (s *Store) GetAllowedEmailByID(ctx context.Context, id uuid.UUID) (domain.AllowedEmail, error) {
+	var row model.AllowedEmail
+	if err := scanAllowedEmail(s.queryRow(ctx, `
+		SELECT `+allowedEmailColumns+`
+		FROM allowed_emails
+		WHERE id = $1
+	`, id), &row); err != nil {
+		return domain.AllowedEmail{}, mapNoRows(err, ErrAllowedEmailNotFound)
+	}
+	return toDomainAllowedEmail(row), nil
+}
+
 func (s *Store) DeleteAllowedEmailByID(ctx context.Context, id uuid.UUID) (domain.AllowedEmail, error) {
 	var row model.AllowedEmail
 	if err := scanAllowedEmail(s.queryRow(ctx, `

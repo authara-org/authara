@@ -382,6 +382,8 @@ func adminErrorMessage(err error) string {
 		return "You cannot remove your own admin role."
 	case errors.Is(err, adminsvc.ErrSelfRevokeSessions):
 		return "You cannot revoke all sessions for your own account from here."
+	case errors.Is(err, adminsvc.ErrSelfRemoveAllowedEmail):
+		return "You cannot remove your own email from the allowlist."
 	case errors.Is(err, adminsvc.ErrLastAdmin):
 		return "This action would leave Authara without an active admin."
 	case errors.Is(err, adminsvc.ErrAllowlistDisabled):
