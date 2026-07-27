@@ -10,10 +10,10 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/testutil"
-	"github.com/go-chi/chi/v5"
 )
 
 func TestOrganizationsGetAndCurrentGet(t *testing.T) {
@@ -29,7 +29,11 @@ func TestOrganizationsGetAndCurrentGet(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/organizations", nil).WithContext(reqCtx)
 		rr := httptest.NewRecorder()
 
-		h.OrganizationsGet(rr, req)
+		resp, err := h.ListCurrentUserOrganizations(contractCtx(reqCtx, req), contract.ListCurrentUserOrganizationsRequestObject{})
+		if err != nil {
+			t.Fatalf("ListCurrentUserOrganizations failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -56,7 +60,11 @@ func TestOrganizationsGetAndCurrentGet(t *testing.T) {
 		currentReq := httptest.NewRequest(http.MethodGet, "/auth/api/v1/organizations/current", nil).WithContext(currentCtx)
 		currentRR := httptest.NewRecorder()
 
-		h.OrganizationCurrentGet(currentRR, currentReq)
+		currentResp, err := h.GetCurrentOrganization(contractCtx(currentCtx, currentReq), contract.GetCurrentOrganizationRequestObject{})
+		if err != nil {
+			t.Fatalf("GetCurrentOrganization failed: %v", err)
+		}
+		writeContractResponse(t, currentRR, currentResp)
 
 		if currentRR.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, currentRR.Code, currentRR.Body.String())
@@ -103,7 +111,11 @@ func TestOrganizationCurrentMembersGet(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/organizations/current/members", nil).WithContext(reqCtx)
 		rr := httptest.NewRecorder()
 
-		h.OrganizationCurrentMembersGet(rr, req)
+		resp, err := h.ListCurrentOrganizationMembers(contractCtx(reqCtx, req), contract.ListCurrentOrganizationMembersRequestObject{})
+		if err != nil {
+			t.Fatalf("ListCurrentOrganizationMembers failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -127,7 +139,11 @@ func TestOrganizationCurrentMembersGet(t *testing.T) {
 
 		h.Organizations = organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModePersonal})
 		rr = httptest.NewRecorder()
-		h.OrganizationCurrentMembersGet(rr, req)
+		resp, err = h.ListCurrentOrganizationMembers(contractCtx(reqCtx, req), contract.ListCurrentOrganizationMembersRequestObject{})
+		if err != nil {
+			t.Fatalf("ListCurrentOrganizationMembers failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 		if rr.Code != http.StatusForbidden {
 			t.Fatalf("expected status %d in personal mode, got %d body=%s", http.StatusForbidden, rr.Code, rr.Body.String())
 		}
@@ -161,10 +177,15 @@ func TestOrganizationSwitchPostReturnsSwitchedTokens(t *testing.T) {
 		reqCtx := httpctx.WithUserID(ctx, user.ID)
 		reqCtx = httpctx.WithSessionID(reqCtx, identity.SessionID)
 		req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/organizations/"+teamOrg.ID.String()+"/switch", nil).WithContext(reqCtx)
-		req = withAPIURLParam(req, "organizationID", teamOrg.ID.String())
 		rr := httptest.NewRecorder()
 
-		h.OrganizationSwitchPost(rr, req)
+		resp, err := h.SwitchOrganization(contractCtx(reqCtx, req), contract.SwitchOrganizationRequestObject{
+			OrganizationID: teamOrg.ID,
+		})
+		if err != nil {
+			t.Fatalf("SwitchOrganization failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -173,7 +194,7 @@ func TestOrganizationSwitchPostReturnsSwitchedTokens(t *testing.T) {
 			t.Fatal("expected switch to set session cookies")
 		}
 
-		var got tokensResponse
+		var got contract.Tokens
 		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 			t.Fatalf("decode switch body: %v", err)
 		}
@@ -273,10 +294,4 @@ func assertAPIMemberListContains(t *testing.T, got []map[string]any, wantID, wan
 		}
 	}
 	t.Fatalf("expected member %q in %+v", wantID, got)
-}
-
-func withAPIURLParam(req *http.Request, key, value string) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add(key, value)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }

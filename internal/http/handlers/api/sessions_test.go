@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
@@ -48,7 +49,11 @@ func TestRefreshPostSetsCookiesOnly(t *testing.T) {
 		addRefreshCookie(req, refreshToken)
 		rr := httptest.NewRecorder()
 
-		h.RefreshPost(rr, req)
+		resp, err := h.RefreshSession(contractCtx(ctx, req), contract.RefreshSessionRequestObject{})
+		if err != nil {
+			t.Fatalf("RefreshSession failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -94,7 +99,14 @@ func TestTokenRefreshPostReturnsTokensFromBody(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/tokens/refresh", strings.NewReader(body)).WithContext(ctx)
 		rr := httptest.NewRecorder()
 
-		h.TokenRefreshPost(rr, req)
+		audience := contract.TokenRefreshRequestAudience(token.AudienceApp)
+		resp, err := h.RefreshTokens(contractCtx(ctx, req), contract.RefreshTokensRequestObject{
+			Body: &contract.TokenRefreshRequest{RefreshToken: refreshToken, Audience: &audience},
+		})
+		if err != nil {
+			t.Fatalf("RefreshTokens failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -142,7 +154,11 @@ func TestRefreshPostDisabledUserReturnsUnauthorized(t *testing.T) {
 		addRefreshCookie(req, refreshToken)
 		rr := httptest.NewRecorder()
 
-		h.RefreshPost(rr, req)
+		resp, err := h.RefreshSession(contractCtx(ctx, req), contract.RefreshSessionRequestObject{})
+		if err != nil {
+			t.Fatalf("RefreshSession failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusUnauthorized {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusUnauthorized, rr.Code, rr.Body.String())

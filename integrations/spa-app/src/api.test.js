@@ -12,9 +12,10 @@ import {
   resendSignupChallenge,
   resendInvitation,
   revokeInvitation,
-  signup,
+  signupDirect,
+  startSignupChallenge,
   updateOrganization,
-  verifySignup,
+  verifySignupChallenge,
 } from "./api.js";
 
 const originalFetch = globalThis.fetch;
@@ -218,7 +219,7 @@ test("custom authentication uses CSRF and the signup challenge API", async () =>
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, options });
     if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
-    if (url.includes("/signup?"))
+    if (url.includes("/signup/challenges?"))
       return json({ challenge_id: "challenge-1" }, 202);
     if (url.endsWith("/challenges/resend"))
       return new Response(null, { status: 204 });
@@ -226,18 +227,24 @@ test("custom authentication uses CSRF and the signup challenge API", async () =>
   };
 
   await login("user@example.com", "password123");
-  const started = await signup("new@example.com", "password123", "invite-code");
+  await signupDirect("direct@example.com", "password123");
+  const started = await startSignupChallenge(
+    "new@example.com",
+    "password123",
+    "invite-code",
+  );
   await resendSignupChallenge(started.challenge_id);
-  await verifySignup(started.challenge_id, "123456");
+  await verifySignupChallenge(started.challenge_id, "123456");
 
   const mutations = calls.filter(({ url }) => !url.endsWith("/csrf"));
   assert.deepEqual(
     mutations.map(({ url, options }) => `${options.method} ${url}`),
     [
       "POST /auth/api/v1/login?audience=app",
-      "POST /auth/api/v1/signup?audience=app",
+      "POST /auth/api/v1/signup/direct?audience=app",
+      "POST /auth/api/v1/signup/challenges?audience=app",
       "POST /auth/api/v1/challenges/resend",
-      "POST /auth/api/v1/signup/verify?audience=app",
+      "POST /auth/api/v1/signup/challenges/verify?audience=app",
     ],
   );
   assert.ok(
@@ -250,14 +257,18 @@ test("custom authentication uses CSRF and the signup challenge API", async () =>
     password: "password123",
   });
   assert.deepEqual(JSON.parse(mutations[1].options.body), {
+    email: "direct@example.com",
+    password: "password123",
+  });
+  assert.deepEqual(JSON.parse(mutations[2].options.body), {
     email: "new@example.com",
     invitation_code: "invite-code",
     password: "password123",
   });
-  assert.deepEqual(JSON.parse(mutations[2].options.body), {
+  assert.deepEqual(JSON.parse(mutations[3].options.body), {
     challenge_id: "challenge-1",
   });
-  assert.deepEqual(JSON.parse(mutations[3].options.body), {
+  assert.deepEqual(JSON.parse(mutations[4].options.body), {
     challenge_id: "challenge-1",
     code: "123456",
   });

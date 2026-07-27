@@ -26,9 +26,9 @@ Internal server-to-server endpoints are available under:
 These endpoints are intended for your application backend, not browsers.
 
 When `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED=true`, authenticated
-clients can use matching organization-management endpoints under
-`/auth/api/v1`. The public and internal routes use the same handlers, but public
-requests derive the actor, current organization, and role from the access token.
+clients can use non-capacity organization-management endpoints under
+`/auth/api/v1`. Organization creation, invitation creation, and invitation
+resend remain internal server-to-server operations.
 
 ---
 
@@ -166,21 +166,33 @@ Errors: `400 invalid_request`, `401 unauthorized`, `403 forbidden`,
 
 ---
 
-## Sign up with a password
+## Sign up directly
 
 ```text
-POST /auth/api/v1/signup
+POST /auth/api/v1/signup/direct
 ```
 
 The request body is the same email-and-password object used for login. Signup
-only creates app-audience sessions.
-
-When challenges are disabled, Authara creates the account immediately, returns
+only creates app-audience sessions. Authara creates the account, returns
 `201 Created` with the authentication response shown above, and sets both
 session cookies.
 
-When `AUTHARA_CHALLENGE_ENABLED=true`, Authara starts email verification and
-returns `202 Accepted` without creating a session:
+This operation returns `404 not_found` when challenges are enabled.
+
+Errors: `400 invalid_request`, `403 forbidden`, `404 not_found`, `429
+rate_limited`, or `500 internal_error`.
+
+---
+
+## Start signup verification
+
+```text
+POST /auth/api/v1/signup/challenges
+```
+
+The request body is the same email-and-password object used for direct signup.
+Authara starts email verification and returns `202 Accepted` without creating a
+session:
 
 ```json
 {
@@ -188,15 +200,17 @@ returns `202 Accepted` without creating a session:
 }
 ```
 
-Errors: `400 invalid_request`, `403 forbidden`, `429 rate_limited`, or
-`500 internal_error`.
+This operation returns `404 not_found` when challenges are disabled.
+
+Errors: `400 invalid_request`, `403 forbidden`, `404 not_found`, `429
+rate_limited`, or `500 internal_error`.
 
 ---
 
-## Verify signup
+## Verify signup verification
 
 ```text
-POST /auth/api/v1/signup/verify
+POST /auth/api/v1/signup/challenges/verify
 ```
 
 ```json
@@ -469,9 +483,9 @@ See [Errors](errors.md).
 # Organization Management
 
 Set `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED=true` to allow authenticated
-clients to manage their own organization directly through Authara. Disable it
-when organization changes must pass through the application backend for billing,
-seat limits, approval, or other business rules.
+clients to manage non-capacity organization data directly through Authara.
+Organization creation, invitation creation, and invitation resend remain
+internal-only so your application backend can enforce billing and seat limits.
 
 Public organization routes require the `authara_access` cookie. State-changing
 requests also require the API CSRF token. Organization-scoped routes only accept
@@ -482,16 +496,13 @@ Available routes:
 
 ```text
 GET   /auth/api/v1/capabilities
-POST  /auth/api/v1/organizations
 GET   /auth/api/v1/organizations/{organizationID}
 PATCH /auth/api/v1/organizations/{organizationID}
 GET   /auth/api/v1/organizations/{organizationID}/members
 GET   /auth/api/v1/organizations/{organizationID}/members/{userID}
 GET   /auth/api/v1/organizations/{organizationID}/invitations
-POST  /auth/api/v1/organizations/{organizationID}/invitations
 GET   /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}
 POST  /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
-POST  /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}/resend
 GET   /auth/api/v1/users/{userID}/memberships
 ```
 
@@ -503,6 +514,28 @@ while the feature is disabled.
 ---
 
 # Internal Endpoints
+
+The internal API contains only server-to-server operations that can create or
+reserve billable organization capacity.
+
+## Create organization
+
+Creates a team organization on behalf of a user after your application backend
+has enforced product-specific rules.
+
+```text
+POST /auth/internal/v1/organizations
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
+### Request
+
+```json
+{
+  "name": "Example Inc",
+  "created_by_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1"
+}
+```
 
 ## Create organization invitation
 
@@ -541,6 +574,15 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
 ```
 
 Authara also enqueues an invitation email when the email worker is configured. The returned `invite_url` is always present for testing or app-owned delivery.
+
+## Resend organization invitation
+
+Replaces an existing invitation with a fresh pending invitation.
+
+```text
+POST /auth/internal/v1/organizations/{organization_id}/invitations/{invitation_id}/resend
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
 
 ### Errors
 

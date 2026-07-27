@@ -13,6 +13,7 @@ import (
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
+	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/store"
@@ -29,11 +30,17 @@ func TestSignupChallengeVerificationCreatesSession(t *testing.T) {
 		signupReq := apiJSONRequest(
 			ctx,
 			http.MethodPost,
-			"/auth/api/v1/signup",
+			"/auth/api/v1/signup/challenges",
 			`{"email":"challenge-api@example.com","password":"password123"}`,
 		)
 		signupRR := httptest.NewRecorder()
-		h.SignupPost(signupRR, signupReq)
+		signupResp, err := h.StartSignupChallenge(contractCtx(ctx, signupReq), contract.StartSignupChallengeRequestObject{
+			Body: signupRequest("challenge-api@example.com", "password123", ""),
+		})
+		if err != nil {
+			t.Fatalf("StartSignupChallenge failed: %v", err)
+		}
+		writeContractResponse(t, signupRR, signupResp)
 
 		if signupRR.Code != http.StatusAccepted {
 			t.Fatalf("expected signup status %d, got %d body=%s", http.StatusAccepted, signupRR.Code, signupRR.Body.String())
@@ -55,21 +62,20 @@ func TestSignupChallengeVerificationCreatesSession(t *testing.T) {
 			t.Fatalf("GenerateCode failed: %v", err)
 		}
 
-		verifyBody, err := json.Marshal(signupVerifyRequest{
-			ChallengeID: challengeID.String(),
-			Code:        code,
-		})
-		if err != nil {
-			t.Fatalf("marshal verify request: %v", err)
-		}
 		verifyReq := apiJSONRequest(
 			ctx,
 			http.MethodPost,
-			"/auth/api/v1/signup/verify",
-			string(verifyBody),
+			"/auth/api/v1/signup/challenges/verify",
+			"",
 		)
 		verifyRR := httptest.NewRecorder()
-		h.SignupVerifyPost(verifyRR, verifyReq)
+		verifyResp, err := h.VerifySignupChallenge(contractCtx(ctx, verifyReq), contract.VerifySignupChallengeRequestObject{
+			Body: &contract.SignupChallengeVerification{ChallengeId: challengeID, Code: code},
+		})
+		if err != nil {
+			t.Fatalf("VerifySignupChallenge failed: %v", err)
+		}
+		writeContractResponse(t, verifyRR, verifyResp)
 
 		if verifyRR.Code != http.StatusCreated {
 			t.Fatalf("expected verify status %d, got %d body=%s", http.StatusCreated, verifyRR.Code, verifyRR.Body.String())
@@ -104,11 +110,17 @@ func TestSignupChallengeExistingEmailIsOpaque(t *testing.T) {
 		req := apiJSONRequest(
 			ctx,
 			http.MethodPost,
-			"/auth/api/v1/signup",
+			"/auth/api/v1/signup/challenges",
 			`{"email":"opaque-api@example.com","password":"password123"}`,
 		)
 		rr := httptest.NewRecorder()
-		h.SignupPost(rr, req)
+		resp, err := h.StartSignupChallenge(contractCtx(ctx, req), contract.StartSignupChallengeRequestObject{
+			Body: signupRequest("opaque-api@example.com", "password123", ""),
+		})
+		if err != nil {
+			t.Fatalf("StartSignupChallenge failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusAccepted {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusAccepted, rr.Code, rr.Body.String())
@@ -156,11 +168,17 @@ func TestSignupChallengeWithInvitationCodeRejectsWrongEmail(t *testing.T) {
 		req := apiJSONRequest(
 			ctx,
 			http.MethodPost,
-			"/auth/api/v1/signup",
+			"/auth/api/v1/signup/challenges",
 			`{"email":"challenge-wrong-invited@example.com","password":"password123","invitation_code":"`+invite.RawToken+`"}`,
 		)
 		rr := httptest.NewRecorder()
-		h.SignupPost(rr, req)
+		resp, err := h.StartSignupChallenge(contractCtx(ctx, req), contract.StartSignupChallengeRequestObject{
+			Body: signupRequest("challenge-wrong-invited@example.com", "password123", invite.RawToken),
+		})
+		if err != nil {
+			t.Fatalf("StartSignupChallenge failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected signup status %d, got %d body=%s", http.StatusBadRequest, rr.Code, rr.Body.String())
@@ -193,18 +211,20 @@ func TestChallengeResendKeepsChallengeStateOpaque(t *testing.T) {
 		}
 
 		for _, challengeID := range []uuid.UUID{realID, opaqueID, uuid.New()} {
-			body, err := json.Marshal(challengeResendRequest{ChallengeID: challengeID.String()})
-			if err != nil {
-				t.Fatalf("marshal resend request: %v", err)
-			}
 			req := apiJSONRequest(
 				ctx,
 				http.MethodPost,
 				"/auth/api/v1/challenges/resend",
-				string(body),
+				"",
 			)
 			rr := httptest.NewRecorder()
-			h.ChallengeResendPost(rr, req)
+			resp, err := h.ResendChallenge(contractCtx(ctx, req), contract.ResendChallengeRequestObject{
+				Body: &contract.ChallengeReference{ChallengeId: challengeID},
+			})
+			if err != nil {
+				t.Fatalf("ResendChallenge failed: %v", err)
+			}
+			writeContractResponse(t, rr, resp)
 
 			if rr.Code != http.StatusNoContent || rr.Body.Len() != 0 {
 				t.Fatalf("expected opaque 204 response for %s, got %d body=%s", challengeID, rr.Code, rr.Body.String())
@@ -213,19 +233,77 @@ func TestChallengeResendKeepsChallengeStateOpaque(t *testing.T) {
 	})
 }
 
-func TestSignupVerifyRejectsInvalidCodeShape(t *testing.T) {
+func TestSignupChallengeVerifyRejectsInvalidCodeShape(t *testing.T) {
 	h := &APIHandler{ChallengeEnabled: true, Challenge: &challenge.Service{}, Verification: &challenge.VerificationCodeService{}}
 	req := httptest.NewRequest(
 		http.MethodPost,
-		"/auth/api/v1/signup/verify",
+		"/auth/api/v1/signup/challenges/verify",
 		strings.NewReader(`{"challenge_id":"`+uuid.NewString()+`","code":"abcdef"}`),
 	)
 	rr := httptest.NewRecorder()
 
-	h.SignupVerifyPost(rr, req)
+	challengeID := uuid.New()
+	resp, err := h.VerifySignupChallenge(contractCtx(req.Context(), req), contract.VerifySignupChallengeRequestObject{
+		Body: &contract.SignupChallengeVerification{ChallengeId: challengeID, Code: "abcdef"},
+	})
+	if err != nil {
+		t.Fatalf("VerifySignupChallenge failed: %v", err)
+	}
+	writeContractResponse(t, rr, resp)
 
 	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "invalid_request") {
 		t.Fatalf("expected invalid_request, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestSignupRoutesReturnNotFoundWhenUnavailable(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler *APIHandler
+		target  string
+		handle  func(*APIHandler, context.Context, *http.Request) (any, error)
+	}{
+		{
+			name:    "direct signup with challenges enabled",
+			handler: &APIHandler{ChallengeEnabled: true},
+			target:  "/auth/api/v1/signup/direct",
+			handle: func(h *APIHandler, ctx context.Context, r *http.Request) (any, error) {
+				return h.SignupDirect(ctx, contract.SignupDirectRequestObject{Body: signupRequest("", "", "")})
+			},
+		},
+		{
+			name:    "challenge signup with challenges disabled",
+			handler: &APIHandler{},
+			target:  "/auth/api/v1/signup/challenges",
+			handle: func(h *APIHandler, ctx context.Context, r *http.Request) (any, error) {
+				return h.StartSignupChallenge(ctx, contract.StartSignupChallengeRequestObject{Body: signupRequest("", "", "")})
+			},
+		},
+		{
+			name:    "challenge verification with challenges disabled",
+			handler: &APIHandler{},
+			target:  "/auth/api/v1/signup/challenges/verify",
+			handle: func(h *APIHandler, ctx context.Context, r *http.Request) (any, error) {
+				return h.VerifySignupChallenge(ctx, contract.VerifySignupChallengeRequestObject{Body: &contract.SignupChallengeVerification{ChallengeId: uuid.New(), Code: "000000"}})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tt.target, strings.NewReader(`{}`))
+			rr := httptest.NewRecorder()
+
+			resp, err := tt.handle(tt.handler, contractCtx(req.Context(), req), req)
+			if err != nil {
+				t.Fatalf("handler failed: %v", err)
+			}
+			writeContractResponse(t, rr, resp)
+
+			if rr.Code != http.StatusNotFound || !strings.Contains(rr.Body.String(), `"code":"not_found"`) {
+				t.Fatalf("expected not_found, got %d body=%s", rr.Code, rr.Body.String())
+			}
+		})
 	}
 }
 
@@ -271,13 +349,9 @@ func newAPIChallengeTestHandler(t *testing.T, tdb *testutil.TestDB) *APIHandler 
 func decodeChallengeID(t *testing.T, body []byte) uuid.UUID {
 	t.Helper()
 
-	var got challengeStartedResponse
+	var got contract.SignupChallenge
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode challenge response: %v", err)
 	}
-	challengeID, err := uuid.Parse(got.ChallengeID)
-	if err != nil {
-		t.Fatalf("parse challenge id: %v", err)
-	}
-	return challengeID
+	return got.ChallengeId
 }

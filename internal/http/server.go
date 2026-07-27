@@ -20,6 +20,8 @@ type ServerConfig struct {
 	Logger            *slog.Logger
 	OAuthProviders    oauth.OAuthProviders
 	Handlers          Handlers
+
+	disableOpenAPIValidation bool
 }
 
 type Handlers struct {

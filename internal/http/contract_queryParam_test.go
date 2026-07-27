@@ -3,49 +3,15 @@ package http
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	redir "github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/middleware"
-	"gopkg.in/yaml.v3"
 )
 
-type httpContractQueryParam struct {
-	QueryParameters []contractQueryParameter `yaml:"query_parameters"`
-}
-
-type contractQueryParameter struct {
-	Name      string   `yaml:"name"`
-	Stability string   `yaml:"stability"`
-	AppliesTo []string `yaml:"applies_to"`
-	Semantics []string `yaml:"semantics"`
-}
-
-func loadStableQueryParameter(t *testing.T, name string) contractQueryParameter {
-	t.Helper()
-
-	data, err := os.ReadFile("../../contract/http.yaml")
-	if err != nil {
-		t.Fatalf("read contract/http.yaml: %v", err)
-	}
-
-	var contract httpContractQueryParam
-	if err := yaml.Unmarshal(data, &contract); err != nil {
-		t.Fatalf("unmarshal contract/http.yaml: %v", err)
-	}
-
-	for _, qp := range contract.QueryParameters {
-		if qp.Name == name && qp.Stability == "stable" {
-			return qp
-		}
-	}
-
-	t.Fatalf("stable query parameter %q not found in contract/http.yaml", name)
-	return contractQueryParameter{}
-}
+var returnToPaths = []string{"/auth/login", "/auth/signup", "/auth/account"}
 
 func newReturnToHandler() http.Handler {
 	return middleware.ReturnTo(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -63,13 +29,7 @@ func newReturnToHandlerWithDefault(defaultReturnTo string) http.Handler {
 
 func TestRedirectContract_ReturnTo_AppliesToPaths(t *testing.T) {
 	handler := newReturnToHandler()
-	qp := loadStableQueryParameter(t, redirect.ReturnToQueryParam)
-
-	if len(qp.AppliesTo) == 0 {
-		t.Fatal("return_to contract has no applies_to paths")
-	}
-
-	for _, path := range qp.AppliesTo {
+	for _, path := range returnToPaths {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path+"?"+redirect.ReturnToQueryParam+"=/private", nil)
 			rr := httptest.NewRecorder()
@@ -89,9 +49,7 @@ func TestRedirectContract_ReturnTo_AppliesToPaths(t *testing.T) {
 
 func TestRedirectContract_ReturnTo_InvalidValueFallsBackToDefault(t *testing.T) {
 	handler := newReturnToHandler()
-	qp := loadStableQueryParameter(t, redirect.ReturnToQueryParam)
-
-	for _, path := range qp.AppliesTo {
+	for _, path := range returnToPaths {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path+"?return_to=//evil.com", nil)
 			rr := httptest.NewRecorder()
@@ -111,9 +69,7 @@ func TestRedirectContract_ReturnTo_InvalidValueFallsBackToDefault(t *testing.T) 
 
 func TestRedirectContract_ReturnTo_NoValueFallsBackToDefault(t *testing.T) {
 	handler := newReturnToHandler()
-	qp := loadStableQueryParameter(t, redirect.ReturnToQueryParam)
-
-	for _, path := range qp.AppliesTo {
+	for _, path := range returnToPaths {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			rr := httptest.NewRecorder()
@@ -149,9 +105,7 @@ func TestRedirectContract_ReturnTo_NoValueUsesConfiguredDefault(t *testing.T) {
 
 func TestRedirectContract_ReturnTo_HTMXUsesHXRedirect(t *testing.T) {
 	handler := newReturnToHandler()
-	qp := loadStableQueryParameter(t, redirect.ReturnToQueryParam)
-
-	for _, path := range qp.AppliesTo {
+	for _, path := range returnToPaths {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path+"?"+redirect.ReturnToQueryParam+"=/private", nil)
 			req.Header.Set("HX-Request", "true")

@@ -113,10 +113,10 @@ AUTHARA_INTERNAL_API_TOKEN
 
 `AUTHARA_INTERNAL_API_TOKEN` is required for calls to `/auth/internal/v1`.
 `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED` allows authenticated clients
-to manage their own organization through matching `/auth/api/v1` routes. Disable
-it when organization changes must pass through the application backend for
-billing, seat limits, approval, or other business rules. Internal routes remain
-available through bearer authentication in either mode.
+to manage non-capacity organization data through matching `/auth/api/v1`
+routes. Organization creation, invitation creation, and invitation resend remain
+internal-only for backend billing and seat-limit checks and remain available
+through bearer authentication in either mode.
 
 `AUTHARA_INVITATION_EMAIL_INCLUDE_CODE` includes the raw invitation code in
 Authara's built-in invitation emails for custom app signup screens. The hosted

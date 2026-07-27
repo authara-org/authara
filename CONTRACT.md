@@ -16,7 +16,7 @@ If behavior described here changes incompatibly, that change is considered **bre
 
 Authara exposes multiple public contracts:
 
-- HTTP contract (routes, cookies, redirects, JSON behavior)
+- OpenAPI contract (public/internal JSON routes, schemas, cookies, and errors)
 - configuration contract (environment variables)
 - webhook contract (event types, payloads, delivery behavior)
 

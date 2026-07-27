@@ -1,16 +1,9 @@
 package internalapi
 
 import (
-	"net/http"
-
 	"github.com/authara-org/authara/internal/http/kit/response"
+	contract "github.com/authara-org/authara/internal/http/openapi"
 )
-
-type RouteContractSpec struct {
-	Method string
-	Path   string
-	Errors map[response.ErrorCode]response.ErrorSpec
-}
 
 const (
 	codeUserNotFound              response.ErrorCode = "user_not_found"
@@ -26,115 +19,17 @@ const (
 	codeInvitationExpired         response.ErrorCode = "invitation_expired"
 )
 
-var CapabilitiesGetErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized: {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-}
-
-var CreateOrganizationErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
-	codeUserNotFound:            {Status: http.StatusNotFound, Code: codeUserNotFound},
-	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var OrganizationErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
-	codeOrganizationNotFound:    {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
-	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var OrganizationMembersGetErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
-	codeOrganizationNotFound:    {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
-	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var OrganizationMemberErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
-	codeOrganizationNotFound:    {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
-	codeMembershipNotFound:      {Status: http.StatusNotFound, Code: codeMembershipNotFound},
-	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var OrganizationInvitationsGetErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
-	codeOrganizationNotFound:    {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
-	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var CreateOrganizationInvitationErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:    {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	codeActorNotMember:           {Status: http.StatusForbidden, Code: codeActorNotMember},
-	codeActorNotAllowed:          {Status: http.StatusForbidden, Code: codeActorNotAllowed},
-	codeOrganizationNotFound:     {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
-	codeAlreadyMember:            {Status: http.StatusConflict, Code: codeAlreadyMember},
-	codeInvitationAlreadyPending: {Status: http.StatusConflict, Code: codeInvitationAlreadyPending},
-	response.CodeInvalidRequest:  {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeInternalError:   {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var OrganizationInvitationGetErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
-	codeInvitationNotFound:      {Status: http.StatusNotFound, Code: codeInvitationNotFound},
-	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var RevokeOrganizationInvitationErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:     {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	response.CodeInvalidRequest:   {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeForbidden:        {Status: http.StatusForbidden, Code: response.CodeForbidden},
-	codeOrganizationNotFound:      {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
-	codeInvitationNotFound:        {Status: http.StatusNotFound, Code: codeInvitationNotFound},
-	codeUserNotFound:              {Status: http.StatusNotFound, Code: codeUserNotFound},
-	codeInvitationAlreadyAccepted: {Status: http.StatusConflict, Code: codeInvitationAlreadyAccepted},
-	codeInvitationRevoked:         {Status: http.StatusConflict, Code: codeInvitationRevoked},
-	codeInvitationExpired:         {Status: http.StatusConflict, Code: codeInvitationExpired},
-	response.CodeInternalError:    {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var ResendOrganizationInvitationErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:     {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	response.CodeInvalidRequest:   {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeForbidden:        {Status: http.StatusForbidden, Code: response.CodeForbidden},
-	codeOrganizationNotFound:      {Status: http.StatusNotFound, Code: codeOrganizationNotFound},
-	codeInvitationNotFound:        {Status: http.StatusNotFound, Code: codeInvitationNotFound},
-	codeAlreadyMember:             {Status: http.StatusConflict, Code: codeAlreadyMember},
-	codeInvitationAlreadyPending:  {Status: http.StatusConflict, Code: codeInvitationAlreadyPending},
-	codeInvitationAlreadyAccepted: {Status: http.StatusConflict, Code: codeInvitationAlreadyAccepted},
-	codeInvitationRevoked:         {Status: http.StatusConflict, Code: codeInvitationRevoked},
-	response.CodeInternalError:    {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var UserMembershipsGetErrors = map[response.ErrorCode]response.ErrorSpec{
-	response.CodeUnauthorized:   {Status: http.StatusUnauthorized, Code: response.CodeUnauthorized},
-	response.CodeInvalidRequest: {Status: http.StatusBadRequest, Code: response.CodeInvalidRequest},
-	response.CodeForbidden:      {Status: http.StatusForbidden, Code: response.CodeForbidden},
-	codeUserNotFound:            {Status: http.StatusNotFound, Code: codeUserNotFound},
-	response.CodeInternalError:  {Status: http.StatusInternalServerError, Code: response.CodeInternalError},
-}
-
-var InternalAPIRouteSpecs = []RouteContractSpec{
-	{Method: http.MethodGet, Path: "/auth/internal/v1/capabilities", Errors: CapabilitiesGetErrors},
-	{Method: http.MethodPost, Path: "/auth/internal/v1/organizations", Errors: CreateOrganizationErrors},
-	{Method: http.MethodGet, Path: "/auth/internal/v1/organizations/{organizationID}", Errors: OrganizationErrors},
-	{Method: http.MethodPatch, Path: "/auth/internal/v1/organizations/{organizationID}", Errors: OrganizationErrors},
-	{Method: http.MethodGet, Path: "/auth/internal/v1/organizations/{organizationID}/members", Errors: OrganizationMembersGetErrors},
-	{Method: http.MethodGet, Path: "/auth/internal/v1/organizations/{organizationID}/members/{userID}", Errors: OrganizationMemberErrors},
-	{Method: http.MethodGet, Path: "/auth/internal/v1/organizations/{organizationID}/invitations", Errors: OrganizationInvitationsGetErrors},
-	{Method: http.MethodPost, Path: "/auth/internal/v1/organizations/{organizationID}/invitations", Errors: CreateOrganizationInvitationErrors},
-	{Method: http.MethodGet, Path: "/auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}", Errors: OrganizationInvitationGetErrors},
-	{Method: http.MethodPost, Path: "/auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/revoke", Errors: RevokeOrganizationInvitationErrors},
-	{Method: http.MethodPost, Path: "/auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend", Errors: ResendOrganizationInvitationErrors},
-	{Method: http.MethodGet, Path: "/auth/internal/v1/users/{userID}/memberships", Errors: UserMembershipsGetErrors},
-}
+var (
+	GetPublicCapabilitiesErrors                = contract.MustOperationErrors("getPublicCapabilities")
+	CreateInternalOrganizationErrors           = contract.MustOperationErrors("createInternalOrganization")
+	GetPublicOrganizationErrors                = contract.MustOperationErrors("getPublicOrganization")
+	UpdatePublicOrganizationErrors             = contract.MustOperationErrors("updatePublicOrganization")
+	ListPublicOrganizationMembersErrors        = contract.MustOperationErrors("listPublicOrganizationMembers")
+	GetPublicOrganizationMemberErrors          = contract.MustOperationErrors("getPublicOrganizationMember")
+	ListPublicOrganizationInvitationsErrors    = contract.MustOperationErrors("listPublicOrganizationInvitations")
+	CreateInternalOrganizationInvitationErrors = contract.MustOperationErrors("createInternalOrganizationInvitation")
+	GetPublicOrganizationInvitationErrors      = contract.MustOperationErrors("getPublicOrganizationInvitation")
+	RevokePublicOrganizationInvitationErrors   = contract.MustOperationErrors("revokePublicOrganizationInvitation")
+	ResendInternalOrganizationInvitationErrors = contract.MustOperationErrors("resendInternalOrganizationInvitation")
+	ListPublicUserMembershipsErrors            = contract.MustOperationErrors("listPublicUserMemberships")
+)

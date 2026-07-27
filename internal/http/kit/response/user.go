@@ -23,14 +23,17 @@ type Organization struct {
 	Role domain.OrganizationRole `json:"role"`
 }
 
-func UserWithRoles(u domain.User, roles []roles.Role) User {
+func UserWithRoles(u domain.User, platformRoles []roles.Role) User {
+	if platformRoles == nil {
+		platformRoles = []roles.Role{}
+	}
 	return User{
 		ID:        u.ID.String(),
 		Email:     u.Email,
 		Username:  u.Username,
 		Disabled:  u.DisabledAt != nil,
 		CreatedAt: u.CreatedAt,
-		Roles:     roles,
+		Roles:     platformRoles,
 	}
 }
 

@@ -221,7 +221,7 @@ variables:
     required: false
     type: bool
     default: false
-    description: Allows authenticated clients to manage their own organization directly through Authara. Disable it when organization changes must pass through the application backend for billing, seat limits, approval, or other business rules. Internal bearer access remains available.
+    description: Allows authenticated clients to manage non-capacity organization data directly through Authara. Organization creation, invitation creation, and invitation resend remain internal-only for backend billing and seat-limit checks.
 
   - name: AUTHARA_ORGANIZATION_INVITATION_TTL
     stability: stable

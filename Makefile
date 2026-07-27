@@ -25,7 +25,13 @@ TEST_DB_LOG_SQL    ?= false
 
 .PHONY: dev dev-tailwind mailhog-up mailhog-down connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email \
 	test test-up test-db-create test-migrate test-run test-down test-reset \
-	test-coverage test-coverage-profile test-coverage-html
+	test-coverage test-coverage-profile test-coverage-html generate check-generated
+
+generate:
+	go generate ./internal/http/openapi
+
+check-generated: generate
+	git diff --exit-code -- internal/http/openapi/generated.go
 
 dev:
 	@if command -v tmux >/dev/null 2>&1; then \

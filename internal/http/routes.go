@@ -7,6 +7,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/handlers/meta"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
+	openapicontract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -24,6 +25,9 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
+	if !cfg.disableOpenAPIValidation {
+		r.Use(openapicontract.ValidationMiddleware(cfg.Logger))
+	}
 
 	registerRoutes(r, cfg, mw)
 
@@ -47,8 +51,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	})
 
 	uih := cfg.Handlers.UI
-	apih := cfg.Handlers.API
-	internalh := cfg.Handlers.InternalAPI
+	contracth := newOpenAPIServer(cfg.Handlers)
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(mw.ReturnTo)
@@ -202,62 +205,57 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 		// API
 		r.Route("/api/v1", func(r chi.Router) {
-			r.Get("/csrf", apih.CSRFGet)
-			r.Get("/oauth/google/options", apih.GoogleOptionsGet)
+			r.Get("/csrf", contracth.GetCsrfToken)
+			r.Get("/oauth/google/options", contracth.GetGoogleLoginOptions)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAPICSRF)
 
-				r.Post("/oauth/google", apih.GoogleLoginPost)
-				r.Post("/login", apih.LoginPost)
-				r.Post("/signup", apih.SignupPost)
-				r.Post("/signup/verify", apih.SignupVerifyPost)
-				r.Post("/challenges/resend", apih.ChallengeResendPost)
-				r.Post("/passkeys/authenticate/options", apih.PasskeyAuthenticateOptionsPost)
-				r.Post("/passkeys/authenticate/finish", apih.PasskeyAuthenticateFinishPost)
-				r.Post("/sessions/logout", apih.LogoutPost)
-				r.Post("/sessions/refresh", apih.RefreshPost)
+				r.Post("/oauth/google", contracth.LoginWithGoogle)
+				r.Post("/login", contracth.LoginWithPassword)
+				r.Post("/signup/direct", contracth.SignupDirect)
+				r.Post("/signup/challenges", contracth.StartSignupChallenge)
+				r.Post("/signup/challenges/verify", contracth.VerifySignupChallenge)
+				r.Post("/challenges/resend", contracth.ResendChallenge)
+				r.Post("/passkeys/authenticate/options", contracth.BeginPasskeyAuthentication)
+				r.Post("/passkeys/authenticate/finish", contracth.FinishPasskeyAuthentication)
+				r.Post("/sessions/logout", contracth.Logout)
+				r.Post("/sessions/refresh", contracth.RefreshSession)
 
 			})
-			r.Post("/tokens/refresh", apih.TokenRefreshPost)
+			r.Post("/tokens/refresh", contracth.RefreshTokens)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAppAccessAuthAPI)
 
-				r.Get("/user", apih.UserGet)
-				r.Get("/capabilities", internalh.CapabilitiesGet)
-				r.Get("/organizations", apih.OrganizationsGet)
-				r.Get("/organizations/current", apih.OrganizationCurrentGet)
-				r.Get("/organizations/current/members", apih.OrganizationCurrentMembersGet)
-				// r.Post("/user/username", apih.ChangeUsername)
-				// r.Post("/user/delete", apih.DeleteUser)
-
+				r.Get("/user", contracth.GetCurrentUser)
+				r.Get("/capabilities", contracth.GetPublicCapabilities)
+				r.Get("/organizations", contracth.ListCurrentUserOrganizations)
+				r.Get("/organizations/current", contracth.GetCurrentOrganization)
+				r.Get("/organizations/current/members", contracth.ListCurrentOrganizationMembers)
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireAPICSRF)
-					r.Post("/passkeys/register/options", apih.PasskeyRegisterOptionsPost)
-					r.Post("/passkeys/register/finish", apih.PasskeyRegisterFinishPost)
-					r.Post("/organizations/{organizationID}/switch", apih.OrganizationSwitchPost)
+					r.Post("/passkeys/register/options", contracth.BeginPasskeyRegistration)
+					r.Post("/passkeys/register/finish", contracth.FinishPasskeyRegistration)
+					r.Post("/organizations/{organizationID}/switch", contracth.SwitchOrganization)
 				})
 
 				// Optional direct organization management for authenticated apps.
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequirePublicOrganizationManagement)
 
-					r.Get("/organizations/{organizationID}", internalh.GetOrganization)
-					r.Get("/organizations/{organizationID}/members", internalh.ListOrganizationMembers)
-					r.Get("/organizations/{organizationID}/members/{userID}", internalh.GetOrganizationMember)
-					r.Get("/organizations/{organizationID}/invitations", internalh.ListOrganizationInvitations)
-					r.Get("/organizations/{organizationID}/invitations/{invitationID}", internalh.GetOrganizationInvitation)
-					r.Get("/users/{userID}/memberships", internalh.ListUserMemberships)
+					r.Get("/organizations/{organizationID}", contracth.GetPublicOrganization)
+					r.Get("/organizations/{organizationID}/members", contracth.ListPublicOrganizationMembers)
+					r.Get("/organizations/{organizationID}/members/{userID}", contracth.GetPublicOrganizationMember)
+					r.Get("/organizations/{organizationID}/invitations", contracth.ListPublicOrganizationInvitations)
+					r.Get("/organizations/{organizationID}/invitations/{invitationID}", contracth.GetPublicOrganizationInvitation)
+					r.Get("/users/{userID}/memberships", contracth.ListPublicUserMemberships)
 
 					r.Group(func(r chi.Router) {
 						r.Use(mw.RequireAPICSRF)
 
-						r.Post("/organizations", internalh.CreateOrganization)
-						r.Patch("/organizations/{organizationID}", internalh.UpdateOrganization)
-						r.Post("/organizations/{organizationID}/invitations", internalh.CreateOrganizationInvitation)
-						r.Post("/organizations/{organizationID}/invitations/{invitationID}/revoke", internalh.RevokeOrganizationInvitation)
-						r.Post("/organizations/{organizationID}/invitations/{invitationID}/resend", internalh.ResendOrganizationInvitation)
+						r.Patch("/organizations/{organizationID}", contracth.UpdatePublicOrganization)
+						r.Post("/organizations/{organizationID}/invitations/{invitationID}/revoke", contracth.RevokePublicOrganizationInvitation)
 					})
 				})
 			})
@@ -274,18 +272,9 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(mw.RequireInternalAPIAuth)
 
-			r.Get("/capabilities", internalh.CapabilitiesGet)
-			r.Post("/organizations", internalh.CreateOrganization)
-			r.Get("/organizations/{organizationID}", internalh.GetOrganization)
-			r.Patch("/organizations/{organizationID}", internalh.UpdateOrganization)
-			r.Get("/organizations/{organizationID}/members", internalh.ListOrganizationMembers)
-			r.Get("/organizations/{organizationID}/members/{userID}", internalh.GetOrganizationMember)
-			r.Get("/organizations/{organizationID}/invitations", internalh.ListOrganizationInvitations)
-			r.Post("/organizations/{organizationID}/invitations", internalh.CreateOrganizationInvitation)
-			r.Get("/organizations/{organizationID}/invitations/{invitationID}", internalh.GetOrganizationInvitation)
-			r.Post("/organizations/{organizationID}/invitations/{invitationID}/revoke", internalh.RevokeOrganizationInvitation)
-			r.Post("/organizations/{organizationID}/invitations/{invitationID}/resend", internalh.ResendOrganizationInvitation)
-			r.Get("/users/{userID}/memberships", internalh.ListUserMemberships)
+			r.Post("/organizations", contracth.CreateInternalOrganization)
+			r.Post("/organizations/{organizationID}/invitations", contracth.CreateInternalOrganizationInvitation)
+			r.Post("/organizations/{organizationID}/invitations/{invitationID}/resend", contracth.ResendInternalOrganizationInvitation)
 		})
 	})
 

@@ -4,84 +4,61 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
+	openapicontract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
-	"gopkg.in/yaml.v3"
 )
 
-type httpContractRoutes struct {
-	Version int             `yaml:"version"`
-	Routes  []contractRoute `yaml:"routes"`
-}
-
-type contractRoute struct {
-	Method    string `yaml:"method"`
-	Path      string `yaml:"path"`
-	Stability string `yaml:"stability"`
-	Kind      string `yaml:"kind"`
-	Access    string `yaml:"access"`
-}
-
 func TestStableRoutesAreRegistered(t *testing.T) {
-	data, err := os.ReadFile("../../contract/http.yaml")
+	document, err := openapicontract.GetSwagger()
 	if err != nil {
-		t.Fatalf("read contract/http.yaml: %v", err)
-	}
-
-	var contract httpContractRoutes
-	if err := yaml.Unmarshal(data, &contract); err != nil {
-		t.Fatalf("unmarshal contract/http.yaml: %v", err)
+		t.Fatalf("load generated OpenAPI contract: %v", err)
 	}
 
 	router := newContractTestRouter()
 	actual := collectRoutes(t, router)
-	expected := stableContractRoutes(contract)
+	expected := openAPIRoutes(document)
 
-	// Contract -> router for all stable contract routes.
 	for key := range expected {
 		if !actual[key] {
-			t.Fatalf("stable route missing from router: %s", key)
+			t.Errorf("OpenAPI operation missing from router: %s", key)
 		}
 	}
 
-	// Router -> contract only for public API routes.
 	for key := range actual {
-		if !isPublicAPIRouteKey(key) {
+		if !isContractAPIRouteKey(key) {
 			continue
 		}
 		if !expected[key] {
-			t.Fatalf("public API route missing from stable contract: %s", key)
+			t.Errorf("router operation missing from OpenAPI: %s", key)
 		}
 	}
 }
 
-func stableContractRoutes(contract httpContractRoutes) map[string]bool {
+func openAPIRoutes(document *openapi3.T) map[string]bool {
 	out := make(map[string]bool)
-
-	for _, route := range contract.Routes {
-		if route.Stability != "stable" {
-			continue
+	for path, item := range document.Paths.Map() {
+		for method := range item.Operations() {
+			out[operationKey(method, path)] = true
 		}
-		out[route.Method+" "+route.Path] = true
 	}
-
 	return out
 }
 
-func isPublicAPIRouteKey(key string) bool {
+func isContractAPIRouteKey(key string) bool {
 	parts := strings.SplitN(key, " ", 2)
 	if len(parts) != 2 {
 		return false
 	}
 
 	path := parts[1]
-	return strings.HasPrefix(path, "/auth/api")
+	return strings.HasPrefix(path, "/auth/api/") || strings.HasPrefix(path, "/auth/internal/")
 }
 
 func newContractTestRouter() chi.Router {
@@ -94,11 +71,12 @@ func newContractTestRouter() chi.Router {
 	})
 
 	cfg := ServerConfig{
-		Version:  "test",
-		Addr:     ":0",
-		Dev:      true,
-		Logger:   logger,
-		Handlers: newTestHandlers(logger, renderer),
+		Version:                  "test",
+		Addr:                     ":0",
+		Dev:                      true,
+		Logger:                   logger,
+		Handlers:                 newTestHandlers(logger, renderer),
+		disableOpenAPIValidation: true,
 	}
 
 	mw := Middlewares{

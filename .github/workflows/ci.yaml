@@ -50,6 +50,9 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Check generated OpenAPI code
+        run: make check-generated
+
       - name: Wait for Postgres
         run: |
           until pg_isready -h localhost -p 5432 -U authara -d authara_test; do

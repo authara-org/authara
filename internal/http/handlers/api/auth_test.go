@@ -11,6 +11,7 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
+	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/testutil"
@@ -21,7 +22,11 @@ func TestCSRFGetReturnsTokenAndCookie(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/csrf", nil)
 	rr := httptest.NewRecorder()
 
-	h.CSRFGet(rr, req)
+	resp, err := h.GetCsrfToken(contractCtx(req.Context(), req), contract.GetCsrfTokenRequestObject{})
+	if err != nil {
+		t.Fatalf("GetCsrfToken failed: %v", err)
+	}
+	writeContractResponse(t, rr, resp)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -54,9 +59,15 @@ func TestSignupAndLoginSetSessionCookies(t *testing.T) {
 			RefreshTTL: time.Hour,
 		}
 
-		signupReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/signup", `{"email":" API-AUTH@example.com ","password":"password123"}`)
+		signupReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/signup/direct", `{"email":" API-AUTH@example.com ","password":"password123"}`)
 		signupRR := httptest.NewRecorder()
-		h.SignupPost(signupRR, signupReq)
+		signupResp, err := h.SignupDirect(contractCtx(ctx, signupReq), contract.SignupDirectRequestObject{
+			Body: signupRequest(" API-AUTH@example.com ", "password123", ""),
+		})
+		if err != nil {
+			t.Fatalf("SignupDirect failed: %v", err)
+		}
+		writeContractResponse(t, signupRR, signupResp)
 
 		if signupRR.Code != http.StatusCreated {
 			t.Fatalf("expected signup status %d, got %d body=%s", http.StatusCreated, signupRR.Code, signupRR.Body.String())
@@ -68,7 +79,13 @@ func TestSignupAndLoginSetSessionCookies(t *testing.T) {
 
 		loginReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/login", `{"email":"api-auth@example.com","password":"password123"}`)
 		loginRR := httptest.NewRecorder()
-		h.LoginPost(loginRR, loginReq)
+		loginResp, err := h.LoginWithPassword(contractCtx(ctx, loginReq), contract.LoginWithPasswordRequestObject{
+			Body: passwordLoginRequest("api-auth@example.com", "password123"),
+		})
+		if err != nil {
+			t.Fatalf("LoginWithPassword failed: %v", err)
+		}
+		writeContractResponse(t, loginRR, loginResp)
 
 		if loginRR.Code != http.StatusOK {
 			t.Fatalf("expected login status %d, got %d body=%s", http.StatusOK, loginRR.Code, loginRR.Body.String())
@@ -120,9 +137,15 @@ func TestSignupWithInvitationCodeJoinsOrganization(t *testing.T) {
 			RefreshTTL: time.Hour,
 		}
 
-		req := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/signup", `{"email":"api-invited@example.com","password":"password123","invitation_code":"`+invite.RawToken+`"}`)
+		req := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/signup/direct", `{"email":"api-invited@example.com","password":"password123","invitation_code":"`+invite.RawToken+`"}`)
 		rr := httptest.NewRecorder()
-		h.SignupPost(rr, req)
+		resp, err := h.SignupDirect(contractCtx(ctx, req), contract.SignupDirectRequestObject{
+			Body: signupRequest("api-invited@example.com", "password123", invite.RawToken),
+		})
+		if err != nil {
+			t.Fatalf("SignupDirect failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusCreated {
 			t.Fatalf("expected signup status %d, got %d body=%s", http.StatusCreated, rr.Code, rr.Body.String())
@@ -178,9 +201,15 @@ func TestSignupWithInvitationCodeRejectsWrongEmail(t *testing.T) {
 			RefreshTTL: time.Hour,
 		}
 
-		req := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/signup", `{"email":"api-wrong-invited@example.com","password":"password123","invitation_code":"`+invite.RawToken+`"}`)
+		req := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/signup/direct", `{"email":"api-wrong-invited@example.com","password":"password123","invitation_code":"`+invite.RawToken+`"}`)
 		rr := httptest.NewRecorder()
-		h.SignupPost(rr, req)
+		resp, err := h.SignupDirect(contractCtx(ctx, req), contract.SignupDirectRequestObject{
+			Body: signupRequest("api-wrong-invited@example.com", "password123", invite.RawToken),
+		})
+		if err != nil {
+			t.Fatalf("SignupDirect failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected signup status %d, got %d body=%s", http.StatusBadRequest, rr.Code, rr.Body.String())
@@ -192,7 +221,7 @@ func TestSignupWithInvitationCodeRejectsWrongEmail(t *testing.T) {
 func assertResponseTokens(t *testing.T, body []byte) {
 	t.Helper()
 
-	var got tokensResponse
+	var got contract.Tokens
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode token response: %v", err)
 	}

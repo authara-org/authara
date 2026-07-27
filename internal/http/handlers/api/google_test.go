@@ -11,6 +11,7 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
+	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
@@ -23,16 +24,20 @@ func TestGoogleOptionsGetReturnsClientIDNonceAndCookie(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/oauth/google/options", nil)
 	rr := httptest.NewRecorder()
 
-	h.GoogleOptionsGet(rr, req)
+	resp, err := h.GetGoogleLoginOptions(contractCtx(req.Context(), req), contract.GetGoogleLoginOptionsRequestObject{})
+	if err != nil {
+		t.Fatalf("GetGoogleLoginOptions failed: %v", err)
+	}
+	writeContractResponse(t, rr, resp)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
 	}
-	var body googleOptionsResponse
+	var body contract.GoogleLoginOptions
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body.ClientID != "test-google-client-id" || body.Nonce == "" {
+	if body.ClientId != "test-google-client-id" || body.Nonce == "" {
 		t.Fatalf("unexpected response: %+v", body)
 	}
 	if !hasCookieValue(rr.Result().Cookies(), "authara_oauth_nonce", body.Nonce) {
@@ -54,7 +59,13 @@ func TestGoogleLoginPostRejectsMismatchedNonce(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "authara_oauth_nonce", Value: "expected"})
 	rr := httptest.NewRecorder()
 
-	h.GoogleLoginPost(rr, req)
+	resp, err := h.LoginWithGoogle(contractCtx(req.Context(), req), contract.LoginWithGoogleRequestObject{
+		Body: &contract.GoogleLoginRequest{Credential: "id-token", Nonce: "wrong"},
+	})
+	if err != nil {
+		t.Fatalf("LoginWithGoogle failed: %v", err)
+	}
+	writeContractResponse(t, rr, resp)
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d body=%s", http.StatusUnauthorized, rr.Code, rr.Body.String())
@@ -69,11 +80,12 @@ func TestCompleteGoogleLoginCreatesSession(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/google", nil).WithContext(ctx)
 		rr := httptest.NewRecorder()
 
-		h.completeGoogleLogin(rr, req, &google.Identity{
+		resp := h.contractGoogleLogin(ctx, req, LoginWithGoogleErrors, &google.Identity{
 			OAuthID:       "google-user-123",
 			Email:         "google-api@example.com",
 			EmailVerified: true,
-		}, "app")
+		}, "app", make(http.Header))
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -100,11 +112,12 @@ func TestCompleteGoogleLoginRequiresExplicitLinkForExistingEmail(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/google", nil).WithContext(ctx)
 		rr := httptest.NewRecorder()
-		h.completeGoogleLogin(rr, req, &google.Identity{
+		resp := h.contractGoogleLogin(ctx, req, LoginWithGoogleErrors, &google.Identity{
 			OAuthID:       "google-existing-123",
 			Email:         "existing-google-api@example.com",
 			EmailVerified: true,
-		}, "app")
+		}, "app", make(http.Header))
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusConflict {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusConflict, rr.Code, rr.Body.String())

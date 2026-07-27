@@ -113,9 +113,9 @@ AUTHARA_INTERNAL_API_TOKEN
 ```
 
 `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED` allows authenticated clients
-to manage their own organization directly through Authara. Disable it when
-organization changes must pass through the application backend for billing,
-seat limits, approval, or other business rules.
+to manage non-capacity organization data directly through Authara.
+Organization creation, invitation creation, and invitation resend remain
+internal-only for backend billing and seat-limit checks.
 
 `AUTHARA_INVITATION_EMAIL_INCLUDE_CODE` includes the raw invitation code in
 Authara's built-in invitation emails for custom app signup screens. The hosted

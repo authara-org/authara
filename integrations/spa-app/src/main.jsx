@@ -14,10 +14,11 @@ import {
   resendSignupChallenge,
   resendInvitation,
   revokeInvitation,
-  signup,
+  signupDirect,
+  startSignupChallenge,
   switchOrganization,
   updateOrganization,
-  verifySignup,
+  verifySignupChallenge,
 } from "./api.js";
 import "./styles.css";
 
@@ -145,28 +146,35 @@ function AuthScreen({ onAuthenticated }) {
 
     try {
       if (mode === "verify") {
-        await verifySignup(challengeID, code);
+        await verifySignupChallenge(challengeID, code);
         await onAuthenticated();
         return;
       }
 
-      const result =
-        mode === "login"
-          ? await login(email, password)
-          : await signup(
-              email,
-              password,
-              mode === "invite" ? invitationCode : "",
-            );
-      if (result?.challenge_id) {
-        setChallengeID(result.challenge_id);
-        setPassword("");
-        setMode("verify");
-        setNotice("Check your email for the six-digit verification code.");
+      if (mode === "login") {
+        await login(email, password);
+        await onAuthenticated();
         return;
       }
 
-      await onAuthenticated();
+      const signupInvitationCode = mode === "invite" ? invitationCode : "";
+      try {
+        await signupDirect(email, password, signupInvitationCode);
+        await onAuthenticated();
+      } catch (signupError) {
+        if (!(signupError instanceof APIError) || signupError.status !== 404) {
+          throw signupError;
+        }
+        const challenge = await startSignupChallenge(
+          email,
+          password,
+          signupInvitationCode,
+        );
+        setChallengeID(challenge.challenge_id);
+        setPassword("");
+        setMode("verify");
+        setNotice("Check your email for the six-digit verification code.");
+      }
     } catch (requestError) {
       setError(requestError.message || "Authentication failed.");
     } finally {

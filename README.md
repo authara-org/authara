@@ -101,7 +101,7 @@ Features include:
 - OAuth provider login
 - CSRF protection for browser flows
 - a thin integration surface for applications and SDKs
-- a stable HTTP contract for core routes and cookies
+- a stable OpenAPI contract for public and internal JSON APIs
 
 The goal is simple:
 
@@ -194,15 +194,15 @@ Authara currently implements a minimal role model.
 
 # API and contract stability
 
-Authara maintains a public HTTP contract for important behavior.
+Authara maintains an OpenAPI contract for its JSON APIs.
 
 This includes:
 
-- stable `/auth` browser routes
 - stable `/auth/api/v1` JSON routes
+- stable `/auth/internal/v1` JSON routes
 - stable cookie names
 - stable error envelope format
-- contract tests for critical behavior
+- generated server/client types and runtime contract validation
 
 The goal is to make integrations predictable across releases.
 
@@ -247,4 +247,3 @@ Example applications demonstrating how to integrate Authara with different techn
 https://github.com/authara-org/authara-examples
 
 These examples include minimal setups for different stacks and show how to integrate authentication end-to-end.
-

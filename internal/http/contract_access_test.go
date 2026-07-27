@@ -5,102 +5,59 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
+	openapicontract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/go-chi/chi/v5"
-	"gopkg.in/yaml.v3"
 )
 
-type accessContract struct {
-	Routes []accessContractRoute `yaml:"routes"`
-}
-
-type accessContractRoute struct {
-	Method    string `yaml:"method"`
-	Path      string `yaml:"path"`
-	Stability string `yaml:"stability"`
-	Kind      string `yaml:"kind"`
-	Access    string `yaml:"access"`
-}
-
 const (
-	markerUserUIAuth   = 418
 	markerUserAPIAuth  = 419
-	markerAdminUIAuth  = 420
-	markerAdminRole    = 421
-	markerAdminAPIAuth = 422
 	markerInternalAuth = 423
 )
 
-func loadAccessContract(t *testing.T) accessContract {
-	t.Helper()
-
-	data, err := os.ReadFile("../../contract/http.yaml")
-	if err != nil {
-		t.Fatalf("read contract/http.yaml: %v", err)
-	}
-
-	var contract accessContract
-	if err := yaml.Unmarshal(data, &contract); err != nil {
-		t.Fatalf("unmarshal contract/http.yaml: %v", err)
-	}
-
-	return contract
-}
-
 func TestRouteAccessContract(t *testing.T) {
-	contract := loadAccessContract(t)
+	document, err := openapicontract.GetSwagger()
+	if err != nil {
+		t.Fatalf("load generated OpenAPI contract: %v", err)
+	}
 	router := newAccessContractTestRouter()
 
-	for _, route := range contract.Routes {
-		if route.Stability != "stable" {
-			continue
-		}
+	for path, item := range document.Paths.Map() {
+		for method, operation := range item.Operations() {
+			access, ok := operation.Extensions["x-authara-access"].(string)
+			if !ok {
+				t.Fatalf("%s is missing x-authara-access", operationKey(method, path))
+			}
+			t.Run(operationKey(method, path), func(t *testing.T) {
+				req := httptest.NewRequest(method, materializeRoutePath(path), nil)
+				rr := httptest.NewRecorder()
 
-		t.Run(route.Method+" "+route.Path, func(t *testing.T) {
-			req := httptest.NewRequest(route.Method, materializeRoutePath(route.Path), nil)
-			rr := httptest.NewRecorder()
+				router.ServeHTTP(rr, req)
 
-			router.ServeHTTP(rr, req)
+				switch access {
+				case "public":
+					assertNotAuthMarker(t, rr.Code)
 
-			switch route.Access {
-			case "public":
-				assertNotAuthMarker(t, rr.Code)
-
-			case "user":
-				if strings.HasPrefix(route.Path, "/auth/api/") {
+				case "user":
 					if rr.Code != markerUserAPIAuth {
 						t.Fatalf("expected user API auth marker %d, got %d", markerUserAPIAuth, rr.Code)
 					}
-				} else {
-					if rr.Code != markerUserUIAuth {
-						t.Fatalf("expected user UI auth marker %d, got %d", markerUserUIAuth, rr.Code)
+
+				case "internal":
+					if rr.Code != markerInternalAuth {
+						t.Fatalf("expected internal auth marker %d, got %d", markerInternalAuth, rr.Code)
 					}
+
+				default:
+					t.Fatalf("unsupported access level %q", access)
 				}
-
-			case "admin":
-				if strings.HasPrefix(route.Path, "/auth/api/") {
-					if rr.Code != markerAdminAPIAuth {
-						t.Fatalf("expected admin API auth marker %d, got %d", markerAdminAPIAuth, rr.Code)
-					}
-				} else {
-					if rr.Code != markerAdminUIAuth {
-						t.Fatalf("expected admin UI auth marker %d, got %d", markerAdminUIAuth, rr.Code)
-					}
-				}
-
-			case "internal":
-				assertNotAuthMarker(t, rr.Code)
-
-			default:
-				t.Fatalf("unsupported access level %q for %s %s", route.Access, route.Method, route.Path)
-			}
-		})
+			})
+		}
 	}
 }
 
@@ -140,13 +97,13 @@ func newAccessContractTestRouter() chi.Router {
 		RequireAPICSRF:            pass,
 		OptionalAppAccessIdentity: pass,
 
-		RequireAppAccessAuthWithRefresh:     marker(markerUserUIAuth, "user-ui-auth"),
+		RequireAppAccessAuthWithRefresh:     pass,
 		RequireAppAccessAuthAPI:             marker(markerUserAPIAuth, "user-api-auth"),
-		RequireAdminAccessAuthWithRefresh:   marker(markerAdminUIAuth, "admin-ui-auth"),
-		RequireAdminAccessAuthAPI:           marker(markerAdminAPIAuth, "admin-api-auth"),
+		RequireAdminAccessAuthWithRefresh:   pass,
+		RequireAdminAccessAuthAPI:           pass,
 		RequireInternalAPIAuth:              marker(markerInternalAuth, "internal-auth"),
 		RequirePublicOrganizationManagement: pass,
-		RequireAdminRole:                    marker(markerAdminRole, "admin-role"),
+		RequireAdminRole:                    pass,
 	}
 
 	r := chi.NewRouter()
@@ -167,7 +124,7 @@ func assertNotAuthMarker(t *testing.T, code int) {
 	t.Helper()
 
 	switch code {
-	case markerUserUIAuth, markerUserAPIAuth, markerAdminUIAuth, markerAdminRole, markerAdminAPIAuth:
+	case markerUserAPIAuth, markerInternalAuth:
 		t.Fatalf("expected public route, but auth middleware marker intercepted with status %d", code)
 	}
 }

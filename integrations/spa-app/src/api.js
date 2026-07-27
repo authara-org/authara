@@ -88,14 +88,28 @@ export function loginWithGoogle(credential, nonce) {
   return mutate(`${API}/oauth/google?audience=app`, { credential, nonce });
 }
 
-export function signup(email, password, invitationCode = "") {
+function signupBody(email, password, invitationCode) {
   const body = { email, password };
   if (invitationCode.trim()) body.invitation_code = invitationCode.trim();
-  return mutate(`${API}/signup?audience=app`, body);
+  return body;
 }
 
-export function verifySignup(challengeID, code) {
-  return mutate(`${API}/signup/verify?audience=app`, {
+export function signupDirect(email, password, invitationCode = "") {
+  return mutate(
+    `${API}/signup/direct?audience=app`,
+    signupBody(email, password, invitationCode),
+  );
+}
+
+export function startSignupChallenge(email, password, invitationCode = "") {
+  return mutate(
+    `${API}/signup/challenges?audience=app`,
+    signupBody(email, password, invitationCode),
+  );
+}
+
+export function verifySignupChallenge(challengeID, code) {
+  return mutate(`${API}/signup/challenges/verify?audience=app`, {
     challenge_id: challengeID,
     code,
   });

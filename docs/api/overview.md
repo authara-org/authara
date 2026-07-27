@@ -25,7 +25,7 @@ This contract covers:
 - versioning rules
 
 The contract is defined in
-[`contract/http.yaml`](../../contract/http.yaml).
+[`contract/openapi.yaml`](../../contract/openapi.yaml).
 
 Applications and SDKs may rely on this document when integrating with Authara.
 

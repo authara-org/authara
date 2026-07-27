@@ -10,9 +10,9 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/testutil"
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -49,12 +49,23 @@ func TestListOrganizationMembersIncludesUserFields(t *testing.T) {
 			t.Fatalf("DisableUser failed: %v", err)
 		}
 
-		handler := New(organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}), false)
-		req := httptest.NewRequest(http.MethodGet, "/auth/internal/v1/organizations/"+org.ID.String()+"/members", nil).WithContext(ctx)
-		req = withInternalURLParam(req, "organizationID", org.ID.String())
+		handler := New(organization.New(organization.Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+			Mode:  organization.OrgModeMulti,
+		}), false)
+		reqCtx := httpctx.WithUserID(ctx, owner.ID)
+		reqCtx = httpctx.WithOrganizationID(reqCtx, org.ID)
+		req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/organizations/"+org.ID.String()+"/members", nil).WithContext(reqCtx)
 		rr := httptest.NewRecorder()
 
-		handler.ListOrganizationMembers(rr, req)
+		resp, err := handler.ListPublicOrganizationMembers(req.Context(), contract.ListPublicOrganizationMembersRequestObject{
+			OrganizationID: org.ID,
+		})
+		if err != nil {
+			t.Fatalf("ListPublicOrganizationMembers failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -136,7 +147,10 @@ func TestPublicOrganizationAuthorizationUsesCurrentMembership(t *testing.T) {
 				req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(reqCtx)
 				rr := httptest.NewRecorder()
 
-				_, authorized := handler.authorizePublicOrganization(rr, req, org.ID, OrganizationErrors, tc.managerOnly)
+				_, resp, authorized := handler.contractAuthorizePublicOrganization(req.Context(), org.ID, GetPublicOrganizationErrors, tc.managerOnly)
+				if !authorized {
+					writeContractResponse(t, rr, resp)
+				}
 
 				if authorized != tc.wantAuthorized {
 					t.Fatalf("expected authorized=%v, got %v", tc.wantAuthorized, authorized)
@@ -147,10 +161,4 @@ func TestPublicOrganizationAuthorizationUsesCurrentMembership(t *testing.T) {
 			})
 		}
 	})
-}
-
-func withInternalURLParam(req *http.Request, key, value string) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add(key, value)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }

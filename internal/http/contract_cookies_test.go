@@ -3,48 +3,34 @@ package http
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
+	"sort"
 	"testing"
 
 	"github.com/authara-org/authara/internal/http/kit/csrf"
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
+	openapicontract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/session"
-	"gopkg.in/yaml.v3"
 )
-
-type httpContractCookies struct {
-	Version int              `yaml:"version"`
-	Cookies []contractCookie `yaml:"cookies"`
-}
-
-type contractCookie struct {
-	Name      string `yaml:"name"`
-	Stability string `yaml:"stability"`
-	Purpose   string `yaml:"purpose"`
-}
 
 func loadStableCookieNames(t *testing.T) []string {
 	t.Helper()
-
-	data, err := os.ReadFile("../../contract/http.yaml")
+	document, err := openapicontract.GetSwagger()
 	if err != nil {
-		t.Fatalf("read contract/http.yaml: %v", err)
+		t.Fatalf("load generated OpenAPI contract: %v", err)
 	}
-
-	var contract httpContractCookies
-	if err := yaml.Unmarshal(data, &contract); err != nil {
-		t.Fatalf("unmarshal contract/http.yaml: %v", err)
+	if document.Components == nil {
+		t.Fatal("OpenAPI components are missing")
 	}
 
 	var names []string
-	for _, c := range contract.Cookies {
-		if c.Stability == "stable" {
-			names = append(names, c.Name)
+	for _, ref := range document.Components.SecuritySchemes {
+		if ref.Value != nil && ref.Value.Type == "apiKey" && ref.Value.In == "cookie" {
+			names = append(names, ref.Value.Name)
 		}
 	}
-
+	sort.Strings(names)
 	if len(names) == 0 {
-		t.Fatal("no stable cookies found in contract/http.yaml")
+		t.Fatal("no API cookies found in OpenAPI security schemes")
 	}
 
 	return names

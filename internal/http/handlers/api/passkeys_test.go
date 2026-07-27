@@ -11,6 +11,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/testutil"
@@ -28,7 +29,11 @@ func TestPasskeyAuthenticateOptionsReturnsJSON(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/passkeys/authenticate/options", nil).WithContext(ctx)
 		rr := httptest.NewRecorder()
 
-		h.PasskeyAuthenticateOptionsPost(rr, req)
+		resp, err := h.BeginPasskeyAuthentication(contractCtx(ctx, req), contract.BeginPasskeyAuthenticationRequestObject{})
+		if err != nil {
+			t.Fatalf("BeginPasskeyAuthentication failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -70,7 +75,11 @@ func TestPasskeyRegisterOptionsBindsAuthenticatedUser(t *testing.T) {
 		req = req.WithContext(httpctx.WithUserID(ctx, user.ID))
 		rr := httptest.NewRecorder()
 
-		h.PasskeyRegisterOptionsPost(rr, req)
+		resp, err := h.BeginPasskeyRegistration(contractCtx(req.Context(), req), contract.BeginPasskeyRegistrationRequestObject{})
+		if err != nil {
+			t.Fatalf("BeginPasskeyRegistration failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
@@ -109,17 +118,21 @@ func TestPasskeyRegisterOptionsBindsAuthenticatedUser(t *testing.T) {
 func TestPasskeyFinishRejectsMalformedBody(t *testing.T) {
 	tests := []struct {
 		name    string
-		handler func(*APIHandler, http.ResponseWriter, *http.Request)
+		handler func(*APIHandler, context.Context) (any, error)
 		ctx     func(context.Context) context.Context
 	}{
 		{
-			name:    "authenticate",
-			handler: (*APIHandler).PasskeyAuthenticateFinishPost,
-			ctx:     func(ctx context.Context) context.Context { return ctx },
+			name: "authenticate",
+			handler: func(h *APIHandler, ctx context.Context) (any, error) {
+				return h.FinishPasskeyAuthentication(ctx, contract.FinishPasskeyAuthenticationRequestObject{})
+			},
+			ctx: func(ctx context.Context) context.Context { return ctx },
 		},
 		{
-			name:    "register",
-			handler: (*APIHandler).PasskeyRegisterFinishPost,
+			name: "register",
+			handler: func(h *APIHandler, ctx context.Context) (any, error) {
+				return h.FinishPasskeyRegistration(ctx, contract.FinishPasskeyRegistrationRequestObject{})
+			},
 			ctx: func(ctx context.Context) context.Context {
 				return httpctx.WithUserID(ctx, uuid.New())
 			},
@@ -137,7 +150,11 @@ func TestPasskeyFinishRejectsMalformedBody(t *testing.T) {
 			req = req.WithContext(tt.ctx(req.Context()))
 			rr := httptest.NewRecorder()
 
-			tt.handler(h, rr, req)
+			resp, err := tt.handler(h, contractCtx(req.Context(), req))
+			if err != nil {
+				t.Fatalf("handler failed: %v", err)
+			}
+			writeContractResponse(t, rr, resp)
 
 			if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "invalid_request") {
 				t.Fatalf("expected invalid_request, got %d body=%s", rr.Code, rr.Body.String())
@@ -160,7 +177,11 @@ func TestPasskeyLoginLimiterBucketsAreIndependent(t *testing.T) {
 
 		optionsReq := httptest.NewRequest(http.MethodPost, "/auth/api/v1/passkeys/authenticate/options", nil).WithContext(ctx)
 		optionsRR := httptest.NewRecorder()
-		h.PasskeyAuthenticateOptionsPost(optionsRR, optionsReq)
+		optionsResp, err := h.BeginPasskeyAuthentication(contractCtx(ctx, optionsReq), contract.BeginPasskeyAuthenticationRequestObject{})
+		if err != nil {
+			t.Fatalf("BeginPasskeyAuthentication failed: %v", err)
+		}
+		writeContractResponse(t, optionsRR, optionsResp)
 		if optionsRR.Code != http.StatusOK {
 			t.Fatalf("expected options status %d, got %d body=%s", http.StatusOK, optionsRR.Code, optionsRR.Body.String())
 		}
@@ -172,7 +193,11 @@ func TestPasskeyLoginLimiterBucketsAreIndependent(t *testing.T) {
 				strings.NewReader(`{"challenge_id":`),
 			).WithContext(ctx)
 			rr := httptest.NewRecorder()
-			h.PasskeyAuthenticateFinishPost(rr, req)
+			resp, err := h.FinishPasskeyAuthentication(contractCtx(ctx, req), contract.FinishPasskeyAuthenticationRequestObject{})
+			if err != nil {
+				t.Fatalf("FinishPasskeyAuthentication failed: %v", err)
+			}
+			writeContractResponse(t, rr, resp)
 			return rr
 		}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/testutil"
@@ -44,7 +45,11 @@ func TestUserGetIncludesOrganization(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/user", nil).WithContext(reqCtx)
 		rr := httptest.NewRecorder()
 
-		h.UserGet(rr, req)
+		resp, err := h.GetCurrentUser(contractCtx(reqCtx, req), contract.GetCurrentUserRequestObject{})
+		if err != nil {
+			t.Fatalf("GetCurrentUser failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
