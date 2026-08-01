@@ -67,7 +67,7 @@ jobs:
         working-directory: .sdk/authara-go
         env:
           # Keep generation reproducible; bump this when cmd/authara-sdk-gen changes.
-          AUTHARA_GO_GENERATOR_REF: 0bf3df0
+          AUTHARA_GO_GENERATOR_REF: 0a88aae
         run: >-
           go run
           github.com/authara-org/authara-go/cmd/authara-sdk-gen@${AUTHARA_GO_GENERATOR_REF}
