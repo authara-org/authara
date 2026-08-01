@@ -147,9 +147,9 @@ func TestPublicOrganizationAuthorizationUsesCurrentMembership(t *testing.T) {
 				req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(reqCtx)
 				rr := httptest.NewRecorder()
 
-				_, resp, authorized := handler.contractAuthorizePublicOrganization(req.Context(), org.ID, GetPublicOrganizationErrors, tc.managerOnly)
+				_, code, message, authorized := handler.contractAuthorizePublicOrganization(req.Context(), org.ID, tc.managerOnly)
 				if !authorized {
-					writeContractResponse(t, rr, resp)
+					writeContractResponse(t, rr, getPublicOrganizationError(code, message))
 				}
 
 				if authorized != tc.wantAuthorized {

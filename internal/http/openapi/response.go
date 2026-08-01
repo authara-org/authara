@@ -114,99 +114,123 @@ func (r Response) Write(w http.ResponseWriter) error {
 	return r.write(w)
 }
 
-func (r Response) VisitBeginPasskeyAuthenticationResponse(w http.ResponseWriter) error {
-	return r.write(w)
+type GetCsrfToken200HeadersResponse struct {
+	Header http.Header
+	Body   CSRFToken
 }
-func (r Response) VisitBeginPasskeyRegistrationResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r GetCsrfToken200HeadersResponse) VisitGetCsrfTokenResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
-func (r Response) VisitCreateInternalOrganizationInvitationResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type GetGoogleLoginOptions200HeadersResponse struct {
+	Header http.Header
+	Body   GoogleLoginOptions
 }
-func (r Response) VisitCreateInternalOrganizationResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r GetGoogleLoginOptions200HeadersResponse) VisitGetGoogleLoginOptionsResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
-func (r Response) VisitFinishPasskeyAuthenticationResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type LoginWithGoogle200HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
 }
-func (r Response) VisitFinishPasskeyRegistrationResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r LoginWithGoogle200HeadersResponse) VisitLoginWithGoogleResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
-func (r Response) VisitGetCsrfTokenResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type LoginWithPassword200HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
 }
-func (r Response) VisitGetCurrentOrganizationResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r LoginWithPassword200HeadersResponse) VisitLoginWithPasswordResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
-func (r Response) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type FinishPasskeyAuthentication200HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
 }
-func (r Response) VisitGetGoogleLoginOptionsResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r FinishPasskeyAuthentication200HeadersResponse) VisitFinishPasskeyAuthenticationResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
-func (r Response) VisitGetPublicCapabilitiesResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type SignupDirect201HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
 }
-func (r Response) VisitGetPublicOrganizationInvitationResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r SignupDirect201HeadersResponse) VisitSignupDirectResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusCreated, r.Header, r.Body)
 }
-func (r Response) VisitGetPublicOrganizationMemberResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type VerifySignupChallenge201HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
 }
-func (r Response) VisitGetPublicOrganizationResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r VerifySignupChallenge201HeadersResponse) VisitVerifySignupChallengeResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusCreated, r.Header, r.Body)
 }
-func (r Response) VisitListCurrentOrganizationMembersResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type SwitchOrganization200HeadersResponse struct {
+	Header http.Header
+	Body   Tokens
 }
-func (r Response) VisitListCurrentUserOrganizationsResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r SwitchOrganization200HeadersResponse) VisitSwitchOrganizationResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
-func (r Response) VisitListPublicOrganizationInvitationsResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type Logout204HeadersResponse struct {
+	Header http.Header
 }
-func (r Response) VisitListPublicOrganizationMembersResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r Logout204HeadersResponse) VisitLogoutResponse(w http.ResponseWriter) error {
+	writeHeaders(w.Header(), r.Header)
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
-func (r Response) VisitListPublicUserMembershipsResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type RefreshSession200HeadersResponse struct {
+	Header http.Header
 }
-func (r Response) VisitLoginWithGoogleResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r RefreshSession200HeadersResponse) VisitRefreshSessionResponse(w http.ResponseWriter) error {
+	writeHeaders(w.Header(), r.Header)
+	w.WriteHeader(http.StatusOK)
+	return nil
 }
-func (r Response) VisitLoginWithPasswordResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+type RefreshSession401HeadersResponse struct {
+	Header http.Header
+	Body   ErrorResponse
 }
-func (r Response) VisitLogoutResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func (r RefreshSession401HeadersResponse) VisitRefreshSessionResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusUnauthorized, r.Header, r.Body)
 }
-func (r Response) VisitRefreshSessionResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func writeJSON(w http.ResponseWriter, status int, header http.Header, body any) error {
+	writeHeaders(w.Header(), header)
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, err := buf.WriteTo(w)
+	return err
 }
-func (r Response) VisitRefreshTokensResponse(w http.ResponseWriter) error {
-	return r.write(w)
-}
-func (r Response) VisitResendChallengeResponse(w http.ResponseWriter) error {
-	return r.write(w)
-}
-func (r Response) VisitResendInternalOrganizationInvitationResponse(w http.ResponseWriter) error {
-	return r.write(w)
-}
-func (r Response) VisitRevokePublicOrganizationInvitationResponse(w http.ResponseWriter) error {
-	return r.write(w)
-}
-func (r Response) VisitSignupDirectResponse(w http.ResponseWriter) error {
-	return r.write(w)
-}
-func (r Response) VisitStartSignupChallengeResponse(w http.ResponseWriter) error {
-	return r.write(w)
-}
-func (r Response) VisitSwitchOrganizationResponse(w http.ResponseWriter) error {
-	return r.write(w)
-}
-func (r Response) VisitUpdatePublicOrganizationResponse(w http.ResponseWriter) error {
-	return r.write(w)
-}
-func (r Response) VisitVerifySignupChallengeResponse(w http.ResponseWriter) error {
-	return r.write(w)
+
+func writeHeaders(dst, src http.Header) {
+	for name, values := range src {
+		for _, value := range values {
+			dst.Add(name, value)
+		}
+	}
 }

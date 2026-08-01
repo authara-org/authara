@@ -14,64 +14,63 @@ import (
 )
 
 func (h *APIHandler) Logout(ctx context.Context, _ contract.LogoutRequestObject) (contract.LogoutResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return logoutError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if refreshToken, exists := session.ReadRefreshToken(r); exists {
 		_ = h.Session.Logout(ctx, refreshToken)
 	}
 	header := make(http.Header)
 	session.ClearSessionCookies(contract.HeaderWriter(header))
-	return contract.NoContent(header), nil
+	return contract.Logout204HeadersResponse{Header: header}, nil
 }
 
 func (h *APIHandler) RefreshSession(ctx context.Context, request contract.RefreshSessionRequestObject) (contract.RefreshSessionResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return refreshSessionError(responseCodeInternalError(), "API contract error.", nil), nil
 	}
 	refreshToken, ok := session.ReadRefreshToken(r)
 	if !ok || refreshToken == "" {
-		return routeError(RefreshSessionErrors, responseCodeUnauthorized(), "Refresh token missing"), nil
+		return refreshSessionError(responseCodeUnauthorized(), "Refresh token missing", nil), nil
 	}
 	audience := token.AudienceApp
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	_, header, out, ok := h.contractRefreshTokens(ctx, refreshToken, audience, RefreshSessionErrors, true)
+	_, header, code, message, ok := h.contractRefreshTokens(ctx, refreshToken, audience, true)
 	if !ok {
-		return out, nil
+		return refreshSessionError(code, message, header), nil
 	}
-	return contract.Empty(http.StatusOK, header), nil
+	return contract.RefreshSession200HeadersResponse{Header: header}, nil
 }
 
 func (h *APIHandler) RefreshTokens(ctx context.Context, request contract.RefreshTokensRequestObject) (contract.RefreshTokensResponseObject, error) {
 	if request.Body == nil {
-		return routeError(RefreshTokensErrors, responseCodeInvalidRequest(), "Invalid JSON body."), nil
+		return refreshTokensError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
 	refreshToken := strings.TrimSpace(request.Body.RefreshToken)
 	if refreshToken == "" {
-		return routeError(RefreshTokensErrors, responseCodeInvalidRequest(), "Refresh token required."), nil
+		return refreshTokensError(responseCodeInvalidRequest(), "Refresh token required."), nil
 	}
 	audience := token.AudienceApp
 	if request.Body.Audience != nil {
 		audience = token.Audience(*request.Body.Audience)
 	}
-	tokens, _, out, ok := h.contractRefreshTokens(ctx, refreshToken, audience, RefreshTokensErrors, false)
+	tokens, _, code, message, ok := h.contractRefreshTokens(ctx, refreshToken, audience, false)
 	if !ok {
-		return out, nil
+		return refreshTokensError(code, message), nil
 	}
-	return contract.JSON(http.StatusOK, tokens), nil
+	return contract.RefreshTokens200JSONResponse(tokens), nil
 }
 
 func (h *APIHandler) contractRefreshTokens(
 	ctx context.Context,
 	refreshToken string,
 	audience token.Audience,
-	routeErrors map[response.ErrorCode]response.ErrorSpec,
 	cookieBacked bool,
-) (contract.Tokens, http.Header, contract.Response, bool) {
+) (contract.Tokens, http.Header, response.ErrorCode, string, bool) {
 	newAccessToken, newRefreshToken, err := h.Session.RefreshSession(ctx, refreshToken, audience, time.Now())
 	header := make(http.Header)
 	switch {
@@ -83,15 +82,13 @@ func (h *APIHandler) contractRefreshTokens(
 		if cookieBacked {
 			session.ClearSessionCookies(contract.HeaderWriter(header))
 		}
-		out := routeError(routeErrors, response.CodeUnauthorized, "Invalid refresh token")
-		out.Header = header
-		return contract.Tokens{}, header, out, false
+		return contract.Tokens{}, header, response.CodeUnauthorized, "Invalid refresh token", false
 	case err != nil:
-		return contract.Tokens{}, header, routeError(routeErrors, response.CodeInternalError, "Session error"), false
+		return contract.Tokens{}, header, response.CodeInternalError, "Session error", false
 	}
 	if cookieBacked {
 		session.SetAccessToken(contract.HeaderWriter(header), newAccessToken, int(h.AccessTTL.Seconds()))
 		session.SetRefreshToken(contract.HeaderWriter(header), newRefreshToken, int(h.RefreshTTL.Seconds()))
 	}
-	return contract.Tokens{AccessToken: newAccessToken, RefreshToken: newRefreshToken}, header, contract.Response{}, true
+	return contract.Tokens{AccessToken: newAccessToken, RefreshToken: newRefreshToken}, header, "", "", true
 }

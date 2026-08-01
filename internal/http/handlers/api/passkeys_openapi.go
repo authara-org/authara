@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"time"
 
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
@@ -16,46 +15,50 @@ import (
 )
 
 func (h *APIHandler) BeginPasskeyAuthentication(ctx context.Context, _ contract.BeginPasskeyAuthenticationRequestObject) (contract.BeginPasskeyAuthenticationResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return beginPasskeyAuthenticationError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if h.Passkeys == nil {
-		return routeError(BeginPasskeyAuthenticationErrors, responseCodeInternalError(), "Passkey error."), nil
+		return beginPasskeyAuthenticationError(responseCodeInternalError(), "Passkey error."), nil
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginAttempt(ctx, httputil.ClientIP(r))
 		if err != nil || !allowed {
-			return routeError(BeginPasskeyAuthenticationErrors, responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
+			return beginPasskeyAuthenticationError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
 		}
 	}
 	optionsJSON, _, err := h.Passkeys.BeginLogin(ctx)
 	if err != nil {
-		return routeError(BeginPasskeyAuthenticationErrors, responseCodeInternalError(), "Passkey error."), nil
+		return beginPasskeyAuthenticationError(responseCodeInternalError(), "Passkey error."), nil
 	}
-	return passkeyOptionsResponse(BeginPasskeyAuthenticationErrors, optionsJSON), nil
+	out, code, message, ok := passkeyOptionsResponse(optionsJSON)
+	if !ok {
+		return beginPasskeyAuthenticationError(code, message), nil
+	}
+	return contract.BeginPasskeyAuthentication200JSONResponse(out), nil
 }
 
 func (h *APIHandler) FinishPasskeyAuthentication(ctx context.Context, request contract.FinishPasskeyAuthenticationRequestObject) (contract.FinishPasskeyAuthenticationResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return finishPasskeyAuthenticationError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if h.Passkeys == nil {
-		return routeError(FinishPasskeyAuthenticationErrors, responseCodeInternalError(), "Passkey error."), nil
+		return finishPasskeyAuthenticationError(responseCodeInternalError(), "Passkey error."), nil
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginFinishAttempt(ctx, httputil.ClientIP(r))
 		if err != nil || !allowed {
-			return routeError(FinishPasskeyAuthenticationErrors, responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
+			return finishPasskeyAuthenticationError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
 		}
 	}
 	if request.Body == nil {
-		return invalidPasskeyResponse(FinishPasskeyAuthenticationErrors), nil
+		return finishPasskeyAuthenticationError(responseCodeInvalidRequest(), "Invalid passkey response."), nil
 	}
 	credential, err := json.Marshal(request.Body.Credential)
 	if err != nil {
-		return invalidPasskeyResponse(FinishPasskeyAuthenticationErrors), nil
+		return finishPasskeyAuthenticationError(responseCodeInvalidRequest(), "Invalid passkey response."), nil
 	}
 	audience := token.AudienceApp
 	if request.Params.Audience != nil {
@@ -63,47 +66,55 @@ func (h *APIHandler) FinishPasskeyAuthentication(ctx context.Context, request co
 	}
 	user, err := h.Passkeys.FinishLogin(ctx, request.Body.ChallengeId, credential, time.Now().UTC())
 	if errors.Is(err, passkey.ErrPasskeyAuthenticationInvalid) {
-		return routeError(FinishPasskeyAuthenticationErrors, responseCodeUnauthorized(), "Passkey sign-in failed."), nil
+		return finishPasskeyAuthenticationError(responseCodeUnauthorized(), "Passkey sign-in failed."), nil
 	}
 	if err != nil {
-		return routeError(FinishPasskeyAuthenticationErrors, responseCodeInternalError(), "Passkey error."), nil
+		return finishPasskeyAuthenticationError(responseCodeInternalError(), "Passkey error."), nil
 	}
-	return h.contractSessionResponse(ctx, r, FinishPasskeyAuthenticationErrors, user, audience, http.StatusOK), nil
+	body, header, code, message, ok := h.contractSession(ctx, r, user, audience)
+	if !ok {
+		return finishPasskeyAuthenticationError(code, message), nil
+	}
+	return contract.FinishPasskeyAuthentication200HeadersResponse{Header: header, Body: body}, nil
 }
 
 func (h *APIHandler) BeginPasskeyRegistration(ctx context.Context, _ contract.BeginPasskeyRegistrationRequestObject) (contract.BeginPasskeyRegistrationResponseObject, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		return routeError(BeginPasskeyRegistrationErrors, responseCodeUnauthorized(), "Unauthorized."), nil
+		return beginPasskeyRegistrationError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
 	if h.Passkeys == nil {
-		return routeError(BeginPasskeyRegistrationErrors, responseCodeInternalError(), "Passkey error."), nil
+		return beginPasskeyRegistrationError(responseCodeInternalError(), "Passkey error."), nil
 	}
 	optionsJSON, _, err := h.Passkeys.BeginRegistration(ctx, userID)
 	if err != nil {
-		return routeError(BeginPasskeyRegistrationErrors, responseCodeInternalError(), "Passkey error."), nil
+		return beginPasskeyRegistrationError(responseCodeInternalError(), "Passkey error."), nil
 	}
-	return passkeyOptionsResponse(BeginPasskeyRegistrationErrors, optionsJSON), nil
+	out, code, message, ok := passkeyOptionsResponse(optionsJSON)
+	if !ok {
+		return beginPasskeyRegistrationError(code, message), nil
+	}
+	return contract.BeginPasskeyRegistration200JSONResponse(out), nil
 }
 
 func (h *APIHandler) FinishPasskeyRegistration(ctx context.Context, request contract.FinishPasskeyRegistrationRequestObject) (contract.FinishPasskeyRegistrationResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return finishPasskeyRegistrationError(responseCodeInternalError(), "API contract error."), nil
 	}
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		return routeError(FinishPasskeyRegistrationErrors, responseCodeUnauthorized(), "Unauthorized."), nil
+		return finishPasskeyRegistrationError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
 	if h.Passkeys == nil {
-		return routeError(FinishPasskeyRegistrationErrors, responseCodeInternalError(), "Passkey error."), nil
+		return finishPasskeyRegistrationError(responseCodeInternalError(), "Passkey error."), nil
 	}
 	if request.Body == nil {
-		return invalidPasskeyResponse(FinishPasskeyRegistrationErrors), nil
+		return finishPasskeyRegistrationError(responseCodeInvalidRequest(), "Invalid passkey response."), nil
 	}
 	credential, err := json.Marshal(request.Body.Credential)
 	if err != nil {
-		return invalidPasskeyResponse(FinishPasskeyRegistrationErrors), nil
+		return finishPasskeyRegistrationError(responseCodeInvalidRequest(), "Invalid passkey response."), nil
 	}
 	name := ""
 	if request.Body.Name != nil {
@@ -120,23 +131,19 @@ func (h *APIHandler) FinishPasskeyRegistration(ctx context.Context, request cont
 	})
 	switch {
 	case errors.Is(err, passkey.ErrPasskeyAlreadyExists):
-		return routeError(FinishPasskeyRegistrationErrors, codePasskeyAlreadyExists, "This passkey is already linked to an account."), nil
+		return finishPasskeyRegistrationError(codePasskeyAlreadyExists, "This passkey is already linked to an account."), nil
 	case errors.Is(err, passkey.ErrPasskeyRegistrationInvalid):
-		return routeError(FinishPasskeyRegistrationErrors, codePasskeyRegistrationInvalid, "Passkey setup could not be verified."), nil
+		return finishPasskeyRegistrationError(codePasskeyRegistrationInvalid, "Passkey setup could not be verified."), nil
 	case err != nil:
-		return routeError(FinishPasskeyRegistrationErrors, responseCodeInternalError(), "Passkey error."), nil
+		return finishPasskeyRegistrationError(responseCodeInternalError(), "Passkey error."), nil
 	}
-	return contract.NoContent(), nil
+	return contract.FinishPasskeyRegistration204Response{}, nil
 }
 
-func passkeyOptionsResponse(routeErrors map[response.ErrorCode]response.ErrorSpec, body []byte) contract.Response {
+func passkeyOptionsResponse(body []byte) (contract.PasskeyOptions, response.ErrorCode, string, bool) {
 	var out contract.PasskeyOptions
 	if err := json.Unmarshal(body, &out); err != nil {
-		return routeError(routeErrors, response.CodeInternalError, "Passkey error.")
+		return contract.PasskeyOptions{}, response.CodeInternalError, "Passkey error.", false
 	}
-	return contract.JSON(http.StatusOK, out)
-}
-
-func invalidPasskeyResponse(routeErrors map[response.ErrorCode]response.ErrorSpec) contract.Response {
-	return routeError(routeErrors, response.CodeInvalidRequest, "Invalid passkey response.")
+	return out, "", "", true
 }

@@ -18,20 +18,20 @@ import (
 )
 
 func (h *APIHandler) LoginWithGoogle(ctx context.Context, request contract.LoginWithGoogleRequestObject) (contract.LoginWithGoogleResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return loginWithGoogleError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if _, ok := h.googleClientID(); !ok || h.Google == nil {
-		return routeError(LoginWithGoogleErrors, responseCodeNotFound(), "Google login is not enabled."), nil
+		return loginWithGoogleError(responseCodeNotFound(), "Google login is not enabled."), nil
 	}
 	if request.Body == nil {
-		return routeError(LoginWithGoogleErrors, responseCodeInvalidRequest(), "Invalid JSON body."), nil
+		return loginWithGoogleError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
 	credential := strings.TrimSpace(request.Body.Credential)
 	nonce := strings.TrimSpace(request.Body.Nonce)
 	if credential == "" || nonce == "" {
-		return routeError(LoginWithGoogleErrors, responseCodeInvalidRequest(), "Google credential and nonce required."), nil
+		return loginWithGoogleError(responseCodeInvalidRequest(), "Google credential and nonce required."), nil
 	}
 	audience := token.AudienceApp
 	if request.Params.Audience != nil {
@@ -39,42 +39,44 @@ func (h *APIHandler) LoginWithGoogle(ctx context.Context, request contract.Login
 	}
 	expectedNonce, ok := oauthstate.ReadNonce(r)
 	if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
-		return routeError(LoginWithGoogleErrors, responseCodeUnauthorized(), "Invalid Google credential."), nil
+		return loginWithGoogleError(responseCodeUnauthorized(), "Invalid Google credential."), nil
 	}
 	identity, err := h.Google.VerifyIDToken(ctx, credential, expectedNonce)
 	if err != nil {
-		return routeError(LoginWithGoogleErrors, responseCodeUnauthorized(), "Invalid Google credential."), nil
+		return loginWithGoogleError(responseCodeUnauthorized(), "Invalid Google credential."), nil
 	}
 	header := make(http.Header)
 	oauthstate.ClearNonce(contract.HeaderWriter(header))
-	return h.contractGoogleLogin(ctx, r, LoginWithGoogleErrors, identity, audience, header), nil
+	return h.contractGoogleLogin(ctx, r, identity, audience, header), nil
 }
 
 func (h *APIHandler) GetGoogleLoginOptions(ctx context.Context, _ contract.GetGoogleLoginOptionsRequestObject) (contract.GetGoogleLoginOptionsResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return getGoogleLoginOptionsError(responseCodeInternalError(), "API contract error."), nil
 	}
 	clientID, ok := h.googleClientID()
 	if !ok {
-		return routeError(GetGoogleLoginOptionsErrors, responseCodeNotFound(), "Google login is not enabled."), nil
+		return getGoogleLoginOptionsError(responseCodeNotFound(), "Google login is not enabled."), nil
 	}
 	header := make(http.Header)
 	nonce, err := oauthstate.EnsureNonce(contract.HeaderWriter(header), r)
 	if err != nil {
-		return routeError(GetGoogleLoginOptionsErrors, responseCodeInternalError(), "Google login setup error."), nil
+		return getGoogleLoginOptionsError(responseCodeInternalError(), "Google login setup error."), nil
 	}
-	return contract.JSON(http.StatusOK, contract.GoogleLoginOptions{ClientId: clientID, Nonce: nonce}, header), nil
+	return contract.GetGoogleLoginOptions200HeadersResponse{
+		Header: header,
+		Body:   contract.GoogleLoginOptions{ClientId: clientID, Nonce: nonce},
+	}, nil
 }
 
 func (h *APIHandler) contractGoogleLogin(
 	ctx context.Context,
 	r *http.Request,
-	routeErrors map[response.ErrorCode]response.ErrorSpec,
 	identity *google.Identity,
 	audience token.Audience,
 	header http.Header,
-) contract.Response {
+) contract.LoginWithGoogleResponseObject {
 	user, err := h.Auth.Login(ctx, auth.LoginInput{
 		Provider: domain.ProviderGoogle,
 		Email:    identity.Email,
@@ -89,16 +91,16 @@ func (h *APIHandler) contractGoogleLogin(
 		case response.CodeForbidden:
 			message = "Google login is not allowed for this account."
 		}
-		return routeError(routeErrors, code, message)
+		return loginWithGoogleError(code, message)
 	}
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now())
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
-		return routeError(routeErrors, response.CodeForbidden, "Account cannot access requested audience.")
+		return loginWithGoogleError(response.CodeForbidden, "Account cannot access requested audience.")
 	case response.CodeInternalError:
-		return routeError(routeErrors, response.CodeInternalError, "Session error.")
+		return loginWithGoogleError(response.CodeInternalError, "Session error.")
 	}
 	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
-	return contract.JSON(http.StatusOK, toContractAuthSession(user, accessToken, refreshToken), header)
+	return contract.LoginWithGoogle200HeadersResponse{Header: header, Body: toContractAuthSession(user, accessToken, refreshToken)}
 }

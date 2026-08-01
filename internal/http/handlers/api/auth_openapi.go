@@ -17,18 +17,18 @@ import (
 )
 
 func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.LoginWithPasswordRequestObject) (contract.LoginWithPasswordResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return loginWithPasswordError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if request.Body == nil {
-		return routeError(LoginWithPasswordErrors, responseCodeInvalidRequest(), "Invalid JSON body."), nil
+		return loginWithPasswordError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
 	body := request.Body
 	email := strings.ToLower(strings.TrimSpace(string(body.Email)))
 	password := body.Password
 	if email == "" || password == "" {
-		return routeError(LoginWithPasswordErrors, responseCodeInvalidRequest(), "Email and password required."), nil
+		return loginWithPasswordError(responseCodeInvalidRequest(), "Email and password required."), nil
 	}
 	audience := token.AudienceApp
 	if request.Params.Audience != nil {
@@ -36,7 +36,7 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 	}
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), email)
 	if err != nil || !allowed {
-		return routeError(LoginWithPasswordErrors, responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
+		return loginWithPasswordError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
 	}
 	user, err := h.Auth.Login(ctx, auth.LoginInput{
 		Provider: domain.ProviderPassword,
@@ -49,30 +49,34 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 		if code == responseCodeInternalError() {
 			message = "Login error."
 		}
-		return routeError(LoginWithPasswordErrors, code, message), nil
+		return loginWithPasswordError(code, message), nil
 	}
-	return h.contractSessionResponse(ctx, r, LoginWithPasswordErrors, user, audience, http.StatusOK), nil
+	sessionBody, header, code, message, ok := h.contractSession(ctx, r, user, audience)
+	if !ok {
+		return loginWithPasswordError(code, message), nil
+	}
+	return contract.LoginWithPassword200HeadersResponse{Header: header, Body: sessionBody}, nil
 }
 
 func (h *APIHandler) SignupDirect(ctx context.Context, request contract.SignupDirectRequestObject) (contract.SignupDirectResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return signupDirectError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if h.ChallengeEnabled {
-		return routeError(SignupDirectErrors, responseCodeNotFound(), "Direct signup is not enabled."), nil
+		return signupDirectError(responseCodeNotFound(), "Direct signup is not enabled."), nil
 	}
-	in, out, ok := signupInputFromBody(request.Body, SignupDirectErrors)
+	in, code, message, ok := signupInputFromBody(request.Body)
 	if !ok {
-		return out, nil
+		return signupDirectError(code, message), nil
 	}
-	audience, out, ok := appAudience(request.Params.Audience, SignupDirectErrors)
+	audience, code, message, ok := appAudience(request.Params.Audience)
 	if !ok {
-		return out, nil
+		return signupDirectError(code, message), nil
 	}
-	passwordHash, out, ok := h.prepareContractSignup(ctx, r, in, SignupDirectErrors)
+	passwordHash, code, message, ok := h.prepareContractSignup(ctx, r, in)
 	if !ok {
-		return out, nil
+		return signupDirectError(code, message), nil
 	}
 	user, err := h.Auth.Signup(ctx, auth.SignupInput{
 		Provider:        domain.ProviderPassword,
@@ -82,9 +86,13 @@ func (h *APIHandler) SignupDirect(ctx context.Context, request contract.SignupDi
 	})
 	if err != nil {
 		code := authSignupErrorCode(err)
-		return routeError(SignupDirectErrors, code, authSignupErrorMessage(err, code)), nil
+		return signupDirectError(code, authSignupErrorMessage(err, code)), nil
 	}
-	return h.contractSessionResponse(ctx, r, SignupDirectErrors, user, audience, http.StatusCreated), nil
+	body, header, code, message, ok := h.contractSession(ctx, r, user, audience)
+	if !ok {
+		return signupDirectError(code, message), nil
+	}
+	return contract.SignupDirect201HeadersResponse{Header: header, Body: body}, nil
 }
 
 type contractSignupInput struct {
@@ -93,9 +101,9 @@ type contractSignupInput struct {
 	InvitationCode string
 }
 
-func signupInputFromBody(body *contract.SignupRequest, routeErrors map[response.ErrorCode]response.ErrorSpec) (contractSignupInput, contract.Response, bool) {
+func signupInputFromBody(body *contract.SignupRequest) (contractSignupInput, response.ErrorCode, string, bool) {
 	if body == nil {
-		return contractSignupInput{}, routeError(routeErrors, responseCodeInvalidRequest(), "Invalid JSON body."), false
+		return contractSignupInput{}, responseCodeInvalidRequest(), "Invalid JSON body.", false
 	}
 	in := contractSignupInput{
 		Email:    strings.ToLower(strings.TrimSpace(string(body.Email))),
@@ -105,52 +113,49 @@ func signupInputFromBody(body *contract.SignupRequest, routeErrors map[response.
 		in.InvitationCode = strings.TrimSpace(*body.InvitationCode)
 	}
 	if in.Email == "" || in.Password == "" {
-		return contractSignupInput{}, routeError(routeErrors, responseCodeInvalidRequest(), "Email and password required."), false
+		return contractSignupInput{}, responseCodeInvalidRequest(), "Email and password required.", false
 	}
-	return in, contract.Response{}, true
+	return in, "", "", true
 }
 
 func (h *APIHandler) prepareContractSignup(
 	ctx context.Context,
 	r *http.Request,
 	in contractSignupInput,
-	routeErrors map[response.ErrorCode]response.ErrorSpec,
-) (string, contract.Response, bool) {
+) (string, response.ErrorCode, string, bool) {
 	if !validationEmailPassword(in.Email, in.Password) {
-		return "", routeError(routeErrors, responseCodeInvalidRequest(), "Please provide a valid email and password."), false
+		return "", responseCodeInvalidRequest(), "Please provide a valid email and password.", false
 	}
 	allowed, err := h.Limiter.AllowSignupAttempt(ctx, httputil.ClientIP(r), in.Email)
 	if err != nil || !allowed {
-		return "", routeError(routeErrors, responseCodeRateLimited(), "Too many attempts. Please try again later."), false
+		return "", responseCodeRateLimited(), "Too many attempts. Please try again later.", false
 	}
 	passwordHash, err := auth.Hash(in.Password)
 	if err != nil {
-		return "", routeError(routeErrors, responseCodeInternalError(), "Password error"), false
+		return "", responseCodeInternalError(), "Password error", false
 	}
-	return passwordHash, contract.Response{}, true
+	return passwordHash, "", "", true
 }
 
 func validationEmailPassword(email, password string) bool {
 	return validation.IsValidEmail(email) && validation.IsValidPassword(password)
 }
 
-func (h *APIHandler) contractSessionResponse(
+func (h *APIHandler) contractSession(
 	ctx context.Context,
 	r *http.Request,
-	routeErrors map[response.ErrorCode]response.ErrorSpec,
 	user domain.User,
 	audience token.Audience,
-	status int,
-) contract.Response {
+) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now())
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
-		return routeError(routeErrors, response.CodeForbidden, "Account cannot access requested audience.")
+		return contract.AuthSession{}, nil, response.CodeForbidden, "Account cannot access requested audience.", false
 	case response.CodeInternalError:
-		return routeError(routeErrors, response.CodeInternalError, "Session error.")
+		return contract.AuthSession{}, nil, response.CodeInternalError, "Session error.", false
 	}
 	header := make(http.Header)
 	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
-	return contract.JSON(status, toContractAuthSession(user, accessToken, refreshToken), header)
+	return toContractAuthSession(user, accessToken, refreshToken), header, "", "", true
 }

@@ -2,7 +2,6 @@ package internalapi
 
 import (
 	"context"
-	"net/http"
 
 	contract "github.com/authara-org/authara/internal/http/openapi"
 )
@@ -11,9 +10,9 @@ func (h *Handler) GetPublicCapabilities(ctx context.Context, _ contract.GetPubli
 	return h.capabilities(), nil
 }
 
-func (h *Handler) capabilities() contract.Response {
+func (h *Handler) capabilities() contract.GetPublicCapabilitiesResponseObject {
 	mode := h.Organizations.Mode()
-	return contract.JSON(http.StatusOK, contract.Capabilities{
+	return contract.GetPublicCapabilities200JSONResponse(contract.Capabilities{
 		OrganizationMode:                   contract.CapabilitiesOrganizationMode(mode),
 		HasVisibleOrganizations:            mode.HasVisibleOrganizations(),
 		AllowsInvitations:                  mode.AllowsInvitations(),

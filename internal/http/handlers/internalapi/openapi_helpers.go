@@ -17,60 +17,54 @@ import (
 func (h *Handler) contractAuthorizePublicOrganization(
 	ctx context.Context,
 	organizationID openapi_types.UUID,
-	routeErrors map[response.ErrorCode]response.ErrorSpec,
 	managerOnly bool,
-) (openapi_types.UUID, contract.Response, bool) {
+) (openapi_types.UUID, response.ErrorCode, string, bool) {
 	userID, publicRequest := httpctx.UserID(ctx)
 	if !publicRequest {
-		return openapi_types.UUID{}, contract.Response{}, true
+		return openapi_types.UUID{}, "", "", true
 	}
 	currentOrganizationID, ok := httpctx.OrganizationID(ctx)
 	if !ok || currentOrganizationID != organizationID {
-		return openapi_types.UUID{}, routeError(routeErrors, response.CodeForbidden, "Organization operation forbidden"), false
+		return openapi_types.UUID{}, response.CodeForbidden, "Organization operation forbidden", false
 	}
 	membership, err := h.Organizations.RequireMembership(ctx, userID, organizationID)
 	if errors.Is(err, store.ErrOrganizationMembershipNotFound) {
-		return openapi_types.UUID{}, routeError(routeErrors, response.CodeForbidden, "Organization operation forbidden"), false
+		return openapi_types.UUID{}, response.CodeForbidden, "Organization operation forbidden", false
 	}
 	if err != nil {
-		return openapi_types.UUID{}, routeError(routeErrors, response.CodeInternalError, "Internal server error"), false
+		return openapi_types.UUID{}, response.CodeInternalError, "Internal server error", false
 	}
 	if managerOnly && membership.Role != domain.OrganizationRoleOwner && membership.Role != domain.OrganizationRoleAdmin {
-		return openapi_types.UUID{}, routeError(routeErrors, response.CodeForbidden, "Organization operation forbidden"), false
+		return openapi_types.UUID{}, response.CodeForbidden, "Organization operation forbidden", false
 	}
-	return userID, contract.Response{}, true
+	return userID, "", "", true
 }
 
-func organizationError(routeErrors map[response.ErrorCode]response.ErrorSpec, err error) contract.Response {
+func organizationError(err error) (response.ErrorCode, string) {
 	switch {
 	case errors.Is(err, store.ErrOrganizationNotFound):
-		return routeError(routeErrors, codeOrganizationNotFound, "Organization not found")
+		return codeOrganizationNotFound, "Organization not found"
 	case errors.Is(err, store.ErrOrganizationMembershipNotFound):
-		return routeError(routeErrors, codeMembershipNotFound, "Membership not found")
+		return codeMembershipNotFound, "Membership not found"
 	case errors.Is(err, store.ErrOrganizationInvitationNotFound):
-		return routeError(routeErrors, codeInvitationNotFound, "Invitation not found")
+		return codeInvitationNotFound, "Invitation not found"
 	case errors.Is(err, store.ErrUserNotFound):
-		return routeError(routeErrors, codeUserNotFound, "User not found")
+		return codeUserNotFound, "User not found"
 	case errors.Is(err, store.ErrInvalidOrganizationName),
 		errors.Is(err, organization.ErrInvalidOrganizationRole):
-		return routeError(routeErrors, response.CodeInvalidRequest, "Invalid organization request")
+		return response.CodeInvalidRequest, "Invalid organization request"
 	case errors.Is(err, organization.ErrOrganizationOperationForbidden),
 		errors.Is(err, organization.ErrOrganizationInviteForbidden):
-		return routeError(routeErrors, response.CodeForbidden, "Organization operation forbidden")
+		return response.CodeForbidden, "Organization operation forbidden"
 	case errors.Is(err, organization.ErrOrganizationInvitationAlreadyAccepted):
-		return routeError(routeErrors, codeInvitationAlreadyAccepted, "Invitation already accepted")
+		return codeInvitationAlreadyAccepted, "Invitation already accepted"
 	case errors.Is(err, organization.ErrOrganizationInvitationRevoked):
-		return routeError(routeErrors, codeInvitationRevoked, "Invitation already revoked")
+		return codeInvitationRevoked, "Invitation already revoked"
 	case errors.Is(err, organization.ErrOrganizationInvitationExpired):
-		return routeError(routeErrors, codeInvitationExpired, "Invitation expired")
+		return codeInvitationExpired, "Invitation expired"
 	default:
-		return routeError(routeErrors, response.CodeInternalError, "Internal server error")
+		return response.CodeInternalError, "Internal server error"
 	}
-}
-
-func routeError(routeErrors map[response.ErrorCode]response.ErrorSpec, code response.ErrorCode, message string) contract.Response {
-	spec := mustRouteError(routeErrors, code)
-	return contract.ErrorJSON(spec.Status, spec.Code, message)
 }
 
 func toContractOrganization(org domain.Organization) contract.Organization {

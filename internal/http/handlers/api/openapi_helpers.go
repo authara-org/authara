@@ -12,31 +12,31 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-func contractRequest(ctx context.Context) (*http.Request, contract.Response, bool) {
+func contractRequest(ctx context.Context) (*http.Request, bool) {
 	r, ok := contract.Request(ctx)
 	if !ok {
-		return nil, contract.InternalError(), false
+		return nil, false
 	}
-	return r, contract.Response{}, true
+	return r, true
 }
 
-func appAudience[T ~string](audience *T, routeErrors map[response.ErrorCode]response.ErrorSpec) (token.Audience, contract.Response, bool) {
+func appAudience[T ~string](audience *T) (token.Audience, response.ErrorCode, string, bool) {
 	if audience != nil && string(*audience) != string(token.AudienceApp) {
-		return "", routeError(routeErrors, responseCodeForbidden(), "Signup only supports app audience."), false
+		return "", responseCodeForbidden(), "Signup only supports app audience.", false
 	}
-	return token.AudienceApp, contract.Response{}, true
+	return token.AudienceApp, "", "", true
 }
 
-func currentOrganization(ctx context.Context, routeErrors map[response.ErrorCode]response.ErrorSpec) (openapi_types.UUID, domain.OrganizationRole, contract.Response, bool) {
+func currentOrganization(ctx context.Context) (openapi_types.UUID, domain.OrganizationRole, response.ErrorCode, string, bool) {
 	organizationID, ok := httpctx.OrganizationID(ctx)
 	if !ok {
-		return openapi_types.UUID{}, "", routeError(routeErrors, response.CodeUnauthorized, "Unauthorized"), false
+		return openapi_types.UUID{}, "", response.CodeUnauthorized, "Unauthorized", false
 	}
 	role, ok := httpctx.OrganizationRole(ctx)
 	if !ok {
-		return openapi_types.UUID{}, "", routeError(routeErrors, response.CodeUnauthorized, "Unauthorized"), false
+		return openapi_types.UUID{}, "", response.CodeUnauthorized, "Unauthorized", false
 	}
-	return organizationID, role, contract.Response{}, true
+	return organizationID, role, "", "", true
 }
 
 func toContractAuthSession(user domain.User, accessToken, refreshToken string) contract.AuthSession {
@@ -59,11 +59,6 @@ func toContractOrganizationSummary(org domain.Organization, role domain.Organiza
 		Name: org.Name,
 		Role: contract.OrganizationRole(role),
 	}
-}
-
-func routeError(routeErrors map[response.ErrorCode]response.ErrorSpec, code response.ErrorCode, message string) contract.Response {
-	spec := mustRouteError(routeErrors, code)
-	return contract.ErrorJSON(spec.Status, spec.Code, message)
 }
 
 func responseCodeInvalidRequest() response.ErrorCode { return response.CodeInvalidRequest }

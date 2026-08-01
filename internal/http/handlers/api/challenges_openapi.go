@@ -18,47 +18,51 @@ import (
 )
 
 func (h *APIHandler) StartSignupChallenge(ctx context.Context, request contract.StartSignupChallengeRequestObject) (contract.StartSignupChallengeResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return startSignupChallengeError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if !h.challengeAvailable() {
-		return routeError(StartSignupChallengeErrors, responseCodeNotFound(), "Challenge verification is not enabled."), nil
+		return startSignupChallengeError(responseCodeNotFound(), "Challenge verification is not enabled."), nil
 	}
-	in, out, ok := signupInputFromBody(request.Body, StartSignupChallengeErrors)
+	in, code, message, ok := signupInputFromBody(request.Body)
 	if !ok {
-		return out, nil
+		return startSignupChallengeError(code, message), nil
 	}
-	_, out, ok = appAudience(request.Params.Audience, StartSignupChallengeErrors)
+	_, code, message, ok = appAudience(request.Params.Audience)
 	if !ok {
-		return out, nil
+		return startSignupChallengeError(code, message), nil
 	}
-	passwordHash, out, ok := h.prepareContractSignup(ctx, r, in, StartSignupChallengeErrors)
+	passwordHash, code, message, ok := h.prepareContractSignup(ctx, r, in)
 	if !ok {
-		return out, nil
+		return startSignupChallengeError(code, message), nil
 	}
-	return h.contractStartSignupChallenge(ctx, in.Email, passwordHash, in.InvitationCode, StartSignupChallengeErrors), nil
+	out, code, message, ok := h.contractStartSignupChallenge(ctx, in.Email, passwordHash, in.InvitationCode)
+	if !ok {
+		return startSignupChallengeError(code, message), nil
+	}
+	return contract.StartSignupChallenge202JSONResponse(out), nil
 }
 
 func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract.VerifySignupChallengeRequestObject) (contract.VerifySignupChallengeResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return verifySignupChallengeError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if !h.challengeAvailable() {
-		return routeError(VerifySignupChallengeErrors, responseCodeNotFound(), "Challenge verification is not enabled."), nil
+		return verifySignupChallengeError(responseCodeNotFound(), "Challenge verification is not enabled."), nil
 	}
 	if request.Body == nil || !isSixDigitCode(strings.TrimSpace(request.Body.Code)) {
-		return invalidChallengeResponse(VerifySignupChallengeErrors), nil
+		return verifySignupChallengeError(responseCodeInvalidRequest(), "Invalid challenge request."), nil
 	}
-	_, out, ok = appAudience(request.Params.Audience, VerifySignupChallengeErrors)
+	_, code, message, ok := appAudience(request.Params.Audience)
 	if !ok {
-		return out, nil
+		return verifySignupChallengeError(code, message), nil
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeVerifyAttempt(ctx, httputil.ClientIP(r))
 		if err != nil || !allowed {
-			return routeError(VerifySignupChallengeErrors, responseCodeRateLimited(), "Too many verification attempts. Please try again later."), nil
+			return verifySignupChallengeError(responseCodeRateLimited(), "Too many verification attempts. Please try again later."), nil
 		}
 	}
 
@@ -92,7 +96,7 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 	})
 	if err != nil {
 		if isExpectedChallengeVerifyError(err) {
-			return routeError(VerifySignupChallengeErrors, responseCodeInvalidRequest(), "Invalid or expired verification code."), nil
+			return verifySignupChallengeError(responseCodeInvalidRequest(), "Invalid or expired verification code."), nil
 		}
 		if signupFailed {
 			code := authSignupErrorCode(err)
@@ -100,7 +104,7 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 			if code == responseCodeInternalError() {
 				message = "Signup error."
 			}
-			return routeError(VerifySignupChallengeErrors, code, message), nil
+			return verifySignupChallengeError(code, message), nil
 		}
 		if sessionFailed {
 			code := sessionErrorCode(err)
@@ -108,38 +112,41 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 			if code == responseCodeForbidden() {
 				message = "Account cannot access requested audience."
 			}
-			return routeError(VerifySignupChallengeErrors, code, message), nil
+			return verifySignupChallengeError(code, message), nil
 		}
-		return routeError(VerifySignupChallengeErrors, responseCodeInternalError(), "Challenge error."), nil
+		return verifySignupChallengeError(responseCodeInternalError(), "Challenge error."), nil
 	}
 	header := make(http.Header)
 	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
-	return contract.JSON(http.StatusCreated, toContractAuthSession(user, accessToken, refreshToken), header), nil
+	return contract.VerifySignupChallenge201HeadersResponse{
+		Header: header,
+		Body:   toContractAuthSession(user, accessToken, refreshToken),
+	}, nil
 }
 
 func (h *APIHandler) ResendChallenge(ctx context.Context, request contract.ResendChallengeRequestObject) (contract.ResendChallengeResponseObject, error) {
-	r, out, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return resendChallengeError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if !h.challengeAvailable() {
-		return routeError(ResendChallengeErrors, responseCodeNotFound(), "Challenge verification is not enabled."), nil
+		return resendChallengeError(responseCodeNotFound(), "Challenge verification is not enabled."), nil
 	}
 	if request.Body == nil {
-		return invalidChallengeResponse(ResendChallengeErrors), nil
+		return resendChallengeError(responseCodeInvalidRequest(), "Invalid challenge request."), nil
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeResendAttempt(ctx, httputil.ClientIP(r))
 		if err != nil || !allowed {
-			return routeError(ResendChallengeErrors, responseCodeRateLimited(), "Too many resend attempts. Please try again later."), nil
+			return resendChallengeError(responseCodeRateLimited(), "Too many resend attempts. Please try again later."), nil
 		}
 	}
 	err := h.Challenge.ResendChallenge(ctx, request.Body.ChallengeId, time.Now().UTC())
 	if err != nil && !isOpaqueChallengeResendError(err) {
-		return routeError(ResendChallengeErrors, responseCodeInternalError(), "Challenge error."), nil
+		return resendChallengeError(responseCodeInternalError(), "Challenge error."), nil
 	}
-	return contract.NoContent(), nil
+	return contract.ResendChallenge204Response{}, nil
 }
 
 func (h *APIHandler) challengeAvailable() bool {
@@ -151,14 +158,13 @@ func (h *APIHandler) contractStartSignupChallenge(
 	email string,
 	passwordHash string,
 	invitationCode string,
-	routeErrors map[response.ErrorCode]response.ErrorSpec,
-) contract.Response {
+) (contract.SignupChallenge, response.ErrorCode, string, bool) {
 	if h.Challenge == nil {
-		return routeError(routeErrors, response.CodeInternalError, "Challenge error.")
+		return contract.SignupChallenge{}, response.CodeInternalError, "Challenge error.", false
 	}
 	exists, err := h.Auth.UserExistsByEmail(ctx, email)
 	if err != nil {
-		return routeError(routeErrors, response.CodeInternalError, "Challenge error.")
+		return contract.SignupChallenge{}, response.CodeInternalError, "Challenge error.", false
 	}
 	now := time.Now().UTC()
 	var challengeID openapi_types.UUID
@@ -168,7 +174,7 @@ func (h *APIHandler) contractStartSignupChallenge(
 		invitationID, err := h.invitationIDForSignupCode(ctx, email, invitationCode)
 		if err != nil {
 			code := authSignupErrorCode(err)
-			return routeError(routeErrors, code, authSignupErrorMessage(err, code))
+			return contract.SignupChallenge{}, code, authSignupErrorMessage(err, code), false
 		}
 		challengeID, err = h.Challenge.CreateSignupChallenge(ctx, challenge.CreateSignupChallengeInput{
 			Email:        email,
@@ -177,11 +183,7 @@ func (h *APIHandler) contractStartSignupChallenge(
 		}, now)
 	}
 	if err != nil {
-		return routeError(routeErrors, response.CodeInternalError, "Challenge error.")
+		return contract.SignupChallenge{}, response.CodeInternalError, "Challenge error.", false
 	}
-	return contract.JSON(http.StatusAccepted, contract.SignupChallenge{ChallengeId: challengeID})
-}
-
-func invalidChallengeResponse(routeErrors map[response.ErrorCode]response.ErrorSpec) contract.Response {
-	return routeError(routeErrors, response.CodeInvalidRequest, "Invalid challenge request.")
+	return contract.SignupChallenge{ChallengeId: challengeID}, "", "", true
 }

@@ -18,49 +18,49 @@ import (
 func (h *APIHandler) ListCurrentUserOrganizations(ctx context.Context, _ contract.ListCurrentUserOrganizationsRequestObject) (contract.ListCurrentUserOrganizationsResponseObject, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		return routeError(ListCurrentUserOrganizationsErrors, responseCodeUnauthorized(), "Unauthorized"), nil
+		return listCurrentUserOrganizationsError(responseCodeUnauthorized(), "Unauthorized"), nil
 	}
 	orgs, err := h.Organizations.ListUserOrganizations(ctx, userID)
 	if err != nil {
-		return routeError(ListCurrentUserOrganizationsErrors, responseCodeInternalError(), "Organization error"), nil
+		return listCurrentUserOrganizationsError(responseCodeInternalError(), "Organization error"), nil
 	}
 	out := make([]contract.OrganizationSummary, 0, len(orgs))
 	for _, org := range orgs {
 		out = append(out, toContractOrganizationSummary(org.Organization, org.Membership.Role))
 	}
-	return contract.JSON(http.StatusOK, contract.OrganizationSummaries{Organizations: out}), nil
+	return contract.ListCurrentUserOrganizations200JSONResponse(contract.OrganizationSummaries{Organizations: out}), nil
 }
 
 func (h *APIHandler) GetCurrentOrganization(ctx context.Context, _ contract.GetCurrentOrganizationRequestObject) (contract.GetCurrentOrganizationResponseObject, error) {
-	organizationID, role, out, ok := currentOrganization(ctx, GetCurrentOrganizationErrors)
+	organizationID, role, code, message, ok := currentOrganization(ctx)
 	if !ok {
-		return out, nil
+		return getCurrentOrganizationError(code, message), nil
 	}
 	org, err := h.Organizations.GetOrganization(ctx, organizationID)
 	if err != nil {
-		return routeError(GetCurrentOrganizationErrors, responseCodeUnauthorized(), "Unauthorized"), nil
+		return getCurrentOrganizationError(responseCodeUnauthorized(), "Unauthorized"), nil
 	}
-	return contract.JSON(http.StatusOK, toContractOrganizationSummary(org, role)), nil
+	return contract.GetCurrentOrganization200JSONResponse(toContractOrganizationSummary(org, role)), nil
 }
 
 func (h *APIHandler) ListCurrentOrganizationMembers(ctx context.Context, _ contract.ListCurrentOrganizationMembersRequestObject) (contract.ListCurrentOrganizationMembersResponseObject, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		return routeError(ListCurrentOrganizationMembersErrors, responseCodeUnauthorized(), "Unauthorized"), nil
+		return listCurrentOrganizationMembersError(responseCodeUnauthorized(), "Unauthorized"), nil
 	}
-	organizationID, _, out, ok := currentOrganization(ctx, ListCurrentOrganizationMembersErrors)
+	organizationID, _, code, message, ok := currentOrganization(ctx)
 	if !ok {
-		return out, nil
+		return listCurrentOrganizationMembersError(code, message), nil
 	}
 	members, err := h.Organizations.ListCurrentOrganizationMembers(ctx, userID, organizationID)
 	switch {
 	case errors.Is(err, organization.ErrOrganizationOperationForbidden):
-		return routeError(ListCurrentOrganizationMembersErrors, responseCodeForbidden(), "Organization members are not visible."), nil
+		return listCurrentOrganizationMembersError(responseCodeForbidden(), "Organization members are not visible."), nil
 	case errors.Is(err, store.ErrOrganizationMembershipNotFound),
 		errors.Is(err, store.ErrOrganizationNotFound):
-		return routeError(ListCurrentOrganizationMembersErrors, responseCodeUnauthorized(), "Unauthorized"), nil
+		return listCurrentOrganizationMembersError(responseCodeUnauthorized(), "Unauthorized"), nil
 	case err != nil:
-		return routeError(ListCurrentOrganizationMembersErrors, responseCodeInternalError(), "Organization error"), nil
+		return listCurrentOrganizationMembersError(responseCodeInternalError(), "Organization error"), nil
 	}
 	outMembers := make([]contract.CurrentOrganizationMember, 0, len(members))
 	for _, member := range members {
@@ -72,24 +72,24 @@ func (h *APIHandler) ListCurrentOrganizationMembers(ctx context.Context, _ contr
 			CreatedAt: member.Membership.CreatedAt,
 		})
 	}
-	return contract.JSON(http.StatusOK, contract.CurrentOrganizationMembers{Members: outMembers}), nil
+	return contract.ListCurrentOrganizationMembers200JSONResponse(contract.CurrentOrganizationMembers{Members: outMembers}), nil
 }
 
 func (h *APIHandler) SwitchOrganization(ctx context.Context, request contract.SwitchOrganizationRequestObject) (contract.SwitchOrganizationResponseObject, error) {
-	_, out, ok := contractRequest(ctx)
+	_, ok := contractRequest(ctx)
 	if !ok {
-		return out, nil
+		return switchOrganizationError(responseCodeInternalError(), "API contract error."), nil
 	}
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
-		return routeError(SwitchOrganizationErrors, responseCodeUnauthorized(), "Unauthorized"), nil
+		return switchOrganizationError(responseCodeUnauthorized(), "Unauthorized"), nil
 	}
 	sessionID, ok := httpctx.SessionID(ctx)
 	if !ok {
-		return routeError(SwitchOrganizationErrors, responseCodeUnauthorized(), "Unauthorized"), nil
+		return switchOrganizationError(responseCodeUnauthorized(), "Unauthorized"), nil
 	}
 	if !h.Organizations.Mode().AllowsOrgSwitching() {
-		return routeError(SwitchOrganizationErrors, responseCodeForbidden(), "Organization switching is disabled."), nil
+		return switchOrganizationError(responseCodeForbidden(), "Organization switching is disabled."), nil
 	}
 	audience := token.AudienceApp
 	if request.Params.Audience != nil {
@@ -98,16 +98,19 @@ func (h *APIHandler) SwitchOrganization(ctx context.Context, request contract.Sw
 	accessToken, refreshToken, err := h.Session.SwitchSessionOrganization(ctx, userID, sessionID, request.OrganizationID, audience, time.Now())
 	switch {
 	case errors.Is(err, session.ErrInvalidSession):
-		return routeError(SwitchOrganizationErrors, responseCodeUnauthorized(), "Unauthorized"), nil
+		return switchOrganizationError(responseCodeUnauthorized(), "Unauthorized"), nil
 	case errors.Is(err, session.ErrForbidden),
 		errors.Is(err, session.ErrUserDisabled),
 		errors.Is(err, session.ErrUserNotAllowed):
-		return routeError(SwitchOrganizationErrors, responseCodeForbidden(), "Organization switch forbidden."), nil
+		return switchOrganizationError(responseCodeForbidden(), "Organization switch forbidden."), nil
 	case err != nil:
-		return routeError(SwitchOrganizationErrors, responseCodeInternalError(), "Session error."), nil
+		return switchOrganizationError(responseCodeInternalError(), "Session error."), nil
 	}
 	header := make(http.Header)
 	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
 	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
-	return contract.JSON(http.StatusOK, contract.Tokens{AccessToken: accessToken, RefreshToken: refreshToken}, header), nil
+	return contract.SwitchOrganization200HeadersResponse{
+		Header: header,
+		Body:   contract.Tokens{AccessToken: accessToken, RefreshToken: refreshToken},
+	}, nil
 }

@@ -80,7 +80,7 @@ func TestCompleteGoogleLoginCreatesSession(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/google", nil).WithContext(ctx)
 		rr := httptest.NewRecorder()
 
-		resp := h.contractGoogleLogin(ctx, req, LoginWithGoogleErrors, &google.Identity{
+		resp := h.contractGoogleLogin(ctx, req, &google.Identity{
 			OAuthID:       "google-user-123",
 			Email:         "google-api@example.com",
 			EmailVerified: true,
@@ -112,7 +112,7 @@ func TestCompleteGoogleLoginRequiresExplicitLinkForExistingEmail(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/google", nil).WithContext(ctx)
 		rr := httptest.NewRecorder()
-		resp := h.contractGoogleLogin(ctx, req, LoginWithGoogleErrors, &google.Identity{
+		resp := h.contractGoogleLogin(ctx, req, &google.Identity{
 			OAuthID:       "google-existing-123",
 			Email:         "existing-google-api@example.com",
 			EmailVerified: true,

@@ -3,7 +3,6 @@ package internalapi
 import (
 	"context"
 	"errors"
-	"net/http"
 	"time"
 
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
@@ -15,62 +14,64 @@ import (
 )
 
 func (h *Handler) ListPublicOrganizationInvitations(ctx context.Context, request contract.ListPublicOrganizationInvitationsRequestObject) (contract.ListPublicOrganizationInvitationsResponseObject, error) {
-	return h.listOrganizationInvitations(ctx, request.OrganizationID, ListPublicOrganizationInvitationsErrors), nil
+	return h.listOrganizationInvitations(ctx, request.OrganizationID), nil
 }
 
 func (h *Handler) GetPublicOrganizationInvitation(ctx context.Context, request contract.GetPublicOrganizationInvitationRequestObject) (contract.GetPublicOrganizationInvitationResponseObject, error) {
-	return h.getOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID, GetPublicOrganizationInvitationErrors), nil
+	return h.getOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID), nil
 }
 
 func (h *Handler) RevokePublicOrganizationInvitation(ctx context.Context, request contract.RevokePublicOrganizationInvitationRequestObject) (contract.RevokePublicOrganizationInvitationResponseObject, error) {
 	actorUserID, ok := httpctx.UserID(ctx)
 	if !ok {
-		return routeError(RevokePublicOrganizationInvitationErrors, response.CodeUnauthorized, "Unauthorized"), nil
+		return revokePublicOrganizationInvitationError(response.CodeUnauthorized, "Unauthorized"), nil
 	}
-	return h.revokeOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID, &actorUserID, RevokePublicOrganizationInvitationErrors), nil
+	return h.revokeOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID, &actorUserID), nil
 }
 
 func (h *Handler) CreateInternalOrganizationInvitation(ctx context.Context, request contract.CreateInternalOrganizationInvitationRequestObject) (contract.CreateInternalOrganizationInvitationResponseObject, error) {
 	if request.Body == nil {
-		return routeError(CreateInternalOrganizationInvitationErrors, response.CodeInvalidRequest, "Invalid request body"), nil
+		return createInternalOrganizationInvitationError(response.CodeInvalidRequest, "Invalid request body"), nil
 	}
-	return h.createOrganizationInvitation(ctx, request.OrganizationID, request.Body.ActorUserId, string(request.Body.Email), CreateInternalOrganizationInvitationErrors), nil
+	return h.createOrganizationInvitation(ctx, request.OrganizationID, request.Body.ActorUserId, string(request.Body.Email)), nil
 }
 
 func (h *Handler) ResendInternalOrganizationInvitation(ctx context.Context, request contract.ResendInternalOrganizationInvitationRequestObject) (contract.ResendInternalOrganizationInvitationResponseObject, error) {
-	return h.resendOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID, ResendInternalOrganizationInvitationErrors), nil
+	return h.resendOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID), nil
 }
 
-func (h *Handler) listOrganizationInvitations(ctx context.Context, organizationID openapi_types.UUID, routeErrors map[response.ErrorCode]response.ErrorSpec) contract.Response {
-	if _, out, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, routeErrors, true); !ok {
-		return out
+func (h *Handler) listOrganizationInvitations(ctx context.Context, organizationID openapi_types.UUID) contract.ListPublicOrganizationInvitationsResponseObject {
+	if _, code, message, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, true); !ok {
+		return listPublicOrganizationInvitationsError(code, message)
 	}
 	now := time.Now().UTC()
 	invitations, err := h.Organizations.ListInvitations(ctx, organizationID)
 	if err != nil {
-		return organizationError(routeErrors, err)
+		code, message := organizationError(err)
+		return listPublicOrganizationInvitationsError(code, message)
 	}
 	outInvitations := make([]contract.OrganizationInvitation, 0, len(invitations))
 	for _, invitation := range invitations {
 		outInvitations = append(outInvitations, toContractInvitation(invitation, "", now))
 	}
-	return contract.JSON(http.StatusOK, contract.OrganizationInvitations{Invitations: outInvitations})
+	return contract.ListPublicOrganizationInvitations200JSONResponse(contract.OrganizationInvitations{Invitations: outInvitations})
 }
 
-func (h *Handler) getOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID, routeErrors map[response.ErrorCode]response.ErrorSpec) contract.Response {
-	if _, out, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, routeErrors, true); !ok {
-		return out
+func (h *Handler) getOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID) contract.GetPublicOrganizationInvitationResponseObject {
+	if _, code, message, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, true); !ok {
+		return getPublicOrganizationInvitationError(code, message)
 	}
 	preview, err := h.Organizations.InvitationByOrganizationAndID(ctx, organizationID, invitationID)
 	if err != nil {
-		return organizationError(routeErrors, err)
+		code, message := organizationError(err)
+		return getPublicOrganizationInvitationError(code, message)
 	}
-	return contract.JSON(http.StatusOK, contract.OrganizationInvitationEnvelope{
+	return contract.GetPublicOrganizationInvitation200JSONResponse(contract.OrganizationInvitationEnvelope{
 		Invitation: toContractInvitation(preview.Invitation, "", time.Now().UTC()),
 	})
 }
 
-func (h *Handler) createOrganizationInvitation(ctx context.Context, organizationID, actorUserID openapi_types.UUID, email string, routeErrors map[response.ErrorCode]response.ErrorSpec) contract.Response {
+func (h *Handler) createOrganizationInvitation(ctx context.Context, organizationID, actorUserID openapi_types.UUID, email string) contract.CreateInternalOrganizationInvitationResponseObject {
 	now := time.Now().UTC()
 	out, err := h.Organizations.CreateInvitation(ctx, organization.CreateInvitationInput{
 		OrganizationID: organizationID,
@@ -79,16 +80,17 @@ func (h *Handler) createOrganizationInvitation(ctx context.Context, organization
 		Now:            now,
 	})
 	if err != nil {
-		return createInvitationError(routeErrors, err)
+		code, message := createInvitationError(err)
+		return createInternalOrganizationInvitationError(code, message)
 	}
-	return contract.JSON(http.StatusCreated, contract.OrganizationInvitationEnvelope{
+	return contract.CreateInternalOrganizationInvitation201JSONResponse(contract.OrganizationInvitationEnvelope{
 		Invitation: toContractInvitation(out.Invitation, out.InviteURL, now),
 	})
 }
 
-func (h *Handler) resendOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID, routeErrors map[response.ErrorCode]response.ErrorSpec) contract.Response {
-	if _, out, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, routeErrors, true); !ok {
-		return out
+func (h *Handler) resendOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID) contract.ResendInternalOrganizationInvitationResponseObject {
+	if _, code, message, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, true); !ok {
+		return resendInternalOrganizationInvitationError(code, message)
 	}
 	now := time.Now().UTC()
 	out, err := h.Organizations.ResendInvitation(ctx, organization.ResendInvitationInput{
@@ -97,16 +99,17 @@ func (h *Handler) resendOrganizationInvitation(ctx context.Context, organization
 		Now:            now,
 	})
 	if err != nil {
-		return resendInvitationError(routeErrors, err)
+		code, message := resendInvitationError(err)
+		return resendInternalOrganizationInvitationError(code, message)
 	}
-	return contract.JSON(http.StatusCreated, contract.OrganizationInvitationEnvelope{
+	return contract.ResendInternalOrganizationInvitation201JSONResponse(contract.OrganizationInvitationEnvelope{
 		Invitation: toContractInvitation(out.Invitation, out.InviteURL, now),
 	})
 }
 
-func (h *Handler) revokeOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID, revokedBy *openapi_types.UUID, routeErrors map[response.ErrorCode]response.ErrorSpec) contract.Response {
-	if _, out, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, routeErrors, true); !ok {
-		return out
+func (h *Handler) revokeOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID, revokedBy *openapi_types.UUID) contract.RevokePublicOrganizationInvitationResponseObject {
+	if _, code, message, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, true); !ok {
+		return revokePublicOrganizationInvitationError(code, message)
 	}
 	now := time.Now().UTC()
 	invitation, err := h.Organizations.RevokeInvitation(ctx, organization.RevokeInvitationInput{
@@ -116,49 +119,50 @@ func (h *Handler) revokeOrganizationInvitation(ctx context.Context, organization
 		Now:             now,
 	})
 	if err != nil {
-		return organizationError(routeErrors, err)
+		code, message := organizationError(err)
+		return revokePublicOrganizationInvitationError(code, message)
 	}
-	return contract.JSON(http.StatusOK, contract.OrganizationInvitationEnvelope{
+	return contract.RevokePublicOrganizationInvitation200JSONResponse(contract.OrganizationInvitationEnvelope{
 		Invitation: toContractInvitation(invitation, "", now),
 	})
 }
 
-func createInvitationError(routeErrors map[response.ErrorCode]response.ErrorSpec, err error) contract.Response {
+func createInvitationError(err error) (response.ErrorCode, string) {
 	switch {
 	case errors.Is(err, store.ErrOrganizationNotFound):
-		return routeError(routeErrors, codeOrganizationNotFound, "Organization not found")
+		return codeOrganizationNotFound, "Organization not found"
 	case errors.Is(err, organization.ErrOrganizationActorNotMember):
-		return routeError(routeErrors, codeActorNotMember, "Actor is not a member of this organization")
+		return codeActorNotMember, "Actor is not a member of this organization"
 	case errors.Is(err, organization.ErrOrganizationInviteForbidden):
-		return routeError(routeErrors, codeActorNotAllowed, "Actor is not allowed to invite members")
+		return codeActorNotAllowed, "Actor is not allowed to invite members"
 	case errors.Is(err, organization.ErrOrganizationMemberAlreadyExists):
-		return routeError(routeErrors, codeAlreadyMember, "User is already a member")
+		return codeAlreadyMember, "User is already a member"
 	case errors.Is(err, organization.ErrOrganizationInvitationAlreadyPending):
-		return routeError(routeErrors, codeInvitationAlreadyPending, "Invitation already pending")
+		return codeInvitationAlreadyPending, "Invitation already pending"
 	case errors.Is(err, organization.ErrInvalidOrganizationInvitationEmail):
-		return routeError(routeErrors, response.CodeInvalidRequest, "Invalid invitation request")
+		return response.CodeInvalidRequest, "Invalid invitation request"
 	default:
-		return routeError(routeErrors, response.CodeInternalError, "Internal server error")
+		return response.CodeInternalError, "Internal server error"
 	}
 }
 
-func resendInvitationError(routeErrors map[response.ErrorCode]response.ErrorSpec, err error) contract.Response {
+func resendInvitationError(err error) (response.ErrorCode, string) {
 	switch {
 	case errors.Is(err, store.ErrOrganizationNotFound):
-		return routeError(routeErrors, codeOrganizationNotFound, "Organization not found")
+		return codeOrganizationNotFound, "Organization not found"
 	case errors.Is(err, store.ErrOrganizationInvitationNotFound):
-		return routeError(routeErrors, codeInvitationNotFound, "Invitation not found")
+		return codeInvitationNotFound, "Invitation not found"
 	case errors.Is(err, organization.ErrOrganizationInviteForbidden):
-		return routeError(routeErrors, response.CodeForbidden, "Organization operation forbidden")
+		return response.CodeForbidden, "Organization operation forbidden"
 	case errors.Is(err, organization.ErrOrganizationMemberAlreadyExists):
-		return routeError(routeErrors, codeAlreadyMember, "User is already a member")
+		return codeAlreadyMember, "User is already a member"
 	case errors.Is(err, organization.ErrOrganizationInvitationAlreadyPending):
-		return routeError(routeErrors, codeInvitationAlreadyPending, "Invitation already pending")
+		return codeInvitationAlreadyPending, "Invitation already pending"
 	case errors.Is(err, organization.ErrOrganizationInvitationAlreadyAccepted):
-		return routeError(routeErrors, codeInvitationAlreadyAccepted, "Invitation already accepted")
+		return codeInvitationAlreadyAccepted, "Invitation already accepted"
 	case errors.Is(err, organization.ErrOrganizationInvitationRevoked):
-		return routeError(routeErrors, codeInvitationRevoked, "Invitation already revoked")
+		return codeInvitationRevoked, "Invitation already revoked"
 	default:
-		return routeError(routeErrors, response.CodeInternalError, "Internal server error")
+		return response.CodeInternalError, "Internal server error"
 	}
 }
