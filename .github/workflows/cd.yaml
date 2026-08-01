@@ -42,3 +42,59 @@ jobs:
             ghcr.io/authara-org/authara-core:latest
           build-args: |
             VERSION=${{ github.ref_name }}
+
+  publish-go-sdk:
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Checkout core
+        uses: actions/checkout@v6
+
+      - name: Checkout Go SDK
+        uses: actions/checkout@v6
+        with:
+          repository: authara-org/authara-go
+          path: .sdk/authara-go
+          token: ${{ secrets.AUTHARA_SDK_RELEASE_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+
+      - name: Generate SDK from released contract
+        working-directory: .sdk/authara-go/cmd/authara-sdk-gen
+        run: go run . -openapi ../../../../contract/openapi.yaml -out ../../authara
+
+      - name: Test generated SDK
+        working-directory: .sdk/authara-go
+        run: go test ./...
+
+      - name: Detect SDK changes
+        id: sdk-changes
+        working-directory: .sdk/authara-go
+        run: |
+          if test -n "$(git status --porcelain -- authara/openapi_types.gen.go authara/openapi_client.gen.go)"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No SDK changes for authara-core ${{ github.ref_name }}; skipping authara-go tag."
+          fi
+
+      - name: Commit and tag SDK release
+        if: steps.sdk-changes.outputs.changed == 'true'
+        working-directory: .sdk/authara-go
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --tags origin
+          if git rev-parse -q --verify "refs/tags/${{ github.ref_name }}"; then
+            echo "authara-go tag ${{ github.ref_name }} already exists but generated SDK files changed." >&2
+            exit 1
+          fi
+          git add authara/openapi_types.gen.go authara/openapi_client.gen.go
+          git commit -m "Update generated SDK for authara-core ${{ github.ref_name }}"
+          git push origin HEAD:main
+          git tag -a "${{ github.ref_name }}" -m "authara-go ${{ github.ref_name }} for authara-core ${{ github.ref_name }}"
+          git push origin "${{ github.ref_name }}"

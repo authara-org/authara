@@ -25,9 +25,11 @@ TEST_DB_LOG_SQL    ?= false
 
 .PHONY: dev dev-tailwind mailhog-up mailhog-down connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email \
 	test test-up test-db-create test-migrate test-run test-down test-reset \
-	test-coverage test-coverage-profile test-coverage-html generate check-generated
+	test-coverage test-coverage-profile test-coverage-html generate openapi-generate check-generated
 
-generate:
+generate: openapi-generate
+
+openapi-generate:
 	go generate ./internal/http/openapi
 
 check-generated: generate
