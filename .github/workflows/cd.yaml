@@ -64,8 +64,15 @@ jobs:
           go-version: "1.25.9"
 
       - name: Generate SDK from released contract
-        working-directory: .sdk/authara-go/cmd/authara-sdk-gen
-        run: go run . -openapi ../../../../contract/openapi.yaml -out ../../authara
+        working-directory: .sdk/authara-go
+        env:
+          # Keep generation reproducible; bump this when cmd/authara-sdk-gen changes.
+          AUTHARA_GO_GENERATOR_REF: 0bf3df0
+        run: >-
+          go run
+          github.com/authara-org/authara-go/cmd/authara-sdk-gen@${AUTHARA_GO_GENERATOR_REF}
+          -openapi ../../contract/openapi.yaml
+          -out authara
 
       - name: Test generated SDK
         working-directory: .sdk/authara-go

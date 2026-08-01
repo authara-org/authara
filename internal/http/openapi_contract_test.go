@@ -51,6 +51,23 @@ func TestOpenAPIContract(t *testing.T) {
 	}
 }
 
+func TestInternalBearerDeclaresSDKAuthMode(t *testing.T) {
+	loader := openapi3.NewLoader()
+	document, err := loader.LoadFromFile("../../contract/openapi.yaml")
+	if err != nil {
+		t.Fatalf("load OpenAPI contract: %v", err)
+	}
+
+	scheme := document.Components.SecuritySchemes["internalBearer"]
+	if scheme == nil || scheme.Value == nil {
+		t.Fatal("internalBearer security scheme is missing or unresolved")
+	}
+	mode, ok := scheme.Value.Extensions["x-authara-auth-mode"].(string)
+	if !ok || mode != "internal_bearer" {
+		t.Fatalf("internalBearer must declare x-authara-auth-mode=internal_bearer, got %v", scheme.Value.Extensions["x-authara-auth-mode"])
+	}
+}
+
 func validateOpenAPIOperation(
 	t *testing.T,
 	endpoint string,
