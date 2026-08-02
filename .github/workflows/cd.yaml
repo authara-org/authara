@@ -105,3 +105,16 @@ jobs:
           git push origin HEAD:main
           git tag -a "${{ github.ref_name }}" -m "authara-go ${{ github.ref_name }} for authara-core ${{ github.ref_name }}"
           git push origin "${{ github.ref_name }}"
+
+      - name: Create SDK GitHub release
+        if: steps.sdk-changes.outputs.changed == 'true'
+        working-directory: .sdk/authara-go
+        env:
+          GH_TOKEN: ${{ secrets.AUTHARA_SDK_RELEASE_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --repo authara-org/authara-go \
+            --verify-tag \
+            --title "authara-go ${{ github.ref_name }}" \
+            --generate-notes \
+            --notes "Generated from authara-core ${{ github.ref_name }}."
