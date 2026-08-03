@@ -102,6 +102,9 @@ events:
         organization_id: uuid
         user_id: uuid
         role: string
+        is_initial_membership: boolean
+        invitation_id: uuid|null
+        metadata: object
 
   - type: organization.membership.updated
     stability: stable
@@ -148,6 +151,7 @@ events:
         organization_id: uuid
         email: string
         role: string
+        metadata: object
         invited_by_user_id: uuid|null
         expires_at: rfc3339
 
@@ -166,6 +170,7 @@ events:
         organization_id: uuid
         email: string
         role: string
+        metadata: object
         accepted_by_user_id: uuid
         accepted_at: rfc3339
 
@@ -184,6 +189,7 @@ events:
         organization_id: uuid
         email: string
         role: string
+        metadata: object
         revoked_by_user_id: uuid|null
         revoked_at: rfc3339
 

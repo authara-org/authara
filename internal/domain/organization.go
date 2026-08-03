@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,6 +64,7 @@ type OrganizationInvitation struct {
 	OrganizationID  uuid.UUID
 	Email           string
 	Role            OrganizationRole
+	Metadata        json.RawMessage
 	TokenHash       string
 	InvitedByUserID *uuid.UUID
 

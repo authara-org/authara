@@ -58,6 +58,28 @@ func TestNormalizeInvitationEmail(t *testing.T) {
 	}
 }
 
+func TestNormalizeInvitationRoleAndMetadata(t *testing.T) {
+	role, err := normalizeInvitationRole("")
+	if err != nil || role != domain.OrganizationRoleMember {
+		t.Fatalf("expected default member role, got %q, %v", role, err)
+	}
+	role, err = normalizeInvitationRole(domain.OrganizationRoleAdmin)
+	if err != nil || role != domain.OrganizationRoleAdmin {
+		t.Fatalf("expected admin role, got %q, %v", role, err)
+	}
+	if _, err := normalizeInvitationRole(domain.OrganizationRoleOwner); !errors.Is(err, ErrInvalidOrganizationRole) {
+		t.Fatalf("expected owner invitation role to fail, got %v", err)
+	}
+
+	metadata, err := normalizeInvitationMetadata(map[string]any{"product_role": "manager"})
+	if err != nil || string(metadata) != `{"product_role":"manager"}` {
+		t.Fatalf("unexpected metadata normalization: %s, %v", metadata, err)
+	}
+	if _, err := normalizeInvitationMetadata(map[string]any{"too_large": string(make([]byte, maxInvitationMetadataBytes))}); !errors.Is(err, ErrInvalidOrganizationInvitationMetadata) {
+		t.Fatalf("expected oversized metadata to fail, got %v", err)
+	}
+}
+
 func TestInviteURLBuildsTokenURL(t *testing.T) {
 	svc := New(Config{PublicURL: "https://auth.example.com"})
 
@@ -111,6 +133,11 @@ func TestOrganizationLifecycleWebhooks(t *testing.T) {
 		} {
 			mustFindWebhookEvent(t, pub.events, eventType)
 		}
+		created := mustFindWebhookEvent(t, pub.events, webhook.EventOrganizationMembershipCreated)
+		data, ok := created.Data.(webhook.OrganizationMembershipCreatedData)
+		if !ok || !data.IsInitialMembership || data.InvitationID != nil || string(data.Metadata) != "{}" {
+			t.Fatalf("unexpected initial membership webhook data: %#v", created.Data)
+		}
 	})
 }
 
@@ -160,6 +187,8 @@ func TestResendInvitationRevokesOldAndCreatesFreshInvite(t *testing.T) {
 			OrganizationID: org.ID,
 			ActorUserID:    owner.ID,
 			Email:          "resend-invitee@example.com",
+			Role:           domain.OrganizationRoleAdmin,
+			Metadata:       map[string]any{"product_role": "manager"},
 			Now:            now,
 		})
 		if err != nil {
@@ -205,6 +234,7 @@ func TestResendInvitationRevokesOldAndCreatesFreshInvite(t *testing.T) {
 			preview.Invitation.Status(now.Add(time.Minute)) != domain.OrganizationInvitationStatusPending {
 			t.Fatalf("unexpected resent invitation: %+v", preview.Invitation)
 		}
+		assertInvitationMetadataRole(t, preview.Invitation.Metadata, "manager")
 	})
 }
 
@@ -334,12 +364,21 @@ func TestAcceptInvitationMultiModeAllowsExistingOtherMembership(t *testing.T) {
 			t.Fatalf("EnsureDefaultOrganizationForUser invitee failed: %v", err)
 		}
 
-		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, Mode: OrgModeMulti, InvitationTTL: time.Hour})
+		pub := &recordingPublisher{}
+		svc := New(Config{
+			Store:            tdb.Store,
+			Tx:               tdb.Tx,
+			Mode:             OrgModeMulti,
+			InvitationTTL:    time.Hour,
+			WebhookPublisher: pub,
+		})
 		now := time.Now().UTC()
 		invite, err := svc.CreateInvitation(ctx, CreateInvitationInput{
 			OrganizationID: org.ID,
 			ActorUserID:    owner.ID,
 			Email:          invitee.Email,
+			Role:           domain.OrganizationRoleAdmin,
+			Metadata:       map[string]any{"product_role": "manager"},
 			Now:            now,
 		})
 		if err != nil {
@@ -357,6 +396,24 @@ func TestAcceptInvitationMultiModeAllowsExistingOtherMembership(t *testing.T) {
 		if !result.InvitationAccepted || !result.MembershipCreated {
 			t.Fatalf("expected invitation and membership creation, got %+v", result)
 		}
+		if result.Membership.Role != domain.OrganizationRoleAdmin {
+			t.Fatalf("expected admin membership, got %q", result.Membership.Role)
+		}
+		if _, err := svc.CreateInvitation(ctx, CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    invitee.ID,
+			Email:          "next-manager@example.com",
+			Role:           domain.OrganizationRoleAdmin,
+			Now:            now,
+		}); err != nil {
+			t.Fatalf("expected invited admin to create another invitation: %v", err)
+		}
+		created := mustFindWebhookEvent(t, pub.events, webhook.EventOrganizationMembershipCreated)
+		data, ok := created.Data.(webhook.OrganizationMembershipCreatedData)
+		if !ok || data.IsInitialMembership || data.InvitationID == nil || *data.InvitationID != invite.Invitation.ID {
+			t.Fatalf("unexpected invited membership webhook data: %#v", created.Data)
+		}
+		assertInvitationMetadataRole(t, data.Metadata, "manager")
 
 		memberships, err := tdb.Store.ListOrganizationMembershipsByUserID(ctx, invitee.ID)
 		if err != nil {
@@ -378,6 +435,17 @@ func mustFindWebhookEvent(t *testing.T, events []webhook.Envelope, eventType web
 	}
 	t.Fatalf("expected event %q in %+v", eventType, events)
 	return webhook.Envelope{}
+}
+
+func assertInvitationMetadataRole(t *testing.T, raw []byte, want string) {
+	t.Helper()
+	var metadata map[string]string
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		t.Fatalf("decode invitation metadata: %v", err)
+	}
+	if metadata["product_role"] != want {
+		t.Fatalf("expected product_role %q, got %q", want, metadata["product_role"])
+	}
 }
 
 func loadInvitationEmailTemplateData(t *testing.T, ctx context.Context, email string) []byte {

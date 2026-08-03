@@ -17,6 +17,7 @@ func toDomainOrganizationInvitation(m model.OrganizationInvitation) domain.Organ
 		OrganizationID:   m.OrganizationID,
 		Email:            m.Email,
 		Role:             domain.OrganizationRole(m.Role),
+		Metadata:         m.Metadata,
 		TokenHash:        m.TokenHash,
 		InvitedByUserID:  m.InvitedByUserID,
 		ExpiresAt:        m.ExpiresAt,
@@ -28,10 +29,15 @@ func toDomainOrganizationInvitation(m model.OrganizationInvitation) domain.Organ
 }
 
 func toModelOrganizationInvitation(d domain.OrganizationInvitation) model.OrganizationInvitation {
+	metadata := d.Metadata
+	if len(metadata) == 0 {
+		metadata = []byte(`{}`)
+	}
 	return model.OrganizationInvitation{
 		OrganizationID:   d.OrganizationID,
 		Email:            normalizeEmail(d.Email),
 		Role:             string(d.Role),
+		Metadata:         metadata,
 		TokenHash:        d.TokenHash,
 		InvitedByUserID:  d.InvitedByUserID,
 		ExpiresAt:        d.ExpiresAt,
@@ -49,6 +55,7 @@ const organizationInvitationColumns = `
 	organization_id,
 	email,
 	role,
+	metadata,
 	token_hash,
 	invited_by_user_id,
 	expires_at,
@@ -66,6 +73,7 @@ func scanOrganizationInvitation(row rowScanner, m *model.OrganizationInvitation)
 		&m.OrganizationID,
 		&m.Email,
 		&m.Role,
+		&m.Metadata,
 		&m.TokenHash,
 		&m.InvitedByUserID,
 		&m.ExpiresAt,
@@ -84,15 +92,17 @@ func (s *Store) CreateOrganizationInvitation(ctx context.Context, invitation dom
 			organization_id,
 			email,
 			role,
+			metadata,
 			token_hash,
 			invited_by_user_id,
 			expires_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
 		RETURNING `+organizationInvitationColumns,
 		m.OrganizationID,
 		m.Email,
 		m.Role,
+		m.Metadata,
 		m.TokenHash,
 		m.InvitedByUserID,
 		m.ExpiresAt,

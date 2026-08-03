@@ -147,7 +147,7 @@ X-Authara-Signature: sha256=...
 }
 ```
 
-Organization events include the organization id, name, kind, and creator when available. Membership events include the organization id, user id, and role. Invitation events include the invitation id, organization id, invited email, role, and status metadata.
+Organization events include the organization id, name, kind, and creator when available. Created-membership events also include whether the membership was created with the organization, the source invitation id when applicable, and the invitation's opaque metadata. Invitation events include the invitation id, organization id, invited email, Authara role, and opaque application metadata.
 
 ---
 

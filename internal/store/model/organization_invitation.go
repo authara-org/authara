@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,11 +12,12 @@ type OrganizationInvitation struct {
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
 
-	OrganizationID  uuid.UUID  `db:"organization_id"`
-	Email           string     `db:"email"`
-	Role            string     `db:"role"`
-	TokenHash       string     `db:"token_hash"`
-	InvitedByUserID *uuid.UUID `db:"invited_by_user_id"`
+	OrganizationID  uuid.UUID       `db:"organization_id"`
+	Email           string          `db:"email"`
+	Role            string          `db:"role"`
+	Metadata        json.RawMessage `db:"metadata"`
+	TokenHash       string          `db:"token_hash"`
+	InvitedByUserID *uuid.UUID      `db:"invited_by_user_id"`
 
 	ExpiresAt time.Time `db:"expires_at"`
 

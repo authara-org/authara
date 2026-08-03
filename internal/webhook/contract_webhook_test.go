@@ -188,6 +188,7 @@ func TestWebhookContract_PayloadShapes(t *testing.T) {
 		NewOrganizationUpdated(fakeOrganization(), time.Now()),
 		NewOrganizationDeleted(fakeOrganization(), time.Now()),
 		NewOrganizationMembershipCreated(fakeMembership(), time.Now()),
+		NewOrganizationMembershipCreatedFromInvitation(fakeMembership(), createdInvitation, time.Now()),
 		NewOrganizationMembershipUpdated(fakeMembership(), time.Now()),
 		NewOrganizationMembershipDeleted(fakeMembership(), time.Now()),
 		NewOrganizationInvitationCreated(createdInvitation, time.Now()),
@@ -325,6 +326,14 @@ func assertContractDataField(t *testing.T, data map[string]any, field string, fi
 		if _, err := time.Parse(time.RFC3339, s); err != nil {
 			t.Fatalf("expected valid rfc3339 %q, got %q: %v", field, s, err)
 		}
+	case "boolean":
+		if _, ok := value.(bool); !ok {
+			t.Fatalf("expected boolean %q, got %#v", field, value)
+		}
+	case "object":
+		if _, ok := value.(map[string]any); !ok {
+			t.Fatalf("expected object %q, got %#v", field, value)
+		}
 	default:
 		t.Fatalf("unsupported contract data type %q for field %q", fieldType, field)
 	}
@@ -344,6 +353,7 @@ func fakeInvitation(invitedBy *uuid.UUID) domain.OrganizationInvitation {
 		OrganizationID:  uuid.New(),
 		Email:           "teammate@example.com",
 		Role:            domain.OrganizationRoleMember,
+		Metadata:        json.RawMessage(`{"product_role":"worker"}`),
 		InvitedByUserID: invitedBy,
 		ExpiresAt:       time.Now().UTC().Add(24 * time.Hour),
 	}

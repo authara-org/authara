@@ -539,9 +539,9 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
 
 ## Create organization invitation
 
-Creates a secure Authara member invitation object and returns the invitation link.
+Creates a secure Authara organization invitation and returns the invitation link.
 
-Your application backend should call this after it has enforced product-specific rules such as billing and seat limits. `actor_user_id` is required; Authara validates that the actor is a member of the organization and is allowed to invite members. Invitations always grant the `member` role; upgrade roles separately after the user joins.
+Your application backend should call this after it has enforced product-specific rules such as billing and seat limits. `actor_user_id` is required; Authara validates that the actor is a member of the organization and is allowed to invite members. `role` controls the Authara organization role granted on acceptance and may be `member` or `admin`; it defaults to `member`. The `owner` role remains reserved for the organization creator. `metadata` is optional opaque application JSON that Authara stores and forwards unchanged.
 
 ```
 POST /auth/internal/v1/organizations/{organization_id}/invitations
@@ -553,7 +553,13 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
 ```json
 {
   "actor_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1",
-  "email": "teammate@example.com"
+  "email": "teammate@example.com",
+  "role": "admin",
+  "metadata": {
+    "baufunk": {
+      "role": "manager"
+    }
+  }
 }
 ```
 
@@ -565,7 +571,12 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
     "id": "7ea9ce22-72bb-45bd-96d2-7368314dd345",
     "organization_id": "68c673e7-1ff9-4113-8bbf-e00f039a9a61",
     "email": "teammate@example.com",
-    "role": "member",
+    "role": "admin",
+    "metadata": {
+      "baufunk": {
+        "role": "manager"
+      }
+    },
     "status": "pending",
     "expires_at": "2026-01-08T12:00:00Z",
     "invite_url": "https://example.com/auth/invitations/accept?token=..."

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
@@ -33,7 +34,22 @@ func (h *Handler) CreateInternalOrganizationInvitation(ctx context.Context, requ
 	if request.Body == nil {
 		return createInternalOrganizationInvitationError(response.CodeInvalidRequest, "Invalid request body"), nil
 	}
-	return h.createOrganizationInvitation(ctx, request.OrganizationID, request.Body.ActorUserId, string(request.Body.Email)), nil
+	var role domain.OrganizationRole
+	if request.Body.Role != nil {
+		role = domain.OrganizationRole(*request.Body.Role)
+	}
+	var metadata map[string]any
+	if request.Body.Metadata != nil {
+		metadata = *request.Body.Metadata
+	}
+	return h.createOrganizationInvitation(
+		ctx,
+		request.OrganizationID,
+		request.Body.ActorUserId,
+		string(request.Body.Email),
+		role,
+		metadata,
+	), nil
 }
 
 func (h *Handler) ResendInternalOrganizationInvitation(ctx context.Context, request contract.ResendInternalOrganizationInvitationRequestObject) (contract.ResendInternalOrganizationInvitationResponseObject, error) {
@@ -71,12 +87,20 @@ func (h *Handler) getOrganizationInvitation(ctx context.Context, organizationID,
 	})
 }
 
-func (h *Handler) createOrganizationInvitation(ctx context.Context, organizationID, actorUserID openapi_types.UUID, email string) contract.CreateInternalOrganizationInvitationResponseObject {
+func (h *Handler) createOrganizationInvitation(
+	ctx context.Context,
+	organizationID, actorUserID openapi_types.UUID,
+	email string,
+	role domain.OrganizationRole,
+	metadata map[string]any,
+) contract.CreateInternalOrganizationInvitationResponseObject {
 	now := time.Now().UTC()
 	out, err := h.Organizations.CreateInvitation(ctx, organization.CreateInvitationInput{
 		OrganizationID: organizationID,
 		ActorUserID:    actorUserID,
 		Email:          email,
+		Role:           role,
+		Metadata:       metadata,
 		Now:            now,
 	})
 	if err != nil {
@@ -139,7 +163,9 @@ func createInvitationError(err error) (response.ErrorCode, string) {
 		return codeAlreadyMember, "User is already a member"
 	case errors.Is(err, organization.ErrOrganizationInvitationAlreadyPending):
 		return codeInvitationAlreadyPending, "Invitation already pending"
-	case errors.Is(err, organization.ErrInvalidOrganizationInvitationEmail):
+	case errors.Is(err, organization.ErrInvalidOrganizationInvitationEmail),
+		errors.Is(err, organization.ErrInvalidOrganizationInvitationMetadata),
+		errors.Is(err, organization.ErrInvalidOrganizationRole):
 		return response.CodeInvalidRequest, "Invalid invitation request"
 	default:
 		return response.CodeInternalError, "Internal server error"

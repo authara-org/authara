@@ -1512,6 +1512,13 @@ components:
         email:
           type: string
           format: email
+        role:
+          $ref: "#/components/schemas/OrganizationInvitationRole"
+        metadata:
+          type: object
+          additionalProperties: true
+          default: {}
+          description: Opaque application metadata stored and forwarded by Authara.
     RevokeInvitationRequest:
       type: object
       additionalProperties: false
@@ -1622,7 +1629,7 @@ components:
     OrganizationInvitation:
       type: object
       additionalProperties: false
-      required: [id, organization_id, email, role, status, expires_at]
+      required: [id, organization_id, email, role, metadata, status, expires_at]
       properties:
         id:
           type: string
@@ -1635,6 +1642,10 @@ components:
           format: email
         role:
           $ref: "#/components/schemas/OrganizationRole"
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Opaque application metadata stored with the invitation.
         status:
           type: string
           enum: [pending, accepted, revoked, expired]
@@ -1681,3 +1692,8 @@ components:
     OrganizationRole:
       type: string
       enum: [owner, admin, member]
+    OrganizationInvitationRole:
+      type: string
+      enum: [admin, member]
+      default: member
+      description: Authara organization role granted when the invitation is accepted. Owner is reserved for the organization creator.

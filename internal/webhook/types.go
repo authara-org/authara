@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
@@ -63,31 +64,43 @@ type OrganizationMembershipData struct {
 	Role           string    `json:"role"`
 }
 
+type OrganizationMembershipCreatedData struct {
+	OrganizationID      uuid.UUID       `json:"organization_id"`
+	UserID              uuid.UUID       `json:"user_id"`
+	Role                string          `json:"role"`
+	IsInitialMembership bool            `json:"is_initial_membership"`
+	InvitationID        *uuid.UUID      `json:"invitation_id"`
+	Metadata            json.RawMessage `json:"metadata"`
+}
+
 type OrganizationInvitationCreatedData struct {
-	InvitationID    uuid.UUID  `json:"invitation_id"`
-	OrganizationID  uuid.UUID  `json:"organization_id"`
-	Email           string     `json:"email"`
-	Role            string     `json:"role"`
-	InvitedByUserID *uuid.UUID `json:"invited_by_user_id"`
-	ExpiresAt       time.Time  `json:"expires_at"`
+	InvitationID    uuid.UUID       `json:"invitation_id"`
+	OrganizationID  uuid.UUID       `json:"organization_id"`
+	Email           string          `json:"email"`
+	Role            string          `json:"role"`
+	Metadata        json.RawMessage `json:"metadata"`
+	InvitedByUserID *uuid.UUID      `json:"invited_by_user_id"`
+	ExpiresAt       time.Time       `json:"expires_at"`
 }
 
 type OrganizationInvitationAcceptedData struct {
-	InvitationID     uuid.UUID `json:"invitation_id"`
-	OrganizationID   uuid.UUID `json:"organization_id"`
-	Email            string    `json:"email"`
-	Role             string    `json:"role"`
-	AcceptedByUserID uuid.UUID `json:"accepted_by_user_id"`
-	AcceptedAt       time.Time `json:"accepted_at"`
+	InvitationID     uuid.UUID       `json:"invitation_id"`
+	OrganizationID   uuid.UUID       `json:"organization_id"`
+	Email            string          `json:"email"`
+	Role             string          `json:"role"`
+	Metadata         json.RawMessage `json:"metadata"`
+	AcceptedByUserID uuid.UUID       `json:"accepted_by_user_id"`
+	AcceptedAt       time.Time       `json:"accepted_at"`
 }
 
 type OrganizationInvitationRevokedData struct {
-	InvitationID    uuid.UUID  `json:"invitation_id"`
-	OrganizationID  uuid.UUID  `json:"organization_id"`
-	Email           string     `json:"email"`
-	Role            string     `json:"role"`
-	RevokedByUserID *uuid.UUID `json:"revoked_by_user_id"`
-	RevokedAt       time.Time  `json:"revoked_at"`
+	InvitationID    uuid.UUID       `json:"invitation_id"`
+	OrganizationID  uuid.UUID       `json:"organization_id"`
+	Email           string          `json:"email"`
+	Role            string          `json:"role"`
+	Metadata        json.RawMessage `json:"metadata"`
+	RevokedByUserID *uuid.UUID      `json:"revoked_by_user_id"`
+	RevokedAt       time.Time       `json:"revoked_at"`
 }
 
 func NewUserCreated(userID uuid.UUID, now time.Time) Envelope {
@@ -115,7 +128,28 @@ func NewOrganizationDeleted(org domain.Organization, now time.Time) Envelope {
 }
 
 func NewOrganizationMembershipCreated(membership domain.OrganizationMembership, now time.Time) Envelope {
-	return newEnvelope(EventOrganizationMembershipCreated, now, organizationMembershipData(membership))
+	return newEnvelope(EventOrganizationMembershipCreated, now, OrganizationMembershipCreatedData{
+		OrganizationID:      membership.OrganizationID,
+		UserID:              membership.UserID,
+		Role:                string(membership.Role),
+		IsInitialMembership: true,
+		Metadata:            json.RawMessage(`{}`),
+	})
+}
+
+func NewOrganizationMembershipCreatedFromInvitation(
+	membership domain.OrganizationMembership,
+	invitation domain.OrganizationInvitation,
+	now time.Time,
+) Envelope {
+	invitationID := invitation.ID
+	return newEnvelope(EventOrganizationMembershipCreated, now, OrganizationMembershipCreatedData{
+		OrganizationID: membership.OrganizationID,
+		UserID:         membership.UserID,
+		Role:           string(membership.Role),
+		InvitationID:   &invitationID,
+		Metadata:       organizationInvitationMetadata(invitation),
+	})
 }
 
 func NewOrganizationMembershipUpdated(membership domain.OrganizationMembership, now time.Time) Envelope {
@@ -135,6 +169,7 @@ func NewOrganizationInvitationCreated(invitation domain.OrganizationInvitation, 
 			OrganizationID:  invitation.OrganizationID,
 			Email:           invitation.Email,
 			Role:            string(invitation.Role),
+			Metadata:        organizationInvitationMetadata(invitation),
 			InvitedByUserID: invitation.InvitedByUserID,
 			ExpiresAt:       invitation.ExpiresAt.UTC(),
 		},
@@ -159,6 +194,7 @@ func NewOrganizationInvitationAccepted(invitation domain.OrganizationInvitation,
 			OrganizationID:   invitation.OrganizationID,
 			Email:            invitation.Email,
 			Role:             string(invitation.Role),
+			Metadata:         organizationInvitationMetadata(invitation),
 			AcceptedByUserID: acceptedBy,
 			AcceptedAt:       acceptedAt,
 		},
@@ -179,6 +215,7 @@ func NewOrganizationInvitationRevoked(invitation domain.OrganizationInvitation, 
 			OrganizationID:  invitation.OrganizationID,
 			Email:           invitation.Email,
 			Role:            string(invitation.Role),
+			Metadata:        organizationInvitationMetadata(invitation),
 			RevokedByUserID: invitation.RevokedByUserID,
 			RevokedAt:       revokedAt,
 		},
@@ -209,4 +246,11 @@ func organizationMembershipData(membership domain.OrganizationMembership) Organi
 		UserID:         membership.UserID,
 		Role:           string(membership.Role),
 	}
+}
+
+func organizationInvitationMetadata(invitation domain.OrganizationInvitation) json.RawMessage {
+	if len(invitation.Metadata) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	return invitation.Metadata
 }

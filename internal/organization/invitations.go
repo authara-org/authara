@@ -24,6 +24,8 @@ type CreateInvitationInput struct {
 	OrganizationID uuid.UUID
 	ActorUserID    uuid.UUID
 	Email          string
+	Role           domain.OrganizationRole
+	Metadata       map[string]any
 	Now            time.Time
 }
 
@@ -75,6 +77,14 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 	now := normalizeNow(in.Now)
 
 	email, err := normalizeInvitationEmail(in.Email)
+	if err != nil {
+		return InvitationWithToken{}, err
+	}
+	role, err := normalizeInvitationRole(in.Role)
+	if err != nil {
+		return InvitationWithToken{}, err
+	}
+	metadata, err := normalizeInvitationMetadata(in.Metadata)
 	if err != nil {
 		return InvitationWithToken{}, err
 	}
@@ -135,7 +145,8 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 		invitation := domain.OrganizationInvitation{
 			OrganizationID:  org.ID,
 			Email:           email,
-			Role:            domain.OrganizationRoleMember,
+			Role:            role,
+			Metadata:        metadata,
 			TokenHash:       tokenHash,
 			InvitedByUserID: &in.ActorUserID,
 			ExpiresAt:       now.Add(s.invitationTTL),
@@ -216,6 +227,7 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 			OrganizationID:  old.OrganizationID,
 			Email:           old.Email,
 			Role:            old.Role,
+			Metadata:        old.Metadata,
 			TokenHash:       tokenHash,
 			InvitedByUserID: old.InvitedByUserID,
 			ExpiresAt:       now.Add(s.invitationTTL),
@@ -493,7 +505,11 @@ func (s *Service) acceptInvitation(
 			return err
 		}
 		if result.MembershipCreated {
-			return s.publish(txCtx, webhook.NewOrganizationMembershipCreated(result.Membership, now))
+			return s.publish(txCtx, webhook.NewOrganizationMembershipCreatedFromInvitation(
+				result.Membership,
+				result.Invitation,
+				now,
+			))
 		}
 		return nil
 	})
@@ -506,6 +522,29 @@ func (s *Service) acceptInvitation(
 
 func canInvite(role domain.OrganizationRole) bool {
 	return role == domain.OrganizationRoleOwner || role == domain.OrganizationRoleAdmin
+}
+
+func normalizeInvitationRole(role domain.OrganizationRole) (domain.OrganizationRole, error) {
+	if role == "" {
+		return domain.OrganizationRoleMember, nil
+	}
+	if role != domain.OrganizationRoleMember && role != domain.OrganizationRoleAdmin {
+		return "", ErrInvalidOrganizationRole
+	}
+	return role, nil
+}
+
+const maxInvitationMetadataBytes = 16 << 10
+
+func normalizeInvitationMetadata(metadata map[string]any) (json.RawMessage, error) {
+	if metadata == nil {
+		return json.RawMessage(`{}`), nil
+	}
+	raw, err := json.Marshal(metadata)
+	if err != nil || len(raw) > maxInvitationMetadataBytes {
+		return nil, ErrInvalidOrganizationInvitationMetadata
+	}
+	return raw, nil
 }
 
 func (s *Service) ensureInvitationTargetNotMember(ctx context.Context, organizationID uuid.UUID, email string) error {

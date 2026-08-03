@@ -2,6 +2,7 @@ package internalapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -106,11 +107,16 @@ func toContractInvitation(invitation domain.OrganizationInvitation, inviteURL st
 	if inviteURL != "" {
 		url = &inviteURL
 	}
+	metadata := map[string]any{}
+	if len(invitation.Metadata) > 0 {
+		_ = json.Unmarshal(invitation.Metadata, &metadata)
+	}
 	return contract.OrganizationInvitation{
 		Id:             invitation.ID,
 		OrganizationId: invitation.OrganizationID,
 		Email:          openapi_types.Email(invitation.Email),
 		Role:           contract.OrganizationRole(invitation.Role),
+		Metadata:       metadata,
 		Status:         contract.OrganizationInvitationStatus(invitation.Status(now)),
 		ExpiresAt:      invitation.ExpiresAt.UTC(),
 		InviteUrl:      url,
