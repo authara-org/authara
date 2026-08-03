@@ -12,10 +12,40 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    outputs:
+      core_bump: ${{ steps.core-release.outputs.bump }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine core release bump
+        id: core-release
+        run: |
+          git fetch --tags --force origin
+          previous_tag="$(git describe --tags --match 'v[0-9]*' --abbrev=0 "${GITHUB_SHA}^" 2>/dev/null || true)"
+          previous_version="${previous_tag#v}"
+          current_version="${GITHUB_REF_NAME#v}"
+
+          if test -z "$previous_tag"; then
+            previous_version="0.0.0"
+          fi
+
+          IFS=. read -r previous_major previous_minor previous_patch <<< "$previous_version"
+          IFS=. read -r current_major current_minor current_patch <<< "$current_version"
+
+          if (( current_major > previous_major )); then
+            bump="major"
+          elif (( current_minor > previous_minor )); then
+            bump="minor"
+          else
+            bump="patch"
+          fi
+
+          echo "Core ${GITHUB_REF_NAME}: ${bump} release since ${previous_tag:-no previous tag}"
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -57,6 +87,30 @@ jobs:
           repository: authara-org/authara-go
           path: .sdk/authara-go
           token: ${{ secrets.AUTHARA_SDK_RELEASE_TOKEN }}
+          fetch-depth: 0
+
+      - name: Determine Go SDK version
+        id: sdk-version
+        working-directory: .sdk/authara-go
+        env:
+          CORE_BUMP: ${{ needs.deploy.outputs.core_bump }}
+        run: |
+          current_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
+          current_version="${current_tag#v}"
+          if test -z "$current_tag"; then
+            current_version="0.0.0"
+          fi
+
+          IFS=. read -r major minor patch <<< "$current_version"
+          case "$CORE_BUMP" in
+            major) next_version="$((major + 1)).0.0" ;;
+            minor) next_version="$major.$((minor + 1)).0" ;;
+            patch) next_version="$major.$minor.$((patch + 1))" ;;
+            *) echo "Unsupported SDK bump: $CORE_BUMP" >&2; exit 1 ;;
+          esac
+
+          echo "Go SDK ${current_tag:-v0.0.0} -> v${next_version}"
+          echo "version=$next_version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -67,7 +121,7 @@ jobs:
         working-directory: .sdk/authara-go
         env:
           # Keep generation reproducible; bump this when cmd/authara-sdk-gen changes.
-          AUTHARA_GO_GENERATOR_REF: 0a88aae
+          AUTHARA_GO_GENERATOR_REF: a312a81
         run: >-
           go run
           github.com/authara-org/authara-go/cmd/authara-sdk-gen@${AUTHARA_GO_GENERATOR_REF}
@@ -96,15 +150,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch --tags origin
-          if git rev-parse -q --verify "refs/tags/${{ github.ref_name }}"; then
-            echo "authara-go tag ${{ github.ref_name }} already exists but generated SDK files changed." >&2
+          sdk_version="${{ steps.sdk-version.outputs.version }}"
+          sdk_tag="v${sdk_version}"
+          if git rev-parse -q --verify "refs/tags/${sdk_tag}"; then
+            echo "authara-go tag ${sdk_tag} already exists but generated SDK files changed." >&2
             exit 1
           fi
           git add authara/openapi_types.gen.go authara/openapi_client.gen.go
-          git commit -m "Update generated SDK for authara-core ${{ github.ref_name }}"
+          git commit -m "Release authara-go ${sdk_tag} for authara-core ${{ github.ref_name }}"
           git push origin HEAD:main
-          git tag -a "${{ github.ref_name }}" -m "authara-go ${{ github.ref_name }} for authara-core ${{ github.ref_name }}"
-          git push origin "${{ github.ref_name }}"
+          git tag -a "$sdk_tag" -m "authara-go ${sdk_tag} for authara-core ${{ github.ref_name }}"
+          git push origin "$sdk_tag"
 
       - name: Create SDK GitHub release
         if: steps.sdk-changes.outputs.changed == 'true'
@@ -112,9 +168,98 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.AUTHARA_SDK_RELEASE_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" \
+          sdk_tag="v${{ steps.sdk-version.outputs.version }}"
+          gh release create "$sdk_tag" \
             --repo authara-org/authara-go \
             --verify-tag \
-            --title "authara-go ${{ github.ref_name }}" \
+            --title "authara-go $sdk_tag" \
             --generate-notes \
             --notes "Generated from authara-core ${{ github.ref_name }}."
+
+  publish-browser-sdk:
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Checkout core
+        uses: actions/checkout@v6
+
+      - name: Checkout browser SDK
+        uses: actions/checkout@v6
+        with:
+          repository: authara-org/authara-browser
+          path: .sdk/authara-browser
+          token: ${{ secrets.AUTHARA_SDK_RELEASE_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: .sdk/authara-browser/package-lock.json
+
+      - name: Install dependencies
+        working-directory: .sdk/authara-browser
+        run: npm ci
+
+      - name: Generate browser SDK from released contract
+        working-directory: .sdk/authara-browser
+        run: npm run generate -- --openapi ../../contract/openapi.yaml
+
+      - name: Check generated browser SDK
+        working-directory: .sdk/authara-browser
+        run: |
+          npm run check:generated -- --openapi ../../contract/openapi.yaml
+          npm test
+          npm run build
+
+      - name: Detect SDK changes
+        id: sdk-changes
+        working-directory: .sdk/authara-browser
+        run: |
+          if test -n "$(git status --porcelain -- src/generated)"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No browser SDK changes for authara-core ${{ github.ref_name }}; skipping @authara/browser tag."
+          fi
+
+      - name: Determine browser SDK version
+        id: sdk-version
+        if: steps.sdk-changes.outputs.changed == 'true'
+        working-directory: .sdk/authara-browser
+        env:
+          CORE_BUMP: ${{ needs.deploy.outputs.core_bump }}
+        run: |
+          current_version="$(node -p "require('./package.json').version")"
+          IFS=. read -r major minor patch <<< "$current_version"
+          case "$CORE_BUMP" in
+            major) next_version="$((major + 1)).0.0" ;;
+            minor) next_version="$major.$((minor + 1)).0" ;;
+            patch) next_version="$major.$minor.$((patch + 1))" ;;
+            *) echo "Unsupported SDK bump: $CORE_BUMP" >&2; exit 1 ;;
+          esac
+
+          echo "Browser SDK v${current_version} -> v${next_version}"
+          echo "version=$next_version" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and tag browser SDK release
+        if: steps.sdk-changes.outputs.changed == 'true'
+        working-directory: .sdk/authara-browser
+        run: |
+          sdk_version="${{ steps.sdk-version.outputs.version }}"
+          sdk_tag="v${sdk_version}"
+          npm version "$sdk_version" --no-git-tag-version
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --tags origin
+          if git rev-parse -q --verify "refs/tags/${sdk_tag}"; then
+            echo "authara-browser tag ${sdk_tag} already exists but generated SDK files changed." >&2
+            exit 1
+          fi
+          git add src/generated package.json package-lock.json
+          git commit -m "Release @authara/browser ${sdk_tag} for authara-core ${{ github.ref_name }}"
+          git push origin HEAD:main
+          git tag -a "$sdk_tag" -m "@authara/browser ${sdk_tag} for authara-core ${{ github.ref_name }}"
+          git push origin "$sdk_tag"
