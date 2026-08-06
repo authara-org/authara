@@ -93,31 +93,28 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/invitations/login", uih.InvitationLoginPage)
 			})
 
+			// Public recovery and challenge actions. Password reset is always available.
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireChallengeEnabled)
+				r.Use(mw.OptionalAppAccessIdentity)
+				r.Get("/password-reset", uih.PasswordResetPage)
+				r.Get("/verify-challenge/{action}", uih.VerifyChallengePage)
 
-				// Public challenge pages/actions
 				r.Group(func(r chi.Router) {
-					r.Use(mw.OptionalAppAccessIdentity)
-					r.Get("/password-reset", uih.PasswordResetPage)
-					r.Get("/verify-challenge/{action}", uih.VerifyChallengePage)
-
-					r.Group(func(r chi.Router) {
-						r.Use(mw.RequireCSRF)
-
-						r.Post("/password-reset", uih.PasswordResetRequestPost)
-						r.Post("/verify-challenge/{action}", uih.VerifyChallengePost)
-						r.Post("/resend-challenge", uih.ResendChallengePost)
-					})
-				})
-
-				// Authenticated challenge-starting actions
-				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireAppAccessAuthWithRefresh)
 					r.Use(mw.RequireCSRF)
 
-					r.Post("/email-change", uih.EmailChangeRequestPost)
+					r.Post("/password-reset", uih.PasswordResetRequestPost)
+					r.Post("/verify-challenge/{action}", uih.VerifyChallengePost)
+					r.Post("/resend-challenge", uih.ResendChallengePost)
 				})
+			})
+
+			// Authenticated challenge-starting actions
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireChallengeEnabled)
+				r.Use(mw.RequireAppAccessAuthWithRefresh)
+				r.Use(mw.RequireCSRF)
+
+				r.Post("/email-change", uih.EmailChangeRequestPost)
 			})
 
 			r.Route("/oauth", func(r chi.Router) {
@@ -216,6 +213,8 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Post("/signup/direct", contracth.SignupDirect)
 				r.Post("/signup/challenges", contracth.StartSignupChallenge)
 				r.Post("/signup/challenges/verify", contracth.VerifySignupChallenge)
+				r.Post("/password-reset/challenges", contracth.StartPasswordResetChallenge)
+				r.Post("/password-reset/challenges/verify", contracth.VerifyPasswordResetChallenge)
 				r.Post("/challenges/resend", contracth.ResendChallenge)
 				r.Post("/passkeys/authenticate/options", contracth.BeginPasskeyAuthentication)
 				r.Post("/passkeys/authenticate/finish", contracth.FinishPasskeyAuthentication)
@@ -235,6 +234,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/organizations/current/members", contracth.ListCurrentOrganizationMembers)
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireAPICSRF)
+					r.Put("/users/password", contracth.SetCurrentUserPassword)
 					r.Post("/passkeys/register/options", contracth.BeginPasskeyRegistration)
 					r.Post("/passkeys/register/finish", contracth.FinishPasskeyRegistration)
 					r.Post("/organizations/{organizationID}/switch", contracth.SwitchOrganization)

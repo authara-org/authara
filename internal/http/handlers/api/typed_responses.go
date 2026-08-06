@@ -120,6 +120,36 @@ func verifySignupChallengeError(code response.ErrorCode, message string) contrac
 	}
 }
 
+func startPasswordResetChallengeError(code response.ErrorCode, message string) contract.StartPasswordResetChallengeResponseObject {
+	spec := mustRouteError(StartPasswordResetChallengeErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.StartPasswordResetChallenge400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusForbidden:
+		return contract.StartPasswordResetChallenge403JSONResponse(body)
+	case http.StatusTooManyRequests:
+		return contract.StartPasswordResetChallenge429JSONResponse(body)
+	default:
+		return contract.StartPasswordResetChallenge500JSONResponse(body)
+	}
+}
+
+func verifyPasswordResetChallengeError(code response.ErrorCode, message string) contract.VerifyPasswordResetChallengeResponseObject {
+	spec := mustRouteError(VerifyPasswordResetChallengeErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.VerifyPasswordResetChallenge400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusForbidden:
+		return contract.VerifyPasswordResetChallenge403JSONResponse(body)
+	case http.StatusTooManyRequests:
+		return contract.VerifyPasswordResetChallenge429JSONResponse(body)
+	default:
+		return contract.VerifyPasswordResetChallenge500JSONResponse(body)
+	}
+}
+
 func resendChallengeError(code response.ErrorCode, message string) contract.ResendChallengeResponseObject {
 	spec := mustRouteError(ResendChallengeErrors, code)
 	body := apiErrorBody(spec.Code, message)
@@ -128,8 +158,6 @@ func resendChallengeError(code response.ErrorCode, message string) contract.Rese
 		return contract.ResendChallenge400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
 	case http.StatusForbidden:
 		return contract.ResendChallenge403JSONResponse(body)
-	case http.StatusNotFound:
-		return contract.ResendChallenge404JSONResponse(body)
 	case http.StatusTooManyRequests:
 		return contract.ResendChallenge429JSONResponse(body)
 	default:
@@ -247,6 +275,21 @@ func getCurrentUserError(code response.ErrorCode, message string) contract.GetCu
 		return contract.GetCurrentUser401JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
 	default:
 		return contract.GetCurrentUser500JSONResponse(body)
+	}
+}
+
+func setCurrentUserPasswordError(code response.ErrorCode, message string) contract.SetCurrentUserPasswordResponseObject {
+	spec := mustRouteError(SetCurrentUserPasswordErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.SetCurrentUserPassword400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.SetCurrentUserPassword401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.SetCurrentUserPassword403JSONResponse(body)
+	default:
+		return contract.SetCurrentUserPassword500JSONResponse(body)
 	}
 }
 

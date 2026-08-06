@@ -292,6 +292,78 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
 
+  /auth/api/v1/password-reset/challenges:
+    post:
+      operationId: startPasswordResetChallenge
+      tags: [Authentication]
+      summary: Start a password reset challenge
+      description: Starts password recovery without revealing whether the email address belongs to an account.
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "403": [forbidden]
+        "429": [rate_limited]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequest"
+      responses:
+        "202":
+          description: Password reset challenge accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeReference"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/password-reset/challenges/verify:
+    post:
+      operationId: verifyPasswordResetChallenge
+      tags: [Authentication]
+      summary: Verify a password reset challenge
+      description: Verifies the emailed code, changes the password, and revokes all existing sessions for the account.
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "403": [forbidden]
+        "429": [rate_limited]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetChallengeVerification"
+      responses:
+        "204":
+          description: Password reset completed and existing sessions revoked
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /auth/api/v1/challenges/resend:
     post:
       operationId: resendChallenge
@@ -303,11 +375,9 @@ paths:
           csrfHeader: []
       x-authara-access: public
       x-authara-csrf: required
-      x-authara-availability: challenges-enabled
       x-authara-error-codes:
         "400": [invalid_request]
         "403": [forbidden]
-        "404": [not_found]
         "429": [rate_limited]
         "500": [internal_error]
       requestBody:
@@ -322,8 +392,6 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "403":
-          $ref: "#/components/responses/Error"
-        "404":
           $ref: "#/components/responses/Error"
         "429":
           $ref: "#/components/responses/Error"
@@ -575,6 +643,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/CurrentUser"
         "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/users/password:
+    put:
+      operationId: setCurrentUserPassword
+      tags: [Users]
+      summary: Set the authenticated user's password
+      description: Creates or replaces the password authentication method for the user identified by the access token and revokes all existing sessions.
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPasswordRequest"
+      responses:
+        "204":
+          description: Password set and existing sessions revoked
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -1284,6 +1387,36 @@ components:
         code:
           type: string
           pattern: "^[0-9]{6}$"
+    PasswordResetRequest:
+      type: object
+      additionalProperties: false
+      required: [email, new_password]
+      properties:
+        email:
+          type: string
+          format: email
+        new_password:
+          type: string
+          format: password
+    PasswordResetChallengeVerification:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, code]
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+    SetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          type: string
+          format: password
     ChallengeReference:
       type: object
       additionalProperties: false

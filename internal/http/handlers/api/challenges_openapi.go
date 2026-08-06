@@ -130,8 +130,8 @@ func (h *APIHandler) ResendChallenge(ctx context.Context, request contract.Resen
 	if !ok {
 		return resendChallengeError(responseCodeInternalError(), "API contract error."), nil
 	}
-	if !h.challengeAvailable() {
-		return resendChallengeError(responseCodeNotFound(), "Challenge verification is not enabled."), nil
+	if h.Challenge == nil {
+		return resendChallengeError(responseCodeInternalError(), "Challenge error."), nil
 	}
 	if request.Body == nil {
 		return resendChallengeError(responseCodeInvalidRequest(), "Invalid challenge request."), nil

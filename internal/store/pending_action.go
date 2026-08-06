@@ -164,6 +164,11 @@ func (s *Store) DeletePendingPasswordResetByChallengeID(ctx context.Context, cha
 	return err
 }
 
+func (s *Store) DeletePendingPasswordResetsByUserID(ctx context.Context, userID uuid.UUID) error {
+	_, err := s.exec(ctx, `DELETE FROM pending_password_resets WHERE user_id = $1`, userID)
+	return err
+}
+
 // ============================
 // pending email change
 // ============================

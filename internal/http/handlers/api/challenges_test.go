@@ -192,6 +192,7 @@ func TestChallengeResendKeepsChallengeStateOpaque(t *testing.T) {
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		h := newAPIChallengeTestHandler(t, tdb)
+		h.ChallengeEnabled = false
 		now := time.Now().UTC()
 		realID, err := h.Challenge.CreateSignupChallenge(ctx, challenge.CreateSignupChallengeInput{
 			Email:        "resend-real@example.com",

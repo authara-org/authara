@@ -2,9 +2,14 @@ package api
 
 import (
 	"context"
+	"errors"
+	"time"
 
+	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/store"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -42,4 +47,27 @@ func (h *APIHandler) GetCurrentUser(ctx context.Context, _ contract.GetCurrentUs
 		Roles:        roles,
 		Organization: toContractOrganizationSummary(org, organizationRole),
 	}), nil
+}
+
+func (h *APIHandler) SetCurrentUserPassword(ctx context.Context, request contract.SetCurrentUserPasswordRequestObject) (contract.SetCurrentUserPasswordResponseObject, error) {
+	if request.Body == nil || !validation.IsValidPassword(request.Body.Password) {
+		return setCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid password"), nil
+	}
+	userID, ok := httpctx.UserID(ctx)
+	if !ok {
+		return setCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized"), nil
+	}
+
+	passwordHash, err := auth.Hash(request.Body.Password)
+	if err != nil {
+		return setCurrentUserPasswordError(responseCodeInternalError(), "Password error"), nil
+	}
+	if err := h.Auth.SetPassword(ctx, userID, passwordHash, time.Now().UTC()); err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			return setCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized"), nil
+		}
+		return setCurrentUserPasswordError(responseCodeInternalError(), "Password error"), nil
+	}
+
+	return contract.SetCurrentUserPassword204Response{}, nil
 }

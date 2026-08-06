@@ -228,6 +228,50 @@ are disabled, `429 rate_limited`, or `500 internal_error`.
 
 ---
 
+## Start password reset
+
+```text
+POST /auth/api/v1/password-reset/challenges
+```
+
+```json
+{
+  "email": "user@example.com",
+  "new_password": "new-password123"
+}
+```
+
+Returns `202 Accepted` with a `challenge_id`. The response is identical when
+the email does not belong to an account, preventing account enumeration. This
+endpoint remains available when optional challenge-based signup is disabled.
+
+Errors: `400 invalid_request`, `403 forbidden`, `429 rate_limited`, or
+`500 internal_error`.
+
+---
+
+## Verify password reset
+
+```text
+POST /auth/api/v1/password-reset/challenges/verify
+```
+
+```json
+{
+  "challenge_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+  "code": "123456"
+}
+```
+
+Returns `204 No Content`. The password is changed and all existing sessions
+for the account are revoked. The user must log in with the new password. This
+endpoint remains available when optional challenge-based signup is disabled.
+
+Errors: `400 invalid_request`, `403 forbidden`, `429 rate_limited`, or
+`500 internal_error`.
+
+---
+
 ## Resend a verification code
 
 ```text
@@ -246,9 +290,8 @@ prevents clients from using resend responses to discover account or challenge
 state.
 
 Malformed requests return `400 invalid_request`; failed CSRF validation returns
-`403 forbidden`; a disabled challenge feature returns `404 not_found`; IP rate
-limiting returns `429 rate_limited`; unexpected failures return
-`500 internal_error`.
+`403 forbidden`; IP rate limiting returns `429 rate_limited`; unexpected
+failures return `500 internal_error`.
 
 ---
 
@@ -376,6 +419,28 @@ Example:
 | 401 | unauthorized |
 
 See [Errors](errors.md) for error definitions.
+
+---
+
+## Set current user password
+
+Creates or replaces the authenticated user's password. The user ID is taken
+from the access token; clients cannot supply one.
+
+```text
+PUT /auth/api/v1/users/password
+Content-Type: application/json
+```
+
+```json
+{
+  "password": "new-password123"
+}
+```
+
+Requires the access and CSRF cookies. Returns `204 No Content` and revokes all
+existing sessions and refresh tokens. Errors: `400 invalid_request`,
+`401 unauthorized`, `403 forbidden`, or `500 internal_error`.
 
 ---
 

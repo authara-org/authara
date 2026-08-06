@@ -900,6 +900,39 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 	return s.store.UpdatePasswordHash(ctx, userID, newPasswordHash)
 }
 
+func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHash string, now time.Time) error {
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {
+			return err
+		}
+
+		_, err := s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
+		switch {
+		case err == nil:
+			err = s.store.UpdatePasswordHash(txCtx, userID, passwordHash)
+		case errors.Is(err, store.ErrorAuthProviderNotFound):
+			_, err = s.store.CreateAuthProvider(txCtx, domain.AuthProvider{
+				UserID:       userID,
+				Provider:     domain.ProviderPassword,
+				PasswordHash: &passwordHash,
+			})
+		}
+		if err != nil {
+			return err
+		}
+		if err := s.store.RevokeAllSessionsForUser(txCtx, userID, now); err != nil {
+			return err
+		}
+		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
+			return err
+		}
+		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewUserUpdated(userID, now))
+	})
+}
+
 func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 	now := time.Now()
 
