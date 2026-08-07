@@ -303,6 +303,7 @@ func TestValidateAccessClaims(t *testing.T) {
 				OrgRole:   "owner",
 				RegisteredClaims: jwt.RegisteredClaims{
 					Subject:   uuid.New().String(),
+					IssuedAt:  jwt.NewNumericDate(now),
 					ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
 				},
 			},

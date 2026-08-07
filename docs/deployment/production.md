@@ -149,7 +149,8 @@ In multi-instance deployments, operators should consider:
 
 Some features, such as the default in-memory rate limiter, are instance-local.
 
-Set `AUTHARA_CACHE_PROVIDER=redis` to use Redis-backed rate limiting across instances.
+Set `AUTHARA_CACHE_PROVIDER=redis` to share rate limits and access-token
+revocations across instances.
 
 ---
 

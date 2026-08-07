@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
+	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/webhook"
@@ -19,23 +20,25 @@ import (
 )
 
 type Config struct {
-	Store            *store.Store
-	Tx               *tx.Manager
-	WebhookPublisher webhook.Publisher
-	Logger           *slog.Logger
-	AccessPolicy     accesspolicy.EmailAccessPolicy
-	OAuthProviders   oauth.OAuthProviders
-	Organizations    *organization.Service
+	Store                  *store.Store
+	Tx                     *tx.Manager
+	WebhookPublisher       webhook.Publisher
+	Logger                 *slog.Logger
+	AccessPolicy           accesspolicy.EmailAccessPolicy
+	OAuthProviders         oauth.OAuthProviders
+	Organizations          *organization.Service
+	AccessTokenRevocations *token.AccessTokenRevocations
 }
 
 type Service struct {
-	store            *store.Store
-	tx               *tx.Manager
-	webhookPublisher webhook.Publisher
-	logger           *slog.Logger
-	accessPolicy     accesspolicy.EmailAccessPolicy
-	oauthProviders   oauth.OAuthProviders
-	organizations    *organization.Service
+	store                  *store.Store
+	tx                     *tx.Manager
+	webhookPublisher       webhook.Publisher
+	logger                 *slog.Logger
+	accessPolicy           accesspolicy.EmailAccessPolicy
+	oauthProviders         oauth.OAuthProviders
+	organizations          *organization.Service
+	accessTokenRevocations *token.AccessTokenRevocations
 }
 
 type emailAllowPolicy interface {
@@ -53,13 +56,14 @@ func New(cfg Config) *Service {
 	}
 
 	return &Service{
-		store:            cfg.Store,
-		tx:               cfg.Tx,
-		webhookPublisher: pub,
-		logger:           cfg.Logger,
-		accessPolicy:     access,
-		oauthProviders:   cfg.OAuthProviders,
-		organizations:    cfg.Organizations,
+		store:                  cfg.Store,
+		tx:                     cfg.Tx,
+		webhookPublisher:       pub,
+		logger:                 cfg.Logger,
+		accessPolicy:           access,
+		oauthProviders:         cfg.OAuthProviders,
+		organizations:          cfg.Organizations,
+		accessTokenRevocations: cfg.AccessTokenRevocations,
 	}
 }
 
@@ -137,7 +141,11 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 		if err := s.store.DeleteUser(txCtx, userID); err != nil {
 			return err
 		}
-		return s.publish(txCtx, webhook.NewUserDeleted(userID, time.Now()))
+		now := time.Now()
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewUserDeleted(userID, now))
 	})
 }
 
@@ -926,6 +934,9 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
 			return err
 		}
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
+			return err
+		}
 		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
 			return err
 		}
@@ -944,6 +955,9 @@ func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 			return err
 		}
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
+			return err
+		}
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		return s.publish(txCtx, webhook.NewUserUpdated(userID, now))

@@ -101,6 +101,7 @@ variables:
     required: false
     type: enum
     default: noop
+    description: Redis enables shared rate limits and immediate access-token revocation checks. Noop keeps access tokens valid until expiry after a session, user, or membership is revoked.
     allowed_values:
       - noop
       - redis

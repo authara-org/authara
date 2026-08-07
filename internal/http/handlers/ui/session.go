@@ -25,7 +25,8 @@ func (h *UIHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 
 	refreshToken, exists := session.ReadRefreshToken(r)
 	if exists {
-		_ = h.Session.Logout(ctx, refreshToken)
+		accessToken, _ := session.ReadAccessToken(r)
+		_ = h.Session.Logout(ctx, refreshToken, accessToken)
 	}
 
 	session.ClearSessionCookies(w)

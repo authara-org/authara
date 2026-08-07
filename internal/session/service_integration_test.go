@@ -174,7 +174,7 @@ func TestCreateSessionAddsOrganizationContext(t *testing.T) {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
 
-		identity, err := svc.ValidateAccessToken(accessToken, token.AudienceApp, now)
+		identity, err := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, now)
 		if err != nil {
 			t.Fatalf("ValidateAccessToken failed: %v", err)
 		}
@@ -248,7 +248,7 @@ func TestSwitchSessionOrganizationRotatesTokens(t *testing.T) {
 			t.Fatalf("SwitchSessionOrganization failed: %v", err)
 		}
 
-		identity, err := svc.ValidateAccessToken(accessToken, token.AudienceApp, now.Add(time.Minute))
+		identity, err := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, now.Add(time.Minute))
 		if err != nil {
 			t.Fatalf("ValidateAccessToken failed: %v", err)
 		}
@@ -290,7 +290,7 @@ func TestActiveSessionPreventsOrganizationMembershipRemoval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
-		identity, err := svc.ValidateAccessToken(accessToken, token.AudienceApp, now)
+		identity, err := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, now)
 		if err != nil {
 			t.Fatalf("ValidateAccessToken failed: %v", err)
 		}
@@ -328,6 +328,7 @@ func TestValidateAccessToken_Succeeds(t *testing.T) {
 	}
 
 	identity, err := svc.ValidateAccessToken(
+		context.Background(),
 		accessToken,
 		token.AudienceAdmin,
 		now,
@@ -374,6 +375,7 @@ func TestValidateAccessToken_WrongAudience(t *testing.T) {
 	}
 
 	_, err = svc.ValidateAccessToken(
+		context.Background(),
 		accessToken,
 		token.AudienceAdmin,
 		now,
@@ -387,6 +389,7 @@ func TestValidateAccessToken_InvalidToken(t *testing.T) {
 	svc := newTestSessionService(t, 10*time.Minute)
 
 	_, err := svc.ValidateAccessToken(
+		context.Background(),
 		"not-a-token",
 		token.AudienceApp,
 		time.Now(),
@@ -413,7 +416,7 @@ func TestValidateAnyAccessToken_AcceptsAppAudience(t *testing.T) {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
-	_, err = svc.ValidateAnyAccessToken(accessToken, now)
+	_, err = svc.ValidateAnyAccessToken(context.Background(), accessToken, now)
 	if err != nil {
 		t.Fatalf("ValidateAnyAccessToken failed: %v", err)
 	}
@@ -436,7 +439,7 @@ func TestValidateAnyAccessToken_AcceptsAdminAudience(t *testing.T) {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
-	_, err = svc.ValidateAnyAccessToken(accessToken, now)
+	_, err = svc.ValidateAnyAccessToken(context.Background(), accessToken, now)
 	if err != nil {
 		t.Fatalf("ValidateAnyAccessToken failed: %v", err)
 	}

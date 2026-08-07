@@ -15,6 +15,10 @@ func (n *Noop) Get(ctx context.Context, key string) ([]byte, error) {
 	return nil, ErrMiss
 }
 
+func (n *Noop) GetMany(ctx context.Context, keys ...string) ([][]byte, error) {
+	return make([][]byte, len(keys)), nil
+}
+
 func (n *Noop) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	return nil
 }

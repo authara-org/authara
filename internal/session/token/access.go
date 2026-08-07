@@ -142,7 +142,7 @@ func validateAccessClaims(claims *AccessClaims, now time.Time) error {
 		return ErrExpiredToken
 	}
 
-	if claims.Subject == "" || claims.SessionID == uuid.Nil || claims.OrgID == uuid.Nil || claims.OrgRole == "" {
+	if claims.IssuedAt == nil || claims.Subject == "" || claims.SessionID == uuid.Nil || claims.OrgID == uuid.Nil || claims.OrgRole == "" {
 		return ErrInvalidClaims
 	}
 

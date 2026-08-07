@@ -75,6 +75,9 @@ func (s *Service) ExecutePasswordReset(
 		if err := s.store.RevokeAllSessionsForUser(txCtx, action.UserID, now); err != nil {
 			return err
 		}
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, action.UserID, now); err != nil {
+			return err
+		}
 		if err := s.store.DeletePendingPasswordResetByChallengeID(txCtx, action.ChallengeID); err != nil {
 			return err
 		}

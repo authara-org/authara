@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/webhook"
@@ -15,25 +16,27 @@ import (
 )
 
 type Config struct {
-	Store              *store.Store
-	Tx                 *tx.Manager
-	WebhookPublisher   webhook.Publisher
-	Logger             *slog.Logger
-	InvitationTTL      time.Duration
-	PublicURL          string
-	Mode               OrgMode
-	IncludeCodeInEmail bool
+	Store                  *store.Store
+	Tx                     *tx.Manager
+	WebhookPublisher       webhook.Publisher
+	Logger                 *slog.Logger
+	InvitationTTL          time.Duration
+	PublicURL              string
+	Mode                   OrgMode
+	IncludeCodeInEmail     bool
+	AccessTokenRevocations *token.AccessTokenRevocations
 }
 
 type Service struct {
-	store              *store.Store
-	tx                 *tx.Manager
-	webhookPublisher   webhook.Publisher
-	logger             *slog.Logger
-	invitationTTL      time.Duration
-	publicURL          string
-	mode               OrgMode
-	includeCodeInEmail bool
+	store                  *store.Store
+	tx                     *tx.Manager
+	webhookPublisher       webhook.Publisher
+	logger                 *slog.Logger
+	invitationTTL          time.Duration
+	publicURL              string
+	mode                   OrgMode
+	includeCodeInEmail     bool
+	accessTokenRevocations *token.AccessTokenRevocations
 }
 
 type UserOrganization struct {
@@ -53,14 +56,15 @@ func New(cfg Config) *Service {
 	}
 
 	return &Service{
-		store:              cfg.Store,
-		tx:                 cfg.Tx,
-		webhookPublisher:   pub,
-		logger:             cfg.Logger,
-		invitationTTL:      cfg.InvitationTTL,
-		publicURL:          strings.TrimRight(cfg.PublicURL, "/"),
-		mode:               cfg.Mode,
-		includeCodeInEmail: cfg.IncludeCodeInEmail,
+		store:                  cfg.Store,
+		tx:                     cfg.Tx,
+		webhookPublisher:       pub,
+		logger:                 cfg.Logger,
+		invitationTTL:          cfg.InvitationTTL,
+		publicURL:              strings.TrimRight(cfg.PublicURL, "/"),
+		mode:                   cfg.Mode,
+		includeCodeInEmail:     cfg.IncludeCodeInEmail,
+		accessTokenRevocations: cfg.AccessTokenRevocations,
 	}
 }
 
@@ -251,6 +255,7 @@ func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID u
 		return domain.OrganizationMembership{}, ErrInvalidOrganizationRole
 	}
 	var membership domain.OrganizationMembership
+	now := time.Now().UTC()
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if _, err := s.store.GetOrganizationByID(txCtx, organizationID); err != nil {
 			return err
@@ -260,7 +265,10 @@ func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID u
 		if err != nil {
 			return err
 		}
-		return s.publish(txCtx, webhook.NewOrganizationMembershipUpdated(membership, time.Now().UTC()))
+		if err := s.accessTokenRevocations.RevokeMembership(txCtx, userID, organizationID, now); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewOrganizationMembershipUpdated(membership, now))
 	})
 	if err != nil {
 		return domain.OrganizationMembership{}, err
@@ -269,6 +277,7 @@ func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID u
 }
 
 func (s *Service) DeleteOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) error {
+	now := time.Now().UTC()
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if _, err := s.store.GetOrganizationByID(txCtx, organizationID); err != nil {
 			return err
@@ -280,7 +289,10 @@ func (s *Service) DeleteOrganizationMember(ctx context.Context, organizationID u
 		if err := s.store.DeleteOrganizationMembership(txCtx, organizationID, userID); err != nil {
 			return err
 		}
-		return s.publish(txCtx, webhook.NewOrganizationMembershipDeleted(membership, time.Now().UTC()))
+		if err := s.accessTokenRevocations.RevokeMembership(txCtx, userID, organizationID, now); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewOrganizationMembershipDeleted(membership, now))
 	})
 }
 

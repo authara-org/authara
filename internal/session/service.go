@@ -20,25 +20,27 @@ import (
 )
 
 type SessionConfig struct {
-	Store                *store.Store
-	Tx                   *tx.Manager
-	AccessTokens         *token.AccessTokenService
-	SessionTTL           time.Duration
-	RefreshTokenTTL      time.Duration
-	RefreshTokenRotation time.Duration
-	AccessPolicy         accesspolicy.EmailAccessPolicy
-	Organizations        *organization.Service
+	Store                  *store.Store
+	Tx                     *tx.Manager
+	AccessTokens           *token.AccessTokenService
+	AccessTokenRevocations *token.AccessTokenRevocations
+	SessionTTL             time.Duration
+	RefreshTokenTTL        time.Duration
+	RefreshTokenRotation   time.Duration
+	AccessPolicy           accesspolicy.EmailAccessPolicy
+	Organizations          *organization.Service
 }
 
 type Service struct {
-	store                *store.Store
-	tx                   *tx.Manager
-	accessTokens         *token.AccessTokenService
-	sessionTTL           time.Duration
-	refreshTokenTTL      time.Duration
-	refreshTokenRotation time.Duration
-	accessPolicy         accesspolicy.EmailAccessPolicy
-	organizations        *organization.Service
+	store                  *store.Store
+	tx                     *tx.Manager
+	accessTokens           *token.AccessTokenService
+	accessTokenRevocations *token.AccessTokenRevocations
+	sessionTTL             time.Duration
+	refreshTokenTTL        time.Duration
+	refreshTokenRotation   time.Duration
+	accessPolicy           accesspolicy.EmailAccessPolicy
+	organizations          *organization.Service
 }
 
 func New(cfg SessionConfig) *Service {
@@ -48,14 +50,15 @@ func New(cfg SessionConfig) *Service {
 	}
 
 	return &Service{
-		store:                cfg.Store,
-		tx:                   cfg.Tx,
-		accessTokens:         cfg.AccessTokens,
-		sessionTTL:           cfg.SessionTTL,
-		refreshTokenTTL:      cfg.RefreshTokenTTL,
-		refreshTokenRotation: cfg.RefreshTokenRotation,
-		accessPolicy:         access,
-		organizations:        cfg.Organizations,
+		store:                  cfg.Store,
+		tx:                     cfg.Tx,
+		accessTokens:           cfg.AccessTokens,
+		accessTokenRevocations: cfg.AccessTokenRevocations,
+		sessionTTL:             cfg.SessionTTL,
+		refreshTokenTTL:        cfg.RefreshTokenTTL,
+		refreshTokenRotation:   cfg.RefreshTokenRotation,
+		accessPolicy:           access,
+		organizations:          cfg.Organizations,
 	}
 }
 
@@ -262,8 +265,9 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrInvalidRefreshToken
 		}
 		if rt.ConsumedAt != nil {
-			_ = s.store.RevokeSession(ctx, rt.SessionID, now)
-			return ErrRefreshTokenReuse
+			cacheErr := s.accessTokenRevocations.RevokeSession(ctx, rt.SessionID, now)
+			storeErr := s.store.RevokeSession(ctx, rt.SessionID, now)
+			return errors.Join(ErrRefreshTokenReuse, cacheErr, storeErr)
 		}
 		if rt.ExpiresAt.Before(now) {
 			return ErrInvalidRefreshToken
@@ -385,31 +389,40 @@ func (s *Service) CleanupExpiredData(ctx context.Context, now time.Time) error {
 	return nil
 }
 
-func (s *Service) Logout(ctx context.Context, refreshToken string) error {
+func (s *Service) Logout(ctx context.Context, refreshToken, accessToken string) error {
+	var cacheErr error
+	if accessToken != "" {
+		cacheErr = s.RevokeAccessToken(ctx, accessToken, time.Now())
+	}
+
 	hashed := hashRefreshToken(refreshToken)
 
 	rt, err := s.store.GetRefreshTokenByHash(ctx, hashed)
 	if err != nil {
 		// Token missing, expired, already cleaned up
 		// Logout must still succeed
-		return nil
+		return cacheErr
 	}
 
-	_ = s.store.RevokeSession(ctx, rt.SessionID, time.Now())
-
-	return nil
+	now := time.Now()
+	cacheErr = errors.Join(cacheErr, s.accessTokenRevocations.RevokeSession(ctx, rt.SessionID, now))
+	storeErr := s.store.RevokeSession(ctx, rt.SessionID, now)
+	return errors.Join(cacheErr, storeErr)
 }
 
 func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error {
-	err := s.store.RevokeAllSessionsForUser(
+	now := time.Now()
+	cacheErr := s.accessTokenRevocations.RevokeUser(ctx, userID, now)
+	storeErr := s.store.RevokeAllSessionsForUser(
 		ctx,
 		userID,
-		time.Now(),
+		now,
 	)
-	return err
+	return errors.Join(cacheErr, storeErr)
 }
 
 func (s *Service) ValidateAccessToken(
+	ctx context.Context,
 	accessToken string,
 	expectedAudience token.Audience,
 	now time.Time,
@@ -418,11 +431,15 @@ func (s *Service) ValidateAccessToken(
 	if err != nil {
 		return nil, err
 	}
+	if err := s.accessTokenRevocations.Check(ctx, accessToken, claims); err != nil {
+		return nil, err
+	}
 
 	return s.identityFromClaims(claims)
 }
 
 func (s *Service) ValidateAnyAccessToken(
+	ctx context.Context,
 	accessToken string,
 	now time.Time,
 ) (*AccessIdentity, error) {
@@ -430,8 +447,19 @@ func (s *Service) ValidateAnyAccessToken(
 	if err != nil {
 		return nil, err
 	}
+	if err := s.accessTokenRevocations.Check(ctx, accessToken, claims); err != nil {
+		return nil, err
+	}
 
 	return s.identityFromClaims(claims)
+}
+
+func (s *Service) RevokeAccessToken(ctx context.Context, accessToken string, now time.Time) error {
+	claims, err := s.accessTokens.ParseAny(accessToken, now)
+	if err != nil {
+		return err
+	}
+	return s.accessTokenRevocations.RevokeToken(ctx, accessToken, claims.ExpiresAt.Time.Sub(now))
 }
 
 func (s *Service) identityFromClaims(claims *token.AccessClaims) (*AccessIdentity, error) {
@@ -562,7 +590,8 @@ func (s *Service) RevokeUserSession(
 		return ErrForbidden
 	}
 
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	cacheErr := s.accessTokenRevocations.RevokeSession(ctx, sessionID, now)
+	storeErr := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.RevokeSession(txCtx, sessionID, now); err != nil {
 			return err
 		}
@@ -571,6 +600,7 @@ func (s *Service) RevokeUserSession(
 		}
 		return nil
 	})
+	return errors.Join(cacheErr, storeErr)
 }
 
 func (s *Service) RevokeOtherUserSessions(
@@ -579,7 +609,18 @@ func (s *Service) RevokeOtherUserSessions(
 	currentSessionID uuid.UUID,
 	now time.Time,
 ) error {
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	sessions, err := s.store.ListActiveSessionsByUserID(ctx, userID, now)
+	if err != nil {
+		return err
+	}
+	var cacheErr error
+	for _, session := range sessions {
+		if session.ID != currentSessionID {
+			cacheErr = errors.Join(cacheErr, s.accessTokenRevocations.RevokeSession(ctx, session.ID, now))
+		}
+	}
+
+	storeErr := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.RevokeOtherSessionsByUserID(txCtx, userID, currentSessionID, now); err != nil {
 			return err
 		}
@@ -588,4 +629,5 @@ func (s *Service) RevokeOtherUserSessions(
 		}
 		return nil
 	})
+	return errors.Join(cacheErr, storeErr)
 }

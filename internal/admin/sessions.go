@@ -19,6 +19,9 @@ func (s *Service) RevokeUserSession(ctx context.Context, actor Actor, userID, se
 		if err := s.store.DeleteRefreshTokensBySession(txCtx, sessionID); err != nil {
 			return err
 		}
+		if err := s.accessTokenRevocations.RevokeSession(txCtx, sessionID, now); err != nil {
+			return err
+		}
 		return s.audit(txCtx, actor, ActionUserSessionRevoked, &userID, user.Email, map[string]any{
 			"session_id": sessionID.String(),
 		}, meta)
@@ -41,6 +44,9 @@ func (s *Service) RevokeAllUserSessions(ctx context.Context, actor Actor, userID
 			return err
 		}
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
+			return err
+		}
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		return s.audit(txCtx, actor, ActionUserSessionsRevoked, &userID, user.Email, map[string]any{

@@ -16,6 +16,18 @@ func TestNoopGetReturnsMiss(t *testing.T) {
 	}
 }
 
+func TestNoopGetManyReturnsMisses(t *testing.T) {
+	c := NewNoop()
+
+	values, err := c.GetMany(context.Background(), "one", "two")
+	if err != nil {
+		t.Fatalf("get many failed: %v", err)
+	}
+	if len(values) != 2 || values[0] != nil || values[1] != nil {
+		t.Fatalf("expected two misses, got %#v", values)
+	}
+}
+
 func TestNoopMutationsSucceed(t *testing.T) {
 	c := NewNoop()
 

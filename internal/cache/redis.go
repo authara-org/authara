@@ -51,6 +51,26 @@ func (r *Redis) Get(ctx context.Context, key string) ([]byte, error) {
 	return value, nil
 }
 
+func (r *Redis) GetMany(ctx context.Context, keys ...string) ([][]byte, error) {
+	values, err := r.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("get many: %w", err)
+	}
+
+	out := make([][]byte, len(values))
+	for i, value := range values {
+		if value == nil {
+			continue
+		}
+		stringValue, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("get many: unexpected value type %T", value)
+		}
+		out[i] = []byte(stringValue)
+	}
+	return out, nil
+}
+
 func (r *Redis) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	if err := r.client.Set(ctx, key, value, ttl).Err(); err != nil {
 		return fmt.Errorf("set %q: %w", key, err)

@@ -507,7 +507,8 @@ func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.R
 	}
 
 	if currentRefresh, ok := authsession.ReadRefreshToken(r); ok {
-		_ = h.Session.Logout(r.Context(), currentRefresh)
+		currentAccess, _ := authsession.ReadAccessToken(r)
+		_ = h.Session.Logout(r.Context(), currentRefresh, currentAccess)
 	}
 	authsession.ClearSessionCookies(w)
 	authsession.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
@@ -705,7 +706,7 @@ func (h *UIHandler) switchSessionToInvitationOrganizationByID(
 	audience token.Audience,
 	now time.Time,
 ) (string, string, error) {
-	identity, err := h.Session.ValidateAccessToken(accessToken, audience, now)
+	identity, err := h.Session.ValidateAccessToken(ctx, accessToken, audience, now)
 	if err != nil {
 		return "", "", err
 	}

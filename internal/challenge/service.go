@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/webhook"
@@ -13,25 +14,27 @@ import (
 )
 
 type Config struct {
-	Store             *store.Store
-	Tx                *tx.Manager
-	AllowlistEnabled  bool
-	ChallengeTTL      time.Duration
-	MaxAttempts       int
-	MaxResends        int
-	MinResendInterval time.Duration
-	WebhookPublisher  webhook.Publisher
+	Store                  *store.Store
+	Tx                     *tx.Manager
+	AllowlistEnabled       bool
+	ChallengeTTL           time.Duration
+	MaxAttempts            int
+	MaxResends             int
+	MinResendInterval      time.Duration
+	WebhookPublisher       webhook.Publisher
+	AccessTokenRevocations *token.AccessTokenRevocations
 }
 
 type Service struct {
-	store             *store.Store
-	tx                *tx.Manager
-	allowlistEnabled  bool
-	challengeTTL      time.Duration
-	maxAttempts       int
-	maxResends        int
-	minResendInterval time.Duration
-	webhookPublisher  webhook.Publisher
+	store                  *store.Store
+	tx                     *tx.Manager
+	allowlistEnabled       bool
+	challengeTTL           time.Duration
+	maxAttempts            int
+	maxResends             int
+	minResendInterval      time.Duration
+	webhookPublisher       webhook.Publisher
+	accessTokenRevocations *token.AccessTokenRevocations
 }
 
 func New(cfg Config) *Service {
@@ -41,14 +44,15 @@ func New(cfg Config) *Service {
 	}
 
 	return &Service{
-		store:             cfg.Store,
-		tx:                cfg.Tx,
-		allowlistEnabled:  cfg.AllowlistEnabled,
-		challengeTTL:      cfg.ChallengeTTL,
-		maxAttempts:       cfg.MaxAttempts,
-		maxResends:        cfg.MaxResends,
-		minResendInterval: cfg.MinResendInterval,
-		webhookPublisher:  pub,
+		store:                  cfg.Store,
+		tx:                     cfg.Tx,
+		allowlistEnabled:       cfg.AllowlistEnabled,
+		challengeTTL:           cfg.ChallengeTTL,
+		maxAttempts:            cfg.MaxAttempts,
+		maxResends:             cfg.MaxResends,
+		minResendInterval:      cfg.MinResendInterval,
+		webhookPublisher:       pub,
+		accessTokenRevocations: cfg.AccessTokenRevocations,
 	}
 }
 

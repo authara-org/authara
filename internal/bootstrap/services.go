@@ -42,46 +42,54 @@ func NewServices(app *App) (Services, error) {
 		app.Config.Token.Issuer,
 		app.Config.Token.AccessTokenTTL,
 	)
+	accessTokenRevocations := token.NewAccessTokenRevocations(
+		app.Cache,
+		app.Config.Token.AccessTokenTTL,
+	)
 
 	organizationService := organization.New(organization.Config{
-		Store:              app.Store,
-		Tx:                 txManager,
-		WebhookPublisher:   webhookPublisher,
-		Logger:             app.Logger,
-		InvitationTTL:      app.Config.Organization.InvitationTTL,
-		PublicURL:          app.Config.Values.PublicURL,
-		Mode:               organization.OrgMode(app.Config.Organization.Mode),
-		IncludeCodeInEmail: app.Config.Organization.InvitationEmailIncludeCode,
+		Store:                  app.Store,
+		Tx:                     txManager,
+		WebhookPublisher:       webhookPublisher,
+		Logger:                 app.Logger,
+		InvitationTTL:          app.Config.Organization.InvitationTTL,
+		PublicURL:              app.Config.Values.PublicURL,
+		Mode:                   organization.OrgMode(app.Config.Organization.Mode),
+		IncludeCodeInEmail:     app.Config.Organization.InvitationEmailIncludeCode,
+		AccessTokenRevocations: accessTokenRevocations,
 	})
 	app.Logger.Warn("AUTHARA_ORG_MODE is a boot-time product shape; changing it after production use is unsupported", "mode", app.Config.Organization.Mode)
 
 	authService := auth.New(auth.Config{
-		Store:            app.Store,
-		Tx:               txManager,
-		OAuthProviders:   oauthProviders,
-		WebhookPublisher: webhookPublisher,
-		Logger:           app.Logger,
-		AccessPolicy:     accessPolicy,
-		Organizations:    organizationService,
+		Store:                  app.Store,
+		Tx:                     txManager,
+		OAuthProviders:         oauthProviders,
+		WebhookPublisher:       webhookPublisher,
+		Logger:                 app.Logger,
+		AccessPolicy:           accessPolicy,
+		Organizations:          organizationService,
+		AccessTokenRevocations: accessTokenRevocations,
 	})
 
 	sessionService := session.New(session.SessionConfig{
-		Store:                app.Store,
-		Tx:                   txManager,
-		AccessTokens:         accessTokenService,
-		SessionTTL:           app.Config.Session.SessionTTL,
-		RefreshTokenTTL:      app.Config.Session.RefreshTokenTTL,
-		RefreshTokenRotation: app.Config.Session.RefreshTokenRotation,
-		AccessPolicy:         accessPolicy,
-		Organizations:        organizationService,
+		Store:                  app.Store,
+		Tx:                     txManager,
+		AccessTokens:           accessTokenService,
+		AccessTokenRevocations: accessTokenRevocations,
+		SessionTTL:             app.Config.Session.SessionTTL,
+		RefreshTokenTTL:        app.Config.Session.RefreshTokenTTL,
+		RefreshTokenRotation:   app.Config.Session.RefreshTokenRotation,
+		AccessPolicy:           accessPolicy,
+		Organizations:          organizationService,
 	})
 
 	adminService := admin.New(admin.Config{
-		Store:            app.Store,
-		Tx:               txManager,
-		AllowlistEnabled: app.Config.AccessPolicy.AllowedEmailEnabled,
-		AuditRetention:   time.Duration(app.Config.Admin.AuditRetentionDays) * 24 * time.Hour,
-		WebhookPublisher: webhookPublisher,
+		Store:                  app.Store,
+		Tx:                     txManager,
+		AllowlistEnabled:       app.Config.AccessPolicy.AllowedEmailEnabled,
+		AuditRetention:         time.Duration(app.Config.Admin.AuditRetentionDays) * 24 * time.Hour,
+		WebhookPublisher:       webhookPublisher,
+		AccessTokenRevocations: accessTokenRevocations,
 	})
 
 	passkeyService, err := newPasskeyService(app, txManager)
@@ -91,14 +99,15 @@ func NewServices(app *App) (Services, error) {
 
 	verificationCodeService := newVerificationCodeService(app)
 	challengeService := challenge.New(challenge.Config{
-		Store:             app.Store,
-		Tx:                txManager,
-		AllowlistEnabled:  app.Config.AccessPolicy.AllowedEmailEnabled,
-		ChallengeTTL:      app.Config.Challenge.TTL,
-		MaxAttempts:       app.Config.Challenge.MaxAttempts,
-		MaxResends:        app.Config.Challenge.MaxResends,
-		MinResendInterval: app.Config.Challenge.MinResendInterval,
-		WebhookPublisher:  webhookPublisher,
+		Store:                  app.Store,
+		Tx:                     txManager,
+		AllowlistEnabled:       app.Config.AccessPolicy.AllowedEmailEnabled,
+		ChallengeTTL:           app.Config.Challenge.TTL,
+		MaxAttempts:            app.Config.Challenge.MaxAttempts,
+		MaxResends:             app.Config.Challenge.MaxResends,
+		MinResendInterval:      app.Config.Challenge.MinResendInterval,
+		WebhookPublisher:       webhookPublisher,
+		AccessTokenRevocations: accessTokenRevocations,
 	})
 
 	emailWorker := challenge.NewWorker(

@@ -19,7 +19,8 @@ func (h *APIHandler) Logout(ctx context.Context, _ contract.LogoutRequestObject)
 		return logoutError(responseCodeInternalError(), "API contract error."), nil
 	}
 	if refreshToken, exists := session.ReadRefreshToken(r); exists {
-		_ = h.Session.Logout(ctx, refreshToken)
+		accessToken, _ := session.ReadAccessToken(r)
+		_ = h.Session.Logout(ctx, refreshToken, accessToken)
 	}
 	header := make(http.Header)
 	session.ClearSessionCookies(contract.HeaderWriter(header))

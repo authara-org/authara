@@ -162,7 +162,7 @@ func TestOrganizationSwitchPostReturnsSwitchedTokens(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
-		identity, err := sessionService.ValidateAccessToken(accessToken, token.AudienceApp, now)
+		identity, err := sessionService.ValidateAccessToken(ctx, accessToken, token.AudienceApp, now)
 		if err != nil {
 			t.Fatalf("ValidateAccessToken failed: %v", err)
 		}
@@ -202,7 +202,7 @@ func TestOrganizationSwitchPostReturnsSwitchedTokens(t *testing.T) {
 			t.Fatalf("expected response tokens, got %+v", got)
 		}
 
-		switchedIdentity, err := sessionService.ValidateAccessToken(got.AccessToken, token.AudienceApp, time.Now())
+		switchedIdentity, err := sessionService.ValidateAccessToken(ctx, got.AccessToken, token.AudienceApp, time.Now())
 		if err != nil {
 			t.Fatalf("ValidateAccessToken switched failed: %v", err)
 		}

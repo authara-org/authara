@@ -24,7 +24,7 @@ func OptionalAccessIdentity(
 				return
 			}
 
-			identity, err := sessionSvc.ValidateAccessToken(accessToken, audience, now())
+			identity, err := sessionSvc.ValidateAccessToken(ctx, accessToken, audience, now())
 			if err != nil {
 				next.ServeHTTP(w, r)
 				return

@@ -92,6 +92,9 @@ func (s *Service) DisableUser(ctx context.Context, actor Actor, userID uuid.UUID
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
 			return err
 		}
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
+			return err
+		}
 		if err := s.audit(txCtx, actor, ActionUserDisabled, &userID, user.Email, map[string]any{}, meta); err != nil {
 			return err
 		}

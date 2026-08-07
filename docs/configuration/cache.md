@@ -2,9 +2,17 @@
 
 Authara can use an optional cache backend for shared runtime state.
 
-When Redis is configured, rate limiting uses Redis-backed counters so limits
-are shared across Authara instances. When cache is disabled, Authara uses a
-noop cache and keeps rate limiting in memory per instance.
+When Redis is configured, rate limiting uses Redis-backed counters and revoked
+access tokens are rejected immediately across Authara instances. Revocation
+entries expire automatically after the access-token TTL. Authara stores token
+hashes, never bearer-token values.
+
+Access-token revocation checks fail closed: when Redis is configured but
+unavailable, authenticated requests are rejected until the cache recovers.
+
+With the `noop` cache, rate limiting stays in memory per instance and access
+tokens remain valid until their normal expiry after a session, user, or
+organization membership is revoked.
 
 ---
 

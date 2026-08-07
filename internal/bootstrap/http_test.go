@@ -49,6 +49,10 @@ func (fakeBootstrapCounterCache) Get(ctx context.Context, key string) ([]byte, e
 	return nil, cache.ErrMiss
 }
 
+func (fakeBootstrapCounterCache) GetMany(ctx context.Context, keys ...string) ([][]byte, error) {
+	return make([][]byte, len(keys)), nil
+}
+
 func (fakeBootstrapCounterCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	return nil
 }
