@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/authara-org/authara/internal/webhook"
+	"github.com/google/uuid"
 )
 
 type recordingPublisher struct {
@@ -116,6 +117,17 @@ func TestOrganizationLifecycleWebhooks(t *testing.T) {
 		}
 		if _, err := svc.UpdateOrganization(ctx, org.ID, "Webhook Org Updated"); err != nil {
 			t.Fatalf("UpdateOrganization failed: %v", err)
+		}
+		otherOwner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "org-webhook-owner@example.com", Username: "org-webhook-owner"})
+		if err != nil {
+			t.Fatalf("CreateUser other owner failed: %v", err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+			OrganizationID: org.ID,
+			UserID:         otherOwner.ID,
+			Role:           domain.OrganizationRoleOwner,
+		}); err != nil {
+			t.Fatalf("CreateOrganizationMembership other owner failed: %v", err)
 		}
 		if _, err := svc.UpdateOrganizationMember(ctx, org.ID, membership.UserID, domain.OrganizationRoleAdmin); err != nil {
 			t.Fatalf("UpdateOrganizationMember failed: %v", err)
@@ -341,6 +353,101 @@ func TestAcceptInvitationSingleModeRejectsExistingOtherMembership(t *testing.T) 
 			t.Fatalf("expected ErrOrganizationSingleMembershipConflict, got %v", err)
 		}
 	})
+}
+
+func TestAcceptInvitationSingleModeSerializesMembershipCreation(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	suffix := uuid.NewString()
+	invitee, err := tdb.Store.CreateUser(ctx, domain.User{Email: "single-concurrent-" + suffix + "@example.com", Username: "single-concurrent-" + suffix})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, Mode: OrgModeSingle, InvitationTTL: time.Hour})
+	owners := make([]domain.User, 0, 2)
+	orgs := make([]domain.Organization, 0, 2)
+	invites := make([]InvitationWithToken, 0, 2)
+	for i := 0; i < 2; i++ {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "single-concurrent-owner-" + uuid.NewString() + "@example.com",
+			Username: "single-concurrent-owner-" + uuid.NewString(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "Concurrent", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		invite, err := svc.CreateInvitation(ctx, CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			Email:          invitee.Email,
+			Now:            time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		owners = append(owners, owner)
+		orgs = append(orgs, org)
+		invites = append(invites, invite)
+	}
+	t.Cleanup(func() {
+		for _, org := range orgs {
+			_ = tdb.Store.DeleteOrganization(context.Background(), org.ID)
+		}
+		_ = tdb.Store.DeleteUser(context.Background(), invitee.ID)
+		for _, owner := range owners {
+			_ = tdb.Store.DeleteUser(context.Background(), owner.ID)
+		}
+	})
+
+	lockCtx, cancel, err := tdb.Tx.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	if _, err := tdb.Store.GetUserByIDForUpdate(lockCtx, invitee.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 2)
+	for _, invite := range invites {
+		invite := invite
+		go func() {
+			_, err := svc.AcceptInvitation(ctx, AcceptInvitationInput{RawToken: invite.RawToken, UserID: invitee.ID, Now: time.Now().UTC()})
+			done <- err
+		}()
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("invitation acceptance completed before user lock was released: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := tdb.Tx.Commit(lockCtx); err != nil {
+		t.Fatal(err)
+	}
+
+	var succeeded, conflicted int
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-done:
+			switch {
+			case err == nil:
+				succeeded++
+			case errors.Is(err, ErrOrganizationSingleMembershipConflict):
+				conflicted++
+			default:
+				t.Fatalf("unexpected acceptance error: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("invitation acceptance did not finish after user lock was released")
+		}
+	}
+	if succeeded != 1 || conflicted != 1 {
+		t.Fatalf("expected one success and one conflict, got success=%d conflict=%d", succeeded, conflicted)
+	}
 }
 
 func TestAcceptInvitationMultiModeAllowsExistingOtherMembership(t *testing.T) {

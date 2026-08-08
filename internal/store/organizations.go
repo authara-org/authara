@@ -155,6 +155,33 @@ func (s *Store) GetOrganizationByID(ctx context.Context, organizationID uuid.UUI
 	return toDomainOrganization(m), nil
 }
 
+func (s *Store) GetOrganizationByIDForUpdate(ctx context.Context, organizationID uuid.UUID) (domain.Organization, error) {
+	var m model.Organization
+
+	err := scanOrganization(s.queryRow(ctx, `
+		SELECT `+organizationColumns+`
+		FROM organizations
+		WHERE id = $1
+		FOR UPDATE
+	`, organizationID), &m)
+	if err != nil {
+		return domain.Organization{}, mapNoRows(err, ErrOrganizationNotFound)
+	}
+
+	return toDomainOrganization(m), nil
+}
+
+func (s *Store) LockOrganizationForKeyShare(ctx context.Context, organizationID uuid.UUID) error {
+	var lockedID uuid.UUID
+	err := s.queryRow(ctx, `
+		SELECT id
+		FROM organizations
+		WHERE id = $1
+		FOR KEY SHARE
+	`, organizationID).Scan(&lockedID)
+	return mapNoRows(err, ErrOrganizationNotFound)
+}
+
 func (s *Store) UpdateOrganizationName(ctx context.Context, organizationID uuid.UUID, name string) (domain.Organization, error) {
 	var m model.Organization
 	name, err := normalizeOrganizationName(name)
@@ -175,6 +202,21 @@ func (s *Store) UpdateOrganizationName(ctx context.Context, organizationID uuid.
 	}
 
 	return toDomainOrganization(m), nil
+}
+
+func (s *Store) DeleteOrganization(ctx context.Context, organizationID uuid.UUID) error {
+	res, err := s.exec(ctx, `DELETE FROM organizations WHERE id = $1`, organizationID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrOrganizationNotFound
+	}
+	return nil
 }
 
 func (s *Store) CreateOrganizationMembership(ctx context.Context, membership domain.OrganizationMembership) (domain.OrganizationMembership, error) {

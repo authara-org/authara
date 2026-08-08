@@ -86,6 +86,33 @@ func (s *Store) GetUserByID(ctx context.Context, userID uuid.UUID) (domain.User,
 	return toDomainUser(m), nil
 }
 
+func (s *Store) GetUserByIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.User, error) {
+	var m model.User
+
+	err := scanUser(s.queryRow(ctx, `
+		SELECT `+userColumns+`
+		FROM users
+		WHERE id = $1
+		FOR UPDATE
+	`, userID), &m)
+	if err != nil {
+		return domain.User{}, mapNoRows(err, ErrUserNotFound)
+	}
+
+	return toDomainUser(m), nil
+}
+
+func (s *Store) LockUserForKeyShare(ctx context.Context, userID uuid.UUID) error {
+	var lockedID uuid.UUID
+	err := s.queryRow(ctx, `
+		SELECT id
+		FROM users
+		WHERE id = $1
+		FOR KEY SHARE
+	`, userID).Scan(&lockedID)
+	return mapNoRows(err, ErrUserNotFound)
+}
+
 func (s *Store) LockUserForAuthMethodMutation(ctx context.Context, userID uuid.UUID) error {
 	var lockedID uuid.UUID
 	err := s.queryRow(ctx, `

@@ -61,10 +61,36 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 					return
 				}
 				if exists {
-					title = "Invitation requires a new account"
-					description = "This invitation was sent to an email that already has an account."
-					errorMessage = "This email already belongs to an organization."
+					user, err := h.Auth.GetUserByEmail(r.Context(), preview.Invitation.Email)
+					if err != nil {
+						h.renderInternalError(w, r)
+						return
+					}
+					memberships, err := h.Organizations.ListUserMemberships(r.Context(), user.ID)
+					if err != nil {
+						h.renderInternalError(w, r)
+						return
+					}
+					title = "Log in to accept this invitation"
+					description = "This invitation was sent to an existing account."
 					showSignupForm = false
+					if len(memberships) == 0 {
+						actions = []authview.InvitationAction{{
+							Label:   "Log in with invited email",
+							Href:    invitationAuthURL("/auth/invitations/login", token),
+							Primary: true,
+						}}
+					} else {
+						description = "Log in to review what is required before joining " + preview.Organization.Name + "."
+						actions = []authview.InvitationAction{{
+							Label: "Log in with invited email",
+							Href: redirect.WithReturnTo(
+								"/auth/login",
+								invitationAuthURL("/auth/invitations/accept", token),
+							),
+							Primary: true,
+						}}
+					}
 				}
 			}
 		}
@@ -154,7 +180,7 @@ func (h *UIHandler) invitationPageForUser(
 	user domain.User,
 ) (invitationPage, error) {
 	emailMatches := normalizeEmailForDisplay(user.Email) == normalizeEmailForDisplay(preview.Invitation.Email)
-	memberOfInvitedOrg, _, err := h.invitationMembershipState(ctx, user.ID, preview.Organization.ID)
+	memberOfInvitedOrg, hasAnyMembership, err := h.invitationMembershipState(ctx, user.ID, preview.Organization.ID)
 	if err != nil {
 		return invitationPage{}, err
 	}
@@ -174,14 +200,20 @@ func (h *UIHandler) invitationPageForUser(
 			page.Title = "You are already a member of " + preview.Organization.Name
 			page.Description = "Continue to the application."
 			page.Actions = []authview.InvitationAction{{Label: "Continue", Href: "/", Primary: true}}
+		case emailMatches && hasAnyMembership:
+			page.Title = "Leave your current organization before joining " + preview.Organization.Name
+			page.Description = "Your account can belong to only one organization at a time."
+			page.ErrorMessage = "Leave or delete your current organization through the application, then return to this invitation."
 		case emailMatches:
-			page.Title = "Invitation requires a new account"
-			page.Description = "This invitation was sent to an email that already has an account."
-			page.ErrorMessage = "In single-organization mode, existing accounts cannot accept organization invitations."
+			page.Description = "You are currently signed in as " + user.Email + "."
+			page.AcceptLabel = "Join " + preview.Organization.Name + " as " + user.Email
 		default:
-			page.Title = "Create an account to join " + preview.Organization.Name
-			page.Description = "This invitation can only be accepted by creating an account for " + preview.Invitation.Email + "."
-			page.ShowSignupForm = true
+			page.Description = "This invitation was sent to " + preview.Invitation.Email + ". You are signed in as " + user.Email + "."
+			page.Actions = []authview.InvitationAction{{
+				Label:   "Log in with invited email",
+				Href:    invitationAuthURL("/auth/invitations/login", rawToken),
+				Primary: true,
+			}}
 		}
 	case organization.OrgModeMulti:
 		if emailMatches {
@@ -242,11 +274,6 @@ func (h *UIHandler) InvitationAcceptPost(w http.ResponseWriter, r *http.Request)
 		h.renderUnauthorized(w, r)
 		return
 	}
-	if !h.Organizations.Mode().AllowsOrgSwitching() {
-		h.renderRequestError(w, r, http.StatusForbidden, "This invitation requires creating a new account.")
-		return
-	}
-
 	now := time.Now().UTC()
 	result, err := h.Organizations.AcceptInvitation(r.Context(), organization.AcceptInvitationInput{
 		RawToken: token,
@@ -398,11 +425,6 @@ func (h *UIHandler) InvitationLoginPage(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	if !h.Organizations.Mode().AllowsOrgSwitching() {
-		h.renderRequestError(w, r, http.StatusForbidden, "This invitation requires creating a new account.")
-		return
-	}
-
 	r = r.WithContext(httpctx.WithReturnTo(r.Context(), invitationAuthURL("/auth/invitations/login", token)))
 	_ = h.Render(
 		w,
@@ -421,11 +443,6 @@ func (h *UIHandler) InvitationLoginPost(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	if !h.Organizations.Mode().AllowsOrgSwitching() {
-		h.renderRequestError(w, r, http.StatusForbidden, "This invitation requires creating a new account.")
-		return
-	}
-
 	password := r.FormValue("password")
 	if password == "" {
 		h.renderInvitationLoginError(w, r, http.StatusBadRequest, "Password required.", preview, token)
@@ -550,7 +567,7 @@ func (h *UIHandler) finishInvitationOAuth(
 		return
 	}
 	if path == "/auth/invitations/login" {
-		if !h.Organizations.Mode().AllowsOrgSwitching() || !exists {
+		if !exists {
 			h.redirectInvitationOAuthFailure(w, returnTo)
 			return
 		}

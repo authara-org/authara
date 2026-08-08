@@ -50,6 +50,7 @@ func newTestHandlersWithAdmin(
 			oauth.OAuthProviders{},
 			10*time.Minute,
 			24*time.Hour,
+			false,
 			renderer,
 		),
 		API: api.New(
@@ -67,6 +68,6 @@ func newTestHandlersWithAdmin(
 			10*time.Minute,
 			24*time.Hour,
 		),
-		InternalAPI: internalapi.New(organization.New(organization.Config{Mode: organization.OrgModeMulti}), false),
+		InternalAPI: internalapi.New(nil, organization.New(organization.Config{Mode: organization.OrgModeMulti}), false),
 	}
 }

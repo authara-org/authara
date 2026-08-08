@@ -150,6 +150,13 @@ variables:
     default: /
     notes: Safe relative path used after auth flows when return_to is not provided.
 
+  - name: AUTHARA_PUBLIC_ACCOUNT_DELETION_ENABLED
+    stability: stable
+    required: false
+    type: bool
+    default: false
+    notes: Enables direct account deletion from Authara's hosted account page. Keep disabled when the application backend must enforce subscriptions or other account-deletion rules.
+
   - name: AUTHARA_TRUST_PROXY_HEADERS
     stability: stable
     required: false

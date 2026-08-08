@@ -44,6 +44,80 @@ func createInternalOrganizationError(code response.ErrorCode, message string) co
 	}
 }
 
+func deleteInternalOrganizationError(code response.ErrorCode, message string) contract.DeleteInternalOrganizationResponseObject {
+	spec := mustRouteError(DeleteInternalOrganizationErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.DeleteInternalOrganization400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.DeleteInternalOrganization401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.DeleteInternalOrganization403JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.DeleteInternalOrganization404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.DeleteInternalOrganization409JSONResponse(body)
+	default:
+		return contract.DeleteInternalOrganization500JSONResponse(body)
+	}
+}
+
+func removeInternalOrganizationMemberError(code response.ErrorCode, message string) contract.RemoveInternalOrganizationMemberResponseObject {
+	spec := mustRouteError(RemoveInternalOrganizationMemberErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.RemoveInternalOrganizationMember400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.RemoveInternalOrganizationMember401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.RemoveInternalOrganizationMember403JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.RemoveInternalOrganizationMember404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.RemoveInternalOrganizationMember409JSONResponse(body)
+	default:
+		return contract.RemoveInternalOrganizationMember500JSONResponse(body)
+	}
+}
+
+func transferInternalOrganizationOwnershipError(code response.ErrorCode, message string) contract.TransferInternalOrganizationOwnershipResponseObject {
+	spec := mustRouteError(TransferInternalOrganizationOwnershipErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.TransferInternalOrganizationOwnership400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.TransferInternalOrganizationOwnership401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.TransferInternalOrganizationOwnership403JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.TransferInternalOrganizationOwnership404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.TransferInternalOrganizationOwnership409JSONResponse(body)
+	default:
+		return contract.TransferInternalOrganizationOwnership500JSONResponse(body)
+	}
+}
+
+func deleteInternalUserError(code response.ErrorCode, message string) contract.DeleteInternalUserResponseObject {
+	spec := mustRouteError(DeleteInternalUserErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.DeleteInternalUser400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.DeleteInternalUser401JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.DeleteInternalUser404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.DeleteInternalUser409JSONResponse(body)
+	default:
+		return contract.DeleteInternalUser500JSONResponse(body)
+	}
+}
+
 func getPublicOrganizationError(code response.ErrorCode, message string) contract.GetPublicOrganizationResponseObject {
 	spec := mustRouteError(GetPublicOrganizationErrors, code)
 	body := apiErrorBody(spec.Code, message)

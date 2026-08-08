@@ -66,6 +66,13 @@ The following error codes may be returned by Authara.
 | `passkey_registration_invalid` | 422 | The passkey registration ceremony could not be verified |
 | `rate_limited` | 429 | Too many requests were made in a given time window |
 | `internal_error` | 500 | An unexpected internal error occurred |
+| `actor_not_member` | 403 | The internal lifecycle actor is not a member of the organization |
+| `actor_not_allowed` | 403 | The actor's organization role cannot perform the operation |
+| `last_organization_owner` | 409 | Ownership must be transferred before the member can leave, be removed, or be deleted |
+| `last_organization_member` | 409 | The last member must explicitly delete the organization |
+| `organization_has_other_members` | 409 | A single-mode organization with other members cannot use the ordinary delete operation |
+| `personal_organization_immutable` | 409 | A personal-organization creator cannot leave, and the organization cannot be deleted independently of its user |
+| `last_active_admin` | 409 | The final active platform administrator cannot be deleted |
 
 ---
 

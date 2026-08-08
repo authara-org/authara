@@ -255,16 +255,28 @@ func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID u
 		return domain.OrganizationMembership{}, ErrInvalidOrganizationRole
 	}
 	var membership domain.OrganizationMembership
-	now := time.Now().UTC()
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		if _, err := s.store.GetOrganizationByID(txCtx, organizationID); err != nil {
+		if _, err := s.store.GetOrganizationByIDForUpdate(txCtx, organizationID); err != nil {
 			return err
 		}
-		var err error
+		current, err := s.store.GetOrganizationMembership(txCtx, organizationID, userID)
+		if err != nil {
+			return err
+		}
+		if current.Role == domain.OrganizationRoleOwner && role != domain.OrganizationRoleOwner {
+			memberships, err := s.store.ListOrganizationMembershipsByOrganizationID(txCtx, organizationID)
+			if err != nil {
+				return err
+			}
+			if countOrganizationOwners(memberships) == 1 {
+				return ErrLastOrganizationOwner
+			}
+		}
 		membership, err = s.store.UpdateOrganizationMembershipRole(txCtx, organizationID, userID, role)
 		if err != nil {
 			return err
 		}
+		now := time.Now().UTC()
 		if err := s.accessTokenRevocations.RevokeMembership(txCtx, userID, organizationID, now); err != nil {
 			return err
 		}
@@ -277,22 +289,10 @@ func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID u
 }
 
 func (s *Service) DeleteOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) error {
-	now := time.Now().UTC()
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		if _, err := s.store.GetOrganizationByID(txCtx, organizationID); err != nil {
-			return err
-		}
-		membership, err := s.store.GetOrganizationMembership(txCtx, organizationID, userID)
-		if err != nil {
-			return err
-		}
-		if err := s.store.DeleteOrganizationMembership(txCtx, organizationID, userID); err != nil {
-			return err
-		}
-		if err := s.accessTokenRevocations.RevokeMembership(txCtx, userID, organizationID, now); err != nil {
-			return err
-		}
-		return s.publish(txCtx, webhook.NewOrganizationMembershipDeleted(membership, now))
+	return s.RemoveOrganizationMember(ctx, RemoveOrganizationMemberInput{
+		OrganizationID: organizationID,
+		UserID:         userID,
+		ActorUserID:    userID,
 	})
 }
 

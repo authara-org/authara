@@ -1144,6 +1144,127 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
 
+  /auth/internal/v1/organizations/{organizationID}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+    delete:
+      operationId: deleteInternalOrganization
+      tags: [Internal]
+      summary: Delete a team organization
+      description: Permanently deletes a team organization after the application backend has approved product-specific dependencies such as subscriptions.
+      security:
+        - internalBearer: []
+      x-authara-access: internal
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [actor_not_member, actor_not_allowed]
+        "404": [organization_not_found]
+        "409": [personal_organization_immutable, organization_has_other_members]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InternalOrganizationActorRequest"
+      responses:
+        "204":
+          description: Organization deleted
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/internal/v1/organizations/{organizationID}/members/{userID}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+      - $ref: "#/components/parameters/UserID"
+    delete:
+      operationId: removeInternalOrganizationMember
+      tags: [Internal]
+      summary: Remove an organization member
+      description: Removes a membership after the application backend has approved the departure; using the target user as actor represents a voluntary leave.
+      security:
+        - internalBearer: []
+      x-authara-access: internal
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [actor_not_member, actor_not_allowed]
+        "404": [organization_not_found, membership_not_found]
+        "409": [personal_organization_immutable, last_organization_owner, last_organization_member]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InternalOrganizationActorRequest"
+      responses:
+        "204":
+          description: Membership removed
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/internal/v1/organizations/{organizationID}/ownership-transfer:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+    post:
+      operationId: transferInternalOrganizationOwnership
+      tags: [Internal]
+      summary: Transfer organization ownership
+      description: Atomically promotes a member to owner and demotes the current owner to admin.
+      security:
+        - internalBearer: []
+      x-authara-access: internal
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [actor_not_member, actor_not_allowed]
+        "404": [organization_not_found, membership_not_found]
+        "409": [personal_organization_immutable]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InternalOwnershipTransferRequest"
+      responses:
+        "204":
+          description: Ownership transferred
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /auth/internal/v1/organizations/{organizationID}/invitations:
     parameters:
       - $ref: "#/components/parameters/OrganizationID"
@@ -1219,6 +1340,37 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/internal/v1/users/{userID}:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    delete:
+      operationId: deleteInternalUser
+      tags: [Internal]
+      summary: Delete a user
+      description: Permanently deletes a user after the application backend has approved account-level dependencies such as active subscriptions.
+      security:
+        - internalBearer: []
+      x-authara-access: internal
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [user_not_found]
+        "409": [last_active_admin, last_organization_owner, last_organization_member]
+        "500": [internal_error]
+      responses:
+        "204":
+          description: User deleted
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
@@ -1625,6 +1777,25 @@ components:
         name:
           type: string
         created_by_user_id:
+          type: string
+          format: uuid
+    InternalOrganizationActorRequest:
+      type: object
+      additionalProperties: false
+      required: [actor_user_id]
+      properties:
+        actor_user_id:
+          type: string
+          format: uuid
+    InternalOwnershipTransferRequest:
+      type: object
+      additionalProperties: false
+      required: [actor_user_id, new_owner_user_id]
+      properties:
+        actor_user_id:
+          type: string
+          format: uuid
+        new_owner_user_id:
           type: string
           format: uuid
     UpdateOrganizationRequest:

@@ -32,8 +32,9 @@ type UIHandler struct {
 	Google         *google.Client
 	OAuthProviders oauth.OAuthProviders
 
-	AccessTTL  time.Duration
-	RefreshTTL time.Duration
+	AccessTTL                    time.Duration
+	RefreshTTL                   time.Duration
+	PublicAccountDeletionEnabled bool
 
 	Render render.Renderer
 }
@@ -53,23 +54,25 @@ func New(
 	oauthProviders oauth.OAuthProviders,
 	accessTTL time.Duration,
 	refreshTTL time.Duration,
+	publicAccountDeletionEnabled bool,
 	renderer render.Renderer,
 ) *UIHandler {
 	return &UIHandler{
-		Admin:          admin,
-		Auth:           auth,
-		Passkeys:       passkeys,
-		Session:        session,
-		Organizations:  organizations,
-		Challenge:      challenge,
-		Features:       features,
-		Verification:   verification,
-		Limiter:        limiter,
-		Logger:         logger,
-		Google:         google,
-		OAuthProviders: oauthProviders,
-		AccessTTL:      accessTTL,
-		RefreshTTL:     refreshTTL,
-		Render:         renderer,
+		Admin:                        admin,
+		Auth:                         auth,
+		Passkeys:                     passkeys,
+		Session:                      session,
+		Organizations:                organizations,
+		Challenge:                    challenge,
+		Features:                     features,
+		Verification:                 verification,
+		Limiter:                      limiter,
+		Logger:                       logger,
+		Google:                       google,
+		OAuthProviders:               oauthProviders,
+		AccessTTL:                    accessTTL,
+		RefreshTTL:                   refreshTTL,
+		PublicAccountDeletionEnabled: publicAccountDeletionEnabled,
+		Render:                       renderer,
 	}
 }

@@ -59,7 +59,7 @@ func (m OrgMode) AllowsUserCreatedTeamOrgs() bool {
 }
 
 func (m OrgMode) AllowsLeaveOrg() bool {
-	return m == OrgModeMulti
+	return m == OrgModeSingle || m == OrgModeMulti
 }
 
 func (m OrgMode) HasVisibleOrganizations() bool {

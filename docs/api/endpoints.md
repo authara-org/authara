@@ -549,8 +549,10 @@ See [Errors](errors.md).
 
 Set `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED=true` to allow authenticated
 clients to manage non-capacity organization data directly through Authara.
-Organization creation, invitation creation, and invitation resend remain
-internal-only so your application backend can enforce billing and seat limits.
+Organization creation, invitation creation, invitation resend, membership
+removal, organization deletion, and user deletion remain internal-only so your
+application backend can enforce billing, subscriptions, seat limits, and
+product-data dependencies.
 
 Public organization routes require the `authara_access` cookie. State-changing
 requests also require the API CSRF token. Organization-scoped routes only accept
@@ -576,12 +578,19 @@ management is disabled and reports
 `allows_public_organization_management: false`. The other routes return `404`
 while the feature is disabled.
 
+In `single` mode, `allows_organization_leave` is `true` because a departure can
+be approved by the application backend, while `allows_org_switching` remains
+`false`: the user may never hold two memberships and cannot switch between
+simultaneously available organizations.
+
 ---
 
 # Internal Endpoints
 
-The internal API contains only server-to-server operations that can create or
-reserve billable organization capacity.
+The internal API contains server-to-server lifecycle operations whose
+product-specific checks belong to the application backend. A webhook cannot
+veto an operation after it happened, so the application must validate billing
+and dependencies before calling these endpoints.
 
 ## Create organization
 
@@ -601,6 +610,94 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
   "created_by_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1"
 }
 ```
+
+## Remove an organization member
+
+Removes a membership after the application backend has approved the departure.
+Set `actor_user_id` to the target user for a voluntary leave, or to the owner or
+admin performing a removal.
+
+```text
+DELETE /auth/internal/v1/organizations/{organization_id}/members/{user_id}
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
+```json
+{
+  "actor_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1"
+}
+```
+
+In `multi` mode, non-creators may leave or be removed from a personal
+organization; its creator cannot leave. In `personal` mode, invitations are
+disabled, so no additional member can join. Authara also rejects removal of the
+last member or sole owner. Sessions currently using the removed organization
+and their refresh tokens are deleted; access tokens for that user and
+organization are revoked. The operation emits
+`organization.membership.deleted`.
+
+## Transfer organization ownership
+
+Atomically promotes an existing member to owner and demotes the current owner
+to admin. The actor must be an owner, the new owner must already belong to the
+team organization, and both users are protected from concurrent deletion while
+the transfer runs.
+
+```text
+POST /auth/internal/v1/organizations/{organization_id}/ownership-transfer
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
+```json
+{
+  "actor_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1",
+  "new_owner_user_id": "67a1123a-e04f-44c2-aae9-314e28dcbd9c"
+}
+```
+
+Personal organization ownership cannot be transferred. A successful transfer
+emits `organization.membership.updated` for both memberships and allows the
+former owner to leave through the member-removal endpoint.
+
+## Delete an organization
+
+Permanently deletes a team organization after application-owned subscription
+and data checks have passed. Only an owner may perform this operation.
+
+```text
+DELETE /auth/internal/v1/organizations/{organization_id}
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
+```json
+{
+  "actor_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1"
+}
+```
+
+Personal organizations cannot be deleted through this endpoint. In `single`
+mode, organization deletion is accepted only when the actor is the sole member;
+an organization with other members requires a separately designed tenant
+teardown. In `multi` mode, all memberships may be removed because users retain
+their personal organizations. A successful deletion removes organization-bound
+sessions and invitations and emits `organization.deleted`.
+
+## Delete a user
+
+Permanently deletes a user after account-level application checks have passed.
+
+```text
+DELETE /auth/internal/v1/users/{user_id}
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
+User deletion cannot bypass organization invariants: Authara rejects deletion
+when the user is the last member or sole owner of a team organization. An owned
+personal organization is deleted as part of the user deletion; in `multi` mode,
+memberships in other users' personal organizations are removed. Direct deletion
+from Authara's hosted account page is disabled by default; enable it explicitly
+with `AUTHARA_PUBLIC_ACCOUNT_DELETION_ENABLED=true` only when application-level
+checks are unnecessary.
 
 ## Create organization invitation
 
@@ -650,6 +747,13 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
 ```
 
 Authara also enqueues an invitation email when the email worker is configured. The returned `invite_url` is always present for testing or app-owned delivery.
+
+In `single` mode, an existing account may accept an invitation only after its
+previous membership has been removed. The hosted invitation page keeps the
+invitation pending and tells the user to leave or delete the current organization
+through the application. After the application backend approves that operation
+and calls the internal API, the user can reopen the invitation, log in, and
+accept it normally.
 
 ## Resend organization invitation
 

@@ -78,8 +78,18 @@ func (s *Service) CreateSession(
 		if err != nil {
 			return err
 		}
+		if err := s.store.LockUserForKeyShare(ctx, userID); err != nil {
+			return err
+		}
 
 		org, membership, err := s.organizations.DefaultOrganizationForUser(ctx, user.ID)
+		if err != nil {
+			return err
+		}
+		if err := s.store.LockOrganizationForKeyShare(ctx, org.ID); err != nil {
+			return err
+		}
+		membership, err = s.organizations.RequireMembership(ctx, userID, org.ID)
 		if err != nil {
 			return err
 		}
@@ -175,6 +185,15 @@ func (s *Service) SwitchSessionOrganization(
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		_, err := s.ensureUserAllowed(ctx, userID)
 		if err != nil {
+			return err
+		}
+		if err := s.store.LockUserForKeyShare(ctx, userID); err != nil {
+			return err
+		}
+		if err := s.store.LockOrganizationForKeyShare(ctx, organizationID); err != nil {
+			if errors.Is(err, store.ErrOrganizationNotFound) {
+				return ErrForbidden
+			}
 			return err
 		}
 
@@ -274,6 +293,29 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		}
 
 		session, err := s.store.GetSessionByID(ctx, rt.SessionID)
+		if err != nil {
+			return ErrInvalidRefreshToken
+		}
+		if err := s.store.LockUserForKeyShare(ctx, session.UserID); err != nil {
+			return ErrInvalidRefreshToken
+		}
+		if err := s.store.LockOrganizationForKeyShare(ctx, rt.OrganizationID); err != nil {
+			return ErrInvalidRefreshToken
+		}
+
+		rt, err = s.store.GetRefreshTokenByHash(ctx, hashed)
+		if err != nil {
+			return ErrInvalidRefreshToken
+		}
+		if rt.ConsumedAt != nil {
+			cacheErr := s.accessTokenRevocations.RevokeSession(ctx, rt.SessionID, now)
+			storeErr := s.store.RevokeSession(ctx, rt.SessionID, now)
+			return errors.Join(ErrRefreshTokenReuse, cacheErr, storeErr)
+		}
+		if rt.ExpiresAt.Before(now) {
+			return ErrInvalidRefreshToken
+		}
+		session, err = s.store.GetSessionByID(ctx, rt.SessionID)
 		if err != nil {
 			return ErrInvalidRefreshToken
 		}

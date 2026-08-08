@@ -40,7 +40,7 @@ func TestCreateOrganizationInvitationRequiresBearerToken(t *testing.T) {
 }
 
 func TestCreateOrganizationInvitationRequiresActorUserID(t *testing.T) {
-	handler := New(nil, false)
+	handler := New(nil, nil, false)
 	organizationID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
 	rr := httptest.NewRecorder()
@@ -58,7 +58,7 @@ func TestCreateOrganizationInvitationRequiresActorUserID(t *testing.T) {
 }
 
 func TestPublicCapabilitiesGetReturnsOrganizationMode(t *testing.T) {
-	handler := New(organization.New(organization.Config{Mode: organization.OrgModeMulti}), true)
+	handler := New(nil, organization.New(organization.Config{Mode: organization.OrgModeMulti}), true)
 	req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/capabilities", nil)
 	rr := httptest.NewRecorder()
 
@@ -88,7 +88,7 @@ func TestPublicCapabilitiesGetReturnsOrganizationMode(t *testing.T) {
 }
 
 func TestCreateOrganizationRequiresCreatedByUserID(t *testing.T) {
-	handler := New(nil, false)
+	handler := New(nil, nil, false)
 	rr := httptest.NewRecorder()
 
 	resp, err := handler.CreateInternalOrganization(context.Background(), contract.CreateInternalOrganizationRequestObject{})

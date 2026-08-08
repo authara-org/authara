@@ -103,15 +103,17 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 
 	var out InvitationWithToken
 	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		org, err := s.store.GetOrganizationByID(txCtx, in.OrganizationID)
-		if err != nil {
-			return err
-		}
-
-		if _, err := s.store.GetUserByID(txCtx, in.ActorUserID); err != nil {
+		if err := s.store.LockUserForKeyShare(txCtx, in.ActorUserID); err != nil {
 			if errors.Is(err, store.ErrUserNotFound) {
 				return ErrOrganizationActorNotMember
 			}
+			return err
+		}
+		if err := s.store.LockOrganizationForKeyShare(txCtx, in.OrganizationID); err != nil {
+			return err
+		}
+		org, err := s.store.GetOrganizationByID(txCtx, in.OrganizationID)
+		if err != nil {
 			return err
 		}
 		membership, err := s.store.GetOrganizationMembership(txCtx, in.OrganizationID, in.ActorUserID)
@@ -182,6 +184,13 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 	if !s.mode.AllowsInvitations() {
 		return InvitationWithToken{}, ErrOrganizationInviteForbidden
 	}
+	preview, err := s.store.GetOrganizationInvitationByID(ctx, in.InvitationID)
+	if err != nil {
+		return InvitationWithToken{}, err
+	}
+	if preview.OrganizationID != in.OrganizationID {
+		return InvitationWithToken{}, store.ErrOrganizationInvitationNotFound
+	}
 	now := normalizeNow(in.Now)
 
 	rawToken, tokenHash, err := generateInvitationToken()
@@ -193,6 +202,15 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 	var out InvitationWithToken
 	var revoked domain.OrganizationInvitation
 	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if preview.InvitedByUserID != nil {
+			if err := s.store.LockUserForKeyShare(txCtx, *preview.InvitedByUserID); err != nil &&
+				!errors.Is(err, store.ErrUserNotFound) {
+				return err
+			}
+		}
+		if err := s.store.LockOrganizationForKeyShare(txCtx, in.OrganizationID); err != nil {
+			return err
+		}
 		org, err := s.store.GetOrganizationByID(txCtx, in.OrganizationID)
 		if err != nil {
 			return err
@@ -337,13 +355,13 @@ func (s *Service) RevokeInvitation(ctx context.Context, in RevokeInvitationInput
 	var out domain.OrganizationInvitation
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		if _, err := s.store.GetOrganizationByID(txCtx, in.OrganizationID); err != nil {
-			return err
-		}
 		if in.RevokedByUserID != nil {
-			if _, err := s.store.GetUserByID(txCtx, *in.RevokedByUserID); err != nil {
+			if err := s.store.LockUserForKeyShare(txCtx, *in.RevokedByUserID); err != nil {
 				return err
 			}
+		}
+		if err := s.store.LockOrganizationForKeyShare(txCtx, in.OrganizationID); err != nil {
+			return err
 		}
 
 		invitation, err := s.store.GetOrganizationInvitationByIDForUpdate(txCtx, in.InvitationID)
@@ -388,8 +406,12 @@ func (s *Service) AcceptInvitation(ctx context.Context, in AcceptInvitationInput
 	if err != nil {
 		return AcceptInvitationResult{}, err
 	}
+	preview, err := s.store.GetOrganizationInvitationByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return AcceptInvitationResult{}, err
+	}
 
-	return s.acceptInvitation(ctx, in.UserID, now, func(txCtx context.Context) (domain.OrganizationInvitation, error) {
+	return s.acceptInvitation(ctx, in.UserID, preview.OrganizationID, now, func(txCtx context.Context) (domain.OrganizationInvitation, error) {
 		return s.store.GetOrganizationInvitationByTokenHashForUpdate(txCtx, tokenHash)
 	})
 }
@@ -401,9 +423,13 @@ func (s *Service) AcceptInvitationByID(ctx context.Context, in AcceptInvitationB
 	if in.InvitationID == uuid.Nil {
 		return AcceptInvitationResult{}, store.ErrOrganizationInvitationNotFound
 	}
+	preview, err := s.store.GetOrganizationInvitationByID(ctx, in.InvitationID)
+	if err != nil {
+		return AcceptInvitationResult{}, err
+	}
 
 	now := normalizeNow(in.Now)
-	return s.acceptInvitation(ctx, in.UserID, now, func(txCtx context.Context) (domain.OrganizationInvitation, error) {
+	return s.acceptInvitation(ctx, in.UserID, preview.OrganizationID, now, func(txCtx context.Context) (domain.OrganizationInvitation, error) {
 		return s.store.GetOrganizationInvitationByIDForUpdate(txCtx, in.InvitationID)
 	})
 }
@@ -411,19 +437,26 @@ func (s *Service) AcceptInvitationByID(ctx context.Context, in AcceptInvitationB
 func (s *Service) acceptInvitation(
 	ctx context.Context,
 	userID uuid.UUID,
+	organizationID uuid.UUID,
 	now time.Time,
 	loadInvitation func(context.Context) (domain.OrganizationInvitation, error),
 ) (AcceptInvitationResult, error) {
 	var result AcceptInvitationResult
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		user, err := s.store.GetUserByIDForUpdate(txCtx, userID)
+		if err != nil {
+			return err
+		}
+		if err := s.store.LockOrganizationForKeyShare(txCtx, organizationID); err != nil {
+			return err
+		}
+
 		invitation, err := loadInvitation(txCtx)
 		if err != nil {
 			return err
 		}
-
-		user, err := s.store.GetUserByID(txCtx, userID)
-		if err != nil {
-			return err
+		if invitation.OrganizationID != organizationID {
+			return store.ErrOrganizationInvitationNotFound
 		}
 		userEmail, err := normalizeInvitationEmail(user.Email)
 		if err != nil {

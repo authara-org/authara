@@ -116,7 +116,7 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 			return err
 		}
 
-		user, err := s.store.GetUserByID(txCtx, userID)
+		user, err := s.store.GetUserByIDForUpdate(txCtx, userID)
 		if err != nil {
 			return err
 		}
@@ -133,6 +133,19 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 			if activeAdmins <= 1 {
 				return ErrCannotDeleteLastAdmin
 			}
+		}
+		organizations := s.organizations
+		if organizations == nil {
+			organizations = organization.New(organization.Config{
+				Store:                  s.store,
+				Tx:                     s.tx,
+				WebhookPublisher:       s.webhookPublisher,
+				Logger:                 s.logger,
+				AccessTokenRevocations: s.accessTokenRevocations,
+			})
+		}
+		if err := organizations.PrepareUserDeletion(txCtx, userID); err != nil {
+			return err
 		}
 
 		if err := s.store.DeleteUserEmailReferences(txCtx, userID, user.Email); err != nil {

@@ -49,7 +49,7 @@ func TestListOrganizationMembersIncludesUserFields(t *testing.T) {
 			t.Fatalf("DisableUser failed: %v", err)
 		}
 
-		handler := New(organization.New(organization.Config{
+		handler := New(nil, organization.New(organization.Config{
 			Store: tdb.Store,
 			Tx:    tdb.Tx,
 			Mode:  organization.OrgModeMulti,
@@ -128,7 +128,7 @@ func TestPublicOrganizationAuthorizationUsesCurrentMembership(t *testing.T) {
 			t.Fatalf("CreateOrganizationMembership failed: %v", err)
 		}
 
-		handler := New(organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}), true)
+		handler := New(nil, organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}), true)
 		for _, tc := range []struct {
 			name           string
 			userID         uuid.UUID

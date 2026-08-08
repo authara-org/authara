@@ -269,6 +269,65 @@ func TestSwitchSessionOrganizationRotatesTokens(t *testing.T) {
 	})
 }
 
+func TestRefreshSessionWaitsForOrganizationLifecycleLock(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+	suffix := uuid.NewString()
+	user, err := tdb.Store.CreateUser(ctx, domain.User{
+		Email:    "session-lock-" + suffix + "@example.com",
+		Username: "session-lock-" + suffix,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, user.ID, "Session Lock", domain.OrganizationKindTeam)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = tdb.Store.DeleteUser(context.Background(), user.ID)
+		_ = tdb.Store.DeleteOrganization(context.Background(), org.ID)
+	})
+
+	svc := newDBSessionService(t, tdb, 10*time.Minute)
+	_, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lockCtx, cancel, err := tdb.Tx.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	if _, err := tdb.Store.GetOrganizationByIDForUpdate(lockCtx, org.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := svc.RefreshSession(ctx, refreshToken, token.AudienceApp, now.Add(time.Minute))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("refresh completed before organization lifecycle lock was released: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := tdb.Tx.Commit(lockCtx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("refresh did not finish after organization lifecycle lock was released")
+	}
+}
+
 func TestActiveSessionPreventsOrganizationMembershipRemoval(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

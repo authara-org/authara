@@ -107,6 +107,7 @@ Examples:
 ```
 AUTHARA_ORG_MODE
 AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED
+AUTHARA_PUBLIC_ACCOUNT_DELETION_ENABLED
 AUTHARA_ORGANIZATION_INVITATION_TTL
 AUTHARA_INVITATION_EMAIL_INCLUDE_CODE
 AUTHARA_INTERNAL_API_TOKEN
@@ -116,6 +117,10 @@ AUTHARA_INTERNAL_API_TOKEN
 to manage non-capacity organization data directly through Authara.
 Organization creation, invitation creation, and invitation resend remain
 internal-only for backend billing and seat-limit checks.
+
+`AUTHARA_PUBLIC_ACCOUNT_DELETION_ENABLED` defaults to `false`. Keep direct
+hosted deletion disabled when the application backend must check active
+subscriptions or clean up product data before deleting an Authara user.
 
 `AUTHARA_INVITATION_EMAIL_INCLUDE_CODE` includes the raw invitation code in
 Authara's built-in invitation emails for custom app signup screens. The hosted

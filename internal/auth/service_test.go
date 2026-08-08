@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,12 +16,19 @@ import (
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
+	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
 )
 
 type staticAccessPolicy struct {
 	allowed bool
 	err     error
+}
+
+type publisherFunc func(context.Context, webhook.Envelope) error
+
+func (f publisherFunc) Publish(ctx context.Context, evt webhook.Envelope) error {
+	return f(ctx, evt)
 }
 
 func (p staticAccessPolicy) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
@@ -981,6 +989,321 @@ func TestDeleteUser_RemovesUser(t *testing.T) {
 			t.Fatal("expected deleted user lookup to fail")
 		}
 	})
+}
+
+func TestDeleteUserRemovesOwnedPersonalOrganization(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "delete-personal@example.com", Username: "delete-personal"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		orgs := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti})
+		org, _, _, err := orgs.EnsureInitialOrganization(ctx, user, organization.SignupSourceDirect)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// The invariant belongs to DeleteUser itself, even when a caller does not
+		// inject the organization service explicitly.
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx})
+		if err := svc.DeleteUser(ctx, user.ID); err != nil {
+			t.Fatalf("DeleteUser failed: %v", err)
+		}
+		if _, err := tdb.Store.GetOrganizationByID(ctx, org.ID); !errors.Is(err, store.ErrOrganizationNotFound) {
+			t.Fatalf("expected personal organization deletion, got %v", err)
+		}
+	})
+}
+
+func TestDeleteUserCannotBypassOrganizationLifecycle(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "delete-team-owner@example.com", Username: "delete-team-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		orgs := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeSingle})
+		org, _, _, err := orgs.EnsureInitialOrganization(ctx, owner, organization.SignupSourceDirect)
+		if err != nil {
+			t.Fatal(err)
+		}
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx})
+
+		err = svc.DeleteUser(ctx, owner.ID)
+		if !errors.Is(err, organization.ErrLastOrganizationMember) {
+			t.Fatalf("expected last-member error, got %v", err)
+		}
+		if _, err := tdb.Store.GetUserByID(ctx, owner.ID); err != nil {
+			t.Fatalf("expected user to remain: %v", err)
+		}
+		if _, err := tdb.Store.GetOrganizationByID(ctx, org.ID); err != nil {
+			t.Fatalf("expected organization to remain: %v", err)
+		}
+	})
+}
+
+func TestDeleteUserRemovesNonCreatorPersonalMembershipInMultiMode(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		creator, err := tdb.Store.CreateUser(ctx, domain.User{Email: "delete-personal-creator@example.com", Username: "delete-personal-creator"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "delete-personal-member@example.com", Username: "delete-personal-member"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, creator.ID, "Creator Personal", domain.OrganizationKindPersonal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+			OrganizationID: org.ID,
+			UserID:         user.ID,
+			Role:           domain.OrganizationRoleMember,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		orgs := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti})
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, Organizations: orgs})
+		if err := svc.DeleteUser(ctx, user.ID); err != nil {
+			t.Fatalf("DeleteUser failed: %v", err)
+		}
+		if _, err := tdb.Store.GetOrganizationByID(ctx, org.ID); err != nil {
+			t.Fatalf("expected creator personal organization to remain: %v", err)
+		}
+		if _, err := tdb.Store.GetUserByID(ctx, user.ID); !errors.Is(err, store.ErrUserNotFound) {
+			t.Fatalf("expected non-creator user deletion, got %v", err)
+		}
+	})
+}
+
+func TestDeleteUserLocksMembershipSnapshot(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	suffix := uuid.NewString()
+	user, err := tdb.Store.CreateUser(ctx, domain.User{
+		Email:    "delete-lock-" + suffix + "@example.com",
+		Username: "delete-lock-" + suffix,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupOrganizations := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti})
+	if _, _, _, err := setupOrganizations.EnsureInitialOrganization(ctx, user, organization.SignupSourceDirect); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = tdb.Store.DeleteUser(context.Background(), user.ID)
+	})
+
+	createOrganizations := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti})
+	createDone := make(chan error, 1)
+	pub := publisherFunc(func(_ context.Context, evt webhook.Envelope) error {
+		if evt.Type != webhook.EventOrganizationDeleted {
+			return nil
+		}
+		go func() {
+			_, _, err := createOrganizations.CreateOrganization(context.Background(), organization.CreateOrganizationInput{
+				Name:            "Concurrent Organization",
+				CreatedByUserID: user.ID,
+			})
+			createDone <- err
+		}()
+		select {
+		case <-createDone:
+			return errors.New("organization creation completed before user deletion released its lock")
+		case <-time.After(100 * time.Millisecond):
+			return nil
+		}
+	})
+	deleteOrganizations := organization.New(organization.Config{
+		Store:            tdb.Store,
+		Tx:               tdb.Tx,
+		Mode:             organization.OrgModeMulti,
+		WebhookPublisher: pub,
+	})
+	svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, Organizations: deleteOrganizations, WebhookPublisher: pub})
+	if err := svc.DeleteUser(ctx, user.ID); err != nil {
+		t.Fatalf("DeleteUser failed: %v", err)
+	}
+	select {
+	case err := <-createDone:
+		if err == nil {
+			t.Fatal("expected concurrent organization creation to fail after user deletion")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("concurrent organization creation did not finish after user deletion")
+	}
+}
+
+func TestDeleteUserUsesMembershipRoleAfterOrganizationLock(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	suffix := uuid.NewString()
+	owner, err := tdb.Store.CreateUser(ctx, domain.User{
+		Email:    "fresh-role-owner-" + suffix + "@example.com",
+		Username: "fresh-role-owner-" + suffix,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := tdb.Store.CreateUser(ctx, domain.User{
+		Email:    "fresh-role-user-" + suffix + "@example.com",
+		Username: "fresh-role-user-" + suffix,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "Fresh Role", domain.OrganizationKindTeam)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+		OrganizationID: org.ID,
+		UserID:         user.ID,
+		Role:           domain.OrganizationRoleMember,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = tdb.Store.DeleteOrganization(context.Background(), org.ID)
+		_ = tdb.Store.DeleteUser(context.Background(), user.ID)
+		_ = tdb.Store.DeleteUser(context.Background(), owner.ID)
+	})
+
+	lockCtx, cancel, err := tdb.Tx.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	if _, err := tdb.Store.GetOrganizationByIDForUpdate(lockCtx, org.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	organizations := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti})
+	svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, Organizations: organizations})
+	done := make(chan error, 1)
+	go func() { done <- svc.DeleteUser(ctx, user.ID) }()
+	select {
+	case err := <-done:
+		t.Fatalf("user deletion completed before organization lock was released: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	if _, err := tdb.Store.UpdateOrganizationMembershipRole(lockCtx, org.ID, user.ID, domain.OrganizationRoleOwner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tdb.Store.UpdateOrganizationMembershipRole(lockCtx, org.ID, owner.ID, domain.OrganizationRoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if err := tdb.Tx.Commit(lockCtx); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, organization.ErrLastOrganizationOwner) {
+			t.Fatalf("expected current owner role to block deletion, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("user deletion did not finish after organization lock was released")
+	}
+	if _, err := tdb.Store.GetUserByID(ctx, user.ID); err != nil {
+		t.Fatalf("expected user to remain: %v", err)
+	}
+}
+
+func TestOwnershipTransferPreventsConcurrentNewOwnerDeletion(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	suffix := uuid.NewString()
+	owner, err := tdb.Store.CreateUser(ctx, domain.User{
+		Email:    "locked-transfer-owner-" + suffix + "@example.com",
+		Username: "locked-transfer-owner-" + suffix,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newOwner, err := tdb.Store.CreateUser(ctx, domain.User{
+		Email:    "locked-transfer-target-" + suffix + "@example.com",
+		Username: "locked-transfer-target-" + suffix,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "Locked Transfer", domain.OrganizationKindTeam)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+		OrganizationID: org.ID,
+		UserID:         newOwner.ID,
+		Role:           domain.OrganizationRoleMember,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = tdb.Store.DeleteOrganization(context.Background(), org.ID)
+		_ = tdb.Store.DeleteUser(context.Background(), newOwner.ID)
+		_ = tdb.Store.DeleteUser(context.Background(), owner.ID)
+	})
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	pub := publisherFunc(func(_ context.Context, evt webhook.Envelope) error {
+		if evt.Type == webhook.EventOrganizationMembershipUpdated {
+			once.Do(func() { close(entered) })
+			<-release
+		}
+		return nil
+	})
+	organizations := organization.New(organization.Config{
+		Store:            tdb.Store,
+		Tx:               tdb.Tx,
+		Mode:             organization.OrgModeMulti,
+		WebhookPublisher: pub,
+	})
+	transferDone := make(chan error, 1)
+	go func() {
+		transferDone <- organizations.TransferOrganizationOwnership(ctx, organization.TransferOrganizationOwnershipInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			NewOwnerUserID: newOwner.ID,
+		})
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ownership transfer did not reach its commit boundary")
+	}
+
+	deleteDone := make(chan error, 1)
+	deleteService := New(Config{Store: tdb.Store, Tx: tdb.Tx, Organizations: organizations})
+	go func() { deleteDone <- deleteService.DeleteUser(ctx, newOwner.ID) }()
+	select {
+	case err := <-deleteDone:
+		t.Fatalf("new owner deletion completed before transfer released its user lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+	if err := <-transferDone; err != nil {
+		t.Fatalf("ownership transfer failed: %v", err)
+	}
+	select {
+	case err := <-deleteDone:
+		if !errors.Is(err, organization.ErrLastOrganizationOwner) {
+			t.Fatalf("expected new owner deletion to be rejected, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("new owner deletion did not finish after transfer committed")
+	}
 }
 
 func TestDeleteUser_RemovesEmailReferences(t *testing.T) {

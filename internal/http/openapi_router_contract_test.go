@@ -90,7 +90,7 @@ func newOpenAPIContractTestRouter(mode organization.OrgMode) http.Handler {
 	pass := func(next http.Handler) http.Handler { return next }
 	handlers := newTestHandlers(logger, render.New(render.Assets{}, false))
 	if mode != "" {
-		handlers.InternalAPI = internalapi.New(organization.New(organization.Config{Mode: mode}), false)
+		handlers.InternalAPI = internalapi.New(nil, organization.New(organization.Config{Mode: mode}), false)
 	}
 
 	return NewRouter(ServerConfig{

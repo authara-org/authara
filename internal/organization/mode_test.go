@@ -47,7 +47,7 @@ func TestOrgModeCapabilities(t *testing.T) {
 		hasVisibleOrganizations bool
 	}{
 		{OrgModePersonal, false, false, false, false, false},
-		{OrgModeSingle, true, false, false, false, true},
+		{OrgModeSingle, true, false, false, true, true},
 		{OrgModeMulti, true, true, true, true, true},
 	}
 

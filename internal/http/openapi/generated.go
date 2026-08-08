@@ -441,6 +441,17 @@ type InternalCreateOrganizationRequest struct {
 	Name            string             `json:"name"`
 }
 
+// InternalOrganizationActorRequest defines model for InternalOrganizationActorRequest.
+type InternalOrganizationActorRequest struct {
+	ActorUserId openapi_types.UUID `json:"actor_user_id"`
+}
+
+// InternalOwnershipTransferRequest defines model for InternalOwnershipTransferRequest.
+type InternalOwnershipTransferRequest struct {
+	ActorUserId    openapi_types.UUID `json:"actor_user_id"`
+	NewOwnerUserId openapi_types.UUID `json:"new_owner_user_id"`
+}
+
 // Membership defines model for Membership.
 type Membership struct {
 	CreatedAt      time.Time          `json:"created_at"`
@@ -757,8 +768,17 @@ type SetCurrentUserPasswordJSONRequestBody = SetPasswordRequest
 // CreateInternalOrganizationJSONRequestBody defines body for CreateInternalOrganization for application/json ContentType.
 type CreateInternalOrganizationJSONRequestBody = InternalCreateOrganizationRequest
 
+// DeleteInternalOrganizationJSONRequestBody defines body for DeleteInternalOrganization for application/json ContentType.
+type DeleteInternalOrganizationJSONRequestBody = InternalOrganizationActorRequest
+
 // CreateInternalOrganizationInvitationJSONRequestBody defines body for CreateInternalOrganizationInvitation for application/json ContentType.
 type CreateInternalOrganizationInvitationJSONRequestBody = InternalCreateInvitationRequest
+
+// RemoveInternalOrganizationMemberJSONRequestBody defines body for RemoveInternalOrganizationMember for application/json ContentType.
+type RemoveInternalOrganizationMemberJSONRequestBody = InternalOrganizationActorRequest
+
+// TransferInternalOrganizationOwnershipJSONRequestBody defines body for TransferInternalOrganizationOwnership for application/json ContentType.
+type TransferInternalOrganizationOwnershipJSONRequestBody = InternalOwnershipTransferRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -861,12 +881,24 @@ type ServerInterface interface {
 	// CreateInternalOrganization Create a team organization
 	// (POST /auth/internal/v1/organizations)
 	CreateInternalOrganization(w http.ResponseWriter, r *http.Request)
+	// DeleteInternalOrganization Delete a team organization
+	// (DELETE /auth/internal/v1/organizations/{organizationID})
+	DeleteInternalOrganization(w http.ResponseWriter, r *http.Request, organizationID OrganizationID)
 	// CreateInternalOrganizationInvitation Create an organization invitation
 	// (POST /auth/internal/v1/organizations/{organizationID}/invitations)
 	CreateInternalOrganizationInvitation(w http.ResponseWriter, r *http.Request, organizationID OrganizationID)
 	// ResendInternalOrganizationInvitation Replace an organization invitation with a fresh invitation
 	// (POST /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend)
 	ResendInternalOrganizationInvitation(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, invitationID InvitationID)
+	// RemoveInternalOrganizationMember Remove an organization member
+	// (DELETE /auth/internal/v1/organizations/{organizationID}/members/{userID})
+	RemoveInternalOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID)
+	// TransferInternalOrganizationOwnership Transfer organization ownership
+	// (POST /auth/internal/v1/organizations/{organizationID}/ownership-transfer)
+	TransferInternalOrganizationOwnership(w http.ResponseWriter, r *http.Request, organizationID OrganizationID)
+	// DeleteInternalUser Delete a user
+	// (DELETE /auth/internal/v1/users/{userID})
+	DeleteInternalUser(w http.ResponseWriter, r *http.Request, userID UserID)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -1071,6 +1103,12 @@ func (_ Unimplemented) CreateInternalOrganization(w http.ResponseWriter, r *http
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// DeleteInternalOrganization Delete a team organization
+// (DELETE /auth/internal/v1/organizations/{organizationID})
+func (_ Unimplemented) DeleteInternalOrganization(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // CreateInternalOrganizationInvitation Create an organization invitation
 // (POST /auth/internal/v1/organizations/{organizationID}/invitations)
 func (_ Unimplemented) CreateInternalOrganizationInvitation(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
@@ -1080,6 +1118,24 @@ func (_ Unimplemented) CreateInternalOrganizationInvitation(w http.ResponseWrite
 // ResendInternalOrganizationInvitation Replace an organization invitation with a fresh invitation
 // (POST /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend)
 func (_ Unimplemented) ResendInternalOrganizationInvitation(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, invitationID InvitationID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RemoveInternalOrganizationMember Remove an organization member
+// (DELETE /auth/internal/v1/organizations/{organizationID}/members/{userID})
+func (_ Unimplemented) RemoveInternalOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// TransferInternalOrganizationOwnership Transfer organization ownership
+// (POST /auth/internal/v1/organizations/{organizationID}/ownership-transfer)
+func (_ Unimplemented) TransferInternalOrganizationOwnership(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteInternalUser Delete a user
+// (DELETE /auth/internal/v1/users/{userID})
+func (_ Unimplemented) DeleteInternalUser(w http.ResponseWriter, r *http.Request, userID UserID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1838,6 +1894,32 @@ func (siw *ServerInterfaceWrapper) CreateInternalOrganization(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteInternalOrganization operation middleware
+func (siw *ServerInterfaceWrapper) DeleteInternalOrganization(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "organizationID" -------------
+	var organizationID OrganizationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "organizationID", chi.URLParam(r, "organizationID"), &organizationID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "organizationID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteInternalOrganization(w, r, organizationID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateInternalOrganizationInvitation operation middleware
 func (siw *ServerInterfaceWrapper) CreateInternalOrganizationInvitation(w http.ResponseWriter, r *http.Request) {
 
@@ -1890,6 +1972,93 @@ func (siw *ServerInterfaceWrapper) ResendInternalOrganizationInvitation(w http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ResendInternalOrganizationInvitation(w, r, organizationID, invitationID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveInternalOrganizationMember operation middleware
+func (siw *ServerInterfaceWrapper) RemoveInternalOrganizationMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "organizationID" -------------
+	var organizationID OrganizationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "organizationID", chi.URLParam(r, "organizationID"), &organizationID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "organizationID", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userID" -------------
+	var userID UserID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userID", chi.URLParam(r, "userID"), &userID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveInternalOrganizationMember(w, r, organizationID, userID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TransferInternalOrganizationOwnership operation middleware
+func (siw *ServerInterfaceWrapper) TransferInternalOrganizationOwnership(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "organizationID" -------------
+	var organizationID OrganizationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "organizationID", chi.URLParam(r, "organizationID"), &organizationID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "organizationID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TransferInternalOrganizationOwnership(w, r, organizationID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteInternalUser operation middleware
+func (siw *ServerInterfaceWrapper) DeleteInternalUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userID" -------------
+	var userID UserID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userID", chi.URLParam(r, "userID"), &userID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteInternalUser(w, r, userID)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2112,10 +2281,22 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/auth/internal/v1/organizations", wrapper.CreateInternalOrganization)
 	})
 	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/auth/internal/v1/organizations/{organizationID}", wrapper.DeleteInternalOrganization)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/auth/internal/v1/organizations/{organizationID}/members/{userID}", wrapper.RemoveInternalOrganizationMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/internal/v1/organizations/{organizationID}/ownership-transfer", wrapper.TransferInternalOrganizationOwnership)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/internal/v1/organizations/{organizationID}/invitations", wrapper.CreateInternalOrganizationInvitation)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend", wrapper.ResendInternalOrganizationInvitation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/auth/internal/v1/users/{userID}", wrapper.DeleteInternalUser)
 	})
 
 	return r
@@ -4648,6 +4829,107 @@ func (response CreateInternalOrganization500JSONResponse) VisitCreateInternalOrg
 	return err
 }
 
+type DeleteInternalOrganizationRequestObject struct {
+	OrganizationID OrganizationID `json:"organizationID"`
+	Body           *DeleteInternalOrganizationJSONRequestBody
+}
+
+type DeleteInternalOrganizationResponseObject interface {
+	VisitDeleteInternalOrganizationResponse(w http.ResponseWriter) error
+}
+
+type DeleteInternalOrganization204Response struct {
+}
+
+func (response DeleteInternalOrganization204Response) VisitDeleteInternalOrganizationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteInternalOrganization400JSONResponse struct{ ErrorJSONResponse }
+
+func (response DeleteInternalOrganization400JSONResponse) VisitDeleteInternalOrganizationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalOrganization401JSONResponse ErrorResponse
+
+func (response DeleteInternalOrganization401JSONResponse) VisitDeleteInternalOrganizationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalOrganization403JSONResponse ErrorResponse
+
+func (response DeleteInternalOrganization403JSONResponse) VisitDeleteInternalOrganizationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalOrganization404JSONResponse ErrorResponse
+
+func (response DeleteInternalOrganization404JSONResponse) VisitDeleteInternalOrganizationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalOrganization409JSONResponse ErrorResponse
+
+func (response DeleteInternalOrganization409JSONResponse) VisitDeleteInternalOrganizationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalOrganization500JSONResponse ErrorResponse
+
+func (response DeleteInternalOrganization500JSONResponse) VisitDeleteInternalOrganizationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateInternalOrganizationInvitationRequestObject struct {
 	OrganizationID OrganizationID `json:"organizationID"`
 	Body           *CreateInternalOrganizationInvitationJSONRequestBody
@@ -4862,6 +5144,295 @@ func (response ResendInternalOrganizationInvitation500JSONResponse) VisitResendI
 	return err
 }
 
+type RemoveInternalOrganizationMemberRequestObject struct {
+	OrganizationID OrganizationID `json:"organizationID"`
+	UserID         UserID         `json:"userID"`
+	Body           *RemoveInternalOrganizationMemberJSONRequestBody
+}
+
+type RemoveInternalOrganizationMemberResponseObject interface {
+	VisitRemoveInternalOrganizationMemberResponse(w http.ResponseWriter) error
+}
+
+type RemoveInternalOrganizationMember204Response struct {
+}
+
+func (response RemoveInternalOrganizationMember204Response) VisitRemoveInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveInternalOrganizationMember400JSONResponse struct{ ErrorJSONResponse }
+
+func (response RemoveInternalOrganizationMember400JSONResponse) VisitRemoveInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveInternalOrganizationMember401JSONResponse ErrorResponse
+
+func (response RemoveInternalOrganizationMember401JSONResponse) VisitRemoveInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveInternalOrganizationMember403JSONResponse ErrorResponse
+
+func (response RemoveInternalOrganizationMember403JSONResponse) VisitRemoveInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveInternalOrganizationMember404JSONResponse ErrorResponse
+
+func (response RemoveInternalOrganizationMember404JSONResponse) VisitRemoveInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveInternalOrganizationMember409JSONResponse ErrorResponse
+
+func (response RemoveInternalOrganizationMember409JSONResponse) VisitRemoveInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveInternalOrganizationMember500JSONResponse ErrorResponse
+
+func (response RemoveInternalOrganizationMember500JSONResponse) VisitRemoveInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferInternalOrganizationOwnershipRequestObject struct {
+	OrganizationID OrganizationID `json:"organizationID"`
+	Body           *TransferInternalOrganizationOwnershipJSONRequestBody
+}
+
+type TransferInternalOrganizationOwnershipResponseObject interface {
+	VisitTransferInternalOrganizationOwnershipResponse(w http.ResponseWriter) error
+}
+
+type TransferInternalOrganizationOwnership204Response struct {
+}
+
+func (response TransferInternalOrganizationOwnership204Response) VisitTransferInternalOrganizationOwnershipResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type TransferInternalOrganizationOwnership400JSONResponse struct{ ErrorJSONResponse }
+
+func (response TransferInternalOrganizationOwnership400JSONResponse) VisitTransferInternalOrganizationOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferInternalOrganizationOwnership401JSONResponse ErrorResponse
+
+func (response TransferInternalOrganizationOwnership401JSONResponse) VisitTransferInternalOrganizationOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferInternalOrganizationOwnership403JSONResponse ErrorResponse
+
+func (response TransferInternalOrganizationOwnership403JSONResponse) VisitTransferInternalOrganizationOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferInternalOrganizationOwnership404JSONResponse ErrorResponse
+
+func (response TransferInternalOrganizationOwnership404JSONResponse) VisitTransferInternalOrganizationOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferInternalOrganizationOwnership409JSONResponse ErrorResponse
+
+func (response TransferInternalOrganizationOwnership409JSONResponse) VisitTransferInternalOrganizationOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferInternalOrganizationOwnership500JSONResponse ErrorResponse
+
+func (response TransferInternalOrganizationOwnership500JSONResponse) VisitTransferInternalOrganizationOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalUserRequestObject struct {
+	UserID UserID `json:"userID"`
+}
+
+type DeleteInternalUserResponseObject interface {
+	VisitDeleteInternalUserResponse(w http.ResponseWriter) error
+}
+
+type DeleteInternalUser204Response struct {
+}
+
+func (response DeleteInternalUser204Response) VisitDeleteInternalUserResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteInternalUser400JSONResponse struct{ ErrorJSONResponse }
+
+func (response DeleteInternalUser400JSONResponse) VisitDeleteInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalUser401JSONResponse ErrorResponse
+
+func (response DeleteInternalUser401JSONResponse) VisitDeleteInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalUser404JSONResponse ErrorResponse
+
+func (response DeleteInternalUser404JSONResponse) VisitDeleteInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalUser409JSONResponse ErrorResponse
+
+func (response DeleteInternalUser409JSONResponse) VisitDeleteInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInternalUser500JSONResponse ErrorResponse
+
+func (response DeleteInternalUser500JSONResponse) VisitDeleteInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetPublicCapabilities Get organization capabilities
@@ -4963,12 +5534,24 @@ type StrictServerInterface interface {
 	// CreateInternalOrganization Create a team organization
 	// (POST /auth/internal/v1/organizations)
 	CreateInternalOrganization(ctx context.Context, request CreateInternalOrganizationRequestObject) (CreateInternalOrganizationResponseObject, error)
+	// DeleteInternalOrganization Delete a team organization
+	// (DELETE /auth/internal/v1/organizations/{organizationID})
+	DeleteInternalOrganization(ctx context.Context, request DeleteInternalOrganizationRequestObject) (DeleteInternalOrganizationResponseObject, error)
 	// CreateInternalOrganizationInvitation Create an organization invitation
 	// (POST /auth/internal/v1/organizations/{organizationID}/invitations)
 	CreateInternalOrganizationInvitation(ctx context.Context, request CreateInternalOrganizationInvitationRequestObject) (CreateInternalOrganizationInvitationResponseObject, error)
 	// ResendInternalOrganizationInvitation Replace an organization invitation with a fresh invitation
 	// (POST /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/resend)
 	ResendInternalOrganizationInvitation(ctx context.Context, request ResendInternalOrganizationInvitationRequestObject) (ResendInternalOrganizationInvitationResponseObject, error)
+	// RemoveInternalOrganizationMember Remove an organization member
+	// (DELETE /auth/internal/v1/organizations/{organizationID}/members/{userID})
+	RemoveInternalOrganizationMember(ctx context.Context, request RemoveInternalOrganizationMemberRequestObject) (RemoveInternalOrganizationMemberResponseObject, error)
+	// TransferInternalOrganizationOwnership Transfer organization ownership
+	// (POST /auth/internal/v1/organizations/{organizationID}/ownership-transfer)
+	TransferInternalOrganizationOwnership(ctx context.Context, request TransferInternalOrganizationOwnershipRequestObject) (TransferInternalOrganizationOwnershipResponseObject, error)
+	// DeleteInternalUser Delete a user
+	// (DELETE /auth/internal/v1/users/{userID})
+	DeleteInternalUser(ctx context.Context, request DeleteInternalUserRequestObject) (DeleteInternalUserResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -5936,6 +6519,39 @@ func (sh *strictHandler) CreateInternalOrganization(w http.ResponseWriter, r *ht
 	}
 }
 
+// DeleteInternalOrganization operation middleware
+func (sh *strictHandler) DeleteInternalOrganization(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
+	var request DeleteInternalOrganizationRequestObject
+
+	request.OrganizationID = organizationID
+
+	var body DeleteInternalOrganizationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteInternalOrganization(ctx, request.(DeleteInternalOrganizationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteInternalOrganization")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteInternalOrganizationResponseObject); ok {
+		if err := validResponse.VisitDeleteInternalOrganizationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // CreateInternalOrganizationInvitation operation middleware
 func (sh *strictHandler) CreateInternalOrganizationInvitation(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
 	var request CreateInternalOrganizationInvitationRequestObject
@@ -5996,89 +6612,190 @@ func (sh *strictHandler) ResendInternalOrganizationInvitation(w http.ResponseWri
 	}
 }
 
+// RemoveInternalOrganizationMember operation middleware
+func (sh *strictHandler) RemoveInternalOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID) {
+	var request RemoveInternalOrganizationMemberRequestObject
+
+	request.OrganizationID = organizationID
+	request.UserID = userID
+
+	var body RemoveInternalOrganizationMemberJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveInternalOrganizationMember(ctx, request.(RemoveInternalOrganizationMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveInternalOrganizationMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveInternalOrganizationMemberResponseObject); ok {
+		if err := validResponse.VisitRemoveInternalOrganizationMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TransferInternalOrganizationOwnership operation middleware
+func (sh *strictHandler) TransferInternalOrganizationOwnership(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
+	var request TransferInternalOrganizationOwnershipRequestObject
+
+	request.OrganizationID = organizationID
+
+	var body TransferInternalOrganizationOwnershipJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TransferInternalOrganizationOwnership(ctx, request.(TransferInternalOrganizationOwnershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TransferInternalOrganizationOwnership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TransferInternalOrganizationOwnershipResponseObject); ok {
+		if err := validResponse.VisitTransferInternalOrganizationOwnershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteInternalUser operation middleware
+func (sh *strictHandler) DeleteInternalUser(w http.ResponseWriter, r *http.Request, userID UserID) {
+	var request DeleteInternalUserRequestObject
+
+	request.UserID = userID
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteInternalUser(ctx, request.(DeleteInternalUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteInternalUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteInternalUserResponseObject); ok {
+		if err := validResponse.VisitDeleteInternalUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"nb7j/HBd+9xw8aBYx4dPD/8fAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

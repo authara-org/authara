@@ -241,6 +241,19 @@ func (s *Store) DeleteRefreshTokensBySession(ctx context.Context, sessionID uuid
 	return err
 }
 
+func (s *Store) DeleteSessionsByOrganizationMembership(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) error {
+	_, err := s.exec(ctx, `
+		DELETE FROM sessions
+		WHERE active_organization_id = $1 AND user_id = $2
+	`, organizationID, userID)
+	return err
+}
+
+func (s *Store) DeleteSessionsByOrganization(ctx context.Context, organizationID uuid.UUID) error {
+	_, err := s.exec(ctx, `DELETE FROM sessions WHERE active_organization_id = $1`, organizationID)
+	return err
+}
+
 func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time) error {
 	_, err := s.exec(ctx, `DELETE FROM refresh_tokens WHERE expires_at < $1`, now)
 	if err != nil {

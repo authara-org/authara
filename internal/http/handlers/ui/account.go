@@ -22,6 +22,7 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
@@ -360,6 +361,10 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 
 func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	if !h.PublicAccountDeletionEnabled {
+		h.renderRequestError(w, r, http.StatusForbidden, "Account deletion is managed by the application.")
+		return
+	}
 
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
@@ -374,6 +379,12 @@ func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, auth.ErrCannotDeleteLastAdmin) {
 			message = "You cannot delete the last active admin account."
 			status = http.StatusUnprocessableEntity
+		} else if errors.Is(err, organization.ErrLastOrganizationOwner) {
+			message = "Transfer ownership of your organization before deleting your account."
+			status = http.StatusConflict
+		} else if errors.Is(err, organization.ErrLastOrganizationMember) {
+			message = "Delete your organization before deleting your account."
+			status = http.StatusConflict
 		}
 		h.renderRequestError(w, r, status, message)
 		return
@@ -417,13 +428,14 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 	totalAuthMethods := len(providers) + len(passkeys)
 
 	return userview.AccountConfig{
-		Username:         user.Username,
-		Email:            user.Email,
-		GoogleClientID:   h.Google.ClientID,
-		Sessions:         toSessionViewModels(sessions, currentSessionID),
-		CurrentSessionID: currentSessionID,
-		AuthProviders:    viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers),
-		Passkeys:         viewmodel.PasskeysFromDomain(passkeys, totalAuthMethods),
+		Username:                     user.Username,
+		Email:                        user.Email,
+		GoogleClientID:               h.Google.ClientID,
+		Sessions:                     toSessionViewModels(sessions, currentSessionID),
+		CurrentSessionID:             currentSessionID,
+		AuthProviders:                viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers),
+		Passkeys:                     viewmodel.PasskeysFromDomain(passkeys, totalAuthMethods),
+		PublicAccountDeletionEnabled: h.PublicAccountDeletionEnabled,
 	}, nil
 }
 
