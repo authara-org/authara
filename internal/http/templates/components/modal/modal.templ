@@ -15,14 +15,15 @@ const (
 )
 
 type openConfirmOptions struct {
-	Headline      string `json:"headline"`
-	Body          string `json:"body"`
-	ConfirmLabel  string `json:"confirmLabel"`
-	ConfirmFormID string `json:"confirmFormId"`
-	Theme         Theme  `json:"theme"`
+	Headline       string `json:"headline"`
+	Body           string `json:"body"`
+	ConfirmLabel   string `json:"confirmLabel"`
+	ConfirmFormID  string `json:"confirmFormId"`
+	Theme          Theme  `json:"theme"`
+	RequiredPhrase string `json:"requiredPhrase,omitempty"`
 }
 
-func OpenConfirm(headline string, body string, confirmLabel string, confirmFormID string, theme Theme) string {
+func OpenConfirm(headline string, body string, confirmLabel string, confirmFormID string, theme Theme, requiredPhrase ...string) string {
 	if confirmLabel == "" {
 		confirmLabel = "Confirm"
 	}
@@ -30,13 +31,18 @@ func OpenConfirm(headline string, body string, confirmLabel string, confirmFormI
 		theme = ThemeNeutral
 	}
 
-	payload, err := json.Marshal(openConfirmOptions{
+	options := openConfirmOptions{
 		Headline:      headline,
 		Body:          body,
 		ConfirmLabel:  confirmLabel,
 		ConfirmFormID: confirmFormID,
 		Theme:         theme,
-	})
+	}
+	if len(requiredPhrase) > 0 {
+		options.RequiredPhrase = requiredPhrase[0]
+	}
+
+	payload, err := json.Marshal(options)
 	if err != nil {
 		return ""
 	}
@@ -87,6 +93,21 @@ templ GlobalConfirmDialog() {
 					class="text-center text-sm leading-relaxed text-grey-600 dark:text-grey-300"
 					x-text="confirm.body"
 				></p>
+				<div x-show="confirm.requiredPhrase" class="mt-5 text-left">
+					<label for="global-confirm-phrase" class="mb-2 block text-sm font-medium text-grey-700 dark:text-grey-200">
+						Type <strong x-text="confirm.requiredPhrase"></strong> to continue.
+					</label>
+					<input
+						id="global-confirm-phrase"
+						type="text"
+						x-model="confirm.confirmation"
+						:disabled="confirm.submitting"
+						@keydown.enter.prevent="runConfirm()"
+						autocomplete="off"
+						spellcheck="false"
+						class="h-[42px] w-full rounded-xl border border-grey-200 bg-white px-4 text-base text-grey-900 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:bg-grey-50 dark:border-grey-700 dark:bg-grey-900 dark:text-grey-100 dark:focus:ring-red-900/40 dark:disabled:bg-grey-800 sm:text-sm"
+					/>
+				</div>
 			</div>
 			<div class="flex flex-col gap-3 bg-grey-50 px-6 py-4 dark:bg-grey-950 sm:flex-row-reverse">
 				@button.Button(button.ButtonConfig{
@@ -94,7 +115,7 @@ templ GlobalConfirmDialog() {
 					Color:              button.Custom,
 					Class:              " sm:flex-1 disabled:cursor-not-allowed",
 					ClassExpression:    "[confirm.theme === 'danger' ? 'bg-red-700 text-red-50 border-transparent hover:bg-red-800 disabled:bg-red-500' : 'bg-blue-600 text-white border-transparent hover:bg-blue-700 disabled:bg-blue-400', confirm.submitting ? 'htmx-request' : '']",
-					DisabledExpression: "confirm.submitting",
+					DisabledExpression: "confirm.submitting || (confirm.requiredPhrase !== '' && confirm.confirmation !== confirm.requiredPhrase)",
 					OnClick:            "runConfirm()",
 				}) {
 					<span x-text="confirm.confirmLabel"></span>

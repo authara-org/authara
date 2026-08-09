@@ -17,7 +17,6 @@ type AccountConfig struct {
 	CurrentSessionID uuid.UUID
 	AuthProviders    []viewmodel.AuthProvider
 	Passkeys         []viewmodel.Passkey
-	PublicAccountDeletionEnabled bool
 }
 
 templ Account(cfg AccountConfig) {
@@ -47,13 +46,9 @@ templ Account(cfg AccountConfig) {
 					</div>
 					@AccountFooterActions()
 				</div>
-				if cfg.PublicAccountDeletionEnabled {
-					@AccountDangerZone()
-				}
+				@AccountDangerZone()
 			</div>
-			if cfg.PublicAccountDeletionEnabled {
-				@DeleteAccountConfirmForm()
-			}
+			@DeleteAccountConfirmForm()
 			@RemovePasswordConfirmForm()
 			@RemoveGoogleConfirmForm()
 		</div>

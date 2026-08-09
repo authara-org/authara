@@ -36,13 +36,14 @@ templ AccountDangerZone() {
 						Label:   "Delete account...",
 						Type:    button.RegularButton,
 						Color:   button.Custom,
-						Class:   " !w-auto !border-0 !rounded-none !p-0 text-sm font-semibold text-red-800 underline opacity-60 hover:opacity-100 dark:text-red-400",
+						Class:   " !w-auto !border-0 !rounded-none !p-0 text-sm font-semibold text-red-800 underline opacity-60 hover:opacity-100 cursor-pointer dark:text-red-400",
 						OnClick: modal.OpenConfirm(
 							"Delete your account?",
-							"This action is permanent and cannot be undone. All your data will be permanently removed.",
+							"Before deleting your account, check whether you have any active subscriptions. This action is permanent and all your data will be permanently removed.",
 							"Delete Account",
 							"delete-account-form",
 							modal.ThemeDanger,
+							"CONFIRM",
 						),
 					})
 				</div>

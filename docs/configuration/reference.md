@@ -26,13 +26,7 @@ Examples:
 APP_ENV
 LOG_LEVEL
 AUTHARA_DEFAULT_RETURN_TO
-AUTHARA_PUBLIC_ACCOUNT_DELETION_ENABLED
 ```
-
-`AUTHARA_PUBLIC_ACCOUNT_DELETION_ENABLED` defaults to `false`. Keep it disabled
-when account deletion must pass through the application backend for subscription
-or product-data checks. Applications can then use the internal user deletion API
-after those checks succeed.
 
 ---
 

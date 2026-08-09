@@ -7,8 +7,7 @@ import (
 )
 
 type UI struct {
-	DefaultReturnTo              string `env:"AUTHARA_DEFAULT_RETURN_TO,default=/"`
-	PublicAccountDeletionEnabled bool   `env:"AUTHARA_PUBLIC_ACCOUNT_DELETION_ENABLED,default=false"`
+	DefaultReturnTo string `env:"AUTHARA_DEFAULT_RETURN_TO,default=/"`
 }
 
 func (u *UI) validate() error {

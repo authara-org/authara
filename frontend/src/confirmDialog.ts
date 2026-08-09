@@ -7,6 +7,8 @@ export type ConfirmDialogState = {
   confirmLabel: string;
   confirmFormId: string;
   theme: ConfirmTheme;
+  requiredPhrase: string;
+  confirmation: string;
   submitting: boolean;
 };
 
@@ -16,6 +18,7 @@ export type OpenConfirmOptions = {
   confirmLabel?: string;
   confirmFormId: string;
   theme?: ConfirmTheme;
+  requiredPhrase?: string;
 };
 
 export type ConfirmDialogController = {
@@ -43,6 +46,8 @@ document.addEventListener("alpine:init", () => {
       confirm.confirmLabel = "Confirm";
       confirm.confirmFormId = "";
       confirm.theme = "neutral";
+      confirm.requiredPhrase = "";
+      confirm.confirmation = "";
       confirm.submitting = false;
     }
 
@@ -54,6 +59,8 @@ document.addEventListener("alpine:init", () => {
         confirmLabel: "Confirm",
         confirmFormId: "",
         theme: "neutral",
+        requiredPhrase: "",
+        confirmation: "",
         submitting: false,
       },
 
@@ -63,6 +70,7 @@ document.addEventListener("alpine:init", () => {
         confirmLabel = "Confirm",
         confirmFormId,
         theme = "neutral",
+        requiredPhrase = "",
       }: OpenConfirmOptions) {
         window.clearTimeout(resetTimer);
         this.confirm.open = true;
@@ -71,6 +79,8 @@ document.addEventListener("alpine:init", () => {
         this.confirm.confirmLabel = confirmLabel;
         this.confirm.confirmFormId = confirmFormId;
         this.confirm.theme = theme;
+        this.confirm.requiredPhrase = requiredPhrase;
+        this.confirm.confirmation = "";
         this.confirm.submitting = false;
       },
 
@@ -87,6 +97,11 @@ document.addEventListener("alpine:init", () => {
       runConfirm() {
         if (this.confirm.submitting) return;
         if (!this.confirm.confirmFormId) return;
+        if (
+          this.confirm.requiredPhrase &&
+          this.confirm.confirmation !== this.confirm.requiredPhrase
+        )
+          return;
 
         const form = document.getElementById(
           this.confirm.confirmFormId,

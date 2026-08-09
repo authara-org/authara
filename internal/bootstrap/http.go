@@ -88,7 +88,6 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Services.OAuthProviders,
 			app.Config.Token.AccessTokenTTL,
 			app.Config.Session.RefreshTokenTTL,
-			app.Config.UI.PublicAccountDeletionEnabled,
 			renderer,
 		),
 		API: api.New(

@@ -361,11 +361,6 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 
 func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !h.PublicAccountDeletionEnabled {
-		h.renderRequestError(w, r, http.StatusForbidden, "Account deletion is managed by the application.")
-		return
-	}
-
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/account"), http.StatusSeeOther)
@@ -428,14 +423,13 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 	totalAuthMethods := len(providers) + len(passkeys)
 
 	return userview.AccountConfig{
-		Username:                     user.Username,
-		Email:                        user.Email,
-		GoogleClientID:               h.Google.ClientID,
-		Sessions:                     toSessionViewModels(sessions, currentSessionID),
-		CurrentSessionID:             currentSessionID,
-		AuthProviders:                viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers),
-		Passkeys:                     viewmodel.PasskeysFromDomain(passkeys, totalAuthMethods),
-		PublicAccountDeletionEnabled: h.PublicAccountDeletionEnabled,
+		Username:         user.Username,
+		Email:            user.Email,
+		GoogleClientID:   h.Google.ClientID,
+		Sessions:         toSessionViewModels(sessions, currentSessionID),
+		CurrentSessionID: currentSessionID,
+		AuthProviders:    viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers),
+		Passkeys:         viewmodel.PasskeysFromDomain(passkeys, totalAuthMethods),
 	}, nil
 }
 
