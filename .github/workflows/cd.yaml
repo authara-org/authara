@@ -118,15 +118,11 @@ jobs:
           go-version: "1.25.9"
 
       - name: Generate SDK from released contract
-        working-directory: .sdk/authara-go
-        env:
-          # Keep generation reproducible; bump this when cmd/authara-sdk-gen changes.
-          AUTHARA_GO_GENERATOR_REF: a312a81
+        working-directory: .sdk/authara-go/cmd/authara-sdk-gen
         run: >-
-          go run
-          github.com/authara-org/authara-go/cmd/authara-sdk-gen@${AUTHARA_GO_GENERATOR_REF}
-          -openapi ../../contract/openapi.yaml
-          -out authara
+          go run .
+          -openapi ../../../../contract/openapi.yaml
+          -out ../../authara
 
       - name: Test generated SDK
         working-directory: .sdk/authara-go
@@ -136,11 +132,25 @@ jobs:
         id: sdk-changes
         working-directory: .sdk/authara-go
         run: |
+          current_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
+          generated_changed=false
+          committed_changed=false
+
           if test -n "$(git status --porcelain -- authara/openapi_types.gen.go authara/openapi_client.gen.go)"; then
+            generated_changed=true
+          fi
+
+          if test -z "$current_tag" || ! git diff --quiet "$current_tag"..HEAD -- \
+            authara cmd/authara-sdk-gen go.mod go.sum README.md; then
+            committed_changed=true
+          fi
+
+          if test "$generated_changed" = true || test "$committed_changed" = true; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Go SDK release required (generated=$generated_changed, committed=$committed_changed)."
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No SDK changes for authara-core ${{ github.ref_name }}; skipping authara-go tag."
+            echo "No unreleased Go SDK changes for authara-core ${{ github.ref_name }}; skipping authara-go tag."
           fi
 
       - name: Commit and tag SDK release
@@ -157,8 +167,10 @@ jobs:
             exit 1
           fi
           git add authara/openapi_types.gen.go authara/openapi_client.gen.go
-          git commit -m "Release authara-go ${sdk_tag} for authara-core ${{ github.ref_name }}"
-          git push origin HEAD:main
+          if ! git diff --cached --quiet; then
+            git commit -m "Release authara-go ${sdk_tag} for authara-core ${{ github.ref_name }}"
+            git push origin HEAD:main
+          fi
           git tag -a "$sdk_tag" -m "authara-go ${sdk_tag} for authara-core ${{ github.ref_name }}"
           git push origin "$sdk_tag"
 
@@ -218,11 +230,25 @@ jobs:
         id: sdk-changes
         working-directory: .sdk/authara-browser
         run: |
+          current_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
+          generated_changed=false
+          committed_changed=false
+
           if test -n "$(git status --porcelain -- src/generated)"; then
+            generated_changed=true
+          fi
+
+          if test -z "$current_tag" || ! git diff --quiet "$current_tag"..HEAD -- \
+            src scripts package.json package-lock.json README.md; then
+            committed_changed=true
+          fi
+
+          if test "$generated_changed" = true || test "$committed_changed" = true; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Browser SDK release required (generated=$generated_changed, committed=$committed_changed)."
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No browser SDK changes for authara-core ${{ github.ref_name }}; skipping @authara/browser tag."
+            echo "No unreleased browser SDK changes for authara-core ${{ github.ref_name }}; skipping @authara/browser tag."
           fi
 
       - name: Determine browser SDK version
@@ -233,6 +259,11 @@ jobs:
           CORE_BUMP: ${{ needs.deploy.outputs.core_bump }}
         run: |
           current_version="$(node -p "require('./package.json').version")"
+          current_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
+          if test -n "$current_tag" && test "$current_tag" != "v${current_version}"; then
+            echo "package.json version ${current_version} does not match latest tag ${current_tag}." >&2
+            exit 1
+          fi
           IFS=. read -r major minor patch <<< "$current_version"
           case "$CORE_BUMP" in
             major) next_version="$((major + 1)).0.0" ;;
