@@ -204,11 +204,17 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 		r.Route("/api/v1", func(r chi.Router) {
 			r.Get("/csrf", contracth.GetCsrfToken)
 			r.Get("/oauth/google/options", contracth.GetGoogleLoginOptions)
+			r.Get("/invitations/preview", contracth.PreviewInvitation)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAPICSRF)
 
 				r.Post("/oauth/google", contracth.LoginWithGoogle)
+				r.Post("/invitations/login", contracth.LoginAndAcceptInvitation)
+				r.Post("/invitations/google", contracth.AuthenticateAndAcceptInvitationWithGoogle)
+				r.Post("/provider-links/recovery/google", contracth.StartGoogleAccountRecoveryLink)
+				r.Post("/provider-links/recovery/{linkID}/password", contracth.CompleteAccountRecoveryLinkWithPassword)
+				r.Post("/provider-links/recovery/{linkID}/google", contracth.CompleteAccountRecoveryLinkWithGoogle)
 				r.Post("/login", contracth.LoginWithPassword)
 				r.Post("/signup/direct", contracth.SignupDirect)
 				r.Post("/signup/challenges", contracth.StartSignupChallenge)
@@ -227,6 +233,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAppAccessAuthAPI)
 
+				r.Get("/account", contracth.GetCurrentAccount)
 				r.Get("/user", contracth.GetCurrentUser)
 				r.Get("/capabilities", contracth.GetPublicCapabilities)
 				r.Get("/organizations", contracth.ListCurrentUserOrganizations)
@@ -234,6 +241,17 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/organizations/current/members", contracth.ListCurrentOrganizationMembers)
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireAPICSRF)
+					r.Post("/invitations/accept", contracth.AcceptInvitation)
+					r.Patch("/account/username", contracth.ChangeCurrentUsername)
+					r.Post("/account/email-change/challenges", contracth.StartCurrentUserEmailChange)
+					r.Post("/account/email-change/challenges/verify", contracth.VerifyCurrentUserEmailChange)
+					r.Post("/account/password", contracth.AddCurrentUserPassword)
+					r.Put("/account/password", contracth.ChangeCurrentUserPassword)
+					r.Post("/account/auth-methods/google", contracth.LinkCurrentUserGoogle)
+					r.Delete("/account/auth-methods/{provider}", contracth.UnlinkCurrentUserAuthMethod)
+					r.Delete("/account/passkeys/{passkeyID}", contracth.DeleteCurrentUserPasskey)
+					r.Delete("/account/sessions/others", contracth.RevokeCurrentUserOtherSessions)
+					r.Delete("/account/sessions/{sessionID}", contracth.RevokeCurrentUserSession)
 					r.Put("/users/password", contracth.SetCurrentUserPassword)
 					r.Post("/passkeys/register/options", contracth.BeginPasskeyRegistration)
 					r.Post("/passkeys/register/finish", contracth.FinishPasskeyRegistration)
@@ -278,6 +296,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Post("/organizations/{organizationID}/ownership-transfer", contracth.TransferInternalOrganizationOwnership)
 			r.Post("/organizations/{organizationID}/invitations", contracth.CreateInternalOrganizationInvitation)
 			r.Post("/organizations/{organizationID}/invitations/{invitationID}/resend", contracth.ResendInternalOrganizationInvitation)
+
 			r.Delete("/users/{userID}", contracth.DeleteInternalUser)
 		})
 	})

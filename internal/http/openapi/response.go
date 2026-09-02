@@ -137,6 +137,16 @@ type LoginWithGoogle200HeadersResponse struct {
 	Body   AuthSession
 }
 
+type LinkCurrentUserGoogle204HeadersResponse struct {
+	Header http.Header
+}
+
+func (r LinkCurrentUserGoogle204HeadersResponse) VisitLinkCurrentUserGoogleResponse(w http.ResponseWriter) error {
+	writeHeaders(w.Header(), r.Header)
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (r LoginWithGoogle200HeadersResponse) VisitLoginWithGoogleResponse(w http.ResponseWriter) error {
 	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
@@ -144,6 +154,60 @@ func (r LoginWithGoogle200HeadersResponse) VisitLoginWithGoogleResponse(w http.R
 type LoginWithPassword200HeadersResponse struct {
 	Header http.Header
 	Body   AuthSession
+}
+
+type AcceptInvitation200HeadersResponse struct {
+	Header http.Header
+	Body   Tokens
+}
+
+func (r AcceptInvitation200HeadersResponse) VisitAcceptInvitationResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
+}
+
+type LoginAndAcceptInvitation200HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
+}
+
+func (r LoginAndAcceptInvitation200HeadersResponse) VisitLoginAndAcceptInvitationResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
+}
+
+type AuthenticateAndAcceptInvitationWithGoogle200HeadersResponse struct {
+	Header http.Header
+	Body   InvitationGoogleResult
+}
+
+func (r AuthenticateAndAcceptInvitationWithGoogle200HeadersResponse) VisitAuthenticateAndAcceptInvitationWithGoogleResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
+}
+
+type StartGoogleAccountRecoveryLink202HeadersResponse struct {
+	Header http.Header
+	Body   AccountRecoveryLink
+}
+
+func (r StartGoogleAccountRecoveryLink202HeadersResponse) VisitStartGoogleAccountRecoveryLinkResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusAccepted, r.Header, r.Body)
+}
+
+type CompleteAccountRecoveryLinkWithPassword200HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
+}
+
+func (r CompleteAccountRecoveryLinkWithPassword200HeadersResponse) VisitCompleteAccountRecoveryLinkWithPasswordResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
+}
+
+type CompleteAccountRecoveryLinkWithGoogle200HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
+}
+
+func (r CompleteAccountRecoveryLinkWithGoogle200HeadersResponse) VisitCompleteAccountRecoveryLinkWithGoogleResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
 
 func (r LoginWithPassword200HeadersResponse) VisitLoginWithPasswordResponse(w http.ResponseWriter) error {

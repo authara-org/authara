@@ -35,6 +35,11 @@ func isExpectedPasswordResetVerifyError(err error) bool {
 		errors.Is(err, store.ErrorPendingPasswordResetNotFound)
 }
 
+func isExpectedEmailChangeVerifyError(err error) bool {
+	return isExpectedChallengeVerifyError(err) ||
+		errors.Is(err, store.ErrorPendingEmailChangeNotFound)
+}
+
 func isOpaqueChallengeResendError(err error) bool {
 	return errors.Is(err, challenge.ErrChallengeExpired) ||
 		errors.Is(err, challenge.ErrChallengeConsumed) ||

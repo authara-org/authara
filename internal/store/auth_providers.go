@@ -167,3 +167,22 @@ func (s *Store) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, passwo
 
 	return nil
 }
+
+func (s *Store) UpdateAuthProviderIdentity(ctx context.Context, userID uuid.UUID, provider domain.Provider, providerUserID string) error {
+	res, err := s.exec(ctx, `
+		UPDATE auth_providers
+		SET provider_user_id = $1
+		WHERE user_id = $2 AND provider = $3
+	`, providerUserID, userID, string(provider))
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrorAuthProviderNotFound
+	}
+	return nil
+}

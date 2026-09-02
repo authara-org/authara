@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 	"github.com/authara-org/authara/internal/session"
 )
 
+type GoogleVerifier interface {
+	VerifyIDToken(context.Context, string, string) (*google.Identity, error)
+}
+
 type APIHandler struct {
 	Auth           *auth.Service
 	Passkeys       *passkey.Service
@@ -23,7 +28,7 @@ type APIHandler struct {
 	Verification   *challenge.VerificationCodeService
 	Limiter        ratelimiter.AuthLimiter
 	Logger         *slog.Logger
-	Google         *google.Client
+	Google         GoogleVerifier
 	OAuthProviders oauth.OAuthProviders
 
 	ChallengeEnabled bool
@@ -40,7 +45,7 @@ func New(
 	verification *challenge.VerificationCodeService,
 	limiter ratelimiter.AuthLimiter,
 	logger *slog.Logger,
-	google *google.Client,
+	google GoogleVerifier,
 	oauthProviders oauth.OAuthProviders,
 	challengeEnabled bool,
 	accessTTL time.Duration,

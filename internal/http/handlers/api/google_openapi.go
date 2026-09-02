@@ -2,9 +2,7 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
@@ -22,31 +20,17 @@ func (h *APIHandler) LoginWithGoogle(ctx context.Context, request contract.Login
 	if !ok {
 		return loginWithGoogleError(responseCodeInternalError(), "API contract error."), nil
 	}
-	if _, ok := h.googleClientID(); !ok || h.Google == nil {
-		return loginWithGoogleError(responseCodeNotFound(), "Google login is not enabled."), nil
-	}
 	if request.Body == nil {
 		return loginWithGoogleError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
-	}
-	credential := strings.TrimSpace(request.Body.Credential)
-	nonce := strings.TrimSpace(request.Body.Nonce)
-	if credential == "" || nonce == "" {
-		return loginWithGoogleError(responseCodeInvalidRequest(), "Google credential and nonce required."), nil
 	}
 	audience := token.AudienceApp
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	expectedNonce, ok := oauthstate.ReadNonce(r)
-	if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
-		return loginWithGoogleError(responseCodeUnauthorized(), "Invalid Google credential."), nil
+	identity, header, code, message, ok := h.verifyGoogleCredential(ctx, r, request.Body.Credential, request.Body.Nonce)
+	if !ok {
+		return loginWithGoogleError(code, message), nil
 	}
-	identity, err := h.Google.VerifyIDToken(ctx, credential, expectedNonce)
-	if err != nil {
-		return loginWithGoogleError(responseCodeUnauthorized(), "Invalid Google credential."), nil
-	}
-	header := make(http.Header)
-	oauthstate.ClearNonce(contract.HeaderWriter(header))
 	return h.contractGoogleLogin(ctx, r, identity, audience, header), nil
 }
 

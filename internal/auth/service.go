@@ -808,6 +808,9 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
 			return err
 		}
 
+		if proofProvider == link.Provider {
+			return s.store.UpdateAuthProviderIdentity(txCtx, user.ID, link.Provider, *link.ProviderUserID)
+		}
 		return s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID)
 	})
 	if err != nil {

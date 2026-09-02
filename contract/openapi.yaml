@@ -114,6 +114,338 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
 
+  /auth/api/v1/invitations/preview:
+    get:
+      operationId: previewInvitation
+      tags: [Organizations]
+      summary: Preview an organization invitation
+      description: Returns the invitation, organization, and current invitation status for a valid bearer token.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      security: []
+      x-authara-access: public
+      x-authara-availability: invitations-enabled
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "403": [forbidden]
+        "404": [not_found, invitation_not_found]
+        "500": [internal_error]
+      responses:
+        "200":
+          description: Invitation preview, including invitations that are no longer pending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationPreview"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/invitations/accept:
+    post:
+      operationId: acceptInvitation
+      tags: [Organizations]
+      summary: Accept an invitation and switch the current session to its organization
+      description: Accepts the invitation for the authenticated user and rotates the current session into the invited organization.
+      parameters:
+        - $ref: "#/components/parameters/AppAudience"
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-availability: invitations-enabled
+      x-authara-set-cookies: [authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden, invitation_email_mismatch]
+        "404": [not_found, invitation_not_found]
+        "409": [invitation_already_accepted, invitation_revoked, invitation_expired, organization_membership_conflict]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationTokenRequest"
+      responses:
+        "200":
+          description: Session tokens scoped to the invitation organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tokens"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/invitations/login:
+    post:
+      operationId: loginAndAcceptInvitation
+      tags: [Authentication]
+      summary: Log in with a password, accept an invitation, and switch organizations
+      description: Uses the invitation email and supplied password to authenticate, accept the invitation, and create a session in the invited organization.
+      parameters:
+        - $ref: "#/components/parameters/AppAudience"
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-availability: invitations-enabled
+      x-authara-set-cookies: [authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden, invitation_email_mismatch]
+        "404": [not_found, invitation_not_found]
+        "409": [invitation_already_accepted, invitation_revoked, invitation_expired, organization_membership_conflict]
+        "429": [rate_limited]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationPasswordLoginRequest"
+      responses:
+        "200":
+          description: Authenticated session scoped to the invitation organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/invitations/google:
+    post:
+      operationId: authenticateAndAcceptInvitationWithGoogle
+      tags: [Authentication]
+      summary: Sign up or log in with Google, accept an invitation, and switch organizations
+      description: Returns a recovery link instead of a session when the Google identity must first be linked to an existing account.
+      parameters:
+        - $ref: "#/components/parameters/AppAudience"
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+          oauthNonceCookie: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-availability: [invitations-enabled, google-enabled]
+      x-authara-set-cookies: [authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden, invitation_email_mismatch]
+        "404": [not_found, invitation_not_found]
+        "409": [invitation_flow_mismatch, auth_method_already_linked, invitation_already_accepted, invitation_revoked, invitation_expired, organization_membership_conflict]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationGoogleRequest"
+      responses:
+        "200":
+          description: Authenticated session or an existing-account recovery link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationGoogleResult"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/provider-links/recovery/google:
+    post:
+      operationId: startGoogleAccountRecoveryLink
+      tags: [Authentication]
+      summary: Start linking Google to an existing account with the same email
+      description: Verifies a Google identity and creates a short-lived link that can be completed by proving ownership of the existing account.
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+          oauthNonceCookie: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-availability: google-enabled
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found]
+        "409": [auth_method_already_linked]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleLoginRequest"
+      responses:
+        "202":
+          description: Existing-account proof is required before Google can be linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountRecoveryLink"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/provider-links/recovery/{linkID}/password:
+    post:
+      operationId: completeAccountRecoveryLinkWithPassword
+      tags: [Authentication]
+      summary: Prove ownership with the existing account password and finish linking
+      description: Consumes a recovery link after password proof, creates a session, and optionally accepts and switches to an invitation organization.
+      parameters:
+        - $ref: "#/components/parameters/ProviderLinkID"
+        - $ref: "#/components/parameters/AppAudience"
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-set-cookies: [authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden, invitation_email_mismatch]
+        "404": [password_provider_not_found, invitation_not_found]
+        "409": [provider_link_expired, auth_method_already_linked, invitation_already_accepted, invitation_revoked, invitation_expired, organization_membership_conflict]
+        "429": [rate_limited]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountRecoveryPasswordProofRequest"
+      responses:
+        "200":
+          description: Linked provider and authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/provider-links/recovery/{linkID}/google:
+    post:
+      operationId: completeAccountRecoveryLinkWithGoogle
+      tags: [Authentication]
+      summary: Prove ownership with an existing Google login and finish linking
+      description: Consumes a recovery link after provider proof, creates a session, and optionally accepts and switches to an invitation organization.
+      parameters:
+        - $ref: "#/components/parameters/ProviderLinkID"
+        - $ref: "#/components/parameters/AppAudience"
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+          oauthNonceCookie: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-availability: google-enabled
+      x-authara-set-cookies: [authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden, invitation_email_mismatch]
+        "404": [not_found, invitation_not_found]
+        "409": [provider_link_expired, auth_method_already_linked, invitation_already_accepted, invitation_revoked, invitation_expired, organization_membership_conflict]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountRecoveryGoogleProofRequest"
+      responses:
+        "200":
+          description: Linked provider and authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /auth/api/v1/login:
     post:
       operationId: loginWithPassword
@@ -643,6 +975,382 @@ paths:
               schema:
                 $ref: "#/components/schemas/CurrentUser"
         "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account:
+    get:
+      operationId: getCurrentAccount
+      tags: [Users]
+      summary: Get the authenticated user's account
+      description: Returns the account profile, active sessions, linked authentication methods, and passkeys.
+      security:
+        - accessCookie: []
+      x-authara-access: user
+      x-authara-error-codes:
+        "401": [unauthorized]
+        "500": [internal_error]
+      responses:
+        "200":
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/username:
+    patch:
+      operationId: changeCurrentUsername
+      tags: [Users]
+      summary: Change the authenticated user's username
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "409": [username_taken]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeUsernameRequest"
+      responses:
+        "204":
+          description: Username changed
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/email-change/challenges:
+    post:
+      operationId: startCurrentUserEmailChange
+      tags: [Users]
+      summary: Start an email change challenge
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-availability: challenges-enabled
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailChangeRequest"
+      responses:
+        "202":
+          description: Email change challenge started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeReference"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/email-change/challenges/verify:
+    post:
+      operationId: verifyCurrentUserEmailChange
+      tags: [Users]
+      summary: Verify an email change challenge
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-availability: challenges-enabled
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found]
+        "429": [rate_limited]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChallengeVerification"
+      responses:
+        "204":
+          description: Email changed
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/password:
+    post:
+      operationId: addCurrentUserPassword
+      tags: [Users]
+      summary: Add password authentication to the authenticated user's account
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "409": [password_already_exists]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPasswordRequest"
+      responses:
+        "204":
+          description: Password authentication added
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: changeCurrentUserPassword
+      tags: [Users]
+      summary: Change the authenticated user's password
+      description: Verifies the current password before replacing it.
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [not_found]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password changed
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/auth-methods/google:
+    post:
+      operationId: linkCurrentUserGoogle
+      tags: [Users]
+      summary: Link Google to the authenticated user's account
+      description: Uses options from getGoogleLoginOptions and links the verified Google identity to the current account.
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+          oauthNonceCookie: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-availability: google-enabled
+      x-authara-clear-cookies: [authara_oauth_nonce]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found]
+        "409": [auth_method_already_linked]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleLoginRequest"
+      responses:
+        "204":
+          description: Google linked
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/auth-methods/{provider}:
+    parameters:
+      - $ref: "#/components/parameters/AuthProvider"
+    delete:
+      operationId: unlinkCurrentUserAuthMethod
+      tags: [Users]
+      summary: Unlink an authentication method from the authenticated user's account
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [not_found]
+        "409": [cannot_remove_last_auth_method]
+        "500": [internal_error]
+      responses:
+        "204":
+          description: Authentication method unlinked
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/passkeys/{passkeyID}:
+    parameters:
+      - $ref: "#/components/parameters/PasskeyID"
+    delete:
+      operationId: deleteCurrentUserPasskey
+      tags: [Passkeys]
+      summary: Delete a passkey from the authenticated user's account
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [not_found]
+        "409": [cannot_remove_last_auth_method]
+        "500": [internal_error]
+      responses:
+        "204":
+          description: Passkey deleted
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/sessions/others:
+    delete:
+      operationId: revokeCurrentUserOtherSessions
+      tags: [Sessions]
+      summary: Revoke all sessions except the current session
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "401": [unauthorized]
+        "403": [forbidden]
+        "500": [internal_error]
+      responses:
+        "204":
+          description: Other sessions revoked
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/sessions/{sessionID}:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    delete:
+      operationId: revokeCurrentUserSession
+      tags: [Sessions]
+      summary: Revoke one of the authenticated user's sessions
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found]
+        "500": [internal_error]
+      responses:
+        "204":
+          description: Session revoked
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -1444,6 +2152,34 @@ components:
       schema:
         type: string
         format: uuid
+    SessionID:
+      name: sessionID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PasskeyID:
+      name: passkeyID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProviderLinkID:
+      name: linkID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AuthProvider:
+      name: provider
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [password, google]
 
   responses:
     Error:
@@ -1495,6 +2231,58 @@ components:
         credential:
           type: string
         nonce:
+          type: string
+    InvitationTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+    InvitationPasswordLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token:
+          type: string
+        password:
+          type: string
+          format: password
+    InvitationGoogleRequest:
+      type: object
+      additionalProperties: false
+      required: [token, credential, nonce, flow]
+      properties:
+        token:
+          type: string
+        credential:
+          type: string
+        nonce:
+          type: string
+        flow:
+          type: string
+          enum: [signup, login]
+    AccountRecoveryPasswordProofRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          type: string
+          format: password
+        invitation_token:
+          type: string
+    AccountRecoveryGoogleProofRequest:
+      type: object
+      additionalProperties: false
+      required: [credential, nonce]
+      properties:
+        credential:
+          type: string
+        nonce:
+          type: string
+        invitation_token:
           type: string
     PasswordLoginRequest:
       type: object
@@ -1569,6 +2357,43 @@ components:
         password:
           type: string
           format: password
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          format: password
+        new_password:
+          type: string
+          format: password
+    ChangeUsernameRequest:
+      type: object
+      additionalProperties: false
+      required: [username]
+      properties:
+        username:
+          type: string
+    EmailChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [new_email]
+      properties:
+        new_email:
+          type: string
+          format: email
+    ChallengeVerification:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, code]
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
     ChallengeReference:
       type: object
       additionalProperties: false
@@ -1577,6 +2402,42 @@ components:
         challenge_id:
           type: string
           format: uuid
+
+    AccountRecoveryLink:
+      type: object
+      additionalProperties: false
+      required: [link_id, proof_methods]
+      properties:
+        link_id:
+          type: string
+          format: uuid
+        proof_methods:
+          type: array
+          items:
+            type: string
+            enum: [password, google]
+
+    InvitationPreview:
+      type: object
+      additionalProperties: false
+      required: [invitation, organization]
+      properties:
+        invitation:
+          $ref: "#/components/schemas/OrganizationInvitation"
+        organization:
+          $ref: "#/components/schemas/Organization"
+    InvitationGoogleResult:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [authenticated, proof_required]
+        session:
+          $ref: "#/components/schemas/AuthSession"
+        recovery:
+          $ref: "#/components/schemas/AccountRecoveryLink"
 
     AuthSession:
       type: object
@@ -1692,6 +2553,70 @@ components:
             enum: ["authara:admin", "authara:auditor", "authara:monitor"]
         organization:
           $ref: "#/components/schemas/OrganizationSummary"
+    Account:
+      type: object
+      additionalProperties: false
+      required: [user, sessions, auth_methods, passkeys]
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountSession"
+        auth_methods:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthMethod"
+        passkeys:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountPasskey"
+    AccountSession:
+      type: object
+      additionalProperties: false
+      required: [id, current, created_at, expires_at, user_agent]
+      properties:
+        id:
+          type: string
+          format: uuid
+        current:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        user_agent:
+          type: string
+    AuthMethod:
+      type: object
+      additionalProperties: false
+      required: [provider, created_at]
+      properties:
+        provider:
+          type: string
+          enum: [password, google]
+        created_at:
+          type: string
+          format: date-time
+    AccountPasskey:
+      type: object
+      additionalProperties: false
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
     OrganizationSummary:
       type: object
       additionalProperties: false
