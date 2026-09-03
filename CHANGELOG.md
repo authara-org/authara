@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.17.0](https://github.com/authara-org/authara/compare/v0.16.0...v0.17.0) (2026-09-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** support login with username ([#41](https://github.com/authara-org/authara/issues/41))
+
+### Features
+
+* **api:** support login with username ([#41](https://github.com/authara-org/authara/issues/41)) ([92502c8](https://github.com/authara-org/authara/commit/92502c89b3b98286a8886d070ac6e08d75ff5740))
+
 ## [0.16.0](https://github.com/authara-org/authara/compare/v0.15.0...v0.16.0) (2026-09-02)
 
 
