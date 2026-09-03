@@ -8,22 +8,23 @@ import (
 )
 
 type Config struct {
-	Values       Values
-	DB           DB
-	Cache        Cache
-	Logging      Logging
-	UI           UI
-	OAuth        OAuth
-	Token        Token
-	Session      Session
-	RateLimit    RateLimit
-	Webhook      Webhook
-	AccessPolicy AccessPolicy
-	Admin        Admin
-	InternalAPI  InternalAPI
-	Organization Organization
-	Challenge    Challenge
-	Email        Email
+	Values         Values
+	DB             DB
+	Cache          Cache
+	Logging        Logging
+	UI             UI
+	OAuth          OAuth
+	Token          Token
+	Session        Session
+	RateLimit      RateLimit
+	Webhook        Webhook
+	AccessPolicy   AccessPolicy
+	Admin          Admin
+	InternalAPI    InternalAPI
+	Organization   Organization
+	Authentication Authentication
+	Challenge      Challenge
+	Email          Email
 }
 
 func Load() (*Config, error) {

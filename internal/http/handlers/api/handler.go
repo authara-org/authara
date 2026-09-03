@@ -31,9 +31,10 @@ type APIHandler struct {
 	Google         GoogleVerifier
 	OAuthProviders oauth.OAuthProviders
 
-	ChallengeEnabled bool
-	AccessTTL        time.Duration
-	RefreshTTL       time.Duration
+	ChallengeEnabled     bool
+	UsernameLoginEnabled bool
+	AccessTTL            time.Duration
+	RefreshTTL           time.Duration
 }
 
 func New(
@@ -48,22 +49,24 @@ func New(
 	google GoogleVerifier,
 	oauthProviders oauth.OAuthProviders,
 	challengeEnabled bool,
+	usernameLoginEnabled bool,
 	accessTTL time.Duration,
 	refreshTTL time.Duration,
 ) *APIHandler {
 	return &APIHandler{
-		Auth:             auth,
-		Passkeys:         passkeys,
-		Session:          session,
-		Organizations:    organizations,
-		Challenge:        challenge,
-		Verification:     verification,
-		Limiter:          limiter,
-		Logger:           logger,
-		Google:           google,
-		OAuthProviders:   oauthProviders,
-		ChallengeEnabled: challengeEnabled,
-		AccessTTL:        accessTTL,
-		RefreshTTL:       refreshTTL,
+		Auth:                 auth,
+		Passkeys:             passkeys,
+		Session:              session,
+		Organizations:        organizations,
+		Challenge:            challenge,
+		Verification:         verification,
+		Limiter:              limiter,
+		Logger:               logger,
+		Google:               google,
+		OAuthProviders:       oauthProviders,
+		ChallengeEnabled:     challengeEnabled,
+		UsernameLoginEnabled: usernameLoginEnabled,
+		AccessTTL:            accessTTL,
+		RefreshTTL:           refreshTTL,
 	}
 }

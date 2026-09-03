@@ -139,7 +139,21 @@ POST /auth/api/v1/login?audience=app
 
 ```json
 {
-  "email": "user@example.com",
+  "identifier": "user@example.com",
+  "password": "password123"
+}
+```
+
+Migration: clients using the previous password-login schema must rename the
+request key from `email` to `identifier`; the email value itself is unchanged.
+
+Set `AUTHARA_USERNAME_LOGIN_ENABLED=true` to also accept the account's username
+in the `identifier` field. The flag defaults to `false`. When enabled, username
+login uses the same request shape:
+
+```json
+{
+  "identifier": "user",
   "password": "password123"
 }
 ```
@@ -172,10 +186,9 @@ Errors: `400 invalid_request`, `401 unauthorized`, `403 forbidden`,
 POST /auth/api/v1/signup/direct
 ```
 
-The request body is the same email-and-password object used for login. Signup
-only creates app-audience sessions. Authara creates the account, returns
-`201 Created` with the authentication response shown above, and sets both
-session cookies.
+Signup requires an email address and password and only creates app-audience
+sessions. Authara creates the account, returns `201 Created` with the
+authentication response shown above, and sets both session cookies.
 
 This operation returns `404 not_found` when challenges are enabled.
 

@@ -76,8 +76,8 @@ export async function getUserWithRefresh() {
   return request(`${API}/user`);
 }
 
-export function login(email, password) {
-  return mutate(`${API}/login?audience=app`, { email, password });
+export function login(identifier, password) {
+  return mutate(`${API}/login?audience=app`, { identifier, password });
 }
 
 export function getGoogleOptions() {

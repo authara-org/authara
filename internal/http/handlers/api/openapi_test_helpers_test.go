@@ -45,10 +45,10 @@ func signupRequest(email, password, invitationCode string) *contract.SignupReque
 	return req
 }
 
-func passwordLoginRequest(email, password string) *contract.PasswordLoginRequest {
+func passwordLoginRequest(identifier, password string) *contract.PasswordLoginRequest {
 	return &contract.PasswordLoginRequest{
-		Email:    openapi_types.Email(email),
-		Password: password,
+		Identifier: identifier,
+		Password:   password,
 	}
 }
 

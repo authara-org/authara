@@ -77,7 +77,7 @@ func TestSignupAndLoginSetSessionCookies(t *testing.T) {
 		}
 		assertResponseTokens(t, signupRR.Body.Bytes())
 
-		loginReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/login", `{"email":"api-auth@example.com","password":"password123"}`)
+		loginReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/login", `{"identifier":"api-auth@example.com","password":"password123"}`)
 		loginRR := httptest.NewRecorder()
 		loginResp, err := h.LoginWithPassword(contractCtx(ctx, loginReq), contract.LoginWithPasswordRequestObject{
 			Body: passwordLoginRequest("api-auth@example.com", "password123"),
@@ -95,6 +95,86 @@ func TestSignupAndLoginSetSessionCookies(t *testing.T) {
 		}
 		assertResponseTokens(t, loginRR.Body.Bytes())
 	})
+}
+
+func TestLoginWithPasswordAcceptsUsername(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		passwordHash, err := auth.Hash("password123")
+		if err != nil {
+			t.Fatalf("Hash failed: %v", err)
+		}
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "api-username-login@example.com",
+			Username: "APIUsernameLogin",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID:       user.ID,
+			Provider:     domain.ProviderPassword,
+			PasswordHash: &passwordHash,
+		}); err != nil {
+			t.Fatalf("CreateAuthProvider failed: %v", err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+
+		h := &APIHandler{
+			Auth:                 auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx}),
+			Session:              newAPIHandlerTestSessionService(t, tdb),
+			Limiter:              ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{}),
+			UsernameLoginEnabled: true,
+			AccessTTL:            time.Minute,
+			RefreshTTL:           time.Hour,
+		}
+
+		req := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/login", `{"identifier":"apiusernamelogin","password":"password123"}`)
+		rr := httptest.NewRecorder()
+		resp, err := h.LoginWithPassword(contractCtx(ctx, req), contract.LoginWithPasswordRequestObject{
+			Body: passwordLoginRequest("apiusernamelogin", "password123"),
+		})
+		if err != nil {
+			t.Fatalf("LoginWithPassword failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected login status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+		if !hasCookie(rr.Result().Cookies(), "authara_access") || !hasCookie(rr.Result().Cookies(), "authara_refresh") {
+			t.Fatal("expected username login to set session cookies")
+		}
+		var body contract.AuthSession
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode login response: %v", err)
+		}
+		if body.User.Id != user.ID {
+			t.Fatalf("expected user id %q, got %q", user.ID, body.User.Id)
+		}
+	})
+}
+
+func TestLoginWithPasswordRejectsUsernameWhenDisabled(t *testing.T) {
+	h := &APIHandler{UsernameLoginEnabled: false}
+	req := apiJSONRequest(context.Background(), http.MethodPost, "/auth/api/v1/login", `{"identifier":"disabled-username","password":"password123"}`)
+	rr := httptest.NewRecorder()
+
+	resp, err := h.LoginWithPassword(contractCtx(req.Context(), req), contract.LoginWithPasswordRequestObject{
+		Body: passwordLoginRequest("disabled-username", "password123"),
+	})
+	if err != nil {
+		t.Fatalf("LoginWithPassword failed: %v", err)
+	}
+	writeContractResponse(t, rr, resp)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusBadRequest, rr.Code, rr.Body.String())
+	}
+	assertErrorMessage(t, rr.Body.Bytes(), "Please provide a valid email address.")
 }
 
 func TestSignupWithInvitationCodeJoinsOrganization(t *testing.T) {

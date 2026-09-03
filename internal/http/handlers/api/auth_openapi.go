@@ -25,27 +25,41 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 		return loginWithPasswordError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
 	body := request.Body
-	email := strings.ToLower(strings.TrimSpace(string(body.Email)))
+	identifier := strings.TrimSpace(body.Identifier)
 	password := body.Password
-	if email == "" || password == "" {
-		return loginWithPasswordError(responseCodeInvalidRequest(), "Email and password required."), nil
+	if identifier == "" || password == "" {
+		message := "Email and password required."
+		if h.UsernameLoginEnabled {
+			message = "Email or username and password required."
+		}
+		return loginWithPasswordError(responseCodeInvalidRequest(), message), nil
+	}
+	loginInput := auth.LoginInput{
+		Provider: domain.ProviderPassword,
+		Email:    strings.ToLower(identifier),
+		Password: password,
+	}
+	invalidCredentialsMessage := "Invalid email or password."
+	if h.UsernameLoginEnabled {
+		loginInput.Identifier = identifier
+		loginInput.Email = ""
+		invalidCredentialsMessage = "Invalid email, username, or password."
+	} else if !validation.IsValidEmail(loginInput.Email) {
+		return loginWithPasswordError(responseCodeInvalidRequest(), "Please provide a valid email address."), nil
 	}
 	audience := token.AudienceApp
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), email)
+	rateLimitIdentifier := strings.ToLower(identifier)
+	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), rateLimitIdentifier)
 	if err != nil || !allowed {
 		return loginWithPasswordError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
 	}
-	user, err := h.Auth.Login(ctx, auth.LoginInput{
-		Provider: domain.ProviderPassword,
-		Email:    email,
-		Password: password,
-	})
+	user, err := h.Auth.Login(ctx, loginInput)
 	if err != nil {
 		code := authLoginErrorCode(err)
-		message := "Invalid email or password."
+		message := invalidCredentialsMessage
 		if code == responseCodeInternalError() {
 			message = "Login error."
 		}

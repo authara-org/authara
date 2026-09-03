@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/session"
 )
@@ -30,7 +31,7 @@ func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		http.StatusOK,
-		authview.Login(h.OAuthProviders.Providers),
+		authview.Login(h.OAuthProviders.Providers, h.Features.UsernameLoginEnabled),
 	)
 }
 
@@ -38,35 +39,48 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
-		h.renderFormError(w, r, http.StatusBadRequest, "Bad Form", authview.LoginForm())
+		h.renderFormError(w, r, http.StatusBadRequest, "Bad Form", authview.LoginForm(h.Features.UsernameLoginEnabled))
 		return
 	}
 
-	email := strings.TrimSpace(r.FormValue("email"))
-	email = strings.ToLower(email)
+	identifier := strings.TrimSpace(r.FormValue("email"))
 	password := r.FormValue("password")
 
-	if email == "" || password == "" {
-		h.renderFormError(w, r, http.StatusBadRequest, "Email and password required.", authview.LoginForm())
+	if identifier == "" || password == "" {
+		message := "Email and password required."
+		if h.Features.UsernameLoginEnabled {
+			message = "Email or username and password required."
+		}
+		h.renderFormError(w, r, http.StatusBadRequest, message, authview.LoginForm(h.Features.UsernameLoginEnabled))
 		return
 	}
 
 	input := auth.LoginInput{
 		Provider: domain.ProviderPassword,
-		Email:    email,
+		Email:    strings.ToLower(identifier),
 		Password: password,
+	}
+	invalidCredentialsMessage := "Invalid email or password."
+	if h.Features.UsernameLoginEnabled {
+		input.Identifier = identifier
+		input.Email = ""
+		invalidCredentialsMessage = "Invalid email, username, or password."
+	} else if !validation.IsValidEmail(input.Email) {
+		h.renderFormError(w, r, http.StatusBadRequest, "Please provide a valid email address.", authview.LoginForm(false))
+		return
 	}
 
 	ip := httputil.ClientIP(r)
-	allowed, err := h.Limiter.AllowLoginAttempt(ctx, ip, email)
+	rateLimitIdentifier := strings.ToLower(identifier)
+	allowed, err := h.Limiter.AllowLoginAttempt(ctx, ip, rateLimitIdentifier)
 	if err != nil || !allowed {
-		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.LoginForm())
+		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.LoginForm(h.Features.UsernameLoginEnabled))
 		return
 	}
 
 	user, err := h.Auth.Login(ctx, input)
 	if err != nil {
-		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid email or password.", authview.LoginForm())
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, invalidCredentialsMessage, authview.LoginForm(h.Features.UsernameLoginEnabled))
 		return
 	}
 
@@ -77,7 +91,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now)
 	if err != nil {
-		h.renderFormError(w, r, http.StatusUnprocessableEntity, "This account is disabled.", authview.LoginForm())
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, "This account is disabled.", authview.LoginForm(h.Features.UsernameLoginEnabled))
 		return
 	}
 

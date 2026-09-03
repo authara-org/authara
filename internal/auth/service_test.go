@@ -25,6 +25,11 @@ type staticAccessPolicy struct {
 	err     error
 }
 
+type recordingAccessPolicy struct {
+	allowed   bool
+	lastEmail string
+}
+
 type publisherFunc func(context.Context, webhook.Envelope) error
 
 func (f publisherFunc) Publish(ctx context.Context, evt webhook.Envelope) error {
@@ -35,6 +40,11 @@ func (p staticAccessPolicy) IsEmailAllowed(ctx context.Context, email string) (b
 	if p.err != nil {
 		return false, p.err
 	}
+	return p.allowed, nil
+}
+
+func (p *recordingAccessPolicy) IsEmailAllowed(_ context.Context, email string) (bool, error) {
+	p.lastEmail = email
 	return p.allowed, nil
 }
 
@@ -566,6 +576,40 @@ func TestLogin_WithPassword_Succeeds(t *testing.T) {
 	})
 }
 
+func TestLogin_WithUsername_Succeeds(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		passwordHash, err := Hash("super-secret")
+		if err != nil {
+			t.Fatalf("Hash failed: %v", err)
+		}
+
+		user := createPasswordUser(t, ctx, tdb, "username-login@example.com", "UsernameLogin", passwordHash)
+		policy := &recordingAccessPolicy{allowed: true}
+		svc := New(Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			AccessPolicy: policy,
+		})
+
+		got, err := svc.Login(ctx, LoginInput{
+			Provider:   domain.ProviderPassword,
+			Identifier: "usernamelogin",
+			Password:   "super-secret",
+		})
+		if err != nil {
+			t.Fatalf("Login failed: %v", err)
+		}
+		if got.ID != user.ID {
+			t.Fatalf("expected user id %q, got %q", user.ID, got.ID)
+		}
+		if policy.lastEmail != user.Email {
+			t.Fatalf("expected access policy email %q, got %q", user.Email, policy.lastEmail)
+		}
+	})
+}
+
 func TestLogin_WrongPassword(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -598,13 +642,21 @@ func TestLogin_BlockedByAccessPolicy(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		_, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "blocked@example.com",
+			Username: "blocked-user",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+
 		svc := New(Config{
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{allowed: false},
 		})
 
-		_, err := svc.Login(ctx, LoginInput{
+		_, err = svc.Login(ctx, LoginInput{
 			Provider: domain.ProviderPassword,
 			Email:    "blocked@example.com",
 			Password: "irrelevant",
@@ -1686,13 +1738,21 @@ func TestLogin_AccessPolicyError(t *testing.T) {
 	policyErr := errors.New("policy failure")
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		_, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "login-policy-error@example.com",
+			Username: "login-policy-error",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+
 		svc := New(Config{
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{err: policyErr},
 		})
 
-		_, err := svc.Login(ctx, LoginInput{
+		_, err = svc.Login(ctx, LoginInput{
 			Provider: domain.ProviderPassword,
 			Email:    "login-policy-error@example.com",
 			Password: "irrelevant",

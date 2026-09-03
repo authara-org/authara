@@ -450,8 +450,8 @@ paths:
     post:
       operationId: loginWithPassword
       tags: [Authentication]
-      summary: Log in with email and password
-      description: Authenticates a user with email and password and creates a new Authara session.
+      summary: Log in with a password
+      description: Authenticates a user with an email address and password and creates a new Authara session. When AUTHARA_USERNAME_LOGIN_ENABLED=true, the identifier field also accepts a username.
       parameters:
         - $ref: "#/components/parameters/Audience"
       security:
@@ -2287,11 +2287,11 @@ components:
     PasswordLoginRequest:
       type: object
       additionalProperties: false
-      required: [email, password]
+      required: [identifier, password]
       properties:
-        email:
+        identifier:
           type: string
-          format: email
+          description: The user's email address, or username when AUTHARA_USERNAME_LOGIN_ENABLED=true.
         password:
           type: string
           format: password

@@ -20,9 +20,10 @@ type SignupInput struct {
 type LoginInput struct {
 	Provider domain.Provider
 
-	Username string
-	Email    string
-	Password string
+	Identifier string // Email address or username for password login.
+	Username   string
+	Email      string
+	Password   string
 
 	OAuthID         string
 	InvitationToken string

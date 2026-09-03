@@ -42,6 +42,15 @@ func TestOpenAPIRouterContractFailures(t *testing.T) {
 			code:   "invalid_request",
 		},
 		{
+			name:   "rejects legacy password login email field",
+			method: http.MethodPost,
+			path:   "/auth/api/v1/login",
+			body:   `{"email":"user@example.com","password":"password123"}`,
+			header: http.Header{"Content-Type": {"application/json"}},
+			want:   http.StatusBadRequest,
+			code:   "invalid_request",
+		},
+		{
 			name:   "rejects invalid path uuid",
 			method: http.MethodGet,
 			path:   "/auth/api/v1/organizations/not-a-uuid",

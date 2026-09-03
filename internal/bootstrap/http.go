@@ -21,8 +21,9 @@ const assetsManifestPath = "./internal/http/static/manifest.json"
 
 func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 	enabledFeatures := features.Features{
-		ChallengeEnabled: app.Config.Challenge.Enabled,
-		AllowlistEnabled: app.Config.AccessPolicy.AllowedEmailEnabled,
+		ChallengeEnabled:     app.Config.Challenge.Enabled,
+		AllowlistEnabled:     app.Config.AccessPolicy.AllowedEmailEnabled,
+		UsernameLoginEnabled: app.Config.Authentication.UsernameLoginEnabled,
 	}
 
 	mw := httpserver.Middlewares{
@@ -102,6 +103,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			googleClient,
 			app.Services.OAuthProviders,
 			enabledFeatures.ChallengeEnabled,
+			enabledFeatures.UsernameLoginEnabled,
 			app.Config.Token.AccessTokenTTL,
 			app.Config.Session.RefreshTokenTTL,
 		),

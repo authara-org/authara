@@ -9,7 +9,7 @@ Authara includes built-in rate limiting to protect against:
 Limits are applied per:
 
 - IP address
-- email address
+- email address (or username when username login is enabled)
 
 ---
 
@@ -45,7 +45,8 @@ Default:
 
 ### AUTHARA_RATE_LIMIT_LOGIN_EMAIL_LIMIT
 
-Maximum login attempts per email.
+Maximum login attempts per submitted email address or enabled username. The
+environment variable retains `EMAIL` in its name for backwards compatibility.
 
 Default:
 
@@ -57,7 +58,7 @@ Default:
 
 ### AUTHARA_RATE_LIMIT_LOGIN_EMAIL_WINDOW
 
-Time window for email-based login attempts.
+Time window for email- or enabled-username-based login attempts.
 
 Default:
 
