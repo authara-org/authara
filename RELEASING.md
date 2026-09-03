@@ -5,16 +5,27 @@ Authara Core and its SDKs are versioned independently. The OpenAPI contract in
 
 ## Release flow
 
-1. Merge Core changes using Conventional Commit messages.
-2. Release Please creates or updates the Core release pull request.
-3. Merge the release pull request when the Core release is ready.
-4. The resulting Core tag deploys the image and dispatches the immutable tag,
+1. Give each change pull request a Conventional Commit title such as `fix:`,
+   `feat:`, or `feat!:`. CI rejects titles that do not follow this format.
+2. After the required checks pass, squash-merge the change pull request. The
+   squash commit title is always the pull request title.
+3. Release Please calculates the next version and creates or updates its release
+   pull request. The release pull request automatically merges after its own
+   required checks pass.
+4. Release Please creates the version commit, tag, changelog, and GitHub release.
+   Do not create or commit any of these manually.
+5. A Core release tag deploys the image and dispatches the immutable tag,
    commit, and release type to the Go and browser SDK repositories.
-5. Each SDK regenerates from that exact Core tag, tests the result, and opens an
+6. Each SDK regenerates from that exact Core tag, tests the result, and opens an
    update pull request when its generated output changed.
-6. SDK update and release pull requests are configured for auto-merge after
-   their required checks pass. Each SDK is then tagged with its own version.
-7. Browser releases are published to npm from the Release Please workflow.
+7. SDK generated-update and release pull requests automatically merge after
+   their required checks pass. Each changed SDK is tagged with its own version.
+8. Browser releases are published to npm from the Release Please workflow.
+
+Merging a releasable change pull request is therefore the release decision. No
+second manual merge, version edit, or tag command is required. A `docs:`,
+`chore:`, `test:`, `build:`, or `ci:` pull request does not create a release by
+itself.
 
 During the initial rollout, SDK release pull requests can be prepared but are
 not auto-merged until `.codegen/manifest.json` records a tagged Core release.
@@ -26,9 +37,10 @@ workflow in that SDK repository. They do not require a Core release.
 
 ## Versioning
 
-- `fix:` creates a patch release.
-- `feat:` creates a minor release.
-- A commit with `!` or a `BREAKING CHANGE:` footer creates a breaking release.
+- `fix:` in the pull request title creates a patch release.
+- `feat:` in the pull request title creates a minor release.
+- A title with `!` or a `BREAKING CHANGE:` footer in the pull request body
+  creates a breaking release.
 - While the projects are below `v1.0.0`, breaking changes bump the minor
   version because `bump-minor-pre-major` is enabled.
 
@@ -39,11 +51,13 @@ recorded in each SDK repository's `.codegen/manifest.json`.
 
 The `AUTHARA_SDK_RELEASE_TOKEN` secret must be available to all three
 repositories. It needs access to create pull requests, push automation branches,
-create releases, and dispatch workflows across the Authara repositories.
+enable auto-merge, create releases, and dispatch workflows across the Authara
+repositories.
 
-Enable pull-request auto-merge in both SDK repositories and make their CI job a
-required check. If auto-merge is unavailable, the automation leaves a tested PR
-ready for manual merge instead of bypassing branch protection.
+Enable pull-request auto-merge in Core and both SDK repositories. Require the
+`pr-title` check plus each repository's normal CI checks. Release automation
+must fail visibly if it cannot enable auto-merge; it must never bypass branch
+protection.
 
 The npm Trusted Publisher must authorize
 `.github/workflows/publish.yaml` in `authara-org/authara-browser`.
