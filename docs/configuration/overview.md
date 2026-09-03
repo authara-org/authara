@@ -76,6 +76,19 @@ PUBLIC_URL
 
 ---
 
+### Authentication
+
+Controls optional authentication behavior. Username login is disabled by
+default; email login remains available in either mode.
+
+Example:
+
+```
+AUTHARA_USERNAME_LOGIN_ENABLED
+```
+
+---
+
 ### Token lifetimes
 
 Controls expiration of access, refresh, and session tokens.

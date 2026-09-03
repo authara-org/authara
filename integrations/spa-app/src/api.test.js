@@ -253,7 +253,7 @@ test("custom authentication uses CSRF and the signup challenge API", async () =>
     ),
   );
   assert.deepEqual(JSON.parse(mutations[0].options.body), {
-    email: "user@example.com",
+    identifier: "user@example.com",
     password: "password123",
   });
   assert.deepEqual(JSON.parse(mutations[1].options.body), {

@@ -77,6 +77,19 @@ PUBLIC_URL
 
 ---
 
+### Authentication
+
+`AUTHARA_USERNAME_LOGIN_ENABLED` controls whether password login accepts a
+username in addition to an email address. It defaults to `false`.
+
+Example:
+
+```
+AUTHARA_USERNAME_LOGIN_ENABLED
+```
+
+---
+
 ### Token lifetimes
 
 Controls expiration of access, refresh, and session tokens.

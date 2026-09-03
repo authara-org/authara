@@ -11,13 +11,13 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 )
 
-templ Login(oauthProviders []oauth.OAuthProvider) {
+templ Login(oauthProviders []oauth.OAuthProvider, usernameLoginEnabled bool) {
 	@templates.PartialRender() {
 		@AuthLayout() {
 			@CardHeader()
 			@HeaderSection("Welcome Back!", "Enter to get unlimited access.")
 			@PasskeyLoginButton()
-			@LoginForm()
+			@LoginForm(usernameLoginEnabled)
 			@OAuthProviders("Login", oauthProviders)
 			<div class="text-center mt-6">
 				<p class="text-grey-800 dark:text-grey-200">
@@ -53,7 +53,17 @@ templ PasskeyLoginButton() {
 	</div>
 }
 
-templ LoginForm() {
+templ LoginForm(usernameLoginEnabled bool) {
+	{{
+		label := "Email"
+		inputType := form.Email
+		placeholder := "Enter your email address"
+		if usernameLoginEnabled {
+			label = "Email or username"
+			inputType = form.Text
+			placeholder = "Enter your email or username"
+		}
+	}}
 	<form
 		x-data
 		data-login-form
@@ -66,15 +76,15 @@ templ LoginForm() {
 	>
 		@csrf.CSRFInput()
 		<label for="email" class="pb-4 text-grey-800 dark:text-grey-200">
-			<div class="pb-1.5">Email <span class="text-red-600">*</span></div>
+			<div class="pb-1.5">{ label } <span class="text-red-600">*</span></div>
 		</label>
 		@form.Input(form.InputConfig{
 			ID:           "email",
-			Type:         form.Email,
+			Type:         inputType,
 			Size:         form.Large,
 			Name:         "email",
 			Autocomplete: "username webauthn",
-			Placeholder:  "Enter your email address",
+			Placeholder:  placeholder,
 			Required:     true,
 			Class:        "mb-4",
 		})

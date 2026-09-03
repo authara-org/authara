@@ -163,16 +163,14 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 }
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error) {
-
-	if err := s.ensureEmailAllowed(ctx, in.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
-		return domain.User{}, err
-	}
-
 	switch in.Provider {
 	case domain.ProviderPassword:
 		return s.loginWithPassword(ctx, in)
 
 	case domain.ProviderGoogle:
+		if err := s.ensureEmailAllowed(ctx, in.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
+			return domain.User{}, err
+		}
 		var user domain.User
 		err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 			var err error
@@ -403,8 +401,18 @@ func (s *Service) acceptSignupInvitation(ctx context.Context, invitationToken st
 }
 
 func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (domain.User, error) {
-	user, err := s.store.GetUserByEmail(ctx, in.Email)
+	identifier := strings.TrimSpace(in.Identifier)
+	var user domain.User
+	var err error
+	if identifier != "" {
+		user, err = s.store.GetUserByEmailOrUsername(ctx, identifier)
+	} else {
+		user, err = s.store.GetUserByEmail(ctx, in.Email)
+	}
 	if err != nil {
+		return domain.User{}, err
+	}
+	if err := s.ensureEmailAllowed(ctx, user.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
 		return domain.User{}, err
 	}
 

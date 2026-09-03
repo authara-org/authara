@@ -158,6 +158,17 @@ variables:
     notes: Enables trusted X-Forwarded-For/X-Real-IP parsing when Authara is behind a proxy that strips client-supplied forwarded headers.
 
   # ------------------------------------------------------------
+  # Authentication
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_USERNAME_LOGIN_ENABLED
+    stability: stable
+    required: false
+    type: bool
+    default: false
+    description: Allows password login with a username in addition to an email address.
+
+  # ------------------------------------------------------------
   # JWT / Tokens
   # ------------------------------------------------------------
 

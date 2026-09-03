@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	authsvc "github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/features"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth/google"
@@ -158,7 +160,8 @@ func TestPasskeyAuthenticateOptionsRateLimited(t *testing.T) {
 
 func TestLoginPageIncludesPasskeyControls(t *testing.T) {
 	h := &UIHandler{
-		Render: render.New(render.Assets{}, false),
+		Features: features.Features{UsernameLoginEnabled: true},
+		Render:   render.New(render.Assets{}, false),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/login?return_to=%2Fdashboard", nil)
@@ -175,7 +178,10 @@ func TestLoginPageIncludesPasskeyControls(t *testing.T) {
 		t.Fatal("expected login page to include passkey button")
 	}
 	if !strings.Contains(body, `autocomplete="username webauthn"`) {
-		t.Fatal("expected login email input to enable passkey autofill")
+		t.Fatal("expected login identifier input to enable passkey autofill")
+	}
+	if !strings.Contains(body, "Email or username") || !strings.Contains(body, `type="text"`) {
+		t.Fatal("expected login page to accept an email address or username")
 	}
 	if !strings.Contains(body, `data-passkey-conditional-login="true"`) {
 		t.Fatal("expected login page to include conditional passkey marker")
@@ -185,6 +191,45 @@ func TestLoginPageIncludesPasskeyControls(t *testing.T) {
 	}
 	if !strings.Contains(body, `data-return-to="/dashboard"`) {
 		t.Fatal("expected conditional passkey marker to include normalized return_to")
+	}
+}
+
+func TestLoginPageUsesEmailOnlyWhenUsernameLoginDisabled(t *testing.T) {
+	h := &UIHandler{Render: render.New(render.Assets{}, false)}
+	req := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
+	rr := httptest.NewRecorder()
+
+	h.LoginPage(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, "Email or username") {
+		t.Fatal("expected username login controls to be hidden")
+	}
+	if !strings.Contains(body, `type="email"`) || !strings.Contains(body, "Enter your email address") {
+		t.Fatal("expected email-only login input")
+	}
+}
+
+func TestLoginPostRejectsUsernameWhenDisabled(t *testing.T) {
+	h := &UIHandler{Render: render.New(render.Assets{}, false)}
+	form := url.Values{
+		"email":    {"disabled-username"},
+		"password": {"password123"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	h.LoginPost(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusBadRequest, rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "Please provide a valid email address.") {
+		t.Fatalf("expected email validation error, body=%s", rr.Body.String())
 	}
 }
 
