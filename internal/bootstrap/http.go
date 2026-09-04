@@ -120,6 +120,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		Dev:               app.Config.Values.AppEnv == "dev",
 		TrustProxyHeaders: app.Config.Values.TrustProxyHeaders,
 		Logger:            app.Logger,
+		Observability:     app.Observability,
 		OAuthProviders:    app.Services.OAuthProviders,
 		Handlers:          handlers,
 	}, mw)

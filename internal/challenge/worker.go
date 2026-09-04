@@ -20,6 +20,11 @@ type WorkerConfig struct {
 	CleanupFailedAfter time.Duration
 	CleanupInterval    time.Duration
 	SendTimeout        time.Duration
+	Metrics            WorkerMetrics
+}
+
+type WorkerMetrics interface {
+	ObserveBackgroundJob(worker, outcome string, duration time.Duration)
 }
 
 type Worker struct {
@@ -27,6 +32,7 @@ type Worker struct {
 	codeSvc *VerificationCodeService
 	sender  email.Sender
 	logger  *slog.Logger
+	metrics WorkerMetrics
 	cfg     WorkerConfig
 }
 
@@ -46,6 +52,7 @@ func NewWorker(
 		codeSvc: codeSvc,
 		sender:  sender,
 		logger:  logger,
+		metrics: cfg.Metrics,
 		cfg:     cfg,
 	}
 }
@@ -103,21 +110,31 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 		}
 		return false, err
 	}
+	started := time.Now()
 
 	sendCtx, cancel := context.WithTimeout(ctx, w.cfg.SendTimeout)
 	defer cancel()
 
 	if err := w.processJob(sendCtx, job, now); err != nil {
 		if job.AttemptCount+1 >= w.cfg.JobMaxAttempts {
-			_ = w.store.MarkEmailJobFailed(ctx, job.ID, err.Error())
+			if markErr := w.store.MarkEmailJobFailed(ctx, job.ID, err.Error()); markErr != nil {
+				w.observeJob("error", started)
+			} else {
+				w.observeJob("failed", started)
+			}
 			return true, err
 		}
 
-		_ = w.store.RequeueEmailJob(ctx, job.ID, err.Error(), now.Add(30*time.Second))
+		if requeueErr := w.store.RequeueEmailJob(ctx, job.ID, err.Error(), now.Add(30*time.Second)); requeueErr != nil {
+			w.observeJob("error", started)
+		} else {
+			w.observeJob("retried", started)
+		}
 		return true, err
 	}
 
 	if err := w.store.MarkEmailJobSent(ctx, job.ID, now); err != nil {
+		w.observeJob("error", started)
 		return true, err
 	}
 
@@ -130,8 +147,15 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 		"template", job.Template,
 		"to_email", job.ToEmail,
 	)
+	w.observeJob("succeeded", started)
 
 	return true, nil
+}
+
+func (w *Worker) observeJob(outcome string, started time.Time) {
+	if w.metrics != nil {
+		w.metrics.ObserveBackgroundJob("email", outcome, time.Since(started))
+	}
 }
 
 func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.Time) error {

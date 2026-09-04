@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	openapicontract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/observability"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 )
@@ -41,6 +43,33 @@ func TestStableRoutesAreRegistered(t *testing.T) {
 	}
 }
 
+func TestMetricsRouteIsRegistered(t *testing.T) {
+	router := newContractTestRouter()
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+	if !strings.Contains(response.Body.String(), `authara_build_info{version="test"} 1`) {
+		t.Fatalf("expected build metric, got:\n%s", response.Body.String())
+	}
+}
+
+func TestMetricsRouteIsNotRegisteredWhenObservabilityIsDisabled(t *testing.T) {
+	router := newContractTestRouterWithObservability(nil)
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, response.Code)
+	}
+}
+
 func openAPIRoutes(document *openapi3.T) map[string]bool {
 	out := make(map[string]bool)
 	for path, item := range document.Paths.Map() {
@@ -62,6 +91,10 @@ func isContractAPIRouteKey(key string) bool {
 }
 
 func newContractTestRouter() chi.Router {
+	return newContractTestRouterWithObservability(observability.New("test"))
+}
+
+func newContractTestRouterWithObservability(metrics *observability.Service) chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	pass := func(next http.Handler) http.Handler { return next }
@@ -75,6 +108,7 @@ func newContractTestRouter() chi.Router {
 		Addr:                     ":0",
 		Dev:                      true,
 		Logger:                   logger,
+		Observability:            metrics,
 		Handlers:                 newTestHandlers(logger, renderer),
 		disableOpenAPIValidation: true,
 	}
@@ -99,6 +133,9 @@ func newContractTestRouter() chi.Router {
 
 	r := chi.NewRouter()
 
+	if metrics != nil {
+		r.Use(metrics.Middleware)
+	}
 	r.Use(middlewareRequestLogger(cfg.Logger))
 
 	registerRoutes(r, cfg, mw)

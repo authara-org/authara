@@ -12,6 +12,7 @@ type Config struct {
 	DB             DB
 	Cache          Cache
 	Logging        Logging
+	Observability  Observability
 	UI             UI
 	OAuth          OAuth
 	Token          Token

@@ -19,6 +19,9 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	if cfg.TrustProxyHeaders {
 		r.Use(middleware.RealIP)
 	}
+	if cfg.Observability != nil {
+		r.Use(cfg.Observability.Middleware)
+	}
 	r.Use(httpmiddleware.SecurityHeaders(httpmiddleware.SecurityHeadersConfig{
 		AllowGoogleOAuth: hasOAuthProvider(cfg, domain.ProviderGoogle),
 	}))
@@ -45,6 +48,10 @@ func hasOAuthProvider(cfg ServerConfig, name domain.Provider) bool {
 }
 
 func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
+	if cfg.Observability != nil {
+		r.Get("/metrics", cfg.Observability.Handler().ServeHTTP)
+	}
+
 	r.Group(func(r chi.Router) {
 		r.Get("/auth/health", meta.Health)
 		r.Get("/auth/version", meta.Version(cfg.Version))
