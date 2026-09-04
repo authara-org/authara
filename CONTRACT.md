@@ -19,6 +19,7 @@ Authara exposes multiple public contracts:
 - OpenAPI contract (public/internal JSON routes, schemas, cookies, and errors)
 - configuration contract (environment variables)
 - webhook contract (event types, payloads, delivery behavior)
+- Redis access-token revocation contract (cross-component key templates)
 
 This document defines the rules and guarantees that apply to all public contracts.
 
@@ -201,6 +202,12 @@ Stable behaviors include:
 
 Security-relevant guarantees must not be weakened.
 
+## 8.1 Access-token revocation contract
+
+Core and server-side SDK middleware share the Redis key templates in
+`contract/access-token-revocations.json`. An incompatible change is breaking
+unless a compatible rollout supports both formats.
+
 ---
 
 # 9. Webhook Contract
@@ -268,6 +275,7 @@ Authara maintains contract tests for:
 - configuration surface
 - webhook event types and payload shape
 - webhook signature format
+- Redis access-token revocation keys
 
 ---
 

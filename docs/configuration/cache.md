@@ -10,6 +10,10 @@ hashes, never bearer-token values.
 Access-token revocation checks fail closed: when Redis is configured but
 unavailable, authenticated requests are rejected until the cache recovers.
 
+Core's Redis revocation key templates are defined by the stable machine-readable
+contract in `contract/access-token-revocations.json`. Server-side SDKs that
+perform revocation checks synchronize and test their keys against it.
+
 With the `noop` cache, rate limiting stays in memory per instance and access
 tokens remain valid until their normal expiry after a session, user, or
 organization membership is revoked.
