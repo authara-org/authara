@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0](https://github.com/authara-org/authara/compare/v0.17.0...v0.18.0) (2026-09-04)
+
+
+### Features
+
+* **contract:** publish access-token revocation keys ([#44](https://github.com/authara-org/authara/issues/44)) ([7d8d726](https://github.com/authara-org/authara/commit/7d8d7261604d15f216050078129e236439363b57))
+
 ## [0.17.0](https://github.com/authara-org/authara/compare/v0.16.0...v0.17.0) (2026-09-03)
 
 
