@@ -7,19 +7,21 @@ import (
 
 	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/observability"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/schema"
 )
 
 type App struct {
-	Config   *config.Config
-	Logger   *slog.Logger
-	Store    *store.Store
-	Cache    cache.Cache
-	Services Services
+	Config        *config.Config
+	Logger        *slog.Logger
+	Observability *observability.Service
+	Store         *store.Store
+	Cache         cache.Cache
+	Services      Services
 }
 
-func NewApp() (*App, error) {
+func NewApp(version string) (*App, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
@@ -51,12 +53,22 @@ func NewApp() (*App, error) {
 	}
 
 	configureRuntime(cfg)
+	var metrics *observability.Service
+	if cfg.Observability.Enabled {
+		metrics = observability.New(version)
+		if err := metrics.RegisterDatabase(st.DB(), "primary"); err != nil {
+			_ = ca.Close()
+			_ = st.Close()
+			return nil, fmt.Errorf("register database metrics: %w", err)
+		}
+	}
 
 	a := &App{
-		Config: cfg,
-		Logger: logger,
-		Store:  st,
-		Cache:  ca,
+		Config:        cfg,
+		Logger:        logger,
+		Observability: metrics,
+		Store:         st,
+		Cache:         ca,
 	}
 	services, err := NewServices(a)
 	if err != nil {

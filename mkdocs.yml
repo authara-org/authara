@@ -46,6 +46,7 @@ nav:
       - Migrations: operations/migrations.md
       - Admin Dashboard: operations/admin-dashboard.md
       - Health Checks: operations/healthchecks.md
+      - Prometheus Metrics: operations/metrics.md
 
   - HTTP:
       - Overview: http/overview.md

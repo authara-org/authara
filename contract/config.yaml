@@ -21,6 +21,13 @@ variables:
       dev: debug
       prod: info
 
+  - name: AUTHARA_METRICS_ENABLED
+    stability: stable
+    required: false
+    type: bool
+    default: false
+    description: Enables Prometheus metric collection and the GET /metrics endpoint.
+
   # ------------------------------------------------------------
   # Database
   # ------------------------------------------------------------

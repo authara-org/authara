@@ -35,7 +35,7 @@ func NewServices(app *App) (Services, error) {
 	accessPolicy := newAccessPolicy(app)
 	oauthProviders := newOAuthProviders(app.Config)
 	webhookPublisher := newWebhookPublisher(app.Config, app.Store)
-	webhookWorker := newWebhookWorker(app.Config, app.Store, app.Logger)
+	webhookWorker := newWebhookWorker(app.Config, app.Store, app.Logger, app.Observability)
 
 	accessTokenService := token.NewAccessTokenService(
 		app.Config.Token.KeySet,
@@ -123,6 +123,7 @@ func NewServices(app *App) (Services, error) {
 			CleanupFailedAfter: app.Config.Email.CleanupFailedAfter,
 			CleanupInterval:    time.Hour,
 			SendTimeout:        app.Config.Email.SMTPTimeout,
+			Metrics:            app.Observability,
 		},
 	)
 

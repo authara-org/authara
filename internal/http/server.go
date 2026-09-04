@@ -10,6 +10,7 @@ import (
 	"github.com/authara-org/authara/internal/http/handlers/internalapi"
 	"github.com/authara-org/authara/internal/http/handlers/ui"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/observability"
 )
 
 type ServerConfig struct {
@@ -18,6 +19,7 @@ type ServerConfig struct {
 	Dev               bool
 	TrustProxyHeaders bool
 	Logger            *slog.Logger
+	Observability     *observability.Service
 	OAuthProviders    oauth.OAuthProviders
 	Handlers          Handlers
 

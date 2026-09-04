@@ -20,7 +20,12 @@ func newWebhookPublisher(cfg *config.Config, store *store.Store) webhook.Publish
 	)
 }
 
-func newWebhookWorker(cfg *config.Config, store *store.Store, logger *slog.Logger) *webhook.Worker {
+func newWebhookWorker(
+	cfg *config.Config,
+	store *store.Store,
+	logger *slog.Logger,
+	metrics webhook.WorkerMetrics,
+) *webhook.Worker {
 	if !cfg.Webhook.Enabled() {
 		return nil
 	}
@@ -44,6 +49,7 @@ func newWebhookWorker(cfg *config.Config, store *store.Store, logger *slog.Logge
 			FailedRetention:      cfg.Webhook.FailedRetention,
 			CleanupInterval:      cfg.Webhook.CleanupInterval,
 			MaintenanceBatchSize: cfg.Webhook.MaintenanceBatchSize,
+			Metrics:              metrics,
 		},
 	)
 }

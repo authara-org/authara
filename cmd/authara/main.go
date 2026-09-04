@@ -19,7 +19,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	app, err := bootstrap.NewApp()
+	app, err := bootstrap.NewApp(Version)
 	if err != nil {
 		log.Fatalf("startup failed: %v", err)
 	}

@@ -20,20 +20,26 @@ type WorkerConfig struct {
 	FailedRetention      time.Duration
 	CleanupInterval      time.Duration
 	MaintenanceBatchSize int
+	Metrics              WorkerMetrics
+}
+
+type WorkerMetrics interface {
+	ObserveBackgroundJob(worker, outcome string, duration time.Duration)
 }
 
 type Worker struct {
-	store  *store.Store
-	sender *Sender
-	logger *slog.Logger
-	cfg    WorkerConfig
+	store   *store.Store
+	sender  *Sender
+	logger  *slog.Logger
+	metrics WorkerMetrics
+	cfg     WorkerConfig
 }
 
 func NewWorker(store *store.Store, sender *Sender, logger *slog.Logger, cfg WorkerConfig) *Worker {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Worker{store: store, sender: sender, logger: logger, cfg: cfg}
+	return &Worker{store: store, sender: sender, logger: logger, metrics: cfg.Metrics, cfg: cfg}
 }
 
 func (w *Worker) Run(ctx context.Context) {
@@ -78,6 +84,7 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 		}
 		return false, err
 	}
+	started := time.Now()
 
 	retryable, err := w.sender.sendOnce(ctx, EventType(event.EventType), event.ID, event.Payload)
 	if err != nil {
@@ -91,6 +98,7 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 				err.Error(),
 				nextAttemptAt,
 			); requeueErr != nil {
+				w.observeJob("error", started)
 				return true, fmt.Errorf("requeue webhook event: %w", requeueErr)
 			}
 			w.logger.WarnContext(ctx, "webhook event retry scheduled",
@@ -100,10 +108,12 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 				"next_attempt_at", nextAttemptAt,
 				"error", err,
 			)
+			w.observeJob("retried", started)
 			return true, nil
 		}
 
 		if markErr := w.store.MarkWebhookEventFailed(ctx, event.ID, processingStartedAt, err.Error()); markErr != nil {
+			w.observeJob("error", started)
 			return true, fmt.Errorf("mark failed webhook event: %w", markErr)
 		}
 		w.logger.WarnContext(ctx, "webhook event failed",
@@ -112,17 +122,26 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 			"attempt", event.AttemptCount,
 			"error", err,
 		)
+		w.observeJob("failed", started)
 		return true, nil
 	}
 
 	if err := w.store.MarkWebhookEventDelivered(ctx, event.ID, *event.ProcessingStartedAt, now); err != nil {
+		w.observeJob("error", started)
 		return true, err
 	}
 	w.logger.InfoContext(ctx, "webhook event delivered",
 		"event_id", event.ID,
 		"event_type", event.EventType,
 	)
+	w.observeJob("succeeded", started)
 	return true, nil
+}
+
+func (w *Worker) observeJob(outcome string, started time.Time) {
+	if w.metrics != nil {
+		w.metrics.ObserveBackgroundJob("webhook", outcome, time.Since(started))
+	}
 }
 
 func deliveryRetryDelay(attempt int) time.Duration {
