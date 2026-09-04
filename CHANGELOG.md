@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/authara-org/authara/compare/v0.18.0...v0.19.0) (2026-09-04)
+
+
+### Features
+
+* **observability:** add opt-in Prometheus metrics ([d44940a](https://github.com/authara-org/authara/commit/d44940a74dcc219d6c1d8a8ca63e2bdef025853f))
+
 ## [0.18.0](https://github.com/authara-org/authara/compare/v0.17.0...v0.18.0) (2026-09-04)
 
 
