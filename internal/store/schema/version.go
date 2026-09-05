@@ -1,3 +1,3 @@
 package schema
 
-const RequiredSchemaVersion = 19
+const RequiredSchemaVersion = 20

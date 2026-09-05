@@ -196,15 +196,8 @@ func RenderBuiltInTemplate(key domain.EmailTemplate, data TemplateData) (Message
 }
 
 func (e templateCatalogEntry) renderBuiltIn(data TemplateData) (Message, error) {
-	for _, variable := range e.definition.RequiredVariables {
-		if strings.TrimSpace(data[variable]) == "" {
-			return Message{}, fmt.Errorf(
-				"%w: template %q requires %q",
-				ErrMissingTemplateVariable,
-				e.definition.Key,
-				variable,
-			)
-		}
+	if err := validateTemplateData(e.definition, data); err != nil {
+		return Message{}, err
 	}
 
 	subject, err := e.renderSubject(data)
@@ -225,6 +218,20 @@ func (e templateCatalogEntry) renderBuiltIn(data TemplateData) (Message, error) 
 		Text:    textBody,
 		HTML:    htmlBody,
 	}, nil
+}
+
+func validateTemplateData(definition TemplateDefinition, data TemplateData) error {
+	for _, variable := range definition.RequiredVariables {
+		if strings.TrimSpace(data[variable]) == "" {
+			return fmt.Errorf(
+				"%w: template %q requires %q",
+				ErrMissingTemplateVariable,
+				definition.Key,
+				variable,
+			)
+		}
+	}
+	return nil
 }
 
 func lookupTemplateEntry(key domain.EmailTemplate) (templateCatalogEntry, error) {

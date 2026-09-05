@@ -35,6 +35,22 @@ func SupportedEmailTemplates() []EmailTemplate {
 	}
 }
 
+// EmailTemplateOverride is the persisted operator customization for one
+// Core-owned email template. A missing override means the built-in template is
+// effective.
+type EmailTemplateOverride struct {
+	Template EmailTemplate
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
+	SubjectTemplate string
+	TextTemplate    string
+	HTMLTemplate    string
+	Revision        int64
+	UpdatedByUserID *uuid.UUID
+}
+
 type EmailJob struct {
 	ID          uuid.UUID
 	ChallengeID *uuid.UUID
