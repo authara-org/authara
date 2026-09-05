@@ -292,12 +292,12 @@ Cause:
 
 For local development:
 
-### MailHog
+### Mailpit
 
 Run:
 
 ```
-docker run -p 1025:1025 -p 8025:8025 mailhog/mailhog
+docker run -p 1025:1025 -p 8025:8025 axllent/mailpit
 ```
 
 Config:
@@ -314,4 +314,3 @@ Then open:
 ```
 http://localhost:8025
 ```
-

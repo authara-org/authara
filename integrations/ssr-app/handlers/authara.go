@@ -239,6 +239,17 @@ func autharaAPIJSON(ctx context.Context, incoming *http.Request, method, path st
 }
 
 func autharaAPIResponse(ctx context.Context, incoming *http.Request, method, path string, body any) (*http.Response, error) {
+	return autharaAPIResponseWithOptions(ctx, incoming, method, path, body, nil, "")
+}
+
+func autharaAPIResponseWithOptions(
+	ctx context.Context,
+	incoming *http.Request,
+	method, path string,
+	body any,
+	overrideCookies []*http.Cookie,
+	csrfToken string,
+) (*http.Response, error) {
 	var reader *bytes.Reader
 	if body == nil {
 		reader = bytes.NewReader(nil)
@@ -254,11 +265,35 @@ func autharaAPIResponse(ctx context.Context, incoming *http.Request, method, pat
 	if err != nil {
 		return nil, err
 	}
-	addCookies(req, incoming.Cookies(), nil)
+	addCookies(req, incoming.Cookies(), overrideCookies)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	if csrfToken != "" {
+		req.Header.Set("X-CSRF-Token", csrfToken)
+	}
 	return http.DefaultClient.Do(req)
+}
+
+func autharaAPICSRFJSON(ctx context.Context, incoming *http.Request, method, path string, body any, wantStatus int, out any) error {
+	csrfToken, csrfCookies, err := fetchAPICSRF(ctx, incoming)
+	if err != nil {
+		return err
+	}
+
+	resp, err := autharaAPIResponseWithOptions(ctx, incoming, method, path, body, csrfCookies, csrfToken)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != wantStatus {
+		return autharaResponseError(resp, path+" failed")
+	}
+	if out == nil {
+		return nil
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
 }
 
 func createInvitation(ctx context.Context, orgID, actorID, email string) (*createInvitationResponse, error) {
@@ -293,15 +328,16 @@ func createOrganization(ctx context.Context, name, createdByUserID string) (*int
 	return &out, err
 }
 
-func updateOrganization(ctx context.Context, orgID, name string) (*internalOrganizationResponse, error) {
+func updateOrganization(incoming *http.Request, orgID, name string) (*internalOrganizationResponse, error) {
 	if orgID == "" || name == "" {
 		return nil, fmt.Errorf("organization and name required")
 	}
 	var out internalOrganizationResponse
-	err := internalJSON(
-		ctx,
+	err := autharaAPICSRFJSON(
+		incoming.Context(),
+		incoming,
 		http.MethodPatch,
-		"/auth/internal/v1/organizations/"+url.PathEscape(orgID),
+		"/auth/api/v1/organizations/"+url.PathEscape(orgID),
 		map[string]string{"name": name},
 		http.StatusOK,
 		&out,
@@ -309,16 +345,17 @@ func updateOrganization(ctx context.Context, orgID, name string) (*internalOrgan
 	return &out, err
 }
 
-func revokeInvitation(ctx context.Context, orgID, invitationID, revokedByUserID string) (*internalInvitationResponse, error) {
+func revokeInvitation(incoming *http.Request, orgID, invitationID string) (*internalInvitationResponse, error) {
 	if orgID == "" || invitationID == "" {
 		return nil, fmt.Errorf("organization and invitation required")
 	}
 	var out internalInvitationResponse
-	err := internalJSON(
-		ctx,
+	err := autharaAPICSRFJSON(
+		incoming.Context(),
+		incoming,
 		http.MethodPost,
-		"/auth/internal/v1/organizations/"+url.PathEscape(orgID)+"/invitations/"+url.PathEscape(invitationID)+"/revoke",
-		map[string]string{"revoked_by_user_id": revokedByUserID},
+		"/auth/api/v1/organizations/"+url.PathEscape(orgID)+"/invitations/"+url.PathEscape(invitationID)+"/revoke",
+		nil,
 		http.StatusOK,
 		&out,
 	)
@@ -341,30 +378,30 @@ func resendInvitation(ctx context.Context, orgID, invitationID string) (*interna
 	return &out, err
 }
 
-func getCapabilities(ctx context.Context) (*capabilitiesResponse, error) {
+func getCapabilities(ctx context.Context, incoming *http.Request) (*capabilitiesResponse, error) {
 	var out capabilitiesResponse
-	if err := internalJSON(ctx, http.MethodGet, "/auth/internal/v1/capabilities", nil, http.StatusOK, &out); err != nil {
+	if err := autharaAPIJSON(ctx, incoming, http.MethodGet, "/auth/api/v1/capabilities", nil, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-func getUserMemberships(ctx context.Context, userID string) ([]internalMembershipWithOrganizationDTO, error) {
+func getUserMemberships(ctx context.Context, incoming *http.Request, userID string) ([]internalMembershipWithOrganizationDTO, error) {
 	var out internalUserMembershipsResponse
-	if err := internalJSON(ctx, http.MethodGet, "/auth/internal/v1/users/"+url.PathEscape(userID)+"/memberships", nil, http.StatusOK, &out); err != nil {
+	if err := autharaAPIJSON(ctx, incoming, http.MethodGet, "/auth/api/v1/users/"+url.PathEscape(userID)+"/memberships", nil, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
 	return out.Memberships, nil
 }
 
-func loadLiveOrganizations(ctx context.Context, userID string, publicOrgs []organizationDTO, memberships []internalMembershipWithOrganizationDTO) ([]liveOrganization, []string) {
+func loadLiveOrganizations(ctx context.Context, incoming *http.Request, userID string, publicOrgs []organizationDTO, memberships []internalMembershipWithOrganizationDTO) ([]liveOrganization, []string) {
 	orgIDs := orgIDsForLiveView(publicOrgs, memberships)
 	out := make([]liveOrganization, 0, len(orgIDs))
 	var errs []string
 
 	for _, orgID := range orgIDs {
 		live := liveOrganization{}
-		if err := internalJSON(ctx, http.MethodGet, "/auth/internal/v1/organizations/"+url.PathEscape(orgID), nil, http.StatusOK, &struct {
+		if err := autharaAPIJSON(ctx, incoming, http.MethodGet, "/auth/api/v1/organizations/"+url.PathEscape(orgID), nil, http.StatusOK, &struct {
 			Organization *internalOrganizationDTO `json:"organization"`
 		}{Organization: &live.Organization}); err != nil {
 			live.Errors = append(live.Errors, err.Error())
@@ -372,29 +409,22 @@ func loadLiveOrganizations(ctx context.Context, userID string, publicOrgs []orga
 		}
 
 		var members internalMembersResponse
-		if err := internalJSON(ctx, http.MethodGet, "/auth/internal/v1/organizations/"+url.PathEscape(orgID)+"/members", nil, http.StatusOK, &members); err != nil {
+		if err := autharaAPIJSON(ctx, incoming, http.MethodGet, "/auth/api/v1/organizations/"+url.PathEscape(orgID)+"/members", nil, http.StatusOK, &members); err != nil {
 			live.Errors = append(live.Errors, err.Error())
 		} else {
 			live.Members = members.Members
 		}
 
 		var member internalMemberResponse
-		if err := internalJSON(ctx, http.MethodGet, "/auth/internal/v1/organizations/"+url.PathEscape(orgID)+"/members/"+url.PathEscape(userID), nil, http.StatusOK, &member); err == nil {
+		if err := autharaAPIJSON(ctx, incoming, http.MethodGet, "/auth/api/v1/organizations/"+url.PathEscape(orgID)+"/members/"+url.PathEscape(userID), nil, http.StatusOK, &member); err == nil {
 			live.CurrentMember = &member.Member
 		}
 
 		var invitations internalInvitationsResponse
-		if err := internalJSON(ctx, http.MethodGet, "/auth/internal/v1/organizations/"+url.PathEscape(orgID)+"/invitations", nil, http.StatusOK, &invitations); err != nil {
+		if err := autharaAPIJSON(ctx, incoming, http.MethodGet, "/auth/api/v1/organizations/"+url.PathEscape(orgID)+"/invitations", nil, http.StatusOK, &invitations); err != nil {
 			live.Errors = append(live.Errors, err.Error())
 		} else {
 			for _, inv := range invitations.Invitations {
-				if inv.Status != "pending" {
-					continue
-				}
-				var one internalInvitationResponse
-				if err := internalJSON(ctx, http.MethodGet, "/auth/internal/v1/organizations/"+url.PathEscape(orgID)+"/invitations/"+url.PathEscape(inv.ID), nil, http.StatusOK, &one); err == nil {
-					inv = one.Invitation
-				}
 				if inv.Status != "pending" {
 					continue
 				}

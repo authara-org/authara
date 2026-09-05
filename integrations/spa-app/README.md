@@ -52,7 +52,7 @@ as `/spa/private`; the gateway must continue routing `/auth/*` to Authara.
 
 All requests use relative URLs. API mutations fetch `/auth/api/v1/csrf` first and send its value as `X-CSRF-Token`; access and refresh tokens stay in Authara's cookies and returned token strings are ignored.
 
-To exercise signup verification locally, run `make mailhog-up`, use the SMTP
+To exercise signup verification locally, run `make mailpit-up`, use the SMTP
 development configuration, and read the code at
 [http://localhost:8025](http://localhost:8025). With the `noop` email provider,
 disable challenges to test immediate signup because verification codes are not
