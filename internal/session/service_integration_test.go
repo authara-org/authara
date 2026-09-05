@@ -749,6 +749,45 @@ func TestCanAccessAudience(t *testing.T) {
 			audience: token.AudienceAdmin,
 			want:     true,
 		},
+		{
+			name: "admin audience denies operator",
+			setup: func(r *roles.Roles) {
+				r.AddOperator()
+			},
+			audience: token.AudienceAdmin,
+			want:     false,
+		},
+		{
+			name:     "operator audience denies empty roles",
+			setup:    func(r *roles.Roles) {},
+			audience: token.AudienceOperator,
+			want:     false,
+		},
+		{
+			name: "operator audience denies admin",
+			setup: func(r *roles.Roles) {
+				r.AddAdmin()
+			},
+			audience: token.AudienceOperator,
+			want:     false,
+		},
+		{
+			name: "operator audience allows operator",
+			setup: func(r *roles.Roles) {
+				r.AddOperator()
+			},
+			audience: token.AudienceOperator,
+			want:     true,
+		},
+		{
+			name: "operator audience allows additive operator role",
+			setup: func(r *roles.Roles) {
+				r.AddAdmin()
+				r.AddOperator()
+			},
+			audience: token.AudienceOperator,
+			want:     true,
+		},
 	}
 
 	for _, tt := range tests {

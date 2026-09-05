@@ -2121,7 +2121,7 @@ components:
       required: false
       schema:
         type: string
-        enum: [app, admin]
+        enum: [app, admin, operator]
         default: app
     AppAudience:
       name: audience
@@ -2525,7 +2525,7 @@ components:
           type: string
         audience:
           type: string
-          enum: [app, admin]
+          enum: [app, admin, operator]
           default: app
 
     CurrentUser:
@@ -2550,7 +2550,7 @@ components:
           type: array
           items:
             type: string
-            enum: ["authara:admin", "authara:auditor", "authara:monitor"]
+            enum: ["authara:admin", "authara:auditor", "authara:monitor", "authara:operator"]
         organization:
           $ref: "#/components/schemas/OrganizationSummary"
     Account:

@@ -97,6 +97,52 @@ func TestAccessTokenService_GenerateAndParse_AdminAudience(t *testing.T) {
 	}
 }
 
+func TestAccessTokenService_GenerateAndParse_OperatorAudience(t *testing.T) {
+	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+	svc := newTestAccessTokenService(t, 10*time.Minute)
+
+	var rs roles.Roles
+	rs.AddOperator()
+
+	tokenString, err := svc.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceOperator, rs, now)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	claims, err := svc.Parse(tokenString, AudienceOperator, now)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(claims.Audience) != 1 || claims.Audience[0] != string(AudienceOperator) {
+		t.Fatalf("expected audience %q, got %v", AudienceOperator, claims.Audience)
+	}
+	if len(claims.Roles) != 1 || claims.Roles[0] != roles.AutharaOperator {
+		t.Fatalf("expected operator role, got %v", claims.Roles)
+	}
+}
+
+func TestAccessTokenService_AdminAndOperatorAudiencesAreDistinct(t *testing.T) {
+	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+	svc := newTestAccessTokenService(t, 10*time.Minute)
+
+	operatorToken, err := svc.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceOperator, roles.Roles{}, now)
+	if err != nil {
+		t.Fatalf("generate operator token: %v", err)
+	}
+	if _, err := svc.Parse(operatorToken, AudienceAdmin, now); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("parse operator token as admin error = %v, want ErrInvalidToken", err)
+	}
+
+	adminToken, err := svc.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceAdmin, roles.Roles{}, now)
+	if err != nil {
+		t.Fatalf("generate admin token: %v", err)
+	}
+	if _, err := svc.Parse(adminToken, AudienceOperator, now); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("parse admin token as operator error = %v, want ErrInvalidToken", err)
+	}
+}
+
 func TestAccessTokenService_Parse_WrongAudience(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestAccessTokenService(t, 10*time.Minute)
@@ -132,6 +178,21 @@ func TestAccessTokenService_ParseAny_AllowsAdminAudience(t *testing.T) {
 	svc := newTestAccessTokenService(t, 10*time.Minute)
 
 	tokenString, err := svc.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceAdmin, roles.Roles{}, now)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	_, err = svc.ParseAny(tokenString, now)
+	if err != nil {
+		t.Fatalf("ParseAny failed: %v", err)
+	}
+}
+
+func TestAccessTokenService_ParseAny_AllowsOperatorAudience(t *testing.T) {
+	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+	svc := newTestAccessTokenService(t, 10*time.Minute)
+
+	tokenString, err := svc.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceOperator, roles.Roles{}, now)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}

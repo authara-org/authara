@@ -16,9 +16,11 @@ func TestRoles_AddMethods_Deduplicate(t *testing.T) {
 	rs.AddAuditor()
 	rs.AddMonitor()
 	rs.AddMonitor()
+	rs.AddOperator()
+	rs.AddOperator()
 
 	got := rs.List()
-	want := []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor}
+	want := []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator}
 
 	if !slices.Equal(got, want) {
 		t.Fatalf("List() = %v, want %v", got, want)
@@ -49,6 +51,7 @@ func TestRoles_Has(t *testing.T) {
 	var rs Roles
 	rs.AddAdmin()
 	rs.AddMonitor()
+	rs.AddOperator()
 
 	if !rs.Has(AutharaAdmin) {
 		t.Fatal("expected Has(AutharaAdmin) to be true")
@@ -58,6 +61,9 @@ func TestRoles_Has(t *testing.T) {
 	}
 	if !rs.Has(AutharaMonitor) {
 		t.Fatal("expected Has(AutharaMonitor) to be true")
+	}
+	if !rs.Has(AutharaOperator) {
+		t.Fatal("expected Has(AutharaOperator) to be true")
 	}
 }
 
@@ -113,6 +119,7 @@ func TestRoles_IsHelpers(t *testing.T) {
 	var rs Roles
 	rs.AddAdmin()
 	rs.AddMonitor()
+	rs.AddOperator()
 
 	if !rs.IsAdmin() {
 		t.Fatal("expected IsAdmin() to be true")
@@ -122,6 +129,9 @@ func TestRoles_IsHelpers(t *testing.T) {
 	}
 	if !rs.IsMonitor() {
 		t.Fatal("expected IsMonitor() to be true")
+	}
+	if !rs.IsOperator() {
+		t.Fatal("expected IsOperator() to be true")
 	}
 }
 
@@ -152,6 +162,11 @@ func TestRoles_CanAccessAdmin(t *testing.T) {
 			name:  "monitor can access admin",
 			setup: func(r *Roles) { r.AddMonitor() },
 			want:  true,
+		},
+		{
+			name:  "operator cannot access admin",
+			setup: func(r *Roles) { r.AddOperator() },
+			want:  false,
 		},
 		{
 			name: "multiple valid roles can access admin",
@@ -202,8 +217,8 @@ func TestFromClaims(t *testing.T) {
 		},
 		{
 			name:   "multiple valid claims",
-			claims: []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor},
-			want:   []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor},
+			claims: []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator},
+			want:   []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator},
 			err:    false,
 		},
 		{
@@ -288,9 +303,15 @@ func TestFromDBRoleNames(t *testing.T) {
 			err:   false,
 		},
 		{
+			name:  "operator maps correctly",
+			input: []string{DBOperatorRoleName},
+			want:  []Role{AutharaOperator},
+			err:   false,
+		},
+		{
 			name:  "multiple role names map correctly",
-			input: []string{DBAdminRoleName, DBAuditorRoleName, DBMonitorRoleName},
-			want:  []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor},
+			input: []string{DBAdminRoleName, DBAuditorRoleName, DBMonitorRoleName, DBOperatorRoleName},
+			want:  []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator},
 			err:   false,
 		},
 		{
@@ -346,6 +367,7 @@ func TestValidate(t *testing.T) {
 		{name: "admin valid", role: AutharaAdmin, err: false},
 		{name: "auditor valid", role: AutharaAuditor, err: false},
 		{name: "monitor valid", role: AutharaMonitor, err: false},
+		{name: "operator valid", role: AutharaOperator, err: false},
 		{name: "unknown authara role invalid", role: "authara:unknown", err: true},
 		{name: "wrong namespace invalid", role: "tenant:admin", err: true},
 		{name: "empty invalid", role: "", err: true},

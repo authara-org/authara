@@ -23,7 +23,7 @@ TEST_DB_SCHEMA     ?= authara
 TEST_DB_TIMEZONE   ?= UTC
 TEST_DB_LOG_SQL    ?= false
 
-.PHONY: dev dev-tailwind mailhog-up mailhog-down connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email \
+.PHONY: dev dev-tailwind mailhog-up mailhog-down connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email operator-by-email \
 	test test-up test-db-create test-migrate test-run test-down test-reset \
 	test-coverage test-coverage-profile test-coverage-html generate openapi-generate check-generated
 
@@ -114,6 +114,23 @@ endif
 		SELECT id FROM $(POSTGRESQL_SCHEMA).users WHERE email = '$(EMAIL)' \
 	), r AS ( \
 		SELECT id FROM $(POSTGRESQL_SCHEMA).platform_roles WHERE name = 'admin' \
+	) \
+	INSERT INTO $(POSTGRESQL_SCHEMA).user_platform_roles (user_id, role_id) \
+	SELECT u.id, r.id FROM u, r \
+	ON CONFLICT DO NOTHING; \
+	"
+
+operator-by-email:
+ifndef EMAIL
+	$(error EMAIL is required. Usage: make operator-by-email EMAIL=user@example.com)
+endif
+	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
+	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
+	-c "\
+	WITH u AS ( \
+		SELECT id FROM $(POSTGRESQL_SCHEMA).users WHERE email = '$(EMAIL)' \
+	), r AS ( \
+		SELECT id FROM $(POSTGRESQL_SCHEMA).platform_roles WHERE name = 'operator' \
 	) \
 	INSERT INTO $(POSTGRESQL_SCHEMA).user_platform_roles (user_id, role_id) \
 	SELECT u.id, r.id FROM u, r \
