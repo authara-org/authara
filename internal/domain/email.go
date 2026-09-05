@@ -24,6 +24,17 @@ const (
 	EmailTemplateOrganizationInvite EmailTemplate = "organization_invitation"
 )
 
+// SupportedEmailTemplates returns every email template understood by Core in
+// its stable display order.
+func SupportedEmailTemplates() []EmailTemplate {
+	return []EmailTemplate{
+		EmailTemplateSignupCode,
+		EmailTemplatePasswordResetCode,
+		EmailTemplateEmailChangeCode,
+		EmailTemplateOrganizationInvite,
+	}
+}
+
 type EmailJob struct {
 	ID          uuid.UUID
 	ChallengeID *uuid.UUID

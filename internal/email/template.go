@@ -4,51 +4,27 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/authara-org/authara/internal/email/templates"
+	"github.com/authara-org/authara/internal/domain"
 )
 
 var ErrInvalidOrganizationName = errors.New("invalid organization name")
 
 func BuildSignupCodeMessage(code string) (Message, error) {
-	htmlBody, err := RenderSignupCodeHTML(code)
-	if err != nil {
-		return Message{}, err
-	}
-
-	msg := Message{
-		Subject: "Your verification code",
-		Text:    templates.SignupCodeText(code),
-		HTML:    htmlBody,
-	}
-	return msg, nil
+	return RenderBuiltInTemplate(domain.EmailTemplateSignupCode, TemplateData{
+		TemplateVariableCode: code,
+	})
 }
 
 func BuildPasswordResetCodeMessage(code string) (Message, error) {
-	htmlBody, err := RenderPasswordResetCodeHTML(code)
-	if err != nil {
-		return Message{}, err
-	}
-
-	msg := Message{
-		Subject: "Your password reset code",
-		Text:    templates.PasswordResetCodeText(code),
-		HTML:    htmlBody,
-	}
-	return msg, nil
+	return RenderBuiltInTemplate(domain.EmailTemplatePasswordResetCode, TemplateData{
+		TemplateVariableCode: code,
+	})
 }
 
 func BuildEmailChangeCodeMessage(code string) (Message, error) {
-	htmlBody, err := RenderEmailChangeCodeHTML(code)
-	if err != nil {
-		return Message{}, err
-	}
-
-	msg := Message{
-		Subject: "Verify your new email address",
-		Text:    templates.EmailChangeCodeText(code),
-		HTML:    htmlBody,
-	}
-	return msg, nil
+	return RenderBuiltInTemplate(domain.EmailTemplateEmailChangeCode, TemplateData{
+		TemplateVariableCode: code,
+	})
 }
 
 type OrganizationInvitationPayload struct {
@@ -65,14 +41,11 @@ func BuildOrganizationInvitationMessage(payload OrganizationInvitationPayload) (
 		return Message{}, ErrInvalidOrganizationName
 	}
 
-	htmlBody, err := RenderOrganizationInvitationHTML(orgName, payload.InviteURL, payload.InvitationCode, payload.Role, payload.ExpiresAt)
-	if err != nil {
-		return Message{}, err
-	}
-
-	return Message{
-		Subject: "You're invited to " + orgName,
-		Text:    templates.OrganizationInvitationText(orgName, payload.InviteURL, payload.InvitationCode, payload.Role, payload.ExpiresAt),
-		HTML:    htmlBody,
-	}, nil
+	return RenderBuiltInTemplate(domain.EmailTemplateOrganizationInvite, TemplateData{
+		TemplateVariableOrganizationName: orgName,
+		TemplateVariableInviteURL:        payload.InviteURL,
+		TemplateVariableInvitationCode:   payload.InvitationCode,
+		TemplateVariableRole:             payload.Role,
+		TemplateVariableExpiresAt:        payload.ExpiresAt,
+	})
 }
