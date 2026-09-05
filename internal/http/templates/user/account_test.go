@@ -18,3 +18,21 @@ func TestAccountAlwaysIncludesDeletion(t *testing.T) {
 		}
 	}
 }
+
+func TestAccountShowsOperatorWorkspaceOnlyForOperators(t *testing.T) {
+	var operatorPage strings.Builder
+	if err := Account(AccountConfig{OperatorAccess: true}).Render(context.Background(), &operatorPage); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(operatorPage.String(), `/auth/operator`) {
+		t.Fatal("operator account page does not link to the operator workspace")
+	}
+
+	var regularPage strings.Builder
+	if err := Account(AccountConfig{}).Render(context.Background(), &regularPage); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(regularPage.String(), `/auth/operator`) {
+		t.Fatal("regular account page must not link to the operator workspace")
+	}
+}

@@ -421,10 +421,12 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 	}
 
 	totalAuthMethods := len(providers) + len(passkeys)
+	platformRoles, _ := httpctx.Roles(ctx)
 
 	return userview.AccountConfig{
 		Username:         user.Username,
 		Email:            user.Email,
+		OperatorAccess:   platformRoles.IsOperator(),
 		GoogleClientID:   h.Google.ClientID,
 		Sessions:         toSessionViewModels(sessions, currentSessionID),
 		CurrentSessionID: currentSessionID,

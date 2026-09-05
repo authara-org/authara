@@ -1,0 +1,53 @@
+package operator
+
+import emailservice "github.com/authara-org/authara/internal/email"
+
+templ EmailTemplates(definitions []emailservice.TemplateDefinition) {
+	@Shell("emails") {
+		<div class="space-y-5">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+				<div>
+					<p class="text-xs font-medium uppercase tracking-[0.16em] text-grey-500 dark:text-grey-400">Email</p>
+					<h2 class="mt-1 text-2xl font-semibold tracking-tight">Template catalog</h2>
+					<p class="mt-2 max-w-2xl text-sm text-grey-600 dark:text-grey-400">These are the Core-owned transactional messages that will support custom text and HTML versions.</p>
+				</div>
+				<span class="inline-flex w-fit rounded-full bg-grey-100 px-2.5 py-1 text-xs font-medium text-grey-700 dark:bg-grey-800 dark:text-grey-200">Read-only</span>
+			</div>
+			<div class="overflow-hidden rounded-xl border border-grey-200 bg-white dark:border-grey-800 dark:bg-grey-900">
+				<div class="divide-y divide-grey-200 dark:divide-grey-800">
+					for _, definition := range definitions {
+						<article class="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,0.7fr)] sm:p-6">
+							<div>
+								<div class="flex flex-wrap items-center gap-2">
+									<h3 class="font-semibold">{ definition.DisplayName }</h3>
+									<span class="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">Built-in default</span>
+								</div>
+								<p class="mt-1 text-sm leading-6 text-grey-600 dark:text-grey-400">{ definition.Description }</p>
+								<p class="mt-3 font-mono text-xs text-grey-500 dark:text-grey-400">{ string(definition.Key) }</p>
+							</div>
+							<div>
+								<p class="text-xs font-medium uppercase tracking-[0.12em] text-grey-500 dark:text-grey-400">Subject</p>
+								<p class="mt-1 text-sm">{ definition.SubjectTemplate }</p>
+								<p class="mt-4 text-xs font-medium uppercase tracking-[0.12em] text-grey-500 dark:text-grey-400">Required variables</p>
+								<div class="mt-2 flex flex-wrap gap-1.5">
+									for _, variable := range definition.RequiredVariables {
+										<code class="rounded-md bg-grey-100 px-2 py-1 text-xs text-grey-700 dark:bg-grey-800 dark:text-grey-200">{ "{{" + variable + "}}" }</code>
+									}
+								</div>
+								if len(definition.OptionalVariables) > 0 {
+									<p class="mt-4 text-xs font-medium uppercase tracking-[0.12em] text-grey-500 dark:text-grey-400">Optional variables</p>
+									<div class="mt-2 flex flex-wrap gap-1.5">
+										for _, variable := range definition.OptionalVariables {
+											<code class="rounded-md bg-grey-100 px-2 py-1 text-xs text-grey-700 dark:bg-grey-800 dark:text-grey-200">{ "{{" + variable + "}}" }</code>
+										}
+									</div>
+								}
+							</div>
+						</article>
+					}
+				</div>
+			</div>
+			<p class="text-sm text-grey-600 dark:text-grey-400">Editing, preview, and publishing will be enabled after template persistence is in place.</p>
+		</div>
+	}
+}

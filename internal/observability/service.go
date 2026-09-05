@@ -127,6 +127,10 @@ func (s *Service) RegisterDatabase(db *sql.DB, name string) error {
 
 // ObserveBackgroundJob records the result and processing time of an asynchronous job.
 func (s *Service) ObserveBackgroundJob(worker, outcome string, duration time.Duration) {
+	if s == nil {
+		return
+	}
+
 	worker = normalizeBackgroundWorker(worker)
 	outcome = normalizeBackgroundOutcome(outcome)
 	s.backgroundJobs.WithLabelValues(worker, outcome).Inc()

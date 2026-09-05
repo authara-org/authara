@@ -205,6 +205,18 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 					})
 				})
 			})
+
+			// operator
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireOperatorAccessAuthWithRefresh)
+				r.Use(mw.RequireOperatorRole)
+
+				r.Get("/operator", uih.OperatorPage)
+				r.Route("/operator", func(r chi.Router) {
+					r.Get("/", uih.OperatorPage)
+					r.Get("/emails", uih.OperatorEmailTemplatesPage)
+				})
+			})
 		})
 
 		// API

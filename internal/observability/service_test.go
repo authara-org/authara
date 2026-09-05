@@ -105,6 +105,11 @@ func TestBackgroundMetricLabelsAreBounded(t *testing.T) {
 	}
 }
 
+func TestObserveBackgroundJobIsSafeWhenObservabilityIsDisabled(t *testing.T) {
+	var service *Service
+	service.ObserveBackgroundJob("webhook", "succeeded", time.Second)
+}
+
 func TestHandlerExposesRuntimeAndBuildMetrics(t *testing.T) {
 	metrics := scrape(t, New("v1.2.3"))
 
