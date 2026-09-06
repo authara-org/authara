@@ -4,18 +4,20 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/authara-org/authara/internal/domain"
 )
 
-func TestBuildOrganizationInvitationMessageRendersTemplate(t *testing.T) {
-	msg, err := BuildOrganizationInvitationMessage(OrganizationInvitationPayload{
-		OrganizationName: "Acme <Team>",
-		InviteURL:        "https://authara.example/auth/invitations/accept?token=abc",
-		InvitationCode:   "code-123",
-		Role:             "admin",
-		ExpiresAt:        "2026-06-24T12:00:00Z",
+func TestRenderBuiltInOrganizationInvitationTemplate(t *testing.T) {
+	msg, err := RenderBuiltInTemplate(domain.EmailTemplateOrganizationInvite, TemplateData{
+		TemplateVariableOrganizationName: "Acme <Team>",
+		TemplateVariableInviteURL:        "https://authara.example/auth/invitations/accept?token=abc",
+		TemplateVariableInvitationCode:   "code-123",
+		TemplateVariableRole:             "admin",
+		TemplateVariableExpiresAt:        "2026-06-24T12:00:00Z",
 	})
 	if err != nil {
-		t.Fatalf("BuildOrganizationInvitationMessage failed: %v", err)
+		t.Fatalf("RenderBuiltInTemplate failed: %v", err)
 	}
 
 	if !strings.Contains(msg.Text, "Accept the invitation: https://authara.example/auth/invitations/accept?token=abc") {
@@ -32,44 +34,12 @@ func TestBuildOrganizationInvitationMessageRendersTemplate(t *testing.T) {
 	}
 }
 
-func TestBuildOrganizationInvitationMessageRendersInvitationCode(t *testing.T) {
-	msg, err := BuildOrganizationInvitationMessage(OrganizationInvitationPayload{
-		OrganizationName: "Acme",
-		InviteURL:        "https://authara.example/auth/invitations/accept?token=abc",
-		InvitationCode:   "code-123",
-		Role:             "member",
-		ExpiresAt:        "2026-06-24T12:00:00Z",
-	})
-	if err != nil {
-		t.Fatalf("BuildOrganizationInvitationMessage failed: %v", err)
-	}
-
-	if !strings.Contains(msg.Text, "Invitation code: code-123") {
-		t.Fatalf("expected invitation code in text body, got: %s", msg.Text)
-	}
-	if !strings.Contains(msg.HTML, "Invitation code") || !strings.Contains(msg.HTML, "code-123") {
-		t.Fatalf("expected invitation code in HTML, got: %s", msg.HTML)
-	}
-}
-
-func TestBuildOrganizationInvitationMessageRejectsBlankOrganizationName(t *testing.T) {
-	_, err := BuildOrganizationInvitationMessage(OrganizationInvitationPayload{
-		OrganizationName: " ",
-		InviteURL:        "https://authara.example/auth/invitations/accept?token=abc",
-		Role:             "admin",
-		ExpiresAt:        "2026-06-24T12:00:00Z",
-	})
-	if !errors.Is(err, ErrInvalidOrganizationName) {
-		t.Fatalf("expected ErrInvalidOrganizationName, got %v", err)
-	}
-}
-
-func TestBuildOrganizationInvitationMessageRequiresInvitationCode(t *testing.T) {
-	_, err := BuildOrganizationInvitationMessage(OrganizationInvitationPayload{
-		OrganizationName: "Acme",
-		InviteURL:        "https://authara.example/auth/invitations/accept?token=abc",
-		Role:             "member",
-		ExpiresAt:        "2026-06-24T12:00:00Z",
+func TestRenderBuiltInOrganizationInvitationRequiresInvitationCode(t *testing.T) {
+	_, err := RenderBuiltInTemplate(domain.EmailTemplateOrganizationInvite, TemplateData{
+		TemplateVariableOrganizationName: "Acme",
+		TemplateVariableInviteURL:        "https://authara.example/auth/invitations/accept?token=abc",
+		TemplateVariableRole:             "member",
+		TemplateVariableExpiresAt:        "2026-06-24T12:00:00Z",
 	})
 	if !errors.Is(err, ErrMissingTemplateVariable) {
 		t.Fatalf("expected ErrMissingTemplateVariable, got %v", err)

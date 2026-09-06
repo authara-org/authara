@@ -115,6 +115,7 @@ func NewServices(app *App) (Services, error) {
 	emailWorker := challenge.NewWorker(
 		app.Store,
 		verificationCodeService,
+		emailTemplateService,
 		newEmailSender(app.Config, app.Logger),
 		app.Logger,
 		challenge.WorkerConfig{

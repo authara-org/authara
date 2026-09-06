@@ -66,8 +66,8 @@ type PreviewTemplateInput struct {
 	HTMLTemplate    string
 }
 
-// TemplateService resolves and validates operator-managed template overrides.
-// Email delivery is wired to this service in Stage 6.
+// TemplateService resolves, validates, and renders operator-managed template
+// overrides for previews and outgoing email delivery.
 type TemplateService struct {
 	store TemplateOverrideStore
 }

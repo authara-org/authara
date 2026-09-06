@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -27,18 +28,24 @@ type WorkerMetrics interface {
 	ObserveBackgroundJob(worker, outcome string, duration time.Duration)
 }
 
+type EmailTemplateRenderer interface {
+	Render(context.Context, domain.EmailTemplate, email.TemplateData) (email.Message, error)
+}
+
 type Worker struct {
-	store   *store.Store
-	codeSvc *VerificationCodeService
-	sender  email.Sender
-	logger  *slog.Logger
-	metrics WorkerMetrics
-	cfg     WorkerConfig
+	store     *store.Store
+	codeSvc   *VerificationCodeService
+	templates EmailTemplateRenderer
+	sender    email.Sender
+	logger    *slog.Logger
+	metrics   WorkerMetrics
+	cfg       WorkerConfig
 }
 
 func NewWorker(
 	store *store.Store,
 	codeSvc *VerificationCodeService,
+	templates EmailTemplateRenderer,
 	sender email.Sender,
 	logger *slog.Logger,
 	cfg WorkerConfig,
@@ -48,12 +55,13 @@ func NewWorker(
 	}
 
 	return &Worker{
-		store:   store,
-		codeSvc: codeSvc,
-		sender:  sender,
-		logger:  logger,
-		metrics: cfg.Metrics,
-		cfg:     cfg,
+		store:     store,
+		codeSvc:   codeSvc,
+		templates: templates,
+		sender:    sender,
+		logger:    logger,
+		metrics:   cfg.Metrics,
+		cfg:       cfg,
 	}
 }
 
@@ -159,8 +167,11 @@ func (w *Worker) observeJob(outcome string, started time.Time) {
 }
 
 func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.Time) error {
-	var msg email.Message
-	var err error
+	if w.templates == nil {
+		return errors.New("email template renderer is not configured")
+	}
+
+	templateData := make(email.TemplateData)
 
 	switch job.Template {
 	case domain.EmailTemplateSignupCode:
@@ -178,10 +189,7 @@ func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.T
 			return err
 		}
 
-		msg, err = email.BuildSignupCodeMessage(code)
-		if err != nil {
-			return err
-		}
+		templateData[email.TemplateVariableCode] = code
 
 	case domain.EmailTemplatePasswordResetCode:
 		if job.ChallengeID == nil {
@@ -198,10 +206,7 @@ func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.T
 			return err
 		}
 
-		msg, err = email.BuildPasswordResetCodeMessage(code)
-		if err != nil {
-			return err
-		}
+		templateData[email.TemplateVariableCode] = code
 
 	case domain.EmailTemplateEmailChangeCode:
 		if job.ChallengeID == nil {
@@ -218,28 +223,23 @@ func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.T
 			return err
 		}
 
-		msg, err = email.BuildEmailChangeCodeMessage(code)
-		if err != nil {
-			return err
-		}
+		templateData[email.TemplateVariableCode] = code
 
 	case domain.EmailTemplateOrganizationInvite:
-		var payload email.OrganizationInvitationPayload
 		if len(job.TemplateData) > 0 {
-			if err := json.Unmarshal(job.TemplateData, &payload); err != nil {
-				return err
+			if err := json.Unmarshal(job.TemplateData, &templateData); err != nil {
+				return fmt.Errorf("decode organization invitation email template data: %w", err)
 			}
-		}
-
-		msg, err = email.BuildOrganizationInvitationMessage(payload)
-		if err != nil {
-			return err
 		}
 
 	default:
 		return errors.New("unsupported email template")
 	}
 
+	msg, err := w.templates.Render(ctx, job.Template, templateData)
+	if err != nil {
+		return fmt.Errorf("render email template %q: %w", job.Template, err)
+	}
 	return w.sender.Send(ctx, job.ToEmail, msg)
 }
 

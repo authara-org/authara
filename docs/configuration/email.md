@@ -29,6 +29,12 @@ Instead of sending emails directly during a request:
 3. background workers process the job
 4. the email is sent via the configured provider
 
+Operators can customize each transactional email from the operator workspace.
+The worker resolves the currently saved template when it processes a job, so
+changes apply without restarting Core. A job that was queued before a template
+change uses the latest saved template when it is delivered. Restoring a
+template immediately returns subsequent deliveries to the built-in version.
+
 ---
 
 ## How it works
