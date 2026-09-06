@@ -7,6 +7,7 @@ import (
 	"github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/features"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
@@ -18,14 +19,15 @@ import (
 )
 
 type UIHandler struct {
-	Admin         *admin.Service
-	Auth          *auth.Service
-	Passkeys      *passkey.Service
-	Session       *session.Service
-	Organizations *organization.Service
-	Challenge     *challenge.Service
-	Features      features.Features
-	Verification  *challenge.VerificationCodeService
+	Admin          *admin.Service
+	Auth           *auth.Service
+	Passkeys       *passkey.Service
+	Session        *session.Service
+	Organizations  *organization.Service
+	Challenge      *challenge.Service
+	Features       features.Features
+	Verification   *challenge.VerificationCodeService
+	EmailTemplates *email.TemplateService
 
 	Limiter        ratelimiter.AuthLimiter
 	Logger         *slog.Logger
@@ -47,6 +49,7 @@ func New(
 	challenge *challenge.Service,
 	features features.Features,
 	verification *challenge.VerificationCodeService,
+	emailTemplates *email.TemplateService,
 	limiter ratelimiter.AuthLimiter,
 	logger *slog.Logger,
 	google *google.Client,
@@ -64,6 +67,7 @@ func New(
 		Challenge:      challenge,
 		Features:       features,
 		Verification:   verification,
+		EmailTemplates: emailTemplates,
 		Limiter:        limiter,
 		Logger:         logger,
 		Google:         google,

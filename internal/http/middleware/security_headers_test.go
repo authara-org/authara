@@ -41,7 +41,7 @@ func TestSecurityHeadersSetsSafeDefaults(t *testing.T) {
 		"font-src 'self'",
 		"img-src 'self' data:",
 		"connect-src 'self'",
-		"frame-src 'none'",
+		"frame-src 'self'",
 		"script-src 'self' 'unsafe-inline' 'unsafe-eval'",
 		"style-src 'self' 'unsafe-inline'",
 	)
@@ -67,7 +67,7 @@ func TestSecurityHeadersAllowsGoogleOAuthSourcesWhenEnabled(t *testing.T) {
 	requireCSPContains(t, csp,
 		"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com",
 		"connect-src 'self' https://accounts.google.com",
-		"frame-src https://accounts.google.com",
+		"frame-src 'self' https://accounts.google.com",
 		"img-src 'self' data: https://www.gstatic.com https://ssl.gstatic.com",
 	)
 }

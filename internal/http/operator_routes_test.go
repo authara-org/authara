@@ -23,7 +23,7 @@ func TestOperatorPagesRequireOperatorAuthentication(t *testing.T) {
 		operatorRole: passMiddleware,
 	})
 
-	for _, path := range []string{"/auth/operator", "/auth/operator/emails"} {
+	for _, path := range []string{"/auth/operator", "/auth/operator/emails", "/auth/operator/emails/signup_code", "/auth/operator/emails/signup_code/versions/1"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rr := httptest.NewRecorder()
 
@@ -41,7 +41,7 @@ func TestOperatorPagesRequireExactOperatorRole(t *testing.T) {
 		operatorRole: markerMiddleware(markerOperatorRoleForOperatorRoutes, "operator-role"),
 	})
 
-	for _, path := range []string{"/auth/operator", "/auth/operator/emails"} {
+	for _, path := range []string{"/auth/operator", "/auth/operator/emails", "/auth/operator/emails/signup_code", "/auth/operator/emails/signup_code/versions/1"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rr := httptest.NewRecorder()
 
@@ -59,7 +59,7 @@ func TestOperatorPagesAreAvailableAfterMiddleware(t *testing.T) {
 		operatorRole: passMiddleware,
 	})
 
-	for _, path := range []string{"/auth/operator", "/auth/operator/", "/auth/operator/emails"} {
+	for _, path := range []string{"/auth/operator", "/auth/operator/", "/auth/operator/emails", "/auth/operator/emails/signup_code"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rr := httptest.NewRecorder()
 
@@ -71,9 +71,33 @@ func TestOperatorPagesAreAvailableAfterMiddleware(t *testing.T) {
 	}
 }
 
+func TestOperatorEmailTemplateMutationsRequireCSRF(t *testing.T) {
+	router := newOperatorRouteTestRouter(operatorRouteMiddlewareConfig{
+		operatorAuth: passMiddleware,
+		operatorRole: passMiddleware,
+		csrf:         markerMiddleware(http.StatusTeapot, "csrf"),
+	})
+
+	for _, path := range []string{
+		"/auth/operator/emails/signup_code",
+		"/auth/operator/emails/signup_code/preview",
+		"/auth/operator/emails/signup_code/reset",
+	} {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusTeapot {
+			t.Fatalf("POST %s: expected CSRF marker %d, got %d", path, http.StatusTeapot, rr.Code)
+		}
+	}
+}
+
 type operatorRouteMiddlewareConfig struct {
 	operatorAuth func(http.Handler) http.Handler
 	operatorRole func(http.Handler) http.Handler
+	csrf         func(http.Handler) http.Handler
 }
 
 func newOperatorRouteTestRouter(m operatorRouteMiddlewareConfig) chi.Router {
@@ -83,6 +107,9 @@ func newOperatorRouteTestRouter(m operatorRouteMiddlewareConfig) chi.Router {
 	}
 	if m.operatorRole == nil {
 		m.operatorRole = passMiddleware
+	}
+	if m.csrf == nil {
+		m.csrf = passMiddleware
 	}
 
 	renderer := render.Renderer(func(w http.ResponseWriter, _ *http.Request, status int, _ templ.Component) error {
@@ -106,7 +133,7 @@ func newOperatorRouteTestRouter(m operatorRouteMiddlewareConfig) chi.Router {
 		RequirePublicOrganizationManagement:  passMiddleware,
 		RequireAdminRole:                     passMiddleware,
 		RequireOperatorRole:                  m.operatorRole,
-		RequireCSRF:                          passMiddleware,
+		RequireCSRF:                          m.csrf,
 		RequireAPICSRF:                       passMiddleware,
 		ReturnTo:                             passMiddleware,
 		HTMX:                                 passMiddleware,

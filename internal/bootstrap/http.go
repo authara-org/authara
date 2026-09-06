@@ -96,6 +96,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Services.Challenge,
 			enabledFeatures,
 			app.Services.Verification,
+			app.Services.EmailTemplates,
 			authLimiter,
 			app.Logger,
 			googleClient,

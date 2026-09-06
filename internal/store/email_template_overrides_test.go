@@ -29,7 +29,7 @@ func TestEmailTemplateOverrideStoreLifecycle(t *testing.T) {
 			HTMLTemplate:    "<strong>{{code}}</strong>",
 			UpdatedByUserID: &updater.ID,
 		}
-		created, err := tdb.Store.UpsertEmailTemplateOverride(ctx, input)
+		created, err := tdb.Store.UpsertEmailTemplateOverride(ctx, input, 0)
 		if err != nil {
 			t.Fatalf("first UpsertEmailTemplateOverride failed: %v", err)
 		}
@@ -39,9 +39,16 @@ func TestEmailTemplateOverrideStoreLifecycle(t *testing.T) {
 		if created.UpdatedByUserID == nil || *created.UpdatedByUserID != updater.ID {
 			t.Fatalf("created updated_by = %v, want %s", created.UpdatedByUserID, updater.ID)
 		}
+		versions, err := tdb.Store.ListEmailTemplateVersions(ctx, input.Template)
+		if err != nil {
+			t.Fatalf("ListEmailTemplateVersions after create failed: %v", err)
+		}
+		if len(versions) != 1 || versions[0].Version != 1 || versions[0].SubjectTemplate != input.SubjectTemplate {
+			t.Fatalf("versions after create = %#v", versions)
+		}
 
 		input.SubjectTemplate = "Updated verification"
-		updated, err := tdb.Store.UpsertEmailTemplateOverride(ctx, input)
+		updated, err := tdb.Store.UpsertEmailTemplateOverride(ctx, input, created.Revision)
 		if err != nil {
 			t.Fatalf("second UpsertEmailTemplateOverride failed: %v", err)
 		}
@@ -50,6 +57,20 @@ func TestEmailTemplateOverrideStoreLifecycle(t *testing.T) {
 		}
 		if !updated.CreatedAt.Equal(created.CreatedAt) {
 			t.Fatalf("created_at changed from %s to %s", created.CreatedAt, updated.CreatedAt)
+		}
+		versions, err = tdb.Store.ListEmailTemplateVersions(ctx, input.Template)
+		if err != nil {
+			t.Fatalf("ListEmailTemplateVersions after update failed: %v", err)
+		}
+		if len(versions) != 2 || versions[0].Version != 2 || versions[0].SubjectTemplate != input.SubjectTemplate {
+			t.Fatalf("versions after update = %#v", versions)
+		}
+		firstVersion, err := tdb.Store.GetEmailTemplateVersion(ctx, input.Template, 1)
+		if err != nil {
+			t.Fatalf("GetEmailTemplateVersion failed: %v", err)
+		}
+		if firstVersion.SubjectTemplate != "Custom verification" {
+			t.Fatalf("first version subject = %q", firstVersion.SubjectTemplate)
 		}
 
 		got, err := tdb.Store.GetEmailTemplateOverride(ctx, input.Template)
@@ -75,13 +96,28 @@ func TestEmailTemplateOverrideStoreLifecycle(t *testing.T) {
 			t.Fatalf("ListEmailTemplateOverrides did not include %q", input.Template)
 		}
 
-		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template); err != nil {
+		input.SubjectTemplate = "Stale update"
+		if _, err := tdb.Store.UpsertEmailTemplateOverride(ctx, input, created.Revision); !errors.Is(err, store.ErrEmailTemplateRevisionConflict) {
+			t.Fatalf("stale UpsertEmailTemplateOverride error = %v", err)
+		}
+
+		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, created.Revision); !errors.Is(err, store.ErrEmailTemplateRevisionConflict) {
+			t.Fatalf("stale DeleteEmailTemplateOverride error = %v", err)
+		}
+		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, updated.Revision); err != nil {
 			t.Fatalf("DeleteEmailTemplateOverride failed: %v", err)
 		}
 		if _, err := tdb.Store.GetEmailTemplateOverride(ctx, input.Template); !errors.Is(err, store.ErrEmailTemplateOverrideNotFound) {
 			t.Fatalf("GetEmailTemplateOverride after delete error = %v", err)
 		}
-		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template); !errors.Is(err, store.ErrEmailTemplateOverrideNotFound) {
+		versions, err = tdb.Store.ListEmailTemplateVersions(ctx, input.Template)
+		if err != nil || len(versions) != 2 {
+			t.Fatalf("history after override delete = %#v, err=%v", versions, err)
+		}
+		if _, err := tdb.Store.GetEmailTemplateVersion(ctx, input.Template, 99); !errors.Is(err, store.ErrEmailTemplateVersionNotFound) {
+			t.Fatalf("missing GetEmailTemplateVersion error = %v", err)
+		}
+		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, updated.Revision); !errors.Is(err, store.ErrEmailTemplateRevisionConflict) {
 			t.Fatalf("second DeleteEmailTemplateOverride error = %v", err)
 		}
 	})

@@ -44,12 +44,18 @@ func TestTemplateCatalogDefinitionsAreCompleteAndRenderable(t *testing.T) {
 			if definition.Description == "" {
 				t.Error("description is empty")
 			}
-			if definition.SubjectTemplate == "" {
+			if definition.DefaultSubjectTemplate == "" {
 				t.Error("subject template is empty")
+			}
+			if definition.DefaultTextTemplate == "" {
+				t.Error("text template is empty")
+			}
+			if definition.DefaultHTMLTemplate == "" {
+				t.Error("HTML template is empty")
 			}
 
 			seenVariables := make(map[string]struct{})
-			for _, variable := range append(definition.RequiredVariables, definition.OptionalVariables...) {
+			for _, variable := range definition.AvailableVariables {
 				if variable == "" {
 					t.Error("template contains an empty variable name")
 				}
@@ -59,9 +65,9 @@ func TestTemplateCatalogDefinitionsAreCompleteAndRenderable(t *testing.T) {
 				seenVariables[variable] = struct{}{}
 			}
 
-			for _, variable := range definition.RequiredVariables {
+			for _, variable := range definition.AvailableVariables {
 				if strings.TrimSpace(definition.SampleData[variable]) == "" {
-					t.Errorf("sample data is missing required variable %q", variable)
+					t.Errorf("sample data is missing available variable %q", variable)
 				}
 			}
 
@@ -96,12 +102,16 @@ func TestTemplateDefinitionRequiresDeclaredVariables(t *testing.T) {
 
 func TestTemplateCatalogReturnsIndependentMetadata(t *testing.T) {
 	first := TemplateCatalog()
-	first[0].RequiredVariables[0] = "changed"
+	first[0].AvailableVariables[0] = "changed"
+	first[0].RequiredBodyVariables[0] = "changed"
 	first[0].SampleData[TemplateVariableCode] = "changed"
 
 	second := TemplateCatalog()
-	if reflect.DeepEqual(first[0].RequiredVariables, second[0].RequiredVariables) {
-		t.Fatal("required variables share mutable catalog state")
+	if reflect.DeepEqual(first[0].AvailableVariables, second[0].AvailableVariables) {
+		t.Fatal("available variables share mutable catalog state")
+	}
+	if reflect.DeepEqual(first[0].RequiredBodyVariables, second[0].RequiredBodyVariables) {
+		t.Fatal("required body variables share mutable catalog state")
 	}
 	if reflect.DeepEqual(first[0].SampleData, second[0].SampleData) {
 		t.Fatal("sample data shares mutable catalog state")

@@ -8,7 +8,7 @@ import (
 templ Shell(active string) {
 	@templates.PartialRender() {
 		<div class="min-h-screen bg-background-light text-grey-900 dark:bg-background-dark dark:text-grey-100">
-			<div class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-12">
+			<div class="mx-auto min-h-screen max-w-6xl px-4 py-6 sm:px-6 sm:py-12">
 				<header class="border-b border-grey-200 pb-5 dark:border-grey-800">
 					<div class="flex items-start justify-between gap-4">
 						<div>
@@ -32,6 +32,14 @@ templ Shell(active string) {
 					{ children... }
 				</section>
 			</div>
+		</div>
+	}
+}
+
+templ EditorShell() {
+	@templates.PartialRender() {
+		<div class="fixed inset-0 z-20 flex h-dvh w-screen flex-col overflow-hidden bg-background-light text-grey-900 dark:bg-background-dark dark:text-grey-100">
+			{ children... }
 		</div>
 	}
 }

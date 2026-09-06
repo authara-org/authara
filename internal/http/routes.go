@@ -215,6 +215,16 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Route("/operator", func(r chi.Router) {
 					r.Get("/", uih.OperatorPage)
 					r.Get("/emails", uih.OperatorEmailTemplatesPage)
+					r.Get("/emails/{templateKey}", uih.OperatorEmailTemplatePage)
+					r.Get("/emails/{templateKey}/versions/{version}", uih.OperatorEmailTemplateVersionPage)
+
+					r.Group(func(r chi.Router) {
+						r.Use(httpmiddleware.LimitRequestBody(2 << 20))
+						r.Use(mw.RequireCSRF)
+						r.Post("/emails/{templateKey}", uih.OperatorEmailTemplateSavePost)
+						r.Post("/emails/{templateKey}/preview", uih.OperatorEmailTemplatePreviewPost)
+						r.Post("/emails/{templateKey}/reset", uih.OperatorEmailTemplateResetPost)
+					})
 				})
 			})
 		})

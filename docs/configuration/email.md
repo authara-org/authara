@@ -5,6 +5,11 @@ Authara includes a built-in email system for sending transactional messages such
 - verification codes
 - authentication-related notifications
 
+Organization invitation emails always contain both the hosted invitation link
+and the raw invitation code. Deployments upgrading from versions that exposed
+`AUTHARA_INVITATION_EMAIL_INCLUDE_CODE` should remove that setting; invitation
+codes are no longer conditionally omitted.
+
 The system is designed to be:
 
 - reliable

@@ -57,7 +57,6 @@ func NewServices(app *App) (Services, error) {
 		InvitationTTL:          app.Config.Organization.InvitationTTL,
 		PublicURL:              app.Config.Values.PublicURL,
 		Mode:                   organization.OrgMode(app.Config.Organization.Mode),
-		IncludeCodeInEmail:     app.Config.Organization.InvitationEmailIncludeCode,
 		AccessTokenRevocations: accessTokenRevocations,
 	})
 	app.Logger.Warn("AUTHARA_ORG_MODE is a boot-time product shape; changing it after production use is unsupported", "mode", app.Config.Organization.Mode)

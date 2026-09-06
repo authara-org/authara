@@ -51,6 +51,20 @@ type EmailTemplateOverride struct {
 	UpdatedByUserID *uuid.UUID
 }
 
+// EmailTemplateVersion is an immutable snapshot created whenever an operator
+// successfully saves or restores a customized template.
+type EmailTemplateVersion struct {
+	Template EmailTemplate
+	Version  int64
+
+	CreatedAt time.Time
+
+	SubjectTemplate string
+	TextTemplate    string
+	HTMLTemplate    string
+	CreatedByUserID *uuid.UUID
+}
+
 type EmailJob struct {
 	ID          uuid.UUID
 	ChallengeID *uuid.UUID

@@ -654,11 +654,9 @@ func (s *Service) enqueueInvitationEmail(ctx context.Context, invitation domain.
 	templateData := map[string]string{
 		"organization_name": org.Name,
 		"invite_url":        inviteURL,
+		"invitation_code":   rawToken,
 		"role":              string(invitation.Role),
 		"expires_at":        invitation.ExpiresAt.UTC().Format(time.RFC3339),
-	}
-	if s.includeCodeInEmail {
-		templateData["invitation_code"] = rawToken
 	}
 
 	data, err := json.Marshal(templateData)

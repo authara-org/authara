@@ -1,11 +1,14 @@
 package http
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"time"
 
 	adminsvc "github.com/authara-org/authara/internal/admin"
+	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/features"
 	"github.com/authara-org/authara/internal/http/handlers/api"
 	"github.com/authara-org/authara/internal/http/handlers/internalapi"
@@ -14,6 +17,7 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/store"
 )
 
 func newTestHandlers(logger *slog.Logger, renderer render.Renderer) Handlers {
@@ -44,6 +48,7 @@ func newTestHandlersWithAdmin(
 			nil,
 			features,
 			nil,
+			email.NewTemplateService(testEmailTemplateStore{}),
 			nil,
 			logger,
 			googleClient,
@@ -70,4 +75,30 @@ func newTestHandlersWithAdmin(
 		),
 		InternalAPI: internalapi.New(nil, organization.New(organization.Config{Mode: organization.OrgModeMulti}), false),
 	}
+}
+
+type testEmailTemplateStore struct{}
+
+func (testEmailTemplateStore) GetEmailTemplateOverride(context.Context, domain.EmailTemplate) (domain.EmailTemplateOverride, error) {
+	return domain.EmailTemplateOverride{}, store.ErrEmailTemplateOverrideNotFound
+}
+
+func (testEmailTemplateStore) ListEmailTemplateOverrides(context.Context) ([]domain.EmailTemplateOverride, error) {
+	return nil, nil
+}
+
+func (testEmailTemplateStore) GetEmailTemplateVersion(context.Context, domain.EmailTemplate, int64) (domain.EmailTemplateVersion, error) {
+	return domain.EmailTemplateVersion{}, store.ErrEmailTemplateVersionNotFound
+}
+
+func (testEmailTemplateStore) ListEmailTemplateVersions(context.Context, domain.EmailTemplate) ([]domain.EmailTemplateVersion, error) {
+	return nil, nil
+}
+
+func (testEmailTemplateStore) UpsertEmailTemplateOverride(context.Context, domain.EmailTemplateOverride, int64) (domain.EmailTemplateOverride, error) {
+	return domain.EmailTemplateOverride{}, nil
+}
+
+func (testEmailTemplateStore) DeleteEmailTemplateOverride(context.Context, domain.EmailTemplate, int64) error {
+	return nil
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/a-h/templ"
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 )
 
@@ -25,7 +27,14 @@ func TestDashboardLinksOperatorAndAccountPages(t *testing.T) {
 
 func TestEmailTemplatesRendersCatalogMetadataWithoutSampleValues(t *testing.T) {
 	definitions := email.TemplateCatalog()
-	html := renderOperatorComponent(t, EmailTemplates(definitions))
+	templates := make([]email.EffectiveTemplate, len(definitions))
+	for i, definition := range definitions {
+		templates[i] = email.EffectiveTemplate{
+			Definition: definition,
+			Source:     email.TemplateSourceBuiltIn,
+		}
+	}
+	html := renderOperatorComponent(t, EmailTemplates(templates))
 
 	for _, definition := range definitions {
 		for _, want := range []string{definition.DisplayName, definition.Description, string(definition.Key)} {
@@ -33,7 +42,7 @@ func TestEmailTemplatesRendersCatalogMetadataWithoutSampleValues(t *testing.T) {
 				t.Fatalf("expected email catalog to contain %q", want)
 			}
 		}
-		for _, variable := range append(definition.RequiredVariables, definition.OptionalVariables...) {
+		for _, variable := range definition.AvailableVariables {
 			if !strings.Contains(html, "{{"+variable+"}}") {
 				t.Fatalf("expected email catalog to contain variable %q", variable)
 			}
@@ -41,6 +50,147 @@ func TestEmailTemplatesRendersCatalogMetadataWithoutSampleValues(t *testing.T) {
 	}
 	if strings.Contains(html, "123456") {
 		t.Fatal("email catalog must not render sample template values")
+	}
+}
+
+func TestEmailTemplateEditorRendersSourcesActionsAndSandboxedPreview(t *testing.T) {
+	definition, err := email.LookupTemplate(email.TemplateCatalog()[0].Key)
+	if err != nil {
+		t.Fatalf("LookupTemplate failed: %v", err)
+	}
+	preview := email.Message{
+		Subject: "Preview subject",
+		Text:    "Preview text",
+		HTML:    `<script>window.top.location = "https://example.com"</script><p>Preview HTML</p>`,
+	}
+	html := renderOperatorComponent(t, EmailTemplateEditor(EmailTemplateEditorModel{
+		Definition:    definition,
+		Source:        email.TemplateSourceOverride,
+		Revision:      7,
+		ActiveVersion: 2,
+		Versions: []domain.EmailTemplateVersion{
+			{
+				Template:        definition.Key,
+				Version:         2,
+				CreatedAt:       time.Date(2026, time.September, 6, 10, 30, 0, 0, time.UTC),
+				SubjectTemplate: "Current subject",
+			},
+			{
+				Template:        definition.Key,
+				Version:         1,
+				CreatedAt:       time.Date(2026, time.September, 5, 9, 15, 0, 0, time.UTC),
+				SubjectTemplate: "Previous subject",
+			},
+		},
+		SubjectTemplate: definition.DefaultSubjectTemplate,
+		TextTemplate:    definition.DefaultTextTemplate,
+		HTMLTemplate:    definition.DefaultHTMLTemplate,
+		Preview:         &preview,
+	}))
+
+	for _, want := range []string{
+		`action="/auth/operator/emails/signup_code"`,
+		`id="email-template-selector"`,
+		`value="/auth/operator/emails/password_reset_code"`,
+		`hx-post="/auth/operator/emails/signup_code/preview"`,
+		`hx-trigger="input delay:500ms"`,
+		`hx-target="#email-template-preview"`,
+		`hx-include="#email-template-form"`,
+		`data-email-template-preview-status`,
+		`data-email-template-save-request`,
+		`id="email-template-actions"`,
+		`id="email-template-source-status"`,
+		`id="email-template-history"`,
+		`id="email-template-restore-action"`,
+		`id="email-template-save-action"`,
+		`id="email-template-revision"`,
+		`hx-target="#email-template-feedback"`,
+		`hx-sync="this:abort"`,
+		`hx-sync="#email-template-form:drop"`,
+		`hx-disabled-elt="#email-template-actions [data-email-template-action]"`,
+		`hx-disabled-elt="#email-template-actions [data-email-template-action]:not([data-email-template-save-request])"`,
+		`>Render</span>`,
+		`>Restore</span>`,
+		`>Save</span>`,
+		`action="/auth/operator/emails/signup_code/reset"`,
+		`href="/auth/operator/emails/signup_code/versions/1"`,
+		`name="revision" value="7"`,
+		"Customized · v2",
+		"Version 2",
+		"Version 1",
+		"2026-09-05 09:15 UTC",
+		"Previous subject",
+		"Current",
+		`data-email-template-editor="text"`,
+		`data-email-template-editor="html"`,
+		`x-show="mode === 'text'"`,
+		`x-show="mode === 'html'"`,
+		`form="email-template-form"`,
+		`sandbox=""`,
+		`srcdoc=`,
+		"{{code}}",
+		"Preview subject",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("expected editor to contain %q", want)
+		}
+	}
+	if strings.Contains(html, `<script>window.top.location`) {
+		t.Fatal("preview HTML must be escaped into the sandboxed srcdoc attribute")
+	}
+	saveMarker := strings.Index(html, `data-email-template-save-request`)
+	if saveMarker < 0 {
+		t.Fatal("could not locate the save button marker")
+	}
+	saveButtonStart := strings.LastIndex(html[:saveMarker], "<button")
+	saveButtonEnd := strings.Index(html[saveMarker:], ">")
+	if saveButtonStart < 0 || saveButtonEnd < 0 {
+		t.Fatal("could not locate the save button")
+	}
+	saveButtonTag := html[saveButtonStart : saveMarker+saveButtonEnd]
+	if !strings.Contains(saveButtonTag, `type="button"`) {
+		t.Fatalf("save button must not also submit the form natively: %s", saveButtonTag)
+	}
+}
+
+func TestEmailTemplateEditorRendersHistoricalVersionAsUnsavedDraft(t *testing.T) {
+	definition, err := email.LookupTemplate(domain.EmailTemplateSignupCode)
+	if err != nil {
+		t.Fatalf("LookupTemplate failed: %v", err)
+	}
+	model := EmailTemplateEditorModel{
+		Definition:     definition,
+		Source:         email.TemplateSourceOverride,
+		Revision:       4,
+		ActiveVersion:  4,
+		ViewingVersion: 2,
+		Versions: []domain.EmailTemplateVersion{
+			{Template: definition.Key, Version: 4, SubjectTemplate: "Current subject"},
+			{Template: definition.Key, Version: 2, SubjectTemplate: "Historical subject"},
+		},
+		SubjectTemplate: "Historical subject",
+		TextTemplate:    "Historical {{code}}",
+		HTMLTemplate:    "<p>Historical {{code}}</p>",
+	}
+	html := renderOperatorComponent(t, EmailTemplateEditor(model))
+
+	for _, want := range []string{
+		"Viewing v2",
+		`data-email-template-viewing-version`,
+		"Return to current",
+		"Save as new version",
+		`href="/auth/operator/emails/signup_code"`,
+		`value="4"`,
+		`value="Historical subject"`,
+		">Viewing</span>",
+		">Current</a>",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("expected historical editor to contain %q", want)
+		}
+	}
+	if strings.Contains(html, "/versions/2/restore") {
+		t.Fatal("historical preview must not persist through a restore route")
 	}
 }
 
