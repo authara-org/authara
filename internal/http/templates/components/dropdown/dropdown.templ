@@ -1,0 +1,121 @@
+package dropdown
+
+import "github.com/authara-org/authara/internal/http/templates/components/icons"
+
+type Option struct {
+	Value string
+	Label string
+}
+
+type Config struct {
+	ID           string
+	Name         string
+	Value        string
+	Options      []Option
+	Class        string
+	TriggerClass string
+	OnChange     string
+}
+
+templ Dropdown(cfg Config) {
+	<div
+		class={ "relative " + cfg.Class }
+		x-data="customDropdown()"
+		data-dropdown-value={ selectedValue(cfg) }
+		data-dropdown-label={ selectedLabel(cfg) }
+		@dropdown-change={ cfg.OnChange }
+		@click.outside="close(false)"
+	>
+		<input
+			x-ref="input"
+			type="hidden"
+			value={ selectedValue(cfg) }
+			:value="value"
+			if cfg.Name != "" {
+				name={ cfg.Name }
+			}
+		/>
+		<button
+			x-ref="trigger"
+			id={ cfg.ID }
+			type="button"
+			class={ triggerClass(cfg) }
+			aria-haspopup="listbox"
+			aria-controls={ listboxID(cfg.ID) }
+			:aria-expanded="open"
+			@click="toggle()"
+			@keydown="handleTriggerKeydown($event)"
+		>
+			<span class="min-w-0 flex-1 truncate text-left" x-text="label">{ selectedLabel(cfg) }</span>
+			<span class="h-4 w-4 shrink-0 stroke-2 text-grey-500 transition-transform duration-150 dark:text-grey-400" :class="open ? 'rotate-180' : ''" aria-hidden="true">
+				@icons.ChevronDown()
+			</span>
+		</button>
+		<div
+			x-cloak
+			x-show="open"
+			x-transition:enter="transition ease-out duration-100"
+			x-transition:enter-start="translate-y-1 opacity-0"
+			x-transition:enter-end="translate-y-0 opacity-100"
+			x-transition:leave="transition ease-in duration-75"
+			x-transition:leave-start="translate-y-0 opacity-100"
+			x-transition:leave-end="translate-y-1 opacity-0"
+			id={ listboxID(cfg.ID) }
+			role="listbox"
+			aria-labelledby={ cfg.ID }
+			class="absolute z-50 mt-1.5 max-h-72 w-full min-w-max overflow-y-auto rounded-xl border border-grey-200 bg-white p-1.5 shadow-xl shadow-grey-950/10 outline-none dark:border-grey-700 dark:bg-grey-900 dark:shadow-black/30"
+		>
+			for _, option := range cfg.Options {
+				<button
+					type="button"
+					role="option"
+					tabindex="-1"
+					data-dropdown-option
+					data-value={ option.Value }
+					data-label={ option.Label }
+					:aria-selected="value === $el.dataset.value"
+					class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-grey-700 outline-none transition-colors hover:bg-grey-100 focus:bg-blue-50 focus:text-blue-800 dark:text-grey-200 dark:hover:bg-grey-800 dark:focus:bg-blue-950/60 dark:focus:text-blue-200"
+					:class="value === $el.dataset.value ? 'bg-blue-50 font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-200' : ''"
+					@click="selectOption($el)"
+					@keydown="handleOptionKeydown($event, $el)"
+				>
+					<span class="min-w-0 flex-1 truncate">{ option.Label }</span>
+					<span x-show="value === $el.dataset.value" class="h-4 w-4 shrink-0 stroke-2" aria-hidden="true">
+						@icons.Check()
+					</span>
+				</button>
+			}
+		</div>
+	</div>
+}
+
+func selectedLabel(cfg Config) string {
+	return selectedOption(cfg).Label
+}
+
+func selectedValue(cfg Config) string {
+	return selectedOption(cfg).Value
+}
+
+func selectedOption(cfg Config) Option {
+	for _, option := range cfg.Options {
+		if option.Value == cfg.Value {
+			return option
+		}
+	}
+	if len(cfg.Options) > 0 {
+		return cfg.Options[0]
+	}
+	return Option{}
+}
+
+func listboxID(id string) string {
+	return id + "-listbox"
+}
+
+func triggerClass(cfg Config) string {
+	return `flex h-10 w-full items-center gap-2 rounded-lg border border-grey-200 bg-white px-3
+		text-sm text-grey-900 outline-none transition-colors hover:border-grey-300 hover:bg-grey-50
+		focus:ring-2 focus:ring-blue-200 dark:border-grey-700 dark:bg-grey-950 dark:text-grey-100
+		dark:hover:border-grey-600 dark:hover:bg-grey-900 dark:focus:ring-blue-900/40 ` + cfg.TriggerClass
+}

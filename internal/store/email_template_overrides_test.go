@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -65,6 +66,38 @@ func TestEmailTemplateOverrideStoreLifecycle(t *testing.T) {
 		if len(versions) != 2 || versions[0].Version != 2 || versions[0].SubjectTemplate != input.SubjectTemplate {
 			t.Fatalf("versions after update = %#v", versions)
 		}
+		auditFilter := store.OperatorAuditEventFilter{
+			ActorUserID:  &updater.ID,
+			ResourceType: domain.OperatorAuditResourceEmailTemplate,
+			ResourceID:   string(input.Template),
+		}
+		events, err := tdb.Store.ListOperatorAuditEvents(ctx, auditFilter)
+		if err != nil {
+			t.Fatalf("ListOperatorAuditEvents after saves failed: %v", err)
+		}
+		if len(events) != 2 {
+			t.Fatalf("audit events after saves = %#v", events)
+		}
+		for _, event := range events {
+			if event.Action != domain.OperatorAuditActionEmailTemplateSaved {
+				t.Fatalf("save audit action = %q", event.Action)
+			}
+			var metadata map[string]any
+			if err := json.Unmarshal(event.Metadata, &metadata); err != nil {
+				t.Fatalf("decode audit metadata: %v", err)
+			}
+			if _, ok := metadata["revision"]; !ok {
+				t.Fatalf("save audit metadata lacks revision: %s", event.Metadata)
+			}
+			if _, ok := metadata["version"]; !ok {
+				t.Fatalf("save audit metadata lacks version: %s", event.Metadata)
+			}
+			for _, sensitiveKey := range []string{"subject_template", "text_template", "html_template"} {
+				if _, ok := metadata[sensitiveKey]; ok {
+					t.Fatalf("audit metadata contains template source %q: %s", sensitiveKey, event.Metadata)
+				}
+			}
+		}
 		firstVersion, err := tdb.Store.GetEmailTemplateVersion(ctx, input.Template, 1)
 		if err != nil {
 			t.Fatalf("GetEmailTemplateVersion failed: %v", err)
@@ -101,11 +134,27 @@ func TestEmailTemplateOverrideStoreLifecycle(t *testing.T) {
 			t.Fatalf("stale UpsertEmailTemplateOverride error = %v", err)
 		}
 
-		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, created.Revision); !errors.Is(err, store.ErrEmailTemplateRevisionConflict) {
+		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, created.Revision, updater.ID); !errors.Is(err, store.ErrEmailTemplateRevisionConflict) {
 			t.Fatalf("stale DeleteEmailTemplateOverride error = %v", err)
 		}
-		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, updated.Revision); err != nil {
+		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, updated.Revision, updater.ID); err != nil {
 			t.Fatalf("DeleteEmailTemplateOverride failed: %v", err)
+		}
+		events, err = tdb.Store.ListOperatorAuditEvents(ctx, auditFilter)
+		if err != nil {
+			t.Fatalf("ListOperatorAuditEvents after restore failed: %v", err)
+		}
+		if len(events) != 3 {
+			t.Fatalf("audit events after restore = %#v", events)
+		}
+		restoreEvents, err := tdb.Store.ListOperatorAuditEvents(ctx, store.OperatorAuditEventFilter{
+			ActorUserID:  &updater.ID,
+			Action:       domain.OperatorAuditActionEmailTemplateRestoredBuiltIn,
+			ResourceType: domain.OperatorAuditResourceEmailTemplate,
+			ResourceID:   string(input.Template),
+		})
+		if err != nil || len(restoreEvents) != 1 {
+			t.Fatalf("restore audit events = %#v, err=%v", restoreEvents, err)
 		}
 		if _, err := tdb.Store.GetEmailTemplateOverride(ctx, input.Template); !errors.Is(err, store.ErrEmailTemplateOverrideNotFound) {
 			t.Fatalf("GetEmailTemplateOverride after delete error = %v", err)
@@ -117,7 +166,7 @@ func TestEmailTemplateOverrideStoreLifecycle(t *testing.T) {
 		if _, err := tdb.Store.GetEmailTemplateVersion(ctx, input.Template, 99); !errors.Is(err, store.ErrEmailTemplateVersionNotFound) {
 			t.Fatalf("missing GetEmailTemplateVersion error = %v", err)
 		}
-		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, updated.Revision); !errors.Is(err, store.ErrEmailTemplateRevisionConflict) {
+		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, updated.Revision, updater.ID); !errors.Is(err, store.ErrEmailTemplateRevisionConflict) {
 			t.Fatalf("second DeleteEmailTemplateOverride error = %v", err)
 		}
 	})

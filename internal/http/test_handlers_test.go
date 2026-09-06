@@ -18,6 +18,7 @@ import (
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/store"
+	"github.com/google/uuid"
 )
 
 func newTestHandlers(logger *slog.Logger, renderer render.Renderer) Handlers {
@@ -99,6 +100,10 @@ func (testEmailTemplateStore) UpsertEmailTemplateOverride(context.Context, domai
 	return domain.EmailTemplateOverride{}, nil
 }
 
-func (testEmailTemplateStore) DeleteEmailTemplateOverride(context.Context, domain.EmailTemplate, int64) error {
+func (testEmailTemplateStore) DeleteEmailTemplateOverride(context.Context, domain.EmailTemplate, int64, uuid.UUID) error {
 	return nil
+}
+
+func (testEmailTemplateStore) ListOperatorAuditEvents(context.Context, store.OperatorAuditEventFilter) ([]domain.OperatorAuditEvent, error) {
+	return nil, nil
 }

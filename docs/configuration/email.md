@@ -34,6 +34,8 @@ The worker resolves the currently saved template when it processes a job, so
 changes apply without restarting Core. A job that was queued before a template
 change uses the latest saved template when it is delivered. Restoring a
 template immediately returns subsequent deliveries to the built-in version.
+See [Operator email templates](../operations/operator-email-templates.md) for
+provisioning, history, audit, backup, and recovery guidance.
 
 ---
 

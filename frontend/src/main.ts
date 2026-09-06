@@ -4,6 +4,7 @@ import "./oauth";
 import { initPasskeys } from "./passkeys";
 import { initTheme, setTheme } from "./theme";
 import "./confirmDialog";
+import "./dropdown";
 
 declare global {
   interface Window {

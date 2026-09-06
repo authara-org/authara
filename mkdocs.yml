@@ -45,6 +45,7 @@ nav:
   - Operations:
       - Migrations: operations/migrations.md
       - Admin Dashboard: operations/admin-dashboard.md
+      - Operator Email Templates: operations/operator-email-templates.md
       - Health Checks: operations/healthchecks.md
       - Prometheus Metrics: operations/metrics.md
 

@@ -23,7 +23,7 @@ func TestOperatorPagesRequireOperatorAuthentication(t *testing.T) {
 		operatorRole: passMiddleware,
 	})
 
-	for _, path := range []string{"/auth/operator", "/auth/operator/emails", "/auth/operator/emails/signup_code", "/auth/operator/emails/signup_code/versions/1"} {
+	for _, path := range []string{"/auth/operator", "/auth/operator/audit", "/auth/operator/emails", "/auth/operator/emails/signup_code", "/auth/operator/emails/signup_code/versions/1"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rr := httptest.NewRecorder()
 
@@ -41,7 +41,7 @@ func TestOperatorPagesRequireExactOperatorRole(t *testing.T) {
 		operatorRole: markerMiddleware(markerOperatorRoleForOperatorRoutes, "operator-role"),
 	})
 
-	for _, path := range []string{"/auth/operator", "/auth/operator/emails", "/auth/operator/emails/signup_code", "/auth/operator/emails/signup_code/versions/1"} {
+	for _, path := range []string{"/auth/operator", "/auth/operator/audit", "/auth/operator/emails", "/auth/operator/emails/signup_code", "/auth/operator/emails/signup_code/versions/1"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rr := httptest.NewRecorder()
 
@@ -59,7 +59,7 @@ func TestOperatorPagesAreAvailableAfterMiddleware(t *testing.T) {
 		operatorRole: passMiddleware,
 	})
 
-	for _, path := range []string{"/auth/operator", "/auth/operator/", "/auth/operator/emails", "/auth/operator/emails/signup_code"} {
+	for _, path := range []string{"/auth/operator", "/auth/operator/", "/auth/operator/audit", "/auth/operator/emails", "/auth/operator/emails/signup_code"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rr := httptest.NewRecorder()
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store/model"
+	"github.com/google/uuid"
 )
 
 const emailTemplateOverrideColumns = `
@@ -205,11 +206,31 @@ func (s *Store) UpsertEmailTemplateOverride(ctx context.Context, in domain.Email
 				saved.html_template,
 				saved.updated_by_user_id
 			FROM saved
-			RETURNING template_key
+			RETURNING template_key, version
+		), audited AS (
+			INSERT INTO operator_audit_events (
+				actor_user_id,
+				action,
+				resource_type,
+				resource_id,
+				metadata
+			)
+			SELECT
+				saved.updated_by_user_id,
+				$7,
+				$8,
+				saved.template_key,
+				jsonb_build_object(
+					'revision', saved.revision,
+					'version', recorded.version
+				)
+			FROM saved
+			JOIN recorded USING (template_key)
+			RETURNING id
 		)
 		SELECT `+emailTemplateOverrideColumns+`
 		FROM saved
-		WHERE EXISTS (SELECT 1 FROM recorded)
+		WHERE EXISTS (SELECT 1 FROM audited)
 	`,
 		string(in.Template),
 		in.SubjectTemplate,
@@ -217,27 +238,51 @@ func (s *Store) UpsertEmailTemplateOverride(ctx context.Context, in domain.Email
 		in.HTMLTemplate,
 		in.UpdatedByUserID,
 		expectedRevision,
+		domain.OperatorAuditActionEmailTemplateSaved,
+		domain.OperatorAuditResourceEmailTemplate,
 	), &row); err != nil {
 		return domain.EmailTemplateOverride{}, mapNoRows(err, ErrEmailTemplateRevisionConflict)
 	}
 	return toDomainEmailTemplateOverride(row), nil
 }
 
-func (s *Store) DeleteEmailTemplateOverride(ctx context.Context, key domain.EmailTemplate, expectedRevision int64) error {
-	result, err := s.exec(ctx, `
-		DELETE FROM email_template_overrides
-		WHERE template_key = $1
-		  AND revision = $2
-	`, string(key), expectedRevision)
-	if err != nil {
-		return err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return ErrEmailTemplateRevisionConflict
-	}
-	return nil
+func (s *Store) DeleteEmailTemplateOverride(
+	ctx context.Context,
+	key domain.EmailTemplate,
+	expectedRevision int64,
+	actorUserID uuid.UUID,
+) error {
+	var auditID uuid.UUID
+	err := s.queryRow(ctx, `
+		WITH deleted AS (
+			DELETE FROM email_template_overrides
+			WHERE template_key = $1
+			  AND revision = $2
+			RETURNING template_key, revision
+		), audited AS (
+			INSERT INTO operator_audit_events (
+				actor_user_id,
+				action,
+				resource_type,
+				resource_id,
+				metadata
+			)
+			SELECT
+				$3,
+				$4,
+				$5,
+				deleted.template_key,
+				jsonb_build_object('revision', deleted.revision)
+			FROM deleted
+			RETURNING id
+		)
+		SELECT id FROM audited
+	`,
+		string(key),
+		expectedRevision,
+		actorUserID,
+		domain.OperatorAuditActionEmailTemplateRestoredBuiltIn,
+		domain.OperatorAuditResourceEmailTemplate,
+	).Scan(&auditID)
+	return mapNoRows(err, ErrEmailTemplateRevisionConflict)
 }

@@ -381,7 +381,10 @@ func TestTemplateServiceLoadsHistoricalVersionWithoutMutationAndCanSaveItAsNew(t
 		t.Fatalf("versions after save = %#v", versions)
 	}
 
-	if err := service.DeleteOverride(context.Background(), input.Template, restored.Override.Revision); err != nil {
+	if err := service.DeleteOverride(context.Background(), input.Template, restored.Override.Revision, uuid.Nil); !errors.Is(err, ErrMissingTemplateUpdater) {
+		t.Fatalf("DeleteOverride without updater error = %v", err)
+	}
+	if err := service.DeleteOverride(context.Background(), input.Template, restored.Override.Revision, updaterID); err != nil {
 		t.Fatalf("DeleteOverride failed: %v", err)
 	}
 	snapshot, err = service.GetVersion(context.Background(), input.Template, 2)
@@ -440,9 +443,51 @@ func TestTemplateServiceListsCatalogWithOverrideState(t *testing.T) {
 	}
 }
 
+func TestTemplateServiceListsPaginatedOperatorAuditEvents(t *testing.T) {
+	fakeStore := newFakeTemplateOverrideStore()
+	fakeStore.auditEvents = []domain.OperatorAuditEvent{
+		{Action: domain.OperatorAuditActionEmailTemplateSaved},
+		{Action: domain.OperatorAuditActionEmailTemplateSaved},
+		{Action: domain.OperatorAuditActionEmailTemplateSaved},
+	}
+	service := NewTemplateService(fakeStore)
+
+	page, err := service.ListAuditEvents(context.Background(), OperatorAuditQuery{
+		Page:     2,
+		Size:     2,
+		Action:   domain.OperatorAuditActionEmailTemplateSaved,
+		Template: domain.EmailTemplateSignupCode,
+	})
+	if err != nil {
+		t.Fatalf("ListAuditEvents failed: %v", err)
+	}
+	if page.Page != 2 || page.Size != 2 || len(page.Events) != 2 || !page.HasNext {
+		t.Fatalf("audit page = %#v", page)
+	}
+	if fakeStore.auditFilter.Action != domain.OperatorAuditActionEmailTemplateSaved ||
+		fakeStore.auditFilter.ResourceType != domain.OperatorAuditResourceEmailTemplate ||
+		fakeStore.auditFilter.ResourceID != string(domain.EmailTemplateSignupCode) ||
+		fakeStore.auditFilter.Limit != 3 ||
+		fakeStore.auditFilter.Offset != 2 {
+		t.Fatalf("audit filter = %#v", fakeStore.auditFilter)
+	}
+}
+
+func TestTemplateServiceRejectsUnknownOperatorAuditFilters(t *testing.T) {
+	service := NewTemplateService(newFakeTemplateOverrideStore())
+	if _, err := service.ListAuditEvents(context.Background(), OperatorAuditQuery{Action: "unknown"}); err == nil {
+		t.Fatal("unknown audit action unexpectedly succeeded")
+	}
+	if _, err := service.ListAuditEvents(context.Background(), OperatorAuditQuery{Template: "unknown"}); !errors.Is(err, ErrUnknownTemplate) {
+		t.Fatalf("unknown audit template error = %v", err)
+	}
+}
+
 type fakeTemplateOverrideStore struct {
 	overrides   map[domain.EmailTemplate]domain.EmailTemplateOverride
 	versions    map[domain.EmailTemplate][]domain.EmailTemplateVersion
+	auditEvents []domain.OperatorAuditEvent
+	auditFilter store.OperatorAuditEventFilter
 	upsertCalls int
 }
 
@@ -507,11 +552,16 @@ func (s *fakeTemplateOverrideStore) UpsertEmailTemplateOverride(_ context.Contex
 	return override, nil
 }
 
-func (s *fakeTemplateOverrideStore) DeleteEmailTemplateOverride(_ context.Context, key domain.EmailTemplate, expectedRevision int64) error {
+func (s *fakeTemplateOverrideStore) DeleteEmailTemplateOverride(_ context.Context, key domain.EmailTemplate, expectedRevision int64, _ uuid.UUID) error {
 	current, ok := s.overrides[key]
 	if !ok || current.Revision != expectedRevision {
 		return store.ErrEmailTemplateRevisionConflict
 	}
 	delete(s.overrides, key)
 	return nil
+}
+
+func (s *fakeTemplateOverrideStore) ListOperatorAuditEvents(_ context.Context, filter store.OperatorAuditEventFilter) ([]domain.OperatorAuditEvent, error) {
+	s.auditFilter = filter
+	return append([]domain.OperatorAuditEvent(nil), s.auditEvents...), nil
 }

@@ -214,6 +214,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/operator", uih.OperatorPage)
 				r.Route("/operator", func(r chi.Router) {
 					r.Get("/", uih.OperatorPage)
+					r.Get("/audit", uih.OperatorAuditPage)
 					r.Get("/emails", uih.OperatorEmailTemplatesPage)
 					r.Get("/emails/{templateKey}", uih.OperatorEmailTemplatePage)
 					r.Get("/emails/{templateKey}/versions/{version}", uih.OperatorEmailTemplateVersionPage)

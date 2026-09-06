@@ -10,7 +10,83 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
+	"github.com/authara-org/authara/internal/testutil"
 )
+
+func TestWorkerSuppliesCodeToEveryCodeTemplate(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+		codeService := NewVerificationCodeService(
+			tdb.Store,
+			10*time.Minute,
+			[]byte("01234567890123456789012345678901"),
+		)
+		cases := []struct {
+			name     string
+			purpose  domain.ChallengePurpose
+			template domain.EmailTemplate
+		}{
+			{name: "signup", purpose: domain.ChallengePurposeSignup, template: domain.EmailTemplateSignupCode},
+			{name: "password reset", purpose: domain.ChallengePurposePasswordReset, template: domain.EmailTemplatePasswordResetCode},
+			{name: "email change", purpose: domain.ChallengePurposeEmailChange, template: domain.EmailTemplateEmailChangeCode},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				challenge, err := tdb.Store.CreateChallenge(ctx, domain.Challenge{
+					Purpose:     tc.purpose,
+					Email:       "code-template@example.test",
+					ExpiresAt:   now.Add(30 * time.Minute),
+					MaxAttempts: 5,
+				})
+				if err != nil {
+					t.Fatalf("create challenge: %v", err)
+				}
+
+				var renderedTemplate domain.EmailTemplate
+				var renderedData email.TemplateData
+				renderer := templateRendererFunc(func(_ context.Context, key domain.EmailTemplate, data email.TemplateData) (email.Message, error) {
+					renderedTemplate = key
+					renderedData = data
+					return email.Message{Subject: "subject", Text: "text"}, nil
+				})
+				sender := &recordingEmailSender{}
+				worker := NewWorker(tdb.Store, codeService, renderer, sender, nil, WorkerConfig{})
+				if err := worker.processJob(ctx, domain.EmailJob{
+					ChallengeID: &challenge.ID,
+					ToEmail:     challenge.Email,
+					Template:    tc.template,
+				}, now); err != nil {
+					t.Fatalf("process email job: %v", err)
+				}
+
+				if renderedTemplate != tc.template {
+					t.Fatalf("rendered template = %q, want %q", renderedTemplate, tc.template)
+				}
+				code := renderedData[email.TemplateVariableCode]
+				if len(code) != 6 || !onlyDecimalDigits(code) {
+					t.Fatalf("rendered code = %q, want six digits", code)
+				}
+				if len(renderedData) != 1 {
+					t.Fatalf("rendered template data = %#v", renderedData)
+				}
+				if len(sender.messages) != 1 {
+					t.Fatalf("sent messages = %d, want 1", len(sender.messages))
+				}
+			})
+		}
+	})
+}
+
+func onlyDecimalDigits(value string) bool {
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 func TestWorkerRendersInvitationAtDeliveryTime(t *testing.T) {
 	templateData := email.TemplateData{

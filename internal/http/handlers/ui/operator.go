@@ -35,6 +35,34 @@ func (h *UIHandler) OperatorPage(w http.ResponseWriter, r *http.Request) {
 	_ = h.Render(w, r, http.StatusOK, operatorview.Dashboard(len(email.TemplateCatalog())))
 }
 
+func (h *UIHandler) OperatorAuditPage(w http.ResponseWriter, r *http.Request) {
+	requestedPage := pageFromRequest(r, 50)
+	action := r.URL.Query().Get("action")
+	if action != domain.OperatorAuditActionEmailTemplateSaved &&
+		action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn {
+		action = ""
+	}
+	template := domain.EmailTemplate(r.URL.Query().Get("template"))
+	if template != "" {
+		if err := email.ValidateTemplate(template); err != nil {
+			template = ""
+		}
+	}
+
+	page, err := h.EmailTemplates.ListAuditEvents(r.Context(), email.OperatorAuditQuery{
+		Page:     requestedPage.Page,
+		Size:     requestedPage.Size,
+		Action:   action,
+		Template: template,
+	})
+	if err != nil {
+		h.logEmailTemplateError("list operator audit events", err)
+		h.renderInternalError(w, r)
+		return
+	}
+	_ = h.Render(w, r, http.StatusOK, operatorview.Audit(page))
+}
+
 func (h *UIHandler) OperatorEmailTemplatesPage(w http.ResponseWriter, r *http.Request) {
 	templates, err := h.EmailTemplates.List(r.Context())
 	if err != nil {
@@ -252,8 +280,13 @@ func (h *UIHandler) OperatorEmailTemplateResetPost(w http.ResponseWriter, r *htt
 	if !ok {
 		return
 	}
+	userID, ok := httpctx.UserID(r.Context())
+	if !ok {
+		h.renderUnauthorized(w, r)
+		return
+	}
 
-	err := h.EmailTemplates.DeleteOverride(r.Context(), key, form)
+	err := h.EmailTemplates.DeleteOverride(r.Context(), key, form, userID)
 	if err == nil {
 		if httpctx.IsHTMX(r.Context()) {
 			effective, getErr := h.EmailTemplates.Get(r.Context(), key)

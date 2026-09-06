@@ -9,6 +9,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/google/uuid"
 )
 
 func TestDashboardLinksOperatorAndAccountPages(t *testing.T) {
@@ -53,6 +54,44 @@ func TestEmailTemplatesRendersCatalogMetadataWithoutSampleValues(t *testing.T) {
 	}
 }
 
+func TestAuditRendersOperationalMetadataWithoutTemplateSources(t *testing.T) {
+	actorID := uuid.New()
+	html := renderOperatorComponent(t, Audit(email.OperatorAuditPage{
+		Events: []domain.OperatorAuditEvent{{
+			CreatedAt:    time.Date(2026, time.September, 6, 13, 15, 0, 0, time.UTC),
+			ActorUserID:  &actorID,
+			Action:       domain.OperatorAuditActionEmailTemplateSaved,
+			ResourceType: domain.OperatorAuditResourceEmailTemplate,
+			ResourceID:   string(domain.EmailTemplateSignupCode),
+			Metadata:     []byte(`{"revision":2,"version":5,"html_template":"secret source"}`),
+		}},
+		Page:     1,
+		Size:     50,
+		Action:   domain.OperatorAuditActionEmailTemplateSaved,
+		Template: domain.EmailTemplateSignupCode,
+	}))
+
+	for _, want := range []string{
+		"Operator audit log",
+		"Template saved",
+		"Signup verification",
+		actorID.String()[:8],
+		actorID.String(),
+		"2026-09-06 13:15:00 UTC",
+		`href="/auth/operator/emails/signup_code"`,
+		`href="/auth/operator/audit"`,
+		`data-dropdown-value="email_template.saved"`,
+		`data-dropdown-value="signup_code"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("expected audit page to contain %q", want)
+		}
+	}
+	if strings.Contains(html, "secret source") || strings.Contains(html, "html_template") {
+		t.Fatal("operator audit page must not render template source metadata")
+	}
+}
+
 func TestEmailTemplateEditorRendersSourcesActionsAndSandboxedPreview(t *testing.T) {
 	definition, err := email.LookupTemplate(email.TemplateCatalog()[0].Key)
 	if err != nil {
@@ -91,7 +130,7 @@ func TestEmailTemplateEditorRendersSourcesActionsAndSandboxedPreview(t *testing.
 	for _, want := range []string{
 		`action="/auth/operator/emails/signup_code"`,
 		`id="email-template-selector"`,
-		`value="/auth/operator/emails/password_reset_code"`,
+		`data-value="/auth/operator/emails/password_reset_code"`,
 		`hx-post="/auth/operator/emails/signup_code/preview"`,
 		`hx-trigger="input delay:500ms"`,
 		`hx-target="#email-template-preview"`,

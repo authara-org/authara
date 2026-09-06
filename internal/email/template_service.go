@@ -39,7 +39,8 @@ type TemplateOverrideStore interface {
 	GetEmailTemplateVersion(context.Context, domain.EmailTemplate, int64) (domain.EmailTemplateVersion, error)
 	ListEmailTemplateVersions(context.Context, domain.EmailTemplate) ([]domain.EmailTemplateVersion, error)
 	UpsertEmailTemplateOverride(context.Context, domain.EmailTemplateOverride, int64) (domain.EmailTemplateOverride, error)
-	DeleteEmailTemplateOverride(context.Context, domain.EmailTemplate, int64) error
+	DeleteEmailTemplateOverride(context.Context, domain.EmailTemplate, int64, uuid.UUID) error
+	ListOperatorAuditEvents(context.Context, store.OperatorAuditEventFilter) ([]domain.OperatorAuditEvent, error)
 }
 
 // EffectiveTemplate combines immutable catalog metadata with an optional
@@ -168,11 +169,19 @@ func (s *TemplateService) SaveOverride(ctx context.Context, in SaveTemplateOverr
 	}, nil
 }
 
-func (s *TemplateService) DeleteOverride(ctx context.Context, key domain.EmailTemplate, expectedRevision int64) error {
+func (s *TemplateService) DeleteOverride(
+	ctx context.Context,
+	key domain.EmailTemplate,
+	expectedRevision int64,
+	updatedByUserID uuid.UUID,
+) error {
 	if err := ValidateTemplate(key); err != nil {
 		return err
 	}
-	if err := s.store.DeleteEmailTemplateOverride(ctx, key, expectedRevision); err != nil {
+	if updatedByUserID == uuid.Nil {
+		return ErrMissingTemplateUpdater
+	}
+	if err := s.store.DeleteEmailTemplateOverride(ctx, key, expectedRevision, updatedByUserID); err != nil {
 		if errors.Is(err, store.ErrEmailTemplateRevisionConflict) {
 			return err
 		}

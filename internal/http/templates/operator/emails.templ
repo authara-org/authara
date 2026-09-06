@@ -6,6 +6,7 @@ import (
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/dropdown"
 	"github.com/authara-org/authara/internal/http/templates/components/theme"
 )
 
@@ -60,15 +61,14 @@ templ EmailTemplateEditor(model EmailTemplateEditorModel) {
 				<a class="inline-flex h-10 items-center rounded-lg px-3 text-sm font-medium text-grey-600 hover:bg-grey-100 hover:text-grey-900 dark:text-grey-300 dark:hover:bg-grey-800 dark:hover:text-white" href="/auth/operator/emails" @click="if (dirty && !window.confirm('Discard unsaved changes?')) $event.preventDefault()">← Templates</a>
 				<div class="min-w-52 flex-1 sm:max-w-xs">
 					<label class="sr-only" for="email-template-selector">Email template</label>
-					<select id="email-template-selector" class="h-10 w-full rounded-lg border border-grey-200 bg-white px-3 text-sm font-medium text-grey-900 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-grey-700 dark:bg-grey-950 dark:text-grey-100 dark:focus:ring-blue-900/40" @change="if (dirty && !window.confirm('Discard unsaved changes?')) { $event.target.value = $event.target.querySelector('option[selected]').value } else { window.location.href = $event.target.value }">
-						for _, definition := range email.TemplateCatalog() {
-							if definition.Key == model.Definition.Key {
-								<option value={ emailTemplateHref(definition.Key) } selected>{ definition.DisplayName }</option>
-							} else {
-								<option value={ emailTemplateHref(definition.Key) }>{ definition.DisplayName }</option>
-							}
-						}
-					</select>
+					@dropdown.Dropdown(dropdown.Config{
+						ID:           "email-template-selector",
+						Value:        emailTemplateHref(model.Definition.Key),
+						Options:      emailTemplateDropdownOptions(),
+						Class:        "w-full",
+						TriggerClass: "font-medium",
+						OnChange:     "if (dirty && !window.confirm('Discard unsaved changes?')) { $event.preventDefault() } else { window.location.href = $event.detail.value }",
+					})
 				</div>
 				@emailTemplateSourceStatus(model, false)
 				@emailTemplateHistory(model, false)

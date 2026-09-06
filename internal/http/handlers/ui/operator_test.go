@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
@@ -59,6 +61,72 @@ func TestOperatorEmailTemplateSaveValidatesAndPreventsStaleOverwrite(t *testing.
 	}
 	if !strings.Contains(staleResponse.Body.String(), "Another operator changed this template") {
 		t.Fatal("stale response does not explain the revision conflict")
+	}
+}
+
+func TestOperatorAuditPageFiltersAndPaginatesEvents(t *testing.T) {
+	templateStore := newOperatorEmailTemplateStore()
+	actorID := uuid.New()
+	templateStore.auditEvents = []domain.OperatorAuditEvent{
+		{
+			CreatedAt:    time.Date(2026, time.September, 6, 13, 0, 0, 0, time.UTC),
+			ActorUserID:  &actorID,
+			Action:       domain.OperatorAuditActionEmailTemplateSaved,
+			ResourceType: domain.OperatorAuditResourceEmailTemplate,
+			ResourceID:   string(domain.EmailTemplateSignupCode),
+			Metadata:     json.RawMessage(`{"revision":2,"version":3}`),
+		},
+		{
+			CreatedAt:    time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC),
+			ActorUserID:  &actorID,
+			Action:       domain.OperatorAuditActionEmailTemplateSaved,
+			ResourceType: domain.OperatorAuditResourceEmailTemplate,
+			ResourceID:   string(domain.EmailTemplateSignupCode),
+			Metadata:     json.RawMessage(`{"revision":1,"version":2}`),
+		},
+		{
+			CreatedAt:    time.Date(2026, time.September, 6, 11, 0, 0, 0, time.UTC),
+			ActorUserID:  &actorID,
+			Action:       domain.OperatorAuditActionEmailTemplateRestoredBuiltIn,
+			ResourceType: domain.OperatorAuditResourceEmailTemplate,
+			ResourceID:   string(domain.EmailTemplatePasswordResetCode),
+			Metadata:     json.RawMessage(`{"revision":4}`),
+		},
+	}
+	h := newOperatorEmailTemplateHandler(templateStore)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/auth/operator/audit?action=email_template.saved&template=signup_code&size=1",
+		nil,
+	)
+	response := httptest.NewRecorder()
+
+	h.OperatorAuditPage(response, req)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("audit page status = %d, want %d", response.Code, http.StatusOK)
+	}
+	body := response.Body.String()
+	for _, want := range []string{
+		"Operator audit log",
+		"Template saved",
+		"Signup verification",
+		actorID.String(),
+		">2</td>",
+		">3</td>",
+		"Next",
+		`data-dropdown-value="email_template.saved"`,
+		`data-dropdown-value="signup_code"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("audit page does not contain %q", want)
+		}
+	}
+	if strings.Contains(body, `href="/auth/operator/emails/password_reset_code"`) {
+		t.Fatalf("audit page ignored template filter: %s", body)
+	}
+	if got := strings.Count(body, `<tr class="border-t border-grey-200 dark:border-grey-800">`); got != 1 {
+		t.Fatalf("audit page rendered %d event rows, want 1: %s", got, body)
 	}
 }
 
@@ -492,8 +560,9 @@ func emailTemplateFormValues(revision int64, subject, textBody, htmlBody string)
 }
 
 type operatorEmailTemplateStore struct {
-	overrides map[domain.EmailTemplate]domain.EmailTemplateOverride
-	versions  map[domain.EmailTemplate][]domain.EmailTemplateVersion
+	overrides   map[domain.EmailTemplate]domain.EmailTemplateOverride
+	versions    map[domain.EmailTemplate][]domain.EmailTemplateVersion
+	auditEvents []domain.OperatorAuditEvent
 }
 
 func newOperatorEmailTemplateStore() *operatorEmailTemplateStore {
@@ -556,13 +625,38 @@ func (s *operatorEmailTemplateStore) UpsertEmailTemplateOverride(_ context.Conte
 	return override, nil
 }
 
-func (s *operatorEmailTemplateStore) DeleteEmailTemplateOverride(_ context.Context, key domain.EmailTemplate, expectedRevision int64) error {
+func (s *operatorEmailTemplateStore) DeleteEmailTemplateOverride(_ context.Context, key domain.EmailTemplate, expectedRevision int64, _ uuid.UUID) error {
 	current, exists := s.overrides[key]
 	if !exists || current.Revision != expectedRevision {
 		return store.ErrEmailTemplateRevisionConflict
 	}
 	delete(s.overrides, key)
 	return nil
+}
+
+func (s *operatorEmailTemplateStore) ListOperatorAuditEvents(_ context.Context, filter store.OperatorAuditEventFilter) ([]domain.OperatorAuditEvent, error) {
+	events := make([]domain.OperatorAuditEvent, 0, len(s.auditEvents))
+	for _, event := range s.auditEvents {
+		if filter.Action != "" && event.Action != filter.Action {
+			continue
+		}
+		if filter.ResourceType != "" && event.ResourceType != filter.ResourceType {
+			continue
+		}
+		if filter.ResourceID != "" && event.ResourceID != filter.ResourceID {
+			continue
+		}
+		events = append(events, event)
+	}
+	start := filter.Offset
+	if start > len(events) {
+		start = len(events)
+	}
+	end := start + filter.Limit
+	if end > len(events) {
+		end = len(events)
+	}
+	return append([]domain.OperatorAuditEvent(nil), events[start:end]...), nil
 }
 
 var _ email.TemplateOverrideStore = (*operatorEmailTemplateStore)(nil)

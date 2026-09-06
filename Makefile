@@ -132,7 +132,7 @@ endif
 test: test-up test-db-create test-migrate test-run
 
 test-up:
-	$(DOCKER_COMPOSE_TEST) up -d $(POSTGRES_SERVICE)
+	$(DOCKER_COMPOSE_TEST) up -d $(POSTGRES_SERVICE) $(MAILPIT_SERVICE)
 	until $(DOCKER_COMPOSE_TEST) exec -T $(POSTGRES_SERVICE) \
 		pg_isready -U $(POSTGRESQL_USERNAME) -d postgres >/dev/null 2>&1; do \
 		echo "waiting for postgres..."; \
@@ -170,6 +170,9 @@ test-run:
 		-e POSTGRESQL_SCHEMA=$(TEST_DB_SCHEMA) \
 		-e POSTGRESQL_TIMEZONE=$(TEST_DB_TIMEZONE) \
 		-e POSTGRESQL_LOG_SQL=$(TEST_DB_LOG_SQL) \
+		-e AUTHARA_TEST_MAILPIT_HTTP_URL=http://mailpit:8025 \
+		-e AUTHARA_TEST_MAILPIT_SMTP_HOST=mailpit \
+		-e AUTHARA_TEST_MAILPIT_SMTP_PORT=1025 \
 		$(AUTHARA_SERVICE) \
 		go test ./... -count=1
 

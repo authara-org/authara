@@ -24,6 +24,7 @@ templ Shell(active string) {
 						<nav aria-label="Operator" class="flex flex-wrap gap-2 text-sm">
 							@navLink("/auth/operator", "Dashboard", active == "dashboard")
 							@navLink("/auth/operator/emails", "Email templates", active == "emails")
+							@navLink("/auth/operator/audit", "Audit log", active == "audit")
 						</nav>
 						<a class="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300" href="/auth/account?return_to=/auth/operator">Back to account</a>
 					</div>
