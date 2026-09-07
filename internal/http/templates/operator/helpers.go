@@ -60,6 +60,38 @@ func emailTemplateHistoryTargetHref(model EmailTemplateEditorModel, version int6
 	return emailTemplateVersionHref(model.Definition.Key, version)
 }
 
+func emailTemplateHistoryDropdownValue(model EmailTemplateEditorModel) string {
+	if model.ViewingVersion > 0 {
+		return emailTemplateHistoryTargetHref(model, model.ViewingVersion)
+	}
+	if model.Source == email.TemplateSourceOverride && model.ActiveVersion > 0 {
+		return emailTemplateHref(model.Definition.Key)
+	}
+	return ""
+}
+
+func emailTemplateHistoryDropdownOptions(model EmailTemplateEditorModel) []dropdown.Option {
+	if len(model.Versions) == 0 {
+		return []dropdown.Option{{Value: "", Label: "No saved versions"}}
+	}
+
+	options := make([]dropdown.Option, 0, len(model.Versions))
+	for _, version := range model.Versions {
+		label := "Version " + strconv.FormatInt(version.Version, 10) + " - " + emailTemplateVersionTime(version.CreatedAt)
+		switch {
+		case version.Version == model.ViewingVersion:
+			label += " (viewing)"
+		case model.Source == email.TemplateSourceOverride && version.Version == model.ActiveVersion:
+			label += " (current)"
+		}
+		options = append(options, dropdown.Option{
+			Value: emailTemplateHistoryTargetHref(model, version.Version),
+			Label: label,
+		})
+	}
+	return options
+}
+
 func saveEmailTemplateLabel(model EmailTemplateEditorModel) string {
 	if model.ViewingVersion > 0 {
 		return "Save as new version"
@@ -131,7 +163,10 @@ func operatorAuditTemplateLabel(resourceID string) string {
 	return definition.DisplayName
 }
 
-func operatorAuditActorLabel(actor *uuid.UUID) string {
+func operatorAuditActorLabel(email *string, actor *uuid.UUID) string {
+	if email != nil && *email != "" {
+		return *email
+	}
 	if actor == nil {
 		return "Deleted user"
 	}
@@ -201,19 +236,4 @@ func placeholderList(variables []string) string {
 		values[i] = "{{" + variable + "}}"
 	}
 	return strings.Join(values, ", ")
-}
-
-func navAriaCurrent(active bool) string {
-	if active {
-		return "page"
-	}
-	return "false"
-}
-
-func navClass(active bool) string {
-	base := "rounded-lg border px-3 py-2 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-grey-950"
-	if active {
-		return base + " border-blue-600 bg-blue-600 text-white"
-	}
-	return base + " border-grey-200 bg-white text-grey-700 hover:border-grey-300 hover:bg-grey-50 dark:border-grey-800 dark:bg-grey-900 dark:text-grey-200 dark:hover:border-grey-700 dark:hover:bg-grey-800"
 }

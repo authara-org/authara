@@ -1,0 +1,94 @@
+package workspace
+
+import "github.com/authara-org/authara/internal/http/templates/components/theme"
+
+type Tab struct {
+	Href   string
+	Label  string
+	Active bool
+}
+
+type Config struct {
+	Title       string
+	Description string
+	TabsLabel   string
+	Tabs        []Tab
+	ContentID   string
+	AccountHref string
+	ViewportHeight bool
+}
+
+templ Shell(cfg Config) {
+	<div class={ shellClass(cfg.ViewportHeight) }>
+		<div class={ containerClass(cfg.ViewportHeight) }>
+			<header class="shrink-0 pb-6">
+				<div class="flex items-start justify-between gap-4">
+					<div>
+						<p class="text-xs font-medium uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Authara</p>
+						<h1 class="mt-1 text-3xl font-semibold tracking-tight">{ cfg.Title }</h1>
+						if cfg.Description != "" {
+							<p class="mt-1 max-w-2xl text-sm text-grey-600 dark:text-grey-400">{ cfg.Description }</p>
+						}
+					</div>
+					<div class="flex shrink-0 items-center gap-3">
+						@TextLink(cfg.AccountHref, "Back to account")
+						<div class="block sm:hidden">
+							@theme.ThemeToggle()
+						</div>
+					</div>
+				</div>
+			</header>
+			<nav aria-label={ cfg.TabsLabel } class="shrink-0 overflow-x-auto border-b border-grey-200 dark:border-grey-800">
+				<div class="flex min-w-max gap-6" role="list">
+					for _, tab := range cfg.Tabs {
+						<a
+							href={ templ.SafeURL(tab.Href) }
+							class={ tabClass(tab.Active) }
+							if tab.Active {
+								aria-current="page"
+							}
+						>
+							{ tab.Label }
+						</a>
+					}
+				</div>
+			</nav>
+			<section id={ cfg.ContentID } class="flex min-h-0 flex-1 flex-col pt-7">
+				{ children... }
+			</section>
+		</div>
+	</div>
+}
+
+func shellClass(viewportHeight bool) string {
+	base := "bg-background-light text-grey-900 dark:bg-background-dark dark:text-grey-100"
+	if viewportHeight {
+		return base + " h-dvh overflow-hidden"
+	}
+	return base + " min-h-screen"
+}
+
+func containerClass(viewportHeight bool) string {
+	base := "mx-auto flex max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-12"
+	if viewportHeight {
+		return base + " h-full"
+	}
+	return base + " min-h-screen"
+}
+
+templ TextLink(href string, label string) {
+	<a
+		href={ templ.SafeURL(href) }
+		class="inline-flex items-center text-sm font-medium text-blue-700 underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-300"
+	>
+		{ label }
+	</a>
+}
+
+func tabClass(active bool) string {
+	base := "border-b-2 px-0.5 pb-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+	if active {
+		return base + " border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300"
+	}
+	return base + " border-transparent text-grey-600 hover:border-grey-300 hover:text-grey-900 dark:text-grey-400 dark:hover:border-grey-600 dark:hover:text-grey-100"
+}

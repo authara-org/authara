@@ -38,6 +38,19 @@ func scanOperatorAuditEvent(row rowScanner, event *domain.OperatorAuditEvent) er
 	)
 }
 
+func scanOperatorAuditEventWithActorEmail(row rowScanner, event *domain.OperatorAuditEvent) error {
+	return row.Scan(
+		&event.ID,
+		&event.CreatedAt,
+		&event.ActorUserID,
+		&event.Action,
+		&event.ResourceType,
+		&event.ResourceID,
+		&event.Metadata,
+		&event.ActorEmail,
+	)
+}
+
 func (s *Store) ListOperatorAuditEvents(ctx context.Context, filter OperatorAuditEventFilter) ([]domain.OperatorAuditEvent, error) {
 	limit := filter.Limit
 	if limit <= 0 {
@@ -52,13 +65,22 @@ func (s *Store) ListOperatorAuditEvents(ctx context.Context, filter OperatorAudi
 	}
 
 	rows, err := s.queryRows(ctx, `
-		SELECT `+operatorAuditEventColumns+`
-		FROM operator_audit_events
-		WHERE ($1::uuid IS NULL OR actor_user_id = $1)
-		  AND ($2 = '' OR action = $2)
-		  AND ($3 = '' OR resource_type = $3)
-		  AND ($4 = '' OR resource_id = $4)
-		ORDER BY created_at DESC, id DESC
+		SELECT
+			audit.id,
+			audit.created_at,
+			audit.actor_user_id,
+			audit.action,
+			audit.resource_type,
+			audit.resource_id,
+			audit.metadata,
+			actor.email
+		FROM operator_audit_events AS audit
+		LEFT JOIN users AS actor ON actor.id = audit.actor_user_id
+		WHERE ($1::uuid IS NULL OR audit.actor_user_id = $1)
+		  AND ($2 = '' OR audit.action = $2)
+		  AND ($3 = '' OR audit.resource_type = $3)
+		  AND ($4 = '' OR audit.resource_id = $4)
+		ORDER BY audit.created_at DESC, audit.id DESC
 		LIMIT $5 OFFSET $6
 	`, filter.ActorUserID, filter.Action, filter.ResourceType, filter.ResourceID, limit, offset)
 	if err != nil {
@@ -69,7 +91,7 @@ func (s *Store) ListOperatorAuditEvents(ctx context.Context, filter OperatorAudi
 	events := make([]domain.OperatorAuditEvent, 0)
 	for rows.Next() {
 		var event domain.OperatorAuditEvent
-		if err := scanOperatorAuditEvent(rows, &event); err != nil {
+		if err := scanOperatorAuditEventWithActorEmail(rows, &event); err != nil {
 			return nil, err
 		}
 		events = append(events, event)

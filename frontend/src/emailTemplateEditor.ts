@@ -213,8 +213,15 @@ class EditorOverviewRuler {
       if (!text) continue;
       const y = ((lineNumber - 0.5) / totalLines) * height;
       const markerWidth = Math.min(width - 4, 3 + Math.sqrt(text.length));
-      context.fillStyle = text.includes("{{") ? placeholderColor : lineColor;
-      context.fillRect(width - markerWidth - 2, Math.floor(y), markerWidth, 1);
+      const isPlaceholder = text.includes("{{");
+      const markerHeight = isPlaceholder ? 3 : 1;
+      context.fillStyle = isPlaceholder ? placeholderColor : lineColor;
+      context.fillRect(
+        width - markerWidth - 2,
+        Math.floor(y - markerHeight / 2),
+        markerWidth,
+        markerHeight,
+      );
     }
 
     const activeLine = document.lineAt(

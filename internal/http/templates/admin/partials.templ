@@ -9,25 +9,6 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/modal"
 )
 
-templ navLink(href string, label string, active bool) {
-	<form
-		class="inline-flex"
-		method="get"
-		action={ href }
-		hx-get={ href }
-		hx-target="#body"
-		hx-swap="innerHTML"
-		hx-push-url={ href }
-	>
-		@button.Button(button.ButtonConfig{
-			Label: label,
-			Type:  button.Submit,
-			Size:  button.Small,
-			Color: navButtonColor(active),
-		})
-	</form>
-}
-
 templ badge(label string, color string) {
 	<span class={ "inline-flex items-center rounded-lg px-2 py-1 text-xs font-medium " + badgeClass(color) }>
 		{ label }

@@ -19,7 +19,9 @@ type OperatorAuditEvent struct {
 	ID        uuid.UUID
 	CreatedAt time.Time
 
-	ActorUserID  *uuid.UUID
+	ActorUserID *uuid.UUID
+	ActorEmail  *string
+
 	Action       string
 	ResourceType string
 	ResourceID   string

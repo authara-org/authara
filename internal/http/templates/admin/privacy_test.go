@@ -75,6 +75,7 @@ func TestAuditPrivacyRendering(t *testing.T) {
 	actorID := uuid.MustParse("9cf1b64b-0000-0000-0000-000000000000")
 	targetID := uuid.MustParse("41ae92dc-0000-0000-0000-000000000000")
 	targetEmail := "privacy-target@example.com"
+	actorEmail := "privacy-admin@example.com"
 	ip := "203.0.113.10"
 	userAgent := "Full audit user agent"
 	metadata, err := json.Marshal(map[string]any{
@@ -90,6 +91,7 @@ func TestAuditPrivacyRendering(t *testing.T) {
 			ID:           uuid.New(),
 			CreatedAt:    fixedTemplateTime(),
 			ActorUserID:  &actorID,
+			ActorEmail:   &actorEmail,
 			Action:       "user.disabled",
 			TargetUserID: &targetID,
 			TargetEmail:  &targetEmail,
@@ -103,6 +105,7 @@ func TestAuditPrivacyRendering(t *testing.T) {
 
 	for _, want := range []string{
 		"9cf1b64b",
+		"privacy-admin@example.com",
 		"41ae92dc",
 		"p***@example.com",
 		"Show personal data",

@@ -44,6 +44,21 @@ func scanAdminAuditEvent(row rowScanner, event *domain.AdminAuditEvent) error {
 	)
 }
 
+func scanAdminAuditEventWithActorEmail(row rowScanner, event *domain.AdminAuditEvent) error {
+	return row.Scan(
+		&event.ID,
+		&event.CreatedAt,
+		&event.ActorUserID,
+		&event.Action,
+		&event.TargetUserID,
+		&event.TargetEmail,
+		&event.Metadata,
+		&event.IP,
+		&event.UserAgent,
+		&event.ActorEmail,
+	)
+}
+
 func (s *Store) CreateAdminAuditEvent(ctx context.Context, event domain.AdminAuditEvent) (domain.AdminAuditEvent, error) {
 	if len(event.Metadata) == 0 {
 		event.Metadata = json.RawMessage(`{}`)
@@ -89,13 +104,24 @@ func (s *Store) ListAdminAuditEvents(ctx context.Context, filter AdminAuditEvent
 	}
 
 	rows, err := s.queryRows(ctx, `
-		SELECT `+adminAuditEventColumns+`
-		FROM admin_audit_events
-		WHERE ($1::uuid IS NULL OR actor_user_id = $1)
-		  AND ($2::uuid IS NULL OR target_user_id = $2)
-		  AND ($3 = '' OR action = $3)
-		  AND ($4 = '' OR target_email = $4)
-		ORDER BY created_at DESC
+		SELECT
+			audit.id,
+			audit.created_at,
+			audit.actor_user_id,
+			audit.action,
+			audit.target_user_id,
+			audit.target_email,
+			audit.metadata,
+			audit.ip,
+			audit.user_agent,
+			actor.email
+		FROM admin_audit_events AS audit
+		LEFT JOIN users AS actor ON actor.id = audit.actor_user_id
+		WHERE ($1::uuid IS NULL OR audit.actor_user_id = $1)
+		  AND ($2::uuid IS NULL OR audit.target_user_id = $2)
+		  AND ($3 = '' OR audit.action = $3)
+		  AND ($4 = '' OR audit.target_email = $4)
+		ORDER BY audit.created_at DESC, audit.id DESC
 		LIMIT $5 OFFSET $6
 	`, filter.ActorUserID, filter.TargetUserID, filter.Action, filter.TargetEmail, limit, offset)
 	if err != nil {
@@ -106,7 +132,7 @@ func (s *Store) ListAdminAuditEvents(ctx context.Context, filter AdminAuditEvent
 	out := make([]domain.AdminAuditEvent, 0)
 	for rows.Next() {
 		var event domain.AdminAuditEvent
-		if err := scanAdminAuditEvent(rows, &event); err != nil {
+		if err := scanAdminAuditEventWithActorEmail(rows, &event); err != nil {
 			return nil, err
 		}
 		out = append(out, event)

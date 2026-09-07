@@ -1,0 +1,110 @@
+package datatable
+
+import "strconv"
+
+type Column struct {
+	Label      string
+	WidthClass string
+}
+
+type Config struct {
+	Columns         []Column
+	MinWidthClass   string
+	Page            int
+	RowCount        int
+	RowLabel        string
+	HasPrevious     bool
+	HasNext         bool
+	PreviousHref    string
+	NextHref        string
+	EmptyTitle      string
+	EmptyDescription string
+}
+
+templ Table(cfg Config) {
+	<section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-grey-200 bg-white dark:border-grey-800 dark:bg-grey-900">
+		<div class="relative min-h-0 flex-1 overflow-auto">
+			<table class={ tableClass(cfg.MinWidthClass) }>
+				<colgroup>
+					for _, column := range cfg.Columns {
+						<col class={ column.WidthClass }/>
+					}
+				</colgroup>
+				<thead class="sticky top-0 z-10 border-b border-grey-200 bg-grey-50 text-left text-grey-600 dark:border-grey-700 dark:bg-grey-800 dark:text-grey-300">
+					<tr>
+						for _, column := range cfg.Columns {
+							<th scope="col" class="whitespace-nowrap px-4 py-3 text-sm font-medium">{ column.Label }</th>
+						}
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-grey-200 dark:divide-grey-800">
+					{ children... }
+				</tbody>
+			</table>
+			if cfg.RowCount == 0 {
+				<div class="pointer-events-none absolute inset-x-0 bottom-0 top-12 flex items-center justify-center p-6 text-center">
+					<div class="max-w-md rounded-xl border border-dashed border-grey-300 bg-grey-50 px-6 py-8 dark:border-grey-700 dark:bg-grey-950">
+						<p class="font-medium text-grey-900 dark:text-grey-100">{ cfg.EmptyTitle }</p>
+						if cfg.EmptyDescription != "" {
+							<p class="mt-2 text-sm leading-6 text-grey-600 dark:text-grey-400">{ cfg.EmptyDescription }</p>
+						}
+					</div>
+				</div>
+			}
+		</div>
+		<footer class="shrink-0 border-t border-grey-200 bg-grey-50 px-4 py-2.5 dark:border-grey-800 dark:bg-grey-950">
+			<div class="flex min-h-9 items-center justify-between gap-4 text-sm text-grey-600 dark:text-grey-400">
+				<p>{ rowSummary(cfg.RowCount, cfg.RowLabel) }</p>
+				<div class="flex items-center gap-4">
+					<span>Page { strconv.Itoa(pageNumber(cfg.Page)) }</span>
+					<nav aria-label="Table pagination" class="flex items-center gap-2">
+						@PaginationLink(cfg.PreviousHref, "Previous", cfg.HasPrevious)
+						@PaginationLink(cfg.NextHref, "Next", cfg.HasNext)
+					</nav>
+				</div>
+			</div>
+		</footer>
+	</section>
+}
+
+templ PaginationLink(href string, label string, enabled bool) {
+	if enabled {
+		<a
+			href={ templ.SafeURL(href) }
+			class="inline-flex h-8 items-center rounded-lg border border-grey-300 bg-white px-3 text-xs font-medium text-grey-700 transition-colors hover:border-grey-400 hover:bg-grey-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-grey-700 dark:bg-grey-900 dark:text-grey-200 dark:hover:border-grey-600 dark:hover:bg-grey-800"
+		>
+			{ label }
+		</a>
+	} else {
+		<span
+			aria-disabled="true"
+			class="inline-flex h-8 cursor-not-allowed items-center rounded-lg border border-grey-200 bg-grey-100 px-3 text-xs font-medium text-grey-400 dark:border-grey-800 dark:bg-grey-900 dark:text-grey-600"
+		>
+			{ label }
+		</span>
+	}
+}
+
+func tableClass(minWidthClass string) string {
+	if minWidthClass == "" {
+		minWidthClass = "min-w-full"
+	}
+	return "w-full table-fixed border-collapse text-sm " + minWidthClass
+}
+
+func pageNumber(page int) int {
+	if page < 1 {
+		return 1
+	}
+	return page
+}
+
+func rowSummary(count int, label string) string {
+	if label == "" {
+		label = "row"
+	}
+	if count == 1 {
+		return "1 " + label + " on this page"
+	}
+	return strconv.Itoa(count) + " " + label + "s on this page"
+}

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	adminsvc "github.com/authara-org/authara/internal/admin"
-	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/google/uuid"
 )
 
@@ -52,6 +51,16 @@ func uuidPtrShort(value *uuid.UUID) string {
 	return shortID(*value)
 }
 
+func auditActorLabel(email *string, id *uuid.UUID) string {
+	if email != nil && *email != "" {
+		return *email
+	}
+	if id == nil {
+		return "Deleted user"
+	}
+	return shortID(*id)
+}
+
 func shortID(id uuid.UUID) string {
 	text := id.String()
 	if len(text) <= 8 {
@@ -84,13 +93,6 @@ func joinStrings(values []string) string {
 		return "None"
 	}
 	return strings.Join(values, ", ")
-}
-
-func navButtonColor(active bool) button.Color {
-	if active {
-		return button.AdminNavActive
-	}
-	return button.AdminNav
 }
 
 func badgeClass(color string) string {

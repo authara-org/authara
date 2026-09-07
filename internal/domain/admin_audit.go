@@ -13,6 +13,7 @@ type AdminAuditEvent struct {
 	CreatedAt time.Time
 
 	ActorUserID *uuid.UUID
+	ActorEmail  *string
 	Action      string
 
 	TargetUserID *uuid.UUID

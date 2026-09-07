@@ -1,22 +1,21 @@
 package operator
 
 import (
-	"strconv"
-
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/datatable"
 	"github.com/authara-org/authara/internal/http/templates/components/dropdown"
 )
 
 templ Audit(page email.OperatorAuditPage) {
 	@Shell("audit") {
-		<div class="space-y-5">
-			<div>
+		<div class="flex min-h-0 flex-1 flex-col gap-5">
+			<div class="shrink-0">
 				<h2 class="text-xl font-semibold">Operator audit log</h2>
 				<p class="mt-1 text-sm text-grey-600 dark:text-grey-400">Template changes recorded for operational accountability. Email contents and delivery secrets are never stored here.</p>
 			</div>
-			<form class="grid gap-3 rounded-xl border border-grey-200 bg-white p-4 dark:border-grey-800 dark:bg-grey-900 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-end" method="get" action="/auth/operator/audit">
+			<form class="grid shrink-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-end" method="get" action="/auth/operator/audit">
 				<div>
 					<label class="text-sm font-medium" for="operator-audit-action">Action</label>
 					@dropdown.Dropdown(dropdown.Config{
@@ -53,54 +52,37 @@ templ Audit(page email.OperatorAuditPage) {
 					})
 				}
 			</form>
-			<div class="overflow-x-auto rounded-xl border border-grey-200 bg-white dark:border-grey-800 dark:bg-grey-900">
-				<table class="min-w-[52rem] table-fixed text-sm">
-					<colgroup>
-						<col class="w-48"/>
-						<col class="w-44"/>
-						<col class="w-56"/>
-						<col class="w-32"/>
-						<col class="w-24"/>
-						<col class="w-24"/>
-					</colgroup>
-					<thead class="bg-grey-50 text-left text-grey-600 dark:bg-grey-800 dark:text-grey-300">
-						<tr>
-							<th class="px-4 py-3">Time</th>
-							<th class="px-4 py-3">Action</th>
-							<th class="px-4 py-3">Template</th>
-							<th class="px-4 py-3">Operator</th>
-							<th class="px-4 py-3">Revision</th>
-							<th class="px-4 py-3">Version</th>
-						</tr>
-					</thead>
-					<tbody>
-						if len(page.Events) == 0 {
-							<tr><td class="px-4 py-6 text-center text-grey-600 dark:text-grey-400" colspan="6">No matching audit events.</td></tr>
-						}
-						for _, event := range page.Events {
-							<tr class="border-t border-grey-200 dark:border-grey-800">
+			@datatable.Table(datatable.Config{
+				Columns: []datatable.Column{
+					{Label: "Time", WidthClass: "w-48"},
+					{Label: "Action", WidthClass: "w-44"},
+					{Label: "Template", WidthClass: "w-56"},
+					{Label: "Operator", WidthClass: "w-56"},
+					{Label: "Revision", WidthClass: "w-24"},
+					{Label: "Version", WidthClass: "w-24"},
+				},
+				MinWidthClass:   "min-w-[58rem]",
+				Page:            page.Page,
+				RowCount:        len(page.Events),
+				RowLabel:        "event",
+				HasPrevious:     page.Page > 1,
+				HasNext:         page.HasNext,
+				PreviousHref:    operatorAuditPageHref(page, page.Page - 1),
+				NextHref:        operatorAuditPageHref(page, page.Page + 1),
+				EmptyTitle:      "No matching audit events",
+				EmptyDescription: "Template changes matching the selected filters will appear here.",
+			}) {
+				for _, event := range page.Events {
+					<tr>
 								<td class="whitespace-nowrap px-4 py-3 align-top"><time datetime={ operatorAuditTimeValue(event.CreatedAt) }>{ operatorAuditTime(event.CreatedAt) }</time></td>
 								<td class="px-4 py-3 align-top font-medium">{ operatorAuditActionLabel(event.Action) }</td>
 								<td class="px-4 py-3 align-top"><a class="font-medium text-blue-700 hover:underline dark:text-blue-300" href={ emailTemplateHref(domain.EmailTemplate(event.ResourceID)) }>{ operatorAuditTemplateLabel(event.ResourceID) }</a></td>
-								<td class="px-4 py-3 align-top"><code class="text-xs" title={ operatorAuditActorTitle(event.ActorUserID) }>{ operatorAuditActorLabel(event.ActorUserID) }</code></td>
+								<td class="truncate px-4 py-3 align-top" title={ operatorAuditActorTitle(event.ActorUserID) }>{ operatorAuditActorLabel(event.ActorEmail, event.ActorUserID) }</td>
 								<td class="px-4 py-3 align-top tabular-nums">{ operatorAuditMetadataValue(event.Metadata, "revision") }</td>
 								<td class="px-4 py-3 align-top tabular-nums">{ operatorAuditMetadataValue(event.Metadata, "version") }</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
-			<div class="flex items-center justify-between gap-3">
-				<p class="text-sm text-grey-600 dark:text-grey-400">Page { strconv.Itoa(page.Page) }</p>
-				<div class="flex gap-2">
-					if page.Page > 1 {
-						@button.LinkButton(button.LinkButtonConfig{Href: operatorAuditPageHref(page, page.Page - 1), Label: "Previous", Color: button.Light, Variant: button.Outline, Size: button.Small})
-					}
-					if page.HasNext {
-						@button.LinkButton(button.LinkButtonConfig{Href: operatorAuditPageHref(page, page.Page + 1), Label: "Next", Color: button.Light, Variant: button.Outline, Size: button.Small})
-					}
-				</div>
-			</div>
+					</tr>
+				}
+			}
 		</div>
 	}
 }

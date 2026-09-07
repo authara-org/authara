@@ -56,10 +56,12 @@ func TestEmailTemplatesRendersCatalogMetadataWithoutSampleValues(t *testing.T) {
 
 func TestAuditRendersOperationalMetadataWithoutTemplateSources(t *testing.T) {
 	actorID := uuid.New()
+	actorEmail := "operator@example.com"
 	html := renderOperatorComponent(t, Audit(email.OperatorAuditPage{
 		Events: []domain.OperatorAuditEvent{{
 			CreatedAt:    time.Date(2026, time.September, 6, 13, 15, 0, 0, time.UTC),
 			ActorUserID:  &actorID,
+			ActorEmail:   &actorEmail,
 			Action:       domain.OperatorAuditActionEmailTemplateSaved,
 			ResourceType: domain.OperatorAuditResourceEmailTemplate,
 			ResourceID:   string(domain.EmailTemplateSignupCode),
@@ -75,7 +77,7 @@ func TestAuditRendersOperationalMetadataWithoutTemplateSources(t *testing.T) {
 		"Operator audit log",
 		"Template saved",
 		"Signup verification",
-		actorID.String()[:8],
+		"operator@example.com",
 		actorID.String(),
 		"2026-09-06 13:15:00 UTC",
 		`href="/auth/operator/emails/signup_code"`,

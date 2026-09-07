@@ -14,7 +14,9 @@ type Config struct {
 	Options      []Option
 	Class        string
 	TriggerClass string
+	TriggerLabel string
 	OnChange     string
+	Attrs        templ.Attributes
 }
 
 templ Dropdown(cfg Config) {
@@ -22,9 +24,10 @@ templ Dropdown(cfg Config) {
 		class={ "relative " + cfg.Class }
 		x-data="customDropdown()"
 		data-dropdown-value={ selectedValue(cfg) }
-		data-dropdown-label={ selectedLabel(cfg) }
+		data-dropdown-label={ dropdownLabel(cfg) }
 		@dropdown-change={ cfg.OnChange }
 		@click.outside="close(false)"
+		{ cfg.Attrs... }
 	>
 		<input
 			x-ref="input"
@@ -46,7 +49,7 @@ templ Dropdown(cfg Config) {
 			@click="toggle()"
 			@keydown="handleTriggerKeydown($event)"
 		>
-			<span class="min-w-0 flex-1 truncate text-left" x-text="label">{ selectedLabel(cfg) }</span>
+			<span class="min-w-0 flex-1 truncate text-left" x-text="label">{ dropdownLabel(cfg) }</span>
 			<span class="h-4 w-4 shrink-0 stroke-2 text-grey-500 transition-transform duration-150 dark:text-grey-400" :class="open ? 'rotate-180' : ''" aria-hidden="true">
 				@icons.ChevronDown()
 			</span>
@@ -91,6 +94,13 @@ templ Dropdown(cfg Config) {
 
 func selectedLabel(cfg Config) string {
 	return selectedOption(cfg).Label
+}
+
+func dropdownLabel(cfg Config) string {
+	if cfg.TriggerLabel != "" {
+		return cfg.TriggerLabel
+	}
+	return selectedLabel(cfg)
 }
 
 func selectedValue(cfg Config) string {
