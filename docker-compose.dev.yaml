@@ -37,6 +37,13 @@ services:
     volumes:
       - redis-data:/data
 
+  mailpit:
+    image: axllent/mailpit:v1.31.1
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+
   backend-migrations:
     build:
       context: ./migrations
@@ -79,11 +86,17 @@ services:
       - .:/app
     env_file:
         - .env
+    environment:
+      AUTHARA_EMAIL_SMTP_HOST: mailpit
+      AUTHARA_EMAIL_SMTP_PORT: 1025
+      AUTHARA_EMAIL_SMTP_TLS: "false"
     depends_on:
       backend-migrations:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
 
   ssr-app:
     build:

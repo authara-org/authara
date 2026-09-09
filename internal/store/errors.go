@@ -31,6 +31,9 @@ var (
 	ErrOrganizationNotFound             = errors.New("organization not found")
 	ErrOrganizationMembershipNotFound   = errors.New("organization membership not found")
 	ErrOrganizationInvitationNotFound   = errors.New("organization invitation not found")
+	ErrEmailTemplateOverrideNotFound    = errors.New("email template override not found")
+	ErrEmailTemplateVersionNotFound     = errors.New("email template version not found")
+	ErrEmailTemplateRevisionConflict    = errors.New("email template revision conflict")
 	ErrInvalidOrganizationName          = errors.New("invalid organization name")
 )
 

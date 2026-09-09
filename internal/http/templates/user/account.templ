@@ -12,6 +12,7 @@ import (
 type AccountConfig struct {
 	Username         string
 	Email            string
+	OperatorAccess   bool
 	GoogleClientID   string
 	Sessions         []viewmodel.Session
 	CurrentSessionID uuid.UUID
@@ -44,7 +45,7 @@ templ Account(cfg AccountConfig) {
 							}
 						</div>
 					</div>
-					@AccountFooterActions()
+					@AccountFooterActions(cfg.OperatorAccess)
 				</div>
 				@AccountDangerZone()
 			</div>

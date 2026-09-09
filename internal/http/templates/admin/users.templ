@@ -6,6 +6,7 @@ import (
 	adminsvc "github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/form"
+	"github.com/authara-org/authara/internal/http/templates/components/workspace"
 )
 
 templ Users(query string, features FeatureFlags) {
@@ -47,7 +48,7 @@ templ UserSearchResult(result *adminsvc.UserSummary) {
 	<div class="space-y-3">
 		if result != nil {
 			<div class="overflow-x-auto border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900">
-				<table class="min-w-full text-sm">
+				<table class="w-full min-w-full text-sm">
 					<thead class="bg-grey-50 dark:bg-grey-800 text-left text-grey-600 dark:text-grey-300">
 						<tr>
 							<th class="px-3 py-2">Email</th>
@@ -68,7 +69,7 @@ templ UserSearchResult(result *adminsvc.UserSummary) {
 							<td class="px-3 py-3">{ fmt.Sprint(result.AuthProviderCount) }</td>
 							<td class="px-3 py-3">{ fmt.Sprint(result.ActiveSessionCount) }</td>
 							<td class="px-3 py-3 text-right">
-								<a class="text-blue-700 dark:text-blue-300 hover:underline" href={ "/auth/admin/users/" + result.ID.String() }>Open</a>
+								@workspace.TextLink("/auth/admin/users/" + result.ID.String(), "Open")
 							</td>
 						</tr>
 					</tbody>

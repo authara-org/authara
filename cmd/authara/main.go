@@ -16,7 +16,18 @@ var Version = "dev"
 func main() {
 	// Binary self-check for Docker HEALTHCHECK
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
-		os.Exit(0)
+		return
+	}
+	if len(os.Args) > 1 && isOperationalCommand(os.Args[1]) {
+		if err := runOperationalCommand(
+			context.Background(),
+			os.Args[1:],
+			os.Stdout,
+			executeOperationalCommandFromEnvironment,
+		); err != nil {
+			log.Fatalf("operational command failed: %v", err)
+		}
+		return
 	}
 
 	app, err := bootstrap.NewApp(Version)

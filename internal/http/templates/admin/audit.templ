@@ -1,43 +1,42 @@
 package admin
 
-import adminsvc "github.com/authara-org/authara/internal/admin"
+import (
+	adminsvc "github.com/authara-org/authara/internal/admin"
+	"github.com/authara-org/authara/internal/http/templates/components/datatable"
+)
 
 templ Audit(page adminsvc.AuditEventPage, features FeatureFlags) {
 	@AdminShell("audit", features) {
-		<div class="space-y-5">
-			<div>
+		<div class="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-hidden">
+			<div class="shrink-0">
 				<h2 class="text-xl font-semibold">Audit Log</h2>
 				<p class="text-sm text-grey-600 dark:text-grey-400">Recent security-sensitive admin mutations. Personal data is hidden by default.</p>
 			</div>
-			<div class="overflow-x-auto border border-grey-200 dark:border-grey-800 rounded-lg bg-white dark:bg-grey-900">
-				<table class="min-w-[64rem] table-fixed text-sm">
-					<colgroup>
-						<col class="w-40"/>
-						<col class="w-44"/>
-						<col class="w-24"/>
-						<col class="w-24"/>
-						<col class="w-48"/>
-						<col class="w-80"/>
-					</colgroup>
-					<thead class="bg-grey-50 dark:bg-grey-800 text-left text-grey-600 dark:text-grey-300">
-						<tr>
-							<th class="px-3 py-2">Created</th>
-							<th class="px-3 py-2">Action</th>
-							<th class="px-3 py-2">Actor</th>
-							<th class="px-3 py-2">Target</th>
-							<th class="px-3 py-2">Email</th>
-							<th class="min-w-[200px] px-3 py-2">Details</th>
-						</tr>
-					</thead>
-					<tbody>
-						if len(page.Events) == 0 {
-							<tr><td class="px-3 py-4 text-grey-600 dark:text-grey-400" colspan="6">No audit events found.</td></tr>
-						}
-						for _, event := range page.Events {
-							<tr class="border-t border-grey-200 dark:border-grey-800">
+			@datatable.Table(datatable.Config{
+				Columns: []datatable.Column{
+					{Label: "Created", WidthClass: "w-40"},
+					{Label: "Action", WidthClass: "w-44"},
+					{Label: "Actor", WidthClass: "w-56"},
+					{Label: "Target", WidthClass: "w-24"},
+					{Label: "Email", WidthClass: "w-48"},
+					{Label: "Details", WidthClass: "w-80"},
+				},
+				MinWidthClass:   "min-w-[72rem]",
+				Page:            page.Page,
+				RowCount:        len(page.Events),
+				RowLabel:        "event",
+				HasPrevious:     page.Page > 1,
+				HasNext:         page.HasNext,
+				PreviousHref:    pageHref("/auth/admin/audit", "", page.Page - 1),
+				NextHref:        pageHref("/auth/admin/audit", "", page.Page + 1),
+				EmptyTitle:      "No audit events yet",
+				EmptyDescription: "Security-sensitive admin changes will appear here.",
+			}) {
+				for _, event := range page.Events {
+					<tr>
 								<td class="px-3 py-3 align-top whitespace-nowrap">{ formatTime(event.CreatedAt) }</td>
 								<td class="px-3 py-3 align-top truncate">{ event.Action }</td>
-								<td class="px-3 py-3 align-top whitespace-nowrap">{ uuidPtrShort(event.ActorUserID) }</td>
+								<td class="truncate px-3 py-3 align-top" title={ uuidPtrString(event.ActorUserID) }>{ auditActorLabel(event.ActorEmail, event.ActorUserID) }</td>
 								<td class="px-3 py-3 align-top whitespace-nowrap">{ uuidPtrShort(event.TargetUserID) }</td>
 								<td class="px-3 py-3 align-top truncate">{ maskedStringPtr(event.TargetEmail) }</td>
 								<td class="min-w-[200px] px-3 py-3 align-top">
@@ -75,12 +74,9 @@ templ Audit(page adminsvc.AuditEventPage, features FeatureFlags) {
 										</dl>
 									</details>
 								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
-			@simplePageControls("/auth/admin/audit", page.Page)
+					</tr>
+				}
+			}
 		</div>
 	}
 }

@@ -573,6 +573,9 @@ var audienceAccess = map[token.Audience][]roles.Role{
 		roles.AutharaAuditor,
 		roles.AutharaMonitor,
 	},
+	token.AudienceOperator: {
+		roles.AutharaOperator,
+	},
 }
 
 func canAccessAudience(rs roles.Roles, audience token.Audience) bool {

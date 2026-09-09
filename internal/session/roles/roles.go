@@ -8,15 +8,17 @@ import (
 type Role string
 
 const (
-	AutharaAdmin   Role = "authara:admin"
-	AutharaAuditor Role = "authara:auditor"
-	AutharaMonitor Role = "authara:monitor"
+	AutharaAdmin    Role = "authara:admin"
+	AutharaAuditor  Role = "authara:auditor"
+	AutharaMonitor  Role = "authara:monitor"
+	AutharaOperator Role = "authara:operator"
 )
 
 const (
-	DBAdminRoleName   = "admin"
-	DBAuditorRoleName = "auditor"
-	DBMonitorRoleName = "monitor"
+	DBAdminRoleName    = "admin"
+	DBAuditorRoleName  = "auditor"
+	DBMonitorRoleName  = "monitor"
+	DBOperatorRoleName = "operator"
 )
 
 type Roles struct {
@@ -45,6 +47,10 @@ func (r *Roles) AddMonitor() {
 	r.add(AutharaMonitor)
 }
 
+func (r *Roles) AddOperator() {
+	r.add(AutharaOperator)
+}
+
 func (r Roles) Has(role Role) bool {
 	return slices.Contains(r.roles, role)
 }
@@ -68,6 +74,10 @@ func (r Roles) IsAuditor() bool {
 
 func (r Roles) IsMonitor() bool {
 	return r.Has(AutharaMonitor)
+}
+
+func (r Roles) IsOperator() bool {
+	return r.Has(AutharaOperator)
 }
 
 func (r Roles) CanAccessAdmin() bool {
@@ -102,6 +112,8 @@ func FromDBRoleNames(names []string) (Roles, error) {
 			r.AddAuditor()
 		case DBMonitorRoleName:
 			r.AddMonitor()
+		case DBOperatorRoleName:
+			r.AddOperator()
 		default:
 			return Roles{}, fmt.Errorf("unknown db role: %s", name)
 		}
@@ -112,7 +124,7 @@ func FromDBRoleNames(names []string) (Roles, error) {
 
 func validate(role Role) error {
 	switch role {
-	case AutharaAdmin, AutharaAuditor, AutharaMonitor:
+	case AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator:
 		return nil
 	default:
 		return fmt.Errorf("invalid role: %s", role)

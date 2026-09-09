@@ -46,9 +46,9 @@ func Private(w http.ResponseWriter, r *http.Request) {
 	upsertCurrentUser(user)
 	publicOrgs, publicOrgsErr := getUserOrganizations(r.Context(), r)
 	currentOrg, currentOrgErr := getCurrentOrganization(r.Context(), r)
-	capabilities, capabilitiesErr := getCapabilities(r.Context())
-	userMemberships, userMembershipsErr := getUserMemberships(r.Context(), user.ID)
-	liveOrgs, liveOrgErrors := loadLiveOrganizations(r.Context(), user.ID, publicOrgs, userMemberships)
+	capabilities, capabilitiesErr := getCapabilities(r.Context(), r)
+	userMemberships, userMembershipsErr := getUserMemberships(r.Context(), r, user.ID)
+	liveOrgs, liveOrgErrors := loadLiveOrganizations(r.Context(), r, user.ID, publicOrgs, userMemberships)
 
 	notice := r.URL.Query().Get("notice")
 	errMsg := r.URL.Query().Get("error")
@@ -72,7 +72,7 @@ func Private(w http.ResponseWriter, r *http.Request) {
 				<h2>Public organization API</h2>
 				%s
 
-				<h2>Internal API</h2>
+				<h2>Organization API details</h2>
 				%s
 
 				<h2>Webhook projection</h2>
@@ -100,7 +100,7 @@ func Private(w http.ResponseWriter, r *http.Request) {
 		renderCreateOrganizationForm(),
 		renderInviteForm(publicOrgs),
 		renderPublicOrganizations(publicOrgs, publicOrgsErr, currentOrg, currentOrgErr),
-		renderInternalAPI(capabilities, capabilitiesErr, userMemberships, userMembershipsErr, liveOrgs, liveOrgErrors),
+		renderOrganizationAPI(capabilities, capabilitiesErr, userMemberships, userMembershipsErr, liveOrgs, liveOrgErrors),
 		renderProjectedOrganizations(user.ID),
 		html.EscapeString(logout.Method),
 		html.EscapeString(logout.Action),
@@ -136,7 +136,7 @@ func UpdateOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	org, err := updateOrganization(r.Context(), strings.TrimSpace(r.FormValue("organization_id")), strings.TrimSpace(r.FormValue("name")))
+	org, err := updateOrganization(r, strings.TrimSpace(r.FormValue("organization_id")), strings.TrimSpace(r.FormValue("name")))
 	if err != nil {
 		redirectPrivateError(w, r, err.Error())
 		return
@@ -198,10 +198,9 @@ func RevokeInvitationPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	inv, err := revokeInvitation(
-		r.Context(),
+		r,
 		strings.TrimSpace(r.FormValue("organization_id")),
 		strings.TrimSpace(r.FormValue("invitation_id")),
-		user.ID,
 	)
 	if err != nil {
 		redirectPrivateError(w, r, err.Error())

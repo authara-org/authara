@@ -11,8 +11,9 @@ import (
 type Audience string
 
 const (
-	AudienceApp   Audience = "app"
-	AudienceAdmin Audience = "admin"
+	AudienceApp      Audience = "app"
+	AudienceAdmin    Audience = "admin"
+	AudienceOperator Audience = "operator"
 )
 
 type AccessClaims struct {
@@ -86,7 +87,7 @@ func (s *AccessTokenService) ParseAny(tokenString string, now time.Time) (*Acces
 	return s.parse(
 		tokenString,
 		now,
-		jwt.WithAudience(string(AudienceApp), string(AudienceAdmin)),
+		jwt.WithAudience(string(AudienceApp), string(AudienceAdmin), string(AudienceOperator)),
 	)
 }
 

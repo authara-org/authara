@@ -49,8 +49,10 @@ func TestAdminStoreCountsAndRoles(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CountUsersCreatedSince after setup failed: %v", err)
 		}
-		if recentAfter-recentBefore != 3 {
-			t.Fatalf("expected 3 recent users, got %d", recentAfter-recentBefore)
+		// Other packages share this database and may create users concurrently.
+		// This transaction must contribute at least the three users above.
+		if recentAfter-recentBefore < 3 {
+			t.Fatalf("expected at least 3 recent users, got %d", recentAfter-recentBefore)
 		}
 
 		admins, err := tdb.Store.CountUsersWithRole(ctx, roles.DBAdminRoleName)
@@ -75,6 +77,33 @@ func TestAdminStoreCountsAndRoles(t *testing.T) {
 		}
 		if hasAdmin {
 			t.Fatal("expected non-admin user not to have admin role")
+		}
+	})
+}
+
+func TestOperatorPlatformRoleIsProvisionedByMigration(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user := createAdminStoreUser(t, ctx, tdb, "store-operator@example.com", "store-operator")
+
+		if err := tdb.Store.AddUserPlatformRoleByName(ctx, user.ID, roles.DBOperatorRoleName); err != nil {
+			t.Fatalf("AddUserPlatformRoleByName operator failed: %v", err)
+		}
+
+		roleNames, err := tdb.Store.GetUserPlatformRoleNames(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("GetUserPlatformRoleNames failed: %v", err)
+		}
+		platformRoles, err := roles.FromDBRoleNames(roleNames)
+		if err != nil {
+			t.Fatalf("FromDBRoleNames failed: %v", err)
+		}
+		if !platformRoles.IsOperator() {
+			t.Fatalf("expected operator role, got %v", platformRoles.List())
+		}
+		if platformRoles.IsAdmin() {
+			t.Fatalf("operator role unexpectedly grants admin role: %v", platformRoles.List())
 		}
 	})
 }

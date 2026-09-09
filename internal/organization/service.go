@@ -23,7 +23,6 @@ type Config struct {
 	InvitationTTL          time.Duration
 	PublicURL              string
 	Mode                   OrgMode
-	IncludeCodeInEmail     bool
 	AccessTokenRevocations *token.AccessTokenRevocations
 }
 
@@ -35,7 +34,6 @@ type Service struct {
 	invitationTTL          time.Duration
 	publicURL              string
 	mode                   OrgMode
-	includeCodeInEmail     bool
 	accessTokenRevocations *token.AccessTokenRevocations
 }
 
@@ -63,7 +61,6 @@ func New(cfg Config) *Service {
 		invitationTTL:          cfg.InvitationTTL,
 		publicURL:              strings.TrimRight(cfg.PublicURL, "/"),
 		mode:                   cfg.Mode,
-		includeCodeInEmail:     cfg.IncludeCodeInEmail,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
 	}
 }

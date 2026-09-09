@@ -8,6 +8,7 @@ import (
 	"github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
@@ -25,6 +26,7 @@ type Services struct {
 	Organizations  *organization.Service
 	Challenge      *challenge.Service
 	Verification   *challenge.VerificationCodeService
+	EmailTemplates *email.TemplateService
 	EmailWorker    *challenge.Worker
 	WebhookWorker  *webhook.Worker
 	OAuthProviders oauth.OAuthProviders
@@ -55,7 +57,6 @@ func NewServices(app *App) (Services, error) {
 		InvitationTTL:          app.Config.Organization.InvitationTTL,
 		PublicURL:              app.Config.Values.PublicURL,
 		Mode:                   organization.OrgMode(app.Config.Organization.Mode),
-		IncludeCodeInEmail:     app.Config.Organization.InvitationEmailIncludeCode,
 		AccessTokenRevocations: accessTokenRevocations,
 	})
 	app.Logger.Warn("AUTHARA_ORG_MODE is a boot-time product shape; changing it after production use is unsupported", "mode", app.Config.Organization.Mode)
@@ -98,6 +99,7 @@ func NewServices(app *App) (Services, error) {
 	}
 
 	verificationCodeService := newVerificationCodeService(app)
+	emailTemplateService := email.NewTemplateService(app.Store)
 	challengeService := challenge.New(challenge.Config{
 		Store:                  app.Store,
 		Tx:                     txManager,
@@ -113,6 +115,7 @@ func NewServices(app *App) (Services, error) {
 	emailWorker := challenge.NewWorker(
 		app.Store,
 		verificationCodeService,
+		emailTemplateService,
 		newEmailSender(app.Config, app.Logger),
 		app.Logger,
 		challenge.WorkerConfig{
@@ -135,6 +138,7 @@ func NewServices(app *App) (Services, error) {
 		Organizations:  organizationService,
 		Challenge:      challengeService,
 		Verification:   verificationCodeService,
+		EmailTemplates: emailTemplateService,
 		EmailWorker:    emailWorker,
 		WebhookWorker:  webhookWorker,
 		OAuthProviders: oauthProviders,

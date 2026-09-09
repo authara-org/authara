@@ -4,6 +4,7 @@ ifneq (,$(wildcard .env))
 endif
 
 POSTGRESQL_SCHEMA ?= authara
+export EMAIL
 
 DOCKER_COMPOSE_FILE = docker-compose.dev.yaml
 DOCKER_COMPOSE_DEV  = docker compose -f $(DOCKER_COMPOSE_FILE)
@@ -13,8 +14,7 @@ DOCKER_COMPOSE_ENV  = POSTGRESQL_DATABASE='$(POSTGRESQL_DATABASE)' POSTGRESQL_US
 POSTGRES_SERVICE   = postgres
 AUTHARA_SERVICE   = authara
 MIGRATIONS_SERVICE = backend-migrations
-MAILHOG_CONTAINER = mailhog
-MAILHOG_IMAGE     = mailhog/mailhog
+MAILPIT_SERVICE    = mailpit
 
 TEST_DB_NAME       ?= authara_test
 TEST_DB_HOST       ?= postgres
@@ -23,7 +23,7 @@ TEST_DB_SCHEMA     ?= authara
 TEST_DB_TIMEZONE   ?= UTC
 TEST_DB_LOG_SQL    ?= false
 
-.PHONY: dev dev-tailwind mailhog-up mailhog-down connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email \
+.PHONY: dev dev-tailwind mailpit-up mailpit-down connect-db migrate-up db-clean db-truncate-table db-reset admin-by-email operator-by-email \
 	test test-up test-db-create test-migrate test-run test-down test-reset \
 	test-coverage test-coverage-profile test-coverage-html generate openapi-generate check-generated
 
@@ -56,21 +56,13 @@ dev:
 dev-tailwind:
 	cd frontend && npm run dev:tailwind
 
-mailhog-up:
-	@if docker ps -a --format '{{.Names}}' | grep -qx '$(MAILHOG_CONTAINER)'; then \
-		docker start $(MAILHOG_CONTAINER); \
-	else \
-		docker run -d \
-			--name $(MAILHOG_CONTAINER) \
-			-p 1025:1025 \
-			-p 8025:8025 \
-			$(MAILHOG_IMAGE); \
-	fi
-	@echo "MailHog SMTP: localhost:1025"
-	@echo "MailHog UI:   http://localhost:8025"
+mailpit-up:
+	$(DOCKER_COMPOSE_DEV) up -d $(MAILPIT_SERVICE)
+	@echo "Mailpit SMTP: localhost:1025"
+	@echo "Mailpit UI:   http://localhost:8025"
 
-mailhog-down:
-	-docker stop $(MAILHOG_CONTAINER)
+mailpit-down:
+	$(DOCKER_COMPOSE_DEV) stop $(MAILPIT_SERVICE)
 
 connect-db:
 	$(DOCKER_COMPOSE_DEV) exec -it $(POSTGRES_SERVICE) \
@@ -107,24 +99,21 @@ admin-by-email:
 ifndef EMAIL
 	$(error EMAIL is required. Usage: make admin-by-email EMAIL=user@example.com)
 endif
-	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
-	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
-	-c "\
-	WITH u AS ( \
-		SELECT id FROM $(POSTGRESQL_SCHEMA).users WHERE email = '$(EMAIL)' \
-	), r AS ( \
-		SELECT id FROM $(POSTGRESQL_SCHEMA).platform_roles WHERE name = 'admin' \
-	) \
-	INSERT INTO $(POSTGRESQL_SCHEMA).user_platform_roles (user_id, role_id) \
-	SELECT u.id, r.id FROM u, r \
-	ON CONFLICT DO NOTHING; \
-	"
+	$(DOCKER_COMPOSE_DEV) exec -T $(AUTHARA_SERVICE) \
+	go run ./cmd/authara admin grant --email "$$EMAIL"
+
+operator-by-email:
+ifndef EMAIL
+	$(error EMAIL is required. Usage: make operator-by-email EMAIL=user@example.com)
+endif
+	$(DOCKER_COMPOSE_DEV) exec -T $(AUTHARA_SERVICE) \
+	go run ./cmd/authara operator grant --email "$$EMAIL"
 
 # Full local test flow
 test: test-up test-db-create test-migrate test-run
 
 test-up:
-	$(DOCKER_COMPOSE_TEST) up -d $(POSTGRES_SERVICE)
+	$(DOCKER_COMPOSE_TEST) up -d $(POSTGRES_SERVICE) $(MAILPIT_SERVICE)
 	until $(DOCKER_COMPOSE_TEST) exec -T $(POSTGRES_SERVICE) \
 		pg_isready -U $(POSTGRESQL_USERNAME) -d postgres >/dev/null 2>&1; do \
 		echo "waiting for postgres..."; \
@@ -162,6 +151,9 @@ test-run:
 		-e POSTGRESQL_SCHEMA=$(TEST_DB_SCHEMA) \
 		-e POSTGRESQL_TIMEZONE=$(TEST_DB_TIMEZONE) \
 		-e POSTGRESQL_LOG_SQL=$(TEST_DB_LOG_SQL) \
+		-e AUTHARA_TEST_MAILPIT_HTTP_URL=http://mailpit:8025 \
+		-e AUTHARA_TEST_MAILPIT_SMTP_HOST=mailpit \
+		-e AUTHARA_TEST_MAILPIT_SMTP_PORT=1025 \
 		$(AUTHARA_SERVICE) \
 		go test ./... -count=1
 

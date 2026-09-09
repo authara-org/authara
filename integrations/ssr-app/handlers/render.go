@@ -56,7 +56,7 @@ func renderPublicOrganizations(orgs []organizationDTO, orgsErr error, current *c
 	return b.String()
 }
 
-func renderInternalAPI(
+func renderOrganizationAPI(
 	capabilities *capabilitiesResponse,
 	capabilitiesErr error,
 	memberships []internalMembershipWithOrganizationDTO,
@@ -90,7 +90,7 @@ func renderInternalAPI(
 	if membershipsErr != nil {
 		fmt.Fprintf(&b, `<p style="color: red;">%s</p>`, html.EscapeString(membershipsErr.Error()))
 	} else if len(memberships) == 0 {
-		b.WriteString(`<p>No memberships returned by internal API.</p>`)
+		b.WriteString(`<p>No memberships returned by the organization API.</p>`)
 	} else {
 		b.WriteString(`<ul>`)
 		for _, membership := range memberships {
@@ -124,7 +124,7 @@ func renderInternalAPI(
 		</form>`, html.EscapeString(org.Organization.ID), html.EscapeString(org.Organization.Name))
 
 		if org.CurrentMember != nil {
-			fmt.Fprintf(&b, `<p>Your internal member row: <code>%s</code> <small>%s</small></p>`, html.EscapeString(org.CurrentMember.UserID), html.EscapeString(org.CurrentMember.Role))
+			fmt.Fprintf(&b, `<p>Your member record: <code>%s</code> <small>%s</small></p>`, html.EscapeString(org.CurrentMember.UserID), html.EscapeString(org.CurrentMember.Role))
 		}
 
 		b.WriteString(`<h5>Members</h5><ul>`)

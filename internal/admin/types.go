@@ -128,7 +128,8 @@ type RecentFailures struct {
 }
 
 type AuditEventPage struct {
-	Events []domain.AdminAuditEvent
-	Page   int
-	Size   int
+	Events  []domain.AdminAuditEvent
+	Page    int
+	Size    int
+	HasNext bool
 }

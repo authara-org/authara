@@ -5,6 +5,11 @@ Authara includes a built-in email system for sending transactional messages such
 - verification codes
 - authentication-related notifications
 
+Organization invitation emails always contain both the hosted invitation link
+and the raw invitation code. Deployments upgrading from versions that exposed
+`AUTHARA_INVITATION_EMAIL_INCLUDE_CODE` should remove that setting; invitation
+codes are no longer conditionally omitted.
+
 The system is designed to be:
 
 - reliable
@@ -23,6 +28,14 @@ Instead of sending emails directly during a request:
 2. the job is stored in the database
 3. background workers process the job
 4. the email is sent via the configured provider
+
+Operators can customize each transactional email from the operator workspace.
+The worker resolves the currently saved template when it processes a job, so
+changes apply without restarting Core. A job that was queued before a template
+change uses the latest saved template when it is delivered. Restoring a
+template immediately returns subsequent deliveries to the built-in version.
+See [Operator email templates](../operations/operator-email-templates.md) for
+provisioning, history, audit, backup, and recovery guidance.
 
 ---
 
@@ -292,12 +305,12 @@ Cause:
 
 For local development:
 
-### MailHog
+### Mailpit
 
 Run:
 
 ```
-docker run -p 1025:1025 -p 8025:8025 mailhog/mailhog
+docker run -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.31.1
 ```
 
 Config:
@@ -314,4 +327,3 @@ Then open:
 ```
 http://localhost:8025
 ```
-

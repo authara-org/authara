@@ -35,13 +35,13 @@ func buildContentSecurityPolicy(cfg SecurityHeadersConfig) string {
 	scriptSrc := []string{"'self'", "'unsafe-inline'", "'unsafe-eval'"}
 	imgSrc := []string{"'self'", "data:"}
 	connectSrc := []string{"'self'"}
-	frameSrc := []string{"'none'"}
+	frameSrc := []string{"'self'"}
 
 	if cfg.AllowGoogleOAuth {
 		scriptSrc = append(scriptSrc, "https://accounts.google.com")
 		imgSrc = append(imgSrc, "https://www.gstatic.com", "https://ssl.gstatic.com")
 		connectSrc = append(connectSrc, "https://accounts.google.com")
-		frameSrc = []string{"https://accounts.google.com"}
+		frameSrc = append(frameSrc, "https://accounts.google.com")
 	}
 
 	directives := []string{

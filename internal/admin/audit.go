@@ -46,13 +46,17 @@ func (s *Service) RecentFailures(ctx context.Context, page Page) (RecentFailures
 func (s *Service) ListAuditEvents(ctx context.Context, page Page) (AuditEventPage, error) {
 	page = normalizePage(page, 50)
 	events, err := s.store.ListAdminAuditEvents(ctx, store.AdminAuditEventFilter{
-		Limit:  page.Size,
+		Limit:  page.Size + 1,
 		Offset: (page.Page - 1) * page.Size,
 	})
 	if err != nil {
 		return AuditEventPage{}, err
 	}
-	return AuditEventPage{Events: events, Page: page.Page, Size: page.Size}, nil
+	hasNext := len(events) > page.Size
+	if hasNext {
+		events = events[:page.Size]
+	}
+	return AuditEventPage{Events: events, Page: page.Page, Size: page.Size, HasNext: hasNext}, nil
 }
 
 func (s *Service) CleanupExpiredAuditEvents(ctx context.Context, now time.Time) (int64, error) {
