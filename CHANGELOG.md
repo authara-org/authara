@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0](https://github.com/authara-org/authara/compare/v0.19.0...v0.20.0) (2026-09-09)
+
+
+### Features
+
+* **email:** add operator-managed transactional templates ([#48](https://github.com/authara-org/authara/issues/48)) ([e131308](https://github.com/authara-org/authara/commit/e131308f628078d96a96e510ec9819bccde2f1a0))
+
 ## [0.19.0](https://github.com/authara-org/authara/compare/v0.18.0...v0.19.0) (2026-09-04)
 
 
