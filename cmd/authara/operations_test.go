@@ -119,12 +119,13 @@ func TestExecuteOperationalCommandGrantsRoles(t *testing.T) {
 func TestExecuteOperationalCommandRevokesRoleAndSessions(t *testing.T) {
 	user := domain.User{ID: uuid.New(), Email: "operator@example.com"}
 	fakeStore := &fakeOperationalStore{user: user, hasRole: true}
-	fakeRevocations := &fakeUserAccessRevoker{}
+	tx := &trackingTransactionRunner{}
+	fakeRevocations := &fakeUserAccessRevoker{tx: tx}
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 
 	_, err := executeOperationalCommand(context.Background(), operationalDependencies{
 		store:       fakeStore,
-		tx:          inlineTransactionRunner{},
+		tx:          tx,
 		revocations: fakeRevocations,
 		now:         func() time.Time { return now },
 	}, operationalCommand{target: "operator", action: "revoke", email: user.Email})
@@ -139,6 +140,46 @@ func TestExecuteOperationalCommandRevokesRoleAndSessions(t *testing.T) {
 	}
 	if fakeRevocations.userID != user.ID || !fakeRevocations.revokedAt.Equal(now) {
 		t.Fatalf("access revocation = (%s, %s), want (%s, %s)", fakeRevocations.userID, fakeRevocations.revokedAt, user.ID, now)
+	}
+	if !fakeRevocations.calledInTransaction {
+		t.Fatal("access-token revocation happened after the role transaction committed")
+	}
+}
+
+func TestExecuteOperationalCommandDoesNotRevokeSessionsWhenRoleIsAbsent(t *testing.T) {
+	user := domain.User{ID: uuid.New(), Email: "operator@example.com"}
+	fakeStore := &fakeOperationalStore{user: user}
+	fakeRevocations := &fakeUserAccessRevoker{}
+
+	_, err := executeOperationalCommand(context.Background(), operationalDependencies{
+		store:       fakeStore,
+		tx:          inlineTransactionRunner{},
+		revocations: fakeRevocations,
+	}, operationalCommand{target: "operator", action: "revoke", email: user.Email})
+	if err != nil {
+		t.Fatalf("executeOperationalCommand failed: %v", err)
+	}
+	if fakeStore.removedRole != "" || fakeStore.revokedSessionsFor != uuid.Nil || fakeRevocations.userID != uuid.Nil {
+		t.Fatal("revoking an absent role changed the user's sessions or access-token cutoff")
+	}
+}
+
+func TestExecuteOperationalCommandRollsBackWhenAccessTokenRevocationFails(t *testing.T) {
+	user := domain.User{ID: uuid.New(), Email: "operator@example.com"}
+	tx := &trackingTransactionRunner{}
+	revokeErr := errors.New("cache unavailable")
+	fakeRevocations := &fakeUserAccessRevoker{tx: tx, err: revokeErr}
+
+	_, err := executeOperationalCommand(context.Background(), operationalDependencies{
+		store:       &fakeOperationalStore{user: user, hasRole: true},
+		tx:          tx,
+		revocations: fakeRevocations,
+	}, operationalCommand{target: "operator", action: "revoke", email: user.Email})
+	if !errors.Is(err, revokeErr) {
+		t.Fatalf("error = %v, want cache revocation error", err)
+	}
+	if !fakeRevocations.calledInTransaction {
+		t.Fatal("cache failure was reported after the role transaction committed")
 	}
 }
 
@@ -207,15 +248,29 @@ func (inlineTransactionRunner) WithTransaction(ctx context.Context, fn func(cont
 	return fn(ctx)
 }
 
+type trackingTransactionRunner struct {
+	active bool
+}
+
+func (r *trackingTransactionRunner) WithTransaction(ctx context.Context, fn func(context.Context) error) error {
+	r.active = true
+	defer func() { r.active = false }()
+	return fn(ctx)
+}
+
 type fakeUserAccessRevoker struct {
-	userID    uuid.UUID
-	revokedAt time.Time
+	tx                  *trackingTransactionRunner
+	err                 error
+	userID              uuid.UUID
+	revokedAt           time.Time
+	calledInTransaction bool
 }
 
 func (f *fakeUserAccessRevoker) RevokeUser(_ context.Context, userID uuid.UUID, revokedAt time.Time) error {
 	f.userID = userID
 	f.revokedAt = revokedAt
-	return nil
+	f.calledInTransaction = f.tx != nil && f.tx.active
+	return f.err
 }
 
 type fakeOperationalStore struct {

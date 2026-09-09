@@ -268,6 +268,11 @@ func (h *UIHandler) OperatorEmailTemplateSavePost(w http.ResponseWriter, r *http
 		_ = h.Render(w, r, status, operatorview.EmailTemplateFeedback(model))
 		return
 	}
+	if err := h.populateEmailTemplateHistory(r.Context(), &model); err != nil {
+		h.logEmailTemplateError("load operator email template history after failed save", err)
+		h.renderInternalError(w, r)
+		return
+	}
 	_ = h.Render(w, r, status, operatorview.EmailTemplateEditor(model))
 }
 

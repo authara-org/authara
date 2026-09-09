@@ -637,6 +637,23 @@ function mountEditor(textarea: HTMLTextAreaElement, kind: EditorKind) {
   });
 }
 
+function destroyEmailTemplateEditors(root: Element) {
+  const textareas = [
+    ...(root.matches("textarea[data-email-template-editor]")
+      ? [root as HTMLTextAreaElement]
+      : []),
+    ...root.querySelectorAll<HTMLTextAreaElement>(
+      "textarea[data-email-template-editor]",
+    ),
+  ];
+  textareas.forEach((textarea) => {
+    const editor = editorViews.get(textarea);
+    if (!editor) return;
+    editor.destroy();
+    editorViews.delete(textarea);
+  });
+}
+
 function readTemplateDiagnostic(root: ParentNode): TemplateDiagnostic | null {
   const element = root.querySelector<HTMLElement>(
     "[data-email-template-diagnostic]",
@@ -795,3 +812,8 @@ export function initEmailTemplateEditors(root: ParentNode) {
     });
   applyTemplateDiagnostic(root);
 }
+
+document.body.addEventListener("htmx:beforeCleanupElement", (event) => {
+  const root = (event as CustomEvent<{ elt?: Element }>).detail?.elt;
+  if (root) destroyEmailTemplateEditors(root);
+});

@@ -154,14 +154,13 @@ func TestEmailTemplateEditorRendersSourcesActionsAndSandboxedPreview(t *testing.
 		`>Restore</span>`,
 		`>Save</span>`,
 		`action="/auth/operator/emails/signup_code/reset"`,
-		`href="/auth/operator/emails/signup_code/versions/1"`,
+		`data-value="/auth/operator/emails/signup_code/versions/1"`,
 		`name="revision" value="7"`,
 		"Customized · v2",
 		"Version 2",
 		"Version 1",
 		"2026-09-05 09:15 UTC",
-		"Previous subject",
-		"Current",
+		"Version 2 - 2026-09-06 10:30 UTC (current)",
 		`data-email-template-editor="text"`,
 		`data-email-template-editor="html"`,
 		`x-show="mode === 'text'"`,
@@ -223,8 +222,8 @@ func TestEmailTemplateEditorRendersHistoricalVersionAsUnsavedDraft(t *testing.T)
 		`href="/auth/operator/emails/signup_code"`,
 		`value="4"`,
 		`value="Historical subject"`,
-		">Viewing</span>",
-		">Current</a>",
+		"Version 2 - Saved version (viewing)",
+		"Version 4 - Saved version (current)",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("expected historical editor to contain %q", want)

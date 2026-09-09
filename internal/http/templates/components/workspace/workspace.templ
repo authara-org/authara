@@ -53,7 +53,7 @@ templ Shell(cfg Config) {
 					}
 				</div>
 			</nav>
-			<section id={ cfg.ContentID } class="flex min-h-0 flex-1 flex-col pt-7">
+			<section id={ cfg.ContentID } class={ contentClass(cfg.ViewportHeight) }>
 				{ children... }
 			</section>
 		</div>
@@ -63,7 +63,7 @@ templ Shell(cfg Config) {
 func shellClass(viewportHeight bool) string {
 	base := "bg-background-light text-grey-900 dark:bg-background-dark dark:text-grey-100"
 	if viewportHeight {
-		return base + " h-dvh overflow-hidden"
+		return base + " fixed inset-0 overflow-hidden"
 	}
 	return base + " min-h-screen"
 }
@@ -71,9 +71,17 @@ func shellClass(viewportHeight bool) string {
 func containerClass(viewportHeight bool) string {
 	base := "mx-auto flex max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-12"
 	if viewportHeight {
-		return base + " h-full"
+		return base + " h-full min-h-0 overflow-hidden"
 	}
 	return base + " min-h-screen"
+}
+
+func contentClass(viewportHeight bool) string {
+	base := "flex min-h-0 flex-1 flex-col pt-7"
+	if viewportHeight {
+		return base + " overflow-hidden"
+	}
+	return base
 }
 
 templ TextLink(href string, label string) {

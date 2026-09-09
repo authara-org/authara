@@ -23,7 +23,7 @@ type Config struct {
 
 templ Table(cfg Config) {
 	<section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-grey-200 bg-white dark:border-grey-800 dark:bg-grey-900">
-		<div class="relative min-h-0 flex-1 overflow-auto">
+		<div class="relative min-h-0 flex-1 overscroll-contain overflow-auto">
 			<table class={ tableClass(cfg.MinWidthClass) }>
 				<colgroup>
 					for _, column := range cfg.Columns {

@@ -483,11 +483,31 @@ func TestTemplateServiceRejectsUnknownOperatorAuditFilters(t *testing.T) {
 	}
 }
 
+func TestTemplateServiceDoesNotWrapOperatorAuditOffset(t *testing.T) {
+	fakeStore := newFakeTemplateOverrideStore()
+	service := NewTemplateService(fakeStore)
+
+	page, err := service.ListAuditEvents(context.Background(), OperatorAuditQuery{
+		Page: int(^uint(0) >> 1),
+		Size: 100,
+	})
+	if err != nil {
+		t.Fatalf("ListAuditEvents failed: %v", err)
+	}
+	if len(page.Events) != 0 || page.HasNext {
+		t.Fatalf("overflowing audit page = %#v, want an empty page", page)
+	}
+	if fakeStore.auditCalls != 0 {
+		t.Fatalf("audit store called %d times with an overflowing offset", fakeStore.auditCalls)
+	}
+}
+
 type fakeTemplateOverrideStore struct {
 	overrides   map[domain.EmailTemplate]domain.EmailTemplateOverride
 	versions    map[domain.EmailTemplate][]domain.EmailTemplateVersion
 	auditEvents []domain.OperatorAuditEvent
 	auditFilter store.OperatorAuditEventFilter
+	auditCalls  int
 	upsertCalls int
 }
 
@@ -562,6 +582,7 @@ func (s *fakeTemplateOverrideStore) DeleteEmailTemplateOverride(_ context.Contex
 }
 
 func (s *fakeTemplateOverrideStore) ListOperatorAuditEvents(_ context.Context, filter store.OperatorAuditEventFilter) ([]domain.OperatorAuditEvent, error) {
+	s.auditCalls++
 	s.auditFilter = filter
 	return append([]domain.OperatorAuditEvent(nil), s.auditEvents...), nil
 }

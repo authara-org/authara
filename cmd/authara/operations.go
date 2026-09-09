@@ -224,6 +224,9 @@ func executeRoleCommand(
 		if err != nil {
 			return err
 		}
+		if !hasRole {
+			return nil
+		}
 		if roleName == roles.DBAdminRoleName && hasRole && user.DisabledAt == nil {
 			activeAdmins, err := deps.store.CountActiveUsersWithRole(txCtx, roleName)
 			if err != nil {
@@ -237,14 +240,13 @@ func executeRoleCommand(
 		if err := deps.store.RemoveUserPlatformRoleByName(txCtx, user.ID, roleName); err != nil {
 			return err
 		}
-		return deps.store.RevokeAllSessionsForUser(txCtx, user.ID, revokedAt)
+		if err := deps.store.RevokeAllSessionsForUser(txCtx, user.ID, revokedAt); err != nil {
+			return err
+		}
+		return deps.revocations.RevokeUser(txCtx, user.ID, revokedAt)
 	})
 	if err != nil {
 		return "", fmt.Errorf("revoke %s role: %w", command.target, err)
-	}
-
-	if err := deps.revocations.RevokeUser(ctx, user.ID, revokedAt); err != nil {
-		return "", fmt.Errorf("revoke %s access tokens: %w", command.target, err)
 	}
 	return fmt.Sprintf("%s role revoked from %s (%s)", command.target, user.Email, user.ID), nil
 }

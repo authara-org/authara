@@ -10,7 +10,7 @@ import (
 
 templ Audit(page email.OperatorAuditPage) {
 	@Shell("audit") {
-		<div class="flex min-h-0 flex-1 flex-col gap-5">
+		<div class="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-hidden">
 			<div class="shrink-0">
 				<h2 class="text-xl font-semibold">Operator audit log</h2>
 				<p class="mt-1 text-sm text-grey-600 dark:text-grey-400">Template changes recorded for operational accountability. Email contents and delivery secrets are never stored here.</p>
@@ -73,7 +73,7 @@ templ Audit(page email.OperatorAuditPage) {
 				EmptyDescription: "Template changes matching the selected filters will appear here.",
 			}) {
 				for _, event := range page.Events {
-					<tr>
+					<tr data-operator-audit-event>
 								<td class="whitespace-nowrap px-4 py-3 align-top"><time datetime={ operatorAuditTimeValue(event.CreatedAt) }>{ operatorAuditTime(event.CreatedAt) }</time></td>
 								<td class="px-4 py-3 align-top font-medium">{ operatorAuditActionLabel(event.Action) }</td>
 								<td class="px-4 py-3 align-top"><a class="font-medium text-blue-700 hover:underline dark:text-blue-300" href={ emailTemplateHref(domain.EmailTemplate(event.ResourceID)) }>{ operatorAuditTemplateLabel(event.ResourceID) }</a></td>

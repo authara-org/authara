@@ -46,6 +46,15 @@ func (s *TemplateService) ListAuditEvents(ctx context.Context, query OperatorAud
 		query.Action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn {
 		return OperatorAuditPage{}, fmt.Errorf("unknown operator audit action %q", query.Action)
 	}
+	maxInt := int(^uint(0) >> 1)
+	if page-1 > maxInt/size {
+		return OperatorAuditPage{
+			Page:     page,
+			Size:     size,
+			Action:   query.Action,
+			Template: query.Template,
+		}, nil
+	}
 
 	events, err := s.store.ListOperatorAuditEvents(ctx, store.OperatorAuditEventFilter{
 		Action:       query.Action,

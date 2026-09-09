@@ -310,7 +310,7 @@ For local development:
 Run:
 
 ```
-docker run -p 1025:1025 -p 8025:8025 axllent/mailpit
+docker run -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.31.1
 ```
 
 Config:

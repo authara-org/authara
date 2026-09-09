@@ -125,7 +125,7 @@ func TestOperatorAuditPageFiltersAndPaginatesEvents(t *testing.T) {
 	if strings.Contains(body, `href="/auth/operator/emails/password_reset_code"`) {
 		t.Fatalf("audit page ignored template filter: %s", body)
 	}
-	if got := strings.Count(body, `<tr class="border-t border-grey-200 dark:border-grey-800">`); got != 1 {
+	if got := strings.Count(body, `data-operator-audit-event`); got != 1 {
 		t.Fatalf("audit page rendered %d event rows, want 1: %s", got, body)
 	}
 }
@@ -211,6 +211,27 @@ func TestOperatorEmailTemplateHTMXSaveReturnsOnlyInlineValidationError(t *testin
 	}
 	if len(templateStore.overrides) != 0 {
 		t.Fatal("invalid HTMX save persisted an override")
+	}
+}
+
+func TestOperatorEmailTemplateFailedFullPageSaveKeepsHistory(t *testing.T) {
+	templateStore := newOperatorEmailTemplateStore()
+	h := newOperatorEmailTemplateHandler(templateStore)
+	userID := uuid.New()
+	valid := emailTemplateFormValues(0, "Custom subject", "Code: {{code}}", "<p>{{code}}</p>")
+	if response := performOperatorEmailTemplateRequest(t, h.OperatorEmailTemplateSavePost, valid, userID); response.Code != http.StatusSeeOther {
+		t.Fatalf("initial save status = %d, want %d", response.Code, http.StatusSeeOther)
+	}
+
+	invalid := emailTemplateFormValues(1, "Custom subject", "Code omitted", "<p>{{code}}</p>")
+	response := performOperatorEmailTemplateRequest(t, h.OperatorEmailTemplateSavePost, invalid, userID)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("failed save status = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+	}
+	for _, want := range []string{"History (1)", "Customized · v1", "data-email-template-workspace"} {
+		if !strings.Contains(response.Body.String(), want) {
+			t.Fatalf("failed full-page save lost %q: %s", want, response.Body.String())
+		}
 	}
 }
 
