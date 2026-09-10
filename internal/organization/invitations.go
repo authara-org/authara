@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	emailpkg "github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
@@ -363,6 +364,10 @@ func (s *Service) RevokeInvitation(ctx context.Context, in RevokeInvitationInput
 		if err := s.store.LockOrganizationForKeyShare(txCtx, in.OrganizationID); err != nil {
 			return err
 		}
+		org, err := s.store.GetOrganizationByID(txCtx, in.OrganizationID)
+		if err != nil {
+			return err
+		}
 
 		invitation, err := s.store.GetOrganizationInvitationByIDForUpdate(txCtx, in.InvitationID)
 		if err != nil {
@@ -387,6 +392,12 @@ func (s *Service) RevokeInvitation(ctx context.Context, in RevokeInvitationInput
 		invitation.RevokedAt = &now
 		invitation.RevokedByUserID = in.RevokedByUserID
 		out = invitation
+		if err := emailpkg.Enqueue(txCtx, s.store, invitation.Email, domain.EmailTemplateOrganizationInvitationRevoked, emailpkg.TemplateData{
+			emailpkg.TemplateVariableOrganizationName: org.Name,
+			emailpkg.TemplateVariableOccurredAt:       emailpkg.OccurredAt(now),
+		}, now); err != nil {
+			return err
+		}
 		return s.publish(txCtx, webhook.NewOrganizationInvitationRevoked(out, now))
 	})
 	if err != nil {
@@ -534,6 +545,20 @@ func (s *Service) acceptInvitation(
 		result.Organization = org
 		result.Membership = membership
 		result.InvitationAccepted = true
+		if invitation.InvitedByUserID != nil {
+			inviter, err := s.store.GetUserByID(txCtx, *invitation.InvitedByUserID)
+			if err != nil {
+				return err
+			}
+			if err := emailpkg.Enqueue(txCtx, s.store, inviter.Email, domain.EmailTemplateOrganizationInvitationAccepted, emailpkg.TemplateData{
+				emailpkg.TemplateVariableOrganizationName: org.Name,
+				emailpkg.TemplateVariableMemberEmail:      user.Email,
+				emailpkg.TemplateVariableRole:             string(membership.Role),
+				emailpkg.TemplateVariableOccurredAt:       emailpkg.OccurredAt(now),
+			}, now); err != nil {
+				return err
+			}
+		}
 		if err := s.publish(txCtx, webhook.NewOrganizationInvitationAccepted(result.Invitation, now)); err != nil {
 			return err
 		}

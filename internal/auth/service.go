@@ -9,6 +9,7 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
@@ -209,7 +210,11 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, erro
 			if err != nil {
 				return err
 			}
-			return s.publish(txCtx, webhook.NewUserCreated(user.ID, time.Now()))
+			now := time.Now().UTC()
+			if err := s.enqueueAccountCreated(txCtx, user, domain.ProviderPassword, now); err != nil {
+				return err
+			}
+			return s.publish(txCtx, webhook.NewUserCreated(user.ID, now))
 		})
 		return user, err
 
@@ -512,6 +517,9 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 				return err
 			}
 		}
+		if err := s.enqueueAccountCreated(txCtx, user, in.Provider, time.Now().UTC()); err != nil {
+			return err
+		}
 
 		return nil
 	})
@@ -669,7 +677,14 @@ func (s *Service) CompleteProviderLink(
 			return err
 		}
 
-		return s.linkExternalIdentityToUser(txCtx, userID, provider, providerUserID)
+		if err := s.linkExternalIdentityToUser(txCtx, userID, provider, providerUserID); err != nil {
+			return err
+		}
+		user, err := s.store.GetUserByID(txCtx, userID)
+		if err != nil {
+			return err
+		}
+		return s.enqueueAuthMethodChanged(txCtx, user, provider, domain.EmailTemplateAuthMethodAdded, now)
 	})
 }
 
@@ -740,7 +755,10 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithPassword(
 			return err
 		}
 
-		return s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID)
+		if err := s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
+			return err
+		}
+		return s.enqueueAuthMethodChanged(txCtx, user, link.Provider, domain.EmailTemplateAuthMethodAdded, now)
 	})
 	if err != nil {
 		return domain.User{}, err
@@ -817,9 +835,13 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
 		}
 
 		if proofProvider == link.Provider {
-			return s.store.UpdateAuthProviderIdentity(txCtx, user.ID, link.Provider, *link.ProviderUserID)
+			if err := s.store.UpdateAuthProviderIdentity(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
+				return err
+			}
+		} else if err := s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
+			return err
 		}
-		return s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID)
+		return s.enqueueAuthMethodChanged(txCtx, user, link.Provider, domain.EmailTemplateAuthMethodAdded, now)
 	})
 	if err != nil {
 		return domain.User{}, err
@@ -885,13 +907,16 @@ func (s *Service) UnlinkAuthProvider(ctx context.Context, userID uuid.UUID, prov
 		if count <= 1 {
 			return ErrCannotRemoveLastAuthMethod
 		}
-
-		err = s.store.DeleteAuthProviderByMethodAndUserID(txCtx, provider, userID)
+		user, err := s.store.GetUserByID(txCtx, userID)
 		if err != nil {
 			return err
 		}
 
-		return nil
+		if err := s.store.DeleteAuthProviderByMethodAndUserID(txCtx, provider, userID); err != nil {
+			return err
+		}
+
+		return s.enqueueAuthMethodChanged(txCtx, user, provider, domain.EmailTemplateAuthMethodRemoved, time.Now().UTC())
 	})
 }
 
@@ -904,6 +929,10 @@ func (s *Service) AddPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err != store.ErrorAuthProviderNotFound {
 			return err
 		}
+		user, err := s.store.GetUserByID(txCtx, userID)
+		if err != nil {
+			return err
+		}
 
 		_, err = s.store.CreateAuthProvider(txCtx, domain.AuthProvider{
 			UserID:       userID,
@@ -911,25 +940,37 @@ func (s *Service) AddPassword(ctx context.Context, userID uuid.UUID, passwordHas
 			PasswordHash: &passwordHash,
 		})
 
-		return err
+		if err != nil {
+			return err
+		}
+		return s.enqueueAuthMethodChanged(txCtx, user, domain.ProviderPassword, domain.EmailTemplateAuthMethodAdded, time.Now().UTC())
 	})
 }
 
 func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword string, newPasswordHash string) error {
-	provider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, userID)
-	if err != nil {
-		return err
-	}
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		provider, err := s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
+		if err != nil {
+			return err
+		}
 
-	ok, err := Verify(currentPassword, *provider.PasswordHash)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return ErrInvalidCredentials
-	}
-
-	return s.store.UpdatePasswordHash(ctx, userID, newPasswordHash)
+		ok, err := Verify(currentPassword, *provider.PasswordHash)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return ErrInvalidCredentials
+		}
+		user, err := s.store.GetUserByID(txCtx, userID)
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		if err := s.store.UpdatePasswordHash(txCtx, userID, newPasswordHash); err != nil {
+			return err
+		}
+		return s.enqueuePasswordChanged(txCtx, user, now)
+	})
 }
 
 func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHash string, now time.Time) error {
@@ -937,8 +978,12 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {
 			return err
 		}
+		user, err := s.store.GetUserByID(txCtx, userID)
+		if err != nil {
+			return err
+		}
 
-		_, err := s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
+		_, err = s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
 		switch {
 		case err == nil:
 			err = s.store.UpdatePasswordHash(txCtx, userID, passwordHash)
@@ -964,6 +1009,9 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
 			return err
 		}
+		if err := s.enqueuePasswordChanged(txCtx, user, now); err != nil {
+			return err
+		}
 		return s.publish(txCtx, webhook.NewUserUpdated(userID, now))
 	})
 }
@@ -972,6 +1020,10 @@ func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 	now := time.Now()
 
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		user, err := s.store.GetUserByID(txCtx, userID)
+		if err != nil {
+			return err
+		}
 		if err := s.store.DisableUser(txCtx, userID, now); err != nil {
 			return err
 		}
@@ -982,6 +1034,11 @@ func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 			return err
 		}
 		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
+			return err
+		}
+		if err := email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAccountDisabled, email.TemplateData{
+			email.TemplateVariableOccurredAt: email.OccurredAt(now),
+		}, now); err != nil {
 			return err
 		}
 		return s.publish(txCtx, webhook.NewUserUpdated(userID, now))
@@ -1030,4 +1087,36 @@ func (s *Service) IsProviderEnabled(provider domain.Provider) bool {
 	}
 
 	return false
+}
+
+func (s *Service) enqueueAccountCreated(
+	ctx context.Context,
+	user domain.User,
+	provider domain.Provider,
+	now time.Time,
+) error {
+	return email.Enqueue(ctx, s.store, user.Email, domain.EmailTemplateAccountCreated, email.TemplateData{
+		email.TemplateVariableUsername:   user.Username,
+		email.TemplateVariableAuthMethod: string(provider),
+		email.TemplateVariableOccurredAt: email.OccurredAt(now),
+	}, now)
+}
+
+func (s *Service) enqueueAuthMethodChanged(
+	ctx context.Context,
+	user domain.User,
+	provider domain.Provider,
+	template domain.EmailTemplate,
+	now time.Time,
+) error {
+	return email.Enqueue(ctx, s.store, user.Email, template, email.TemplateData{
+		email.TemplateVariableAuthMethod: string(provider),
+		email.TemplateVariableOccurredAt: email.OccurredAt(now),
+	}, now)
+}
+
+func (s *Service) enqueuePasswordChanged(ctx context.Context, user domain.User, now time.Time) error {
+	return email.Enqueue(ctx, s.store, user.Email, domain.EmailTemplatePasswordChanged, email.TemplateData{
+		email.TemplateVariableOccurredAt: email.OccurredAt(now),
+	}, now)
 }

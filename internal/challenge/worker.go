@@ -172,6 +172,11 @@ func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.T
 	}
 
 	templateData := make(email.TemplateData)
+	if len(job.TemplateData) > 0 {
+		if err := json.Unmarshal(job.TemplateData, &templateData); err != nil {
+			return fmt.Errorf("decode email template data for %q: %w", job.Template, err)
+		}
+	}
 
 	switch job.Template {
 	case domain.EmailTemplateSignupCode:
@@ -225,15 +230,10 @@ func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.T
 
 		templateData[email.TemplateVariableCode] = code
 
-	case domain.EmailTemplateOrganizationInvite:
-		if len(job.TemplateData) > 0 {
-			if err := json.Unmarshal(job.TemplateData, &templateData); err != nil {
-				return fmt.Errorf("decode organization invitation email template data: %w", err)
-			}
-		}
-
 	default:
-		return errors.New("unsupported email template")
+		if err := email.ValidateTemplate(job.Template); err != nil {
+			return fmt.Errorf("unsupported email template: %w", err)
+		}
 	}
 
 	msg, err := w.templates.Render(ctx, job.Template, templateData)

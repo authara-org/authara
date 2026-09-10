@@ -9,6 +9,7 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
@@ -169,7 +170,7 @@ func TestCreateSessionAddsOrganizationContext(t *testing.T) {
 		}
 
 		svc := newDBSessionService(t, tdb, 10*time.Minute)
-		accessToken, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		accessToken, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "203.0.113.42")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -199,6 +200,15 @@ func TestCreateSessionAddsOrganizationContext(t *testing.T) {
 		}
 		if rt.OrganizationID != identity.OrganizationID {
 			t.Fatalf("expected refresh org %q, got %q", identity.OrganizationID, rt.OrganizationID)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateNewSignIn); got != 1 {
+			t.Fatalf("new sign-in email jobs = %d, want 1", got)
+		}
+		data := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateNewSignIn)
+		if data[email.TemplateVariableIPAddress] != "203.0.113.42" ||
+			data[email.TemplateVariableUserAgent] != "test-agent" ||
+			data[email.TemplateVariableOccurredAt] != "2026-05-14T12:00:00Z" {
+			t.Fatalf("unexpected new sign-in template data: %#v", data)
 		}
 	})
 }
@@ -234,7 +244,7 @@ func TestSwitchSessionOrganizationRotatesTokens(t *testing.T) {
 		}
 
 		svc := newDBSessionService(t, tdb, 10*time.Minute)
-		_, oldRefreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		_, oldRefreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -291,7 +301,7 @@ func TestRefreshSessionWaitsForOrganizationLifecycleLock(t *testing.T) {
 	})
 
 	svc := newDBSessionService(t, tdb, 10*time.Minute)
-	_, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+	_, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +355,7 @@ func TestActiveSessionPreventsOrganizationMembershipRemoval(t *testing.T) {
 		}
 
 		svc := newDBSessionService(t, tdb, 10*time.Minute)
-		accessToken, _, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		accessToken, _, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}

@@ -16,9 +16,9 @@ templ Shell(active string) {
 				{Href: "/auth/operator/emails", Label: "Email templates", Active: active == "emails"},
 				{Href: "/auth/operator/audit", Label: "Audit log", Active: active == "audit"},
 			},
-			ContentID:   "operator-content",
-			AccountHref: "/auth/account?return_to=/auth/operator",
-			ViewportHeight: active == "audit",
+			ContentID:      "operator-content",
+			AccountHref:    "/auth/account?return_to=/auth/operator",
+			ViewportHeight: active == "audit" || active == "emails",
 		}) {
 			{ children... }
 		}

@@ -161,7 +161,7 @@ func (h *APIHandler) contractSession(
 	user domain.User,
 	audience token.Audience,
 ) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now())
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
 		return contract.AuthSession{}, nil, response.CodeForbidden, "Account cannot access requested audience.", false

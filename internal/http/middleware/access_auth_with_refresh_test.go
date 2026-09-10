@@ -36,7 +36,7 @@ func TestRequireAccessAuthWithRefreshSwitchesBetweenAppAndOperatorAudiences(t *t
 			t.Fatalf("AddUserPlatformRoleByName failed: %v", err)
 		}
 
-		appAccess, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		appAccess, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}

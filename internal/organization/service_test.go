@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/authara-org/authara/internal/webhook"
@@ -149,6 +150,17 @@ func TestOrganizationLifecycleWebhooks(t *testing.T) {
 		data, ok := created.Data.(webhook.OrganizationMembershipCreatedData)
 		if !ok || !data.IsInitialMembership || data.InvitationID != nil || string(data.Metadata) != "{}" {
 			t.Fatalf("unexpected initial membership webhook data: %#v", created.Data)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateOrganizationRoleChanged); got != 1 {
+			t.Fatalf("organization-role-changed email jobs = %d, want 1", got)
+		}
+		roleData := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateOrganizationRoleChanged)
+		if roleData[email.TemplateVariablePreviousRole] != string(domain.OrganizationRoleOwner) ||
+			roleData[email.TemplateVariableRole] != string(domain.OrganizationRoleAdmin) {
+			t.Fatalf("unexpected role-change template data: %#v", roleData)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateOrganizationMembershipRemoved); got != 1 {
+			t.Fatalf("organization-membership-removed email jobs = %d, want 1", got)
 		}
 	})
 }
@@ -515,6 +527,57 @@ func TestAcceptInvitationMultiModeAllowsExistingOtherMembership(t *testing.T) {
 		}
 		if len(memberships) != 2 {
 			t.Fatalf("expected 2 memberships, got %d", len(memberships))
+		}
+		if got := testutil.CountEmailJobs(t, ctx, owner.Email, domain.EmailTemplateOrganizationInvitationAccepted); got != 1 {
+			t.Fatalf("invitation-accepted email jobs = %d, want 1", got)
+		}
+		acceptedData := testutil.LatestEmailTemplateData(t, ctx, owner.Email, domain.EmailTemplateOrganizationInvitationAccepted)
+		if acceptedData[email.TemplateVariableOrganizationName] != org.Name ||
+			acceptedData[email.TemplateVariableMemberEmail] != invitee.Email ||
+			acceptedData[email.TemplateVariableRole] != string(domain.OrganizationRoleAdmin) {
+			t.Fatalf("unexpected invitation-accepted template data: %#v", acceptedData)
+		}
+	})
+}
+
+func TestRevokeInvitationQueuesInviteeNotification(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "revoke-owner@example.com", Username: "revoke-owner"})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "Revoke Org", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatalf("EnsureOrganizationForUser failed: %v", err)
+		}
+		svc := New(Config{
+			Store:         tdb.Store,
+			Tx:            tdb.Tx,
+			Mode:          OrgModeMulti,
+			InvitationTTL: time.Hour,
+		})
+		now := time.Date(2026, 9, 9, 18, 30, 0, 0, time.UTC)
+		invite, err := svc.CreateInvitation(ctx, CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			Email:          "revoked-invitee@example.com",
+			Now:            now,
+		})
+		if err != nil {
+			t.Fatalf("CreateInvitation failed: %v", err)
+		}
+		if _, err := svc.RevokeInvitation(ctx, RevokeInvitationInput{
+			OrganizationID:  org.ID,
+			InvitationID:    invite.Invitation.ID,
+			RevokedByUserID: &owner.ID,
+			Now:             now,
+		}); err != nil {
+			t.Fatalf("RevokeInvitation failed: %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, invite.Invitation.Email, domain.EmailTemplateOrganizationInvitationRevoked); got != 1 {
+			t.Fatalf("invitation-revoked email jobs = %d, want 1", got)
 		}
 	})
 }

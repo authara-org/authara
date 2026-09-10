@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/testutil"
 )
 
@@ -312,6 +313,66 @@ func TestExecuteEmailChangeMovesAllowlistEntryWhenEnabled(t *testing.T) {
 		}
 		if oldAllowed || !newAllowed {
 			t.Fatalf("expected allowlist to move from old to new email, old=%t new=%t", oldAllowed, newAllowed)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, oldEmail, domain.EmailTemplateEmailChangedOldAddress); got != 1 {
+			t.Fatalf("old-address confirmation email jobs = %d, want 1", got)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, newEmail, domain.EmailTemplateEmailChangedNewAddress); got != 1 {
+			t.Fatalf("new-address confirmation email jobs = %d, want 1", got)
+		}
+		data := testutil.LatestEmailTemplateData(t, ctx, oldEmail, domain.EmailTemplateEmailChangedOldAddress)
+		if data[email.TemplateVariableOldEmail] != oldEmail ||
+			data[email.TemplateVariableNewEmail] != newEmail ||
+			data[email.TemplateVariableOccurredAt] != "2026-07-17T12:00:00Z" {
+			t.Fatalf("unexpected email-change template data: %#v", data)
+		}
+	})
+}
+
+func TestExecutePasswordResetQueuesPasswordChangedNotification(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 9, 18, 30, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "password-reset-notification@example.com",
+			Username: "password-reset-notification",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		oldHash := "old-password-hash"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID:       user.ID,
+			Provider:     domain.ProviderPassword,
+			PasswordHash: &oldHash,
+		}); err != nil {
+			t.Fatalf("CreateAuthProvider failed: %v", err)
+		}
+		svc := New(Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			ChallengeTTL: 30 * time.Minute,
+			MaxAttempts:  5,
+			MaxResends:   3,
+		})
+		challengeID, err := svc.CreatePasswordResetChallenge(ctx, CreatePasswordResetChallengeInput{
+			UserID:       user.ID,
+			Email:        user.Email,
+			PasswordHash: "new-password-hash",
+		}, now)
+		if err != nil {
+			t.Fatalf("CreatePasswordResetChallenge failed: %v", err)
+		}
+		action, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetPendingPasswordResetByChallengeID failed: %v", err)
+		}
+		if err := svc.ExecutePasswordReset(ctx, action, now); err != nil {
+			t.Fatalf("ExecutePasswordReset failed: %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 1 {
+			t.Fatalf("password-changed email jobs = %d, want 1", got)
 		}
 	})
 }

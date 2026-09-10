@@ -6,6 +6,7 @@ import (
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/datatable"
 	"github.com/authara-org/authara/internal/http/templates/components/dropdown"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
 	"github.com/authara-org/authara/internal/http/templates/components/theme"
@@ -14,8 +15,8 @@ import (
 
 templ EmailTemplates(templates []email.EffectiveTemplate) {
 	@Shell("emails") {
-		<div class="space-y-5">
-			<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+		<div class="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-hidden">
+			<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 				<div>
 					<p class="text-xs font-medium uppercase tracking-[0.16em] text-grey-500 dark:text-grey-400">Email</p>
 					<h2 class="mt-1 text-2xl font-semibold tracking-tight">Template catalog</h2>
@@ -23,37 +24,37 @@ templ EmailTemplates(templates []email.EffectiveTemplate) {
 				</div>
 				<span class="inline-flex w-fit rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-200">Live editor</span>
 			</div>
-			<div class="overflow-hidden rounded-xl border border-grey-200 bg-white dark:border-grey-800 dark:bg-grey-900">
-				<div class="divide-y divide-grey-200 dark:divide-grey-800">
-					for _, template := range templates {
-						<article class="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,0.7fr)] sm:p-6">
-							<div>
-								<div class="flex flex-wrap items-center gap-2">
-									<h3 class="font-semibold">{ template.Definition.DisplayName }</h3>
-									if template.Source == email.TemplateSourceOverride {
-										<span class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-200">Customized</span>
-									} else {
-										<span class="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">Built-in default</span>
-									}
-								</div>
-								<p class="mt-1 text-sm leading-6 text-grey-600 dark:text-grey-400">{ template.Definition.Description }</p>
-								<p class="mt-3 font-mono text-xs text-grey-500 dark:text-grey-400">{ string(template.Definition.Key) }</p>
-							</div>
-							<div>
-								<p class="text-xs font-medium uppercase tracking-[0.12em] text-grey-500 dark:text-grey-400">Available variables</p>
-								<div class="mt-2 flex flex-wrap gap-1.5">
-									for _, variable := range template.Definition.AvailableVariables {
-										<code class="rounded-md bg-grey-100 px-2 py-1 text-xs text-grey-700 dark:bg-grey-800 dark:text-grey-200">{ "{{" + variable + "}}" }</code>
-									}
-								</div>
-								<div class="mt-4">
-									@workspace.TextLink(emailTemplateHref(template.Definition.Key), "Edit and preview")
-								</div>
-							</div>
-						</article>
-					}
-				</div>
-			</div>
+			@datatable.Table(datatable.Config{
+				Columns: []datatable.Column{
+					{Label: "Email template"},
+					{Label: "Status", WidthClass: "w-44"},
+					{Label: "Action", WidthClass: "w-44"},
+				},
+				MinWidthClass:    "min-w-[40rem]",
+				RowCount:         len(templates),
+				RowLabel:         "template",
+				EmptyTitle:       "No email templates",
+				EmptyDescription: "Core-owned transactional email templates will appear here.",
+			}) {
+				for _, template := range templates {
+					<tr>
+						<td class="px-4 py-3 align-middle">
+							<p class="font-medium text-grey-900 dark:text-grey-100">{ template.Definition.DisplayName }</p>
+							<p class="mt-1 leading-6 text-grey-600 dark:text-grey-400">{ template.Definition.Description }</p>
+						</td>
+						<td class="px-4 py-3 align-middle">
+							if template.Source == email.TemplateSourceOverride {
+								<span class="inline-flex rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-200">Customized</span>
+							} else {
+								<span class="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">Built-in default</span>
+							}
+						</td>
+						<td class="px-4 py-3 align-middle">
+							@workspace.TextLink(emailTemplateHref(template.Definition.Key), "Edit and preview")
+						</td>
+					</tr>
+				}
+			}
 		</div>
 	}
 }

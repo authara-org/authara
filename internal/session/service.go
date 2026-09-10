@@ -11,6 +11,7 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
@@ -68,6 +69,7 @@ func (s *Service) CreateSession(
 	audience token.Audience,
 	userAgent string,
 	now time.Time,
+	clientIP string,
 ) (
 	accessToken string,
 	refreshToken string,
@@ -157,6 +159,13 @@ func (s *Service) CreateSession(
 			now,
 		)
 		if err != nil {
+			return err
+		}
+		if err := email.Enqueue(ctx, s.store, user.Email, domain.EmailTemplateNewSignIn, email.TemplateData{
+			email.TemplateVariableIPAddress:  email.ValueOrUnknown(clientIP),
+			email.TemplateVariableUserAgent:  email.ValueOrUnknown(userAgent),
+			email.TemplateVariableOccurredAt: email.OccurredAt(now),
+		}, now); err != nil {
 			return err
 		}
 

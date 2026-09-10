@@ -158,7 +158,7 @@ func TestOrganizationSwitchPostReturnsSwitchedTokens(t *testing.T) {
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
 		now := time.Now().UTC()
 
-		accessToken, _, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		accessToken, _, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}

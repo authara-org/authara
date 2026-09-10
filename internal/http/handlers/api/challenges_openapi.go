@@ -88,7 +88,7 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 			signupFailed = true
 			return err
 		}
-		accessToken, refreshToken, err = h.Session.CreateSession(txCtx, user.ID, token.AudienceApp, r.UserAgent(), now)
+		accessToken, refreshToken, err = h.Session.CreateSession(txCtx, user.ID, token.AudienceApp, r.UserAgent(), now, httputil.ClientIPString(r))
 		if err != nil {
 			sessionFailed = true
 		}

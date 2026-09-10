@@ -13,6 +13,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/flash"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/viewmodel"
@@ -108,7 +109,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 		audience := redirect.AudienceForPath(returnTo)
 		now := time.Now()
-		accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)
+		accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
 		if err != nil {
 			h.renderError(w, r, ctx)
 			return
@@ -173,7 +174,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()
 	now := time.Now()
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now)
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderError(w, r, ctx)
 		return

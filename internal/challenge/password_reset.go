@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/google/uuid"
 )
 
@@ -69,6 +70,10 @@ func (s *Service) ExecutePasswordReset(
 	now time.Time,
 ) error {
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		user, err := s.store.GetUserByID(txCtx, action.UserID)
+		if err != nil {
+			return err
+		}
 		if err := s.store.UpdatePasswordHash(txCtx, action.UserID, action.PasswordHash); err != nil {
 			return err
 		}
@@ -81,6 +86,8 @@ func (s *Service) ExecutePasswordReset(
 		if err := s.store.DeletePendingPasswordResetByChallengeID(txCtx, action.ChallengeID); err != nil {
 			return err
 		}
-		return nil
+		return email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplatePasswordChanged, email.TemplateData{
+			email.TemplateVariableOccurredAt: email.OccurredAt(now),
+		}, now)
 	})
 }

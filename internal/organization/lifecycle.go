@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	emailpkg "github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
@@ -72,7 +73,7 @@ func (s *Service) RemoveOrganizationMember(ctx context.Context, in RemoveOrganiz
 			return ErrLastOrganizationOwner
 		}
 
-		return s.removeOrganizationMembership(txCtx, target, time.Now().UTC())
+		return s.removeOrganizationMembership(txCtx, org, target, time.Now().UTC(), true)
 	})
 }
 
@@ -103,7 +104,7 @@ func (s *Service) DeleteOrganization(ctx context.Context, in DeleteOrganizationI
 		if s.mode == OrgModeSingle && len(memberships) > 1 {
 			return ErrOrganizationHasOtherMembers
 		}
-		return s.deleteOrganization(txCtx, org, memberships, time.Now().UTC())
+		return s.deleteOrganization(txCtx, org, memberships, time.Now().UTC(), true)
 	})
 }
 
@@ -147,6 +148,14 @@ func (s *Service) TransferOrganizationOwnership(ctx context.Context, in Transfer
 		if _, err := s.store.GetOrganizationMembership(txCtx, in.OrganizationID, in.NewOwnerUserID); err != nil {
 			return err
 		}
+		previousOwnerUser, err := s.store.GetUserByID(txCtx, in.ActorUserID)
+		if err != nil {
+			return err
+		}
+		newOwnerUser, err := s.store.GetUserByID(txCtx, in.NewOwnerUserID)
+		if err != nil {
+			return err
+		}
 
 		newOwner, err := s.store.UpdateOrganizationMembershipRole(
 			txCtx,
@@ -173,6 +182,17 @@ func (s *Service) TransferOrganizationOwnership(ctx context.Context, in Transfer
 				return err
 			}
 			if err := s.publish(txCtx, webhook.NewOrganizationMembershipUpdated(membership, now)); err != nil {
+				return err
+			}
+		}
+		data := emailpkg.TemplateData{
+			emailpkg.TemplateVariableOrganizationName:   org.Name,
+			emailpkg.TemplateVariablePreviousOwnerEmail: previousOwnerUser.Email,
+			emailpkg.TemplateVariableNewOwnerEmail:      newOwnerUser.Email,
+			emailpkg.TemplateVariableOccurredAt:         emailpkg.OccurredAt(now),
+		}
+		for _, recipient := range []string{previousOwnerUser.Email, newOwnerUser.Email} {
+			if err := emailpkg.Enqueue(txCtx, s.store, recipient, domain.EmailTemplateOrganizationOwnershipTransferred, data, now); err != nil {
 				return err
 			}
 		}
@@ -243,19 +263,33 @@ func (s *Service) PrepareUserDeletion(ctx context.Context, userID uuid.UUID) err
 		if item.organization.Kind == domain.OrganizationKindPersonal &&
 			item.organization.CreatedByUserID != nil &&
 			*item.organization.CreatedByUserID == userID {
-			if err := s.deleteOrganization(ctx, item.organization, item.memberships, now); err != nil {
+			if err := s.deleteOrganization(ctx, item.organization, item.memberships, now, false); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := s.removeOrganizationMembership(ctx, item.membership, now); err != nil {
+		if err := s.removeOrganizationMembership(ctx, item.organization, item.membership, now, false); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Service) removeOrganizationMembership(ctx context.Context, membership domain.OrganizationMembership, now time.Time) error {
+func (s *Service) removeOrganizationMembership(
+	ctx context.Context,
+	org domain.Organization,
+	membership domain.OrganizationMembership,
+	now time.Time,
+	notify bool,
+) error {
+	var user domain.User
+	var err error
+	if notify {
+		user, err = s.store.GetUserByID(ctx, membership.UserID)
+		if err != nil {
+			return err
+		}
+	}
 	if err := s.store.DeleteSessionsByOrganizationMembership(ctx, membership.OrganizationID, membership.UserID); err != nil {
 		return err
 	}
@@ -265,10 +299,35 @@ func (s *Service) removeOrganizationMembership(ctx context.Context, membership d
 	if err := s.store.DeleteOrganizationMembership(ctx, membership.OrganizationID, membership.UserID); err != nil {
 		return err
 	}
+	if notify {
+		if err := emailpkg.Enqueue(ctx, s.store, user.Email, domain.EmailTemplateOrganizationMembershipRemoved, emailpkg.TemplateData{
+			emailpkg.TemplateVariableOrganizationName: org.Name,
+			emailpkg.TemplateVariableRole:             string(membership.Role),
+			emailpkg.TemplateVariableOccurredAt:       emailpkg.OccurredAt(now),
+		}, now); err != nil {
+			return err
+		}
+	}
 	return s.publish(ctx, webhook.NewOrganizationMembershipDeleted(membership, now))
 }
 
-func (s *Service) deleteOrganization(ctx context.Context, org domain.Organization, memberships []domain.OrganizationMembership, now time.Time) error {
+func (s *Service) deleteOrganization(
+	ctx context.Context,
+	org domain.Organization,
+	memberships []domain.OrganizationMembership,
+	now time.Time,
+	notify bool,
+) error {
+	recipients := make([]string, 0, len(memberships))
+	if notify {
+		for _, membership := range memberships {
+			user, err := s.store.GetUserByID(ctx, membership.UserID)
+			if err != nil {
+				return err
+			}
+			recipients = append(recipients, user.Email)
+		}
+	}
 	if err := s.store.DeleteSessionsByOrganization(ctx, org.ID); err != nil {
 		return err
 	}
@@ -279,6 +338,14 @@ func (s *Service) deleteOrganization(ctx context.Context, org domain.Organizatio
 	}
 	if err := s.store.DeleteOrganization(ctx, org.ID); err != nil {
 		return err
+	}
+	for _, recipient := range recipients {
+		if err := emailpkg.Enqueue(ctx, s.store, recipient, domain.EmailTemplateOrganizationDeleted, emailpkg.TemplateData{
+			emailpkg.TemplateVariableOrganizationName: org.Name,
+			emailpkg.TemplateVariableOccurredAt:       emailpkg.OccurredAt(now),
+		}, now); err != nil {
+			return err
+		}
 	}
 	return s.publish(ctx, webhook.NewOrganizationDeleted(org, now))
 }

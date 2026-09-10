@@ -7,6 +7,7 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
@@ -77,7 +78,7 @@ func (h *APIHandler) contractGoogleLogin(
 		}
 		return loginWithGoogleError(code, message)
 	}
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now())
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
 		return loginWithGoogleError(response.CodeForbidden, "Account cannot access requested audience.")

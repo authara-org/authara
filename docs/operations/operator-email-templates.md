@@ -55,6 +55,29 @@ Consequently:
 
 Previewing a draft or a historical version never changes the active template.
 
+## Built-in email types
+
+Every type below has an independently editable subject, plain-text body, and
+HTML body. The editor shows the variables accepted by the selected type and
+requires all of them to be present before saving.
+
+| Category | Email types |
+| --- | --- |
+| Verification | Signup code, password-reset code, email-change code |
+| Account | Account created, new sign-in, account disabled, account enabled |
+| Authentication | Authentication method added, authentication method removed, password changed, email changed (old address), email changed (new address), admin access changed |
+| Organization | Invitation, invitation accepted, invitation revoked, membership removed, role changed, ownership transferred, organization deleted |
+
+Security and activity notifications are always queued when the corresponding
+operation commits; they do not have individual environment switches. A new
+sign-in email is queued for every authenticated session and receives the
+observed IP address and user agent when available. An email-change completion
+notifies both addresses so either mailbox can identify an unauthorized change.
+
+Core does not send an account-deleted email. User deletion deliberately removes
+queued jobs and other direct email-address references, and a final outbound job
+would retain the address after that cleanup.
+
 ## History and recovery
 
 Every successful save appends an immutable snapshot to

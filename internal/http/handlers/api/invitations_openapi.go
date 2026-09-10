@@ -386,7 +386,7 @@ func (h *APIHandler) finishRecoverySession(ctx context.Context, r *http.Request,
 
 func (h *APIHandler) contractInvitationSession(ctx context.Context, r *http.Request, user domain.User, organizationID contract.OrganizationID, audience token.Audience) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
 	now := time.Now().UTC()
-	accessToken, _, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)
+	accessToken, _, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		code, message := invitationSessionError(err)
 		return contract.AuthSession{}, nil, code, message, false

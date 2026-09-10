@@ -139,7 +139,7 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 
 	audience := redirect.AudienceForPath(returnTo)
 	now := time.Now()
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not create session.")
 		return

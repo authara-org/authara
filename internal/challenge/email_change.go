@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
 )
@@ -83,6 +84,17 @@ func (s *Service) ExecuteEmailChange(
 			}
 		}
 		if err := s.store.DeletePendingEmailChangeByChallengeID(txCtx, action.ChallengeID); err != nil {
+			return err
+		}
+		data := email.TemplateData{
+			email.TemplateVariableOldEmail:   action.OldEmail,
+			email.TemplateVariableNewEmail:   action.NewEmail,
+			email.TemplateVariableOccurredAt: email.OccurredAt(now),
+		}
+		if err := email.Enqueue(txCtx, s.store, action.OldEmail, domain.EmailTemplateEmailChangedOldAddress, data, now); err != nil {
+			return err
+		}
+		if err := email.Enqueue(txCtx, s.store, action.NewEmail, domain.EmailTemplateEmailChangedNewAddress, data, now); err != nil {
 			return err
 		}
 		return s.webhookPublisher.Publish(txCtx, webhook.NewUserUpdated(action.UserID, now))

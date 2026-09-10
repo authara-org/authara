@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	htmlpkg "html"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func TestDashboardLinksOperatorAndAccountPages(t *testing.T) {
 	}
 }
 
-func TestEmailTemplatesRendersCatalogMetadataWithoutSampleValues(t *testing.T) {
+func TestEmailTemplatesRendersSimpleUnpaginatedTable(t *testing.T) {
 	definitions := email.TemplateCatalog()
 	templates := make([]email.EffectiveTemplate, len(definitions))
 	for i, definition := range definitions {
@@ -38,15 +39,37 @@ func TestEmailTemplatesRendersCatalogMetadataWithoutSampleValues(t *testing.T) {
 	html := renderOperatorComponent(t, EmailTemplates(templates))
 
 	for _, definition := range definitions {
-		for _, want := range []string{definition.DisplayName, definition.Description, string(definition.Key)} {
-			if !strings.Contains(html, want) {
+		for _, want := range []string{definition.DisplayName, definition.Description, emailTemplateHref(definition.Key)} {
+			if !strings.Contains(html, htmlpkg.EscapeString(want)) {
 				t.Fatalf("expected email catalog to contain %q", want)
 			}
 		}
+		if strings.Contains(html, ">"+string(definition.Key)+"<") {
+			t.Fatalf("email catalog must not visibly render template key %q", definition.Key)
+		}
 		for _, variable := range definition.AvailableVariables {
-			if !strings.Contains(html, "{{"+variable+"}}") {
-				t.Fatalf("expected email catalog to contain variable %q", variable)
+			if strings.Contains(html, "{{"+variable+"}}") {
+				t.Fatalf("email catalog must not render available variable %q", variable)
 			}
+		}
+	}
+	for _, want := range []string{
+		"<table",
+		"Email template",
+		"Status",
+		"Action",
+		"fixed inset-0 overflow-hidden",
+		"flex h-full min-h-0 flex-1 flex-col gap-5 overflow-hidden",
+		"overscroll-contain overflow-auto",
+		"align-middle",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("expected email catalog table to contain %q", want)
+		}
+	}
+	for _, unwanted := range []string{"Available variables", "Table pagination", "Page 1"} {
+		if strings.Contains(html, unwanted) {
+			t.Fatalf("email catalog must not contain %q", unwanted)
 		}
 	}
 	if strings.Contains(html, "123456") {
@@ -84,6 +107,8 @@ func TestAuditRendersOperationalMetadataWithoutTemplateSources(t *testing.T) {
 		`href="/auth/operator/audit"`,
 		`data-dropdown-value="email_template.saved"`,
 		`data-dropdown-value="signup_code"`,
+		"Table pagination",
+		"Page 1",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("expected audit page to contain %q", want)

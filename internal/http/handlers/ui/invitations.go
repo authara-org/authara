@@ -512,7 +512,7 @@ func (h *UIHandler) invitationPreview(w http.ResponseWriter, r *http.Request, to
 }
 
 func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.Request, user domain.User, invitationID uuid.UUID, now time.Time) {
-	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), r.UserAgent(), now)
+	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderInternalError(w, r)
 		return

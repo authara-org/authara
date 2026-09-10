@@ -3,6 +3,8 @@ package admin
 import (
 	"context"
 
+	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
@@ -98,6 +100,11 @@ func (s *Service) DisableUser(ctx context.Context, actor Actor, userID uuid.UUID
 		if err := s.audit(txCtx, actor, ActionUserDisabled, &userID, user.Email, map[string]any{}, meta); err != nil {
 			return err
 		}
+		if err := email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAccountDisabled, email.TemplateData{
+			email.TemplateVariableOccurredAt: email.OccurredAt(now),
+		}, now); err != nil {
+			return err
+		}
 		return s.webhookPublisher.Publish(txCtx, webhook.NewUserUpdated(userID, now))
 	}); err != nil {
 		return err
@@ -116,6 +123,11 @@ func (s *Service) EnableUser(ctx context.Context, actor Actor, userID uuid.UUID,
 			return err
 		}
 		if err := s.audit(txCtx, actor, ActionUserEnabled, &userID, user.Email, map[string]any{}, meta); err != nil {
+			return err
+		}
+		if err := email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAccountEnabled, email.TemplateData{
+			email.TemplateVariableOccurredAt: email.OccurredAt(now),
+		}, now); err != nil {
 			return err
 		}
 		return s.webhookPublisher.Publish(txCtx, webhook.NewUserUpdated(userID, now))
