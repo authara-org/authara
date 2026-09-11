@@ -43,7 +43,9 @@ func (s *TemplateService) ListAuditEvents(ctx context.Context, query OperatorAud
 	}
 	if query.Action != "" &&
 		query.Action != domain.OperatorAuditActionEmailTemplateSaved &&
-		query.Action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn {
+		query.Action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn &&
+		query.Action != domain.OperatorAuditActionEmailTemplateDeliveryEnabled &&
+		query.Action != domain.OperatorAuditActionEmailTemplateDeliveryDisabled {
 		return OperatorAuditPage{}, fmt.Errorf("unknown operator audit action %q", query.Action)
 	}
 	maxInt := int(^uint(0) >> 1)

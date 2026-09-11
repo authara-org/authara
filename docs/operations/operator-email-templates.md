@@ -38,6 +38,22 @@ Role removal revokes the user's active sessions. Keep database and cache
 access available as part of the deployment recovery procedure so an operator
 role can be granted even when the browser workspace is inaccessible.
 
+## Delivery controls
+
+The **Delivery** switch in the template catalog controls whether Core creates
+new jobs for that email type. Every email type is enabled by default. Turning
+one off takes effect immediately across Core replicas and prevents subsequent
+jobs of that type from being inserted into `email_jobs`.
+
+Jobs that were already queued are not cancelled and continue through normal
+worker processing. Turning delivery back on allows new jobs to be queued
+again. Delivery settings are installation-wide and are independent of whether
+the template uses the built-in content or a customization.
+
+Disabling verification emails such as signup, password-reset, or email-change
+codes also prevents users from receiving the code required to complete that
+flow.
+
 ## Saving and live delivery
 
 Saving validates the complete template before it becomes active. Required
@@ -68,11 +84,12 @@ requires all of them to be present before saving.
 | Authentication | Authentication method added, authentication method removed, password changed, email changed (old address), email changed (new address), admin access changed |
 | Organization | Invitation, invitation accepted, invitation revoked, membership removed, role changed, ownership transferred, organization deleted |
 
-Security and activity notifications are always queued when the corresponding
-operation commits; they do not have individual environment switches. A new
-sign-in email is queued for every authenticated session and receives the
-observed IP address and user agent when available. An email-change completion
-notifies both addresses so either mailbox can identify an unauthorized change.
+When their delivery switches are enabled, security and activity notifications
+are queued when the corresponding operation commits. They do not have
+individual environment switches. A new sign-in email is queued for every
+authenticated session and receives the observed IP address and user agent when
+available. An email-change completion notifies both addresses so either mailbox
+can identify an unauthorized change.
 
 Core does not send an account-deleted email. User deletion deliberately removes
 queued jobs and other direct email-address references, and a final outbound job
@@ -94,7 +111,7 @@ overwriting the newer value.
 
 ## Audit records
 
-Successful saves and restores are recorded in
+Successful saves, restores, and delivery-setting changes are recorded in
 `authara.operator_audit_events` in the same database statement as the template
 change. Each event contains:
 
@@ -127,6 +144,7 @@ Email-template state is stored in these tables:
 ```text
 authara.email_template_overrides
 authara.email_template_versions
+authara.email_template_delivery_settings
 authara.operator_audit_events
 ```
 
@@ -159,7 +177,7 @@ Then point a non-production Core instance at the restored database and verify:
 3. Current and historical templates preview correctly.
 4. A test signup email reaches Mailpit or the deployment's test SMTP inbox.
 
-Do not restore only the three template tables into a running production
+Do not restore only the template-related tables into a running production
 database without first resolving existing primary keys, foreign keys, and
 current revisions. For a single broken template, using **Restore** in the
 operator workspace is safer than a partial database restore because the

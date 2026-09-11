@@ -225,6 +225,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 						r.Post("/emails/{templateKey}", uih.OperatorEmailTemplateSavePost)
 						r.Post("/emails/{templateKey}/preview", uih.OperatorEmailTemplatePreviewPost)
 						r.Post("/emails/{templateKey}/reset", uih.OperatorEmailTemplateResetPost)
+						r.Post("/emails/{templateKey}/delivery", uih.OperatorEmailTemplateDeliveryPost)
 					})
 				})
 			})

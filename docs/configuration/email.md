@@ -43,10 +43,12 @@ template immediately returns subsequent deliveries to the built-in version.
 See [Operator email templates](../operations/operator-email-templates.md) for
 provisioning, history, audit, backup, and recovery guidance.
 
-Security and activity notifications are queued automatically when the related
-database operation commits. There are no per-notification environment toggles.
-A new-sign-in notification is created for every new authenticated session and
-includes the observed client IP address and user agent when available.
+Operators can also disable or re-enable each email type from the template
+catalog. Every type is enabled by default. A disabled type does not create new
+`email_jobs`; jobs already queued before it was disabled are unaffected. There
+are no per-notification environment toggles. When enabled, a new-sign-in
+notification is created for every new authenticated session and includes the
+observed client IP address and user agent when available.
 
 Account deletion intentionally does not queue an email. The deletion flow
 removes queued jobs and other direct references to the user's email address, so

@@ -83,6 +83,18 @@ type EmailTemplateOverride struct {
 	UpdatedByUserID *uuid.UUID
 }
 
+// EmailTemplateDeliverySetting is an explicit operator choice for whether new
+// jobs of a template type may be enqueued. A missing setting means enabled.
+type EmailTemplateDeliverySetting struct {
+	Template EmailTemplate
+	Enabled  bool
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
+	UpdatedByUserID *uuid.UUID
+}
+
 // EmailTemplateVersion is an immutable snapshot created whenever an operator
 // successfully saves or restores a customized template.
 type EmailTemplateVersion struct {

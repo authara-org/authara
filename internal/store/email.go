@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
@@ -77,6 +78,9 @@ func toModelEmailJob(d domain.EmailJob) model.EmailJob {
 	}
 }
 
+// CreateEmailJob inserts a job when delivery for its template is enabled.
+// Missing delivery settings default to enabled; a disabled template returns a
+// zero job without an error so the surrounding business transaction can commit.
 func (s *Store) CreateEmailJob(ctx context.Context, in domain.EmailJob) (domain.EmailJob, error) {
 	row := toModelEmailJob(in)
 
@@ -93,7 +97,12 @@ func (s *Store) CreateEmailJob(ctx context.Context, in domain.EmailJob) (domain.
 			next_attempt_at,
 			sent_at
 		)
-		VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)
+		SELECT $1, $2, $3::varchar, $4::jsonb, $5, $6, $7, $8, $9, $10
+		WHERE COALESCE((
+			SELECT enabled
+			FROM email_template_delivery_settings
+			WHERE template_key = $3::varchar
+		), true)
 		RETURNING `+emailJobColumns,
 		row.ChallengeID,
 		row.ToEmail,
@@ -106,6 +115,9 @@ func (s *Store) CreateEmailJob(ctx context.Context, in domain.EmailJob) (domain.
 		row.NextAttemptAt,
 		row.SentAt,
 	), &row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.EmailJob{}, nil
+		}
 		return domain.EmailJob{}, err
 	}
 

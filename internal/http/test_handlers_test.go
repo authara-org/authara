@@ -88,6 +88,19 @@ func (testEmailTemplateStore) ListEmailTemplateOverrides(context.Context) ([]dom
 	return nil, nil
 }
 
+func (testEmailTemplateStore) ListEmailTemplateDeliverySettings(context.Context) ([]domain.EmailTemplateDeliverySetting, error) {
+	return nil, nil
+}
+
+func (testEmailTemplateStore) SetEmailTemplateDeliveryEnabled(
+	context.Context,
+	domain.EmailTemplate,
+	bool,
+	uuid.UUID,
+) (domain.EmailTemplateDeliverySetting, error) {
+	return domain.EmailTemplateDeliverySetting{}, nil
+}
+
 func (testEmailTemplateStore) GetEmailTemplateVersion(context.Context, domain.EmailTemplate, int64) (domain.EmailTemplateVersion, error) {
 	return domain.EmailTemplateVersion{}, store.ErrEmailTemplateVersionNotFound
 }

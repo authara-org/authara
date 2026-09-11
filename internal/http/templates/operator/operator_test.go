@@ -39,7 +39,7 @@ func TestEmailTemplatesRendersSimpleUnpaginatedTable(t *testing.T) {
 	html := renderOperatorComponent(t, EmailTemplates(templates))
 
 	for _, definition := range definitions {
-		for _, want := range []string{definition.DisplayName, definition.Description, emailTemplateHref(definition.Key)} {
+		for _, want := range []string{definition.DisplayName, definition.Description, emailTemplateHref(definition.Key), emailTemplateDeliveryHref(definition.Key)} {
 			if !strings.Contains(html, htmlpkg.EscapeString(want)) {
 				t.Fatalf("expected email catalog to contain %q", want)
 			}
@@ -57,6 +57,7 @@ func TestEmailTemplatesRendersSimpleUnpaginatedTable(t *testing.T) {
 		"<table",
 		"Email template",
 		"Status",
+		"Delivery",
 		"Action",
 		"fixed inset-0 overflow-hidden",
 		"flex h-full min-h-0 flex-1 flex-col gap-5 overflow-hidden",
@@ -67,6 +68,21 @@ func TestEmailTemplatesRendersSimpleUnpaginatedTable(t *testing.T) {
 			t.Fatalf("expected email catalog table to contain %q", want)
 		}
 	}
+	if got := strings.Count(html, `role="switch"`); got != len(definitions) {
+		t.Fatalf("enabled delivery switches = %d, want %d", got, len(definitions))
+	}
+	for _, want := range []string{
+		`aria-checked="true"`,
+		`bg-blue-600`,
+		`h-7 w-12`,
+		`h-5 w-5`,
+		`hx-target="this"`,
+		`hx-swap="outerHTML"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("delivery switches do not contain %q", want)
+		}
+	}
 	for _, unwanted := range []string{"Available variables", "Table pagination", "Page 1"} {
 		if strings.Contains(html, unwanted) {
 			t.Fatalf("email catalog must not contain %q", unwanted)
@@ -74,6 +90,29 @@ func TestEmailTemplatesRendersSimpleUnpaginatedTable(t *testing.T) {
 	}
 	if strings.Contains(html, "123456") {
 		t.Fatal("email catalog must not render sample template values")
+	}
+}
+
+func TestEmailTemplatesRendersDisabledDeliverySwitch(t *testing.T) {
+	definition, err := email.LookupTemplate(domain.EmailTemplateNewSignIn)
+	if err != nil {
+		t.Fatalf("LookupTemplate failed: %v", err)
+	}
+	html := renderOperatorComponent(t, EmailTemplates([]email.EffectiveTemplate{{
+		Definition:       definition,
+		Source:           email.TemplateSourceBuiltIn,
+		DeliveryDisabled: true,
+	}}))
+
+	for _, want := range []string{
+		`role="switch"`,
+		`aria-checked="false"`,
+		`name="enabled" value="true"`,
+		"Delivery of New sign-in",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("disabled delivery switch does not contain %q: %s", want, html)
+		}
 	}
 }
 

@@ -49,6 +49,18 @@ func resetEmailTemplateHref(key domain.EmailTemplate) string {
 	return emailTemplateHref(key) + "/reset"
 }
 
+func emailTemplateDeliveryHref(key domain.EmailTemplate) string {
+	return emailTemplateHref(key) + "/delivery"
+}
+
+func emailTemplateDeliveryLabel(key domain.EmailTemplate) string {
+	definition, err := email.LookupTemplate(key)
+	if err != nil {
+		return "Email delivery"
+	}
+	return "Delivery of " + definition.DisplayName
+}
+
 func emailTemplateVersionHref(key domain.EmailTemplate, version int64) string {
 	return emailTemplateHref(key) + "/versions/" + strconv.FormatInt(version, 10)
 }
@@ -123,6 +135,8 @@ func operatorAuditActionDropdownOptions() []dropdown.Option {
 		{Value: "", Label: "All actions"},
 		{Value: domain.OperatorAuditActionEmailTemplateSaved, Label: "Template saved"},
 		{Value: domain.OperatorAuditActionEmailTemplateRestoredBuiltIn, Label: "Built-in restored"},
+		{Value: domain.OperatorAuditActionEmailTemplateDeliveryEnabled, Label: "Delivery enabled"},
+		{Value: domain.OperatorAuditActionEmailTemplateDeliveryDisabled, Label: "Delivery disabled"},
 	}
 }
 
@@ -150,6 +164,10 @@ func operatorAuditActionLabel(action string) string {
 		return "Template saved"
 	case domain.OperatorAuditActionEmailTemplateRestoredBuiltIn:
 		return "Built-in restored"
+	case domain.OperatorAuditActionEmailTemplateDeliveryEnabled:
+		return "Delivery enabled"
+	case domain.OperatorAuditActionEmailTemplateDeliveryDisabled:
+		return "Delivery disabled"
 	default:
 		return action
 	}

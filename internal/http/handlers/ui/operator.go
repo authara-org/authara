@@ -39,7 +39,9 @@ func (h *UIHandler) OperatorAuditPage(w http.ResponseWriter, r *http.Request) {
 	requestedPage := pageFromRequest(r, 50)
 	action := r.URL.Query().Get("action")
 	if action != domain.OperatorAuditActionEmailTemplateSaved &&
-		action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn {
+		action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn &&
+		action != domain.OperatorAuditActionEmailTemplateDeliveryEnabled &&
+		action != domain.OperatorAuditActionEmailTemplateDeliveryDisabled {
 		action = ""
 	}
 	template := domain.EmailTemplate(r.URL.Query().Get("template"))
@@ -64,6 +66,10 @@ func (h *UIHandler) OperatorAuditPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UIHandler) OperatorEmailTemplatesPage(w http.ResponseWriter, r *http.Request) {
+	msg, _ := flash.Read(w, r)
+	if msg != nil {
+		r = r.WithContext(httpctx.WithFlash(r.Context(), msg))
+	}
 	templates, err := h.EmailTemplates.List(r.Context())
 	if err != nil {
 		h.logEmailTemplateError("list operator email templates", err)
@@ -71,6 +77,45 @@ func (h *UIHandler) OperatorEmailTemplatesPage(w http.ResponseWriter, r *http.Re
 		return
 	}
 	_ = h.Render(w, r, http.StatusOK, operatorview.EmailTemplates(templates))
+}
+
+func (h *UIHandler) OperatorEmailTemplateDeliveryPost(w http.ResponseWriter, r *http.Request) {
+	key, ok := h.operatorEmailTemplateKey(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid email delivery setting.")
+		return
+	}
+	enabled, err := strconv.ParseBool(r.Form.Get("enabled"))
+	if err != nil {
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid email delivery setting.")
+		return
+	}
+	userID, ok := httpctx.UserID(r.Context())
+	if !ok {
+		h.renderUnauthorized(w, r)
+		return
+	}
+	if err := h.EmailTemplates.SetDeliveryEnabled(r.Context(), key, enabled, userID); err != nil {
+		h.logEmailTemplateError("set operator email template delivery", err)
+		h.renderInternalError(w, r)
+		return
+	}
+	message := "Email delivery disabled."
+	if enabled {
+		message = "Email delivery enabled."
+	}
+	if httpctx.IsHTMX(r.Context()) {
+		_ = h.Render(w, r, http.StatusOK, templ.Join(
+			operatorview.EmailTemplateDeliveryToggle(key, enabled),
+			toast.ToastMessage(toast.Success, message),
+		))
+		return
+	}
+	_ = flash.Set(w, flash.Message{Kind: "success", Message: message})
+	http.Redirect(w, r, "/auth/operator/emails", http.StatusSeeOther)
 }
 
 func (h *UIHandler) OperatorEmailTemplatePage(w http.ResponseWriter, r *http.Request) {

@@ -64,6 +64,62 @@ func TestOperatorEmailTemplateSaveValidatesAndPreventsStaleOverwrite(t *testing.
 	}
 }
 
+func TestOperatorEmailTemplateDeliveryToggle(t *testing.T) {
+	templateStore := newOperatorEmailTemplateStore()
+	h := newOperatorEmailTemplateHandler(templateStore)
+	userID := uuid.New()
+
+	response := performOperatorEmailTemplateHTMXRequest(
+		t,
+		h.OperatorEmailTemplateDeliveryPost,
+		url.Values{"enabled": {"false"}},
+		userID,
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("disable status = %d, want %d", response.Code, http.StatusOK)
+	}
+	setting := templateStore.delivery[domain.EmailTemplateSignupCode]
+	if setting.Enabled || setting.UpdatedByUserID == nil || *setting.UpdatedByUserID != userID {
+		t.Fatalf("disabled delivery setting = %#v", setting)
+	}
+	for _, want := range []string{"Email delivery disabled.", `hx-swap-oob="afterbegin:#toast-container"`} {
+		if !strings.Contains(response.Body.String(), want) {
+			t.Fatalf("disable response does not contain %q: %s", want, response.Body.String())
+		}
+	}
+
+	response = performOperatorEmailTemplateHTMXRequest(
+		t,
+		h.OperatorEmailTemplateDeliveryPost,
+		url.Values{"enabled": {"true", "false"}},
+		userID,
+	)
+	if response.Code != http.StatusOK || !templateStore.delivery[domain.EmailTemplateSignupCode].Enabled {
+		t.Fatalf("enable result: status=%d setting=%#v", response.Code, templateStore.delivery[domain.EmailTemplateSignupCode])
+	}
+	if !strings.Contains(response.Body.String(), "Email delivery enabled.") {
+		t.Fatalf("enable response is incomplete: %s", response.Body.String())
+	}
+}
+
+func TestOperatorEmailTemplateDeliveryToggleRejectsInvalidState(t *testing.T) {
+	templateStore := newOperatorEmailTemplateStore()
+	h := newOperatorEmailTemplateHandler(templateStore)
+	response := performOperatorEmailTemplateRequest(
+		t,
+		h.OperatorEmailTemplateDeliveryPost,
+		url.Values{"enabled": {"invalid"}},
+		uuid.New(),
+	)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid state status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	if len(templateStore.delivery) != 0 {
+		t.Fatal("invalid state changed a delivery setting")
+	}
+}
+
 func TestOperatorAuditPageFiltersAndPaginatesEvents(t *testing.T) {
 	templateStore := newOperatorEmailTemplateStore()
 	actorID := uuid.New()
@@ -582,6 +638,7 @@ func emailTemplateFormValues(revision int64, subject, textBody, htmlBody string)
 
 type operatorEmailTemplateStore struct {
 	overrides   map[domain.EmailTemplate]domain.EmailTemplateOverride
+	delivery    map[domain.EmailTemplate]domain.EmailTemplateDeliverySetting
 	versions    map[domain.EmailTemplate][]domain.EmailTemplateVersion
 	auditEvents []domain.OperatorAuditEvent
 }
@@ -589,6 +646,7 @@ type operatorEmailTemplateStore struct {
 func newOperatorEmailTemplateStore() *operatorEmailTemplateStore {
 	return &operatorEmailTemplateStore{
 		overrides: make(map[domain.EmailTemplate]domain.EmailTemplateOverride),
+		delivery:  make(map[domain.EmailTemplate]domain.EmailTemplateDeliverySetting),
 		versions:  make(map[domain.EmailTemplate][]domain.EmailTemplateVersion),
 	}
 }
@@ -607,6 +665,29 @@ func (s *operatorEmailTemplateStore) ListEmailTemplateOverrides(context.Context)
 		overrides = append(overrides, override)
 	}
 	return overrides, nil
+}
+
+func (s *operatorEmailTemplateStore) ListEmailTemplateDeliverySettings(context.Context) ([]domain.EmailTemplateDeliverySetting, error) {
+	settings := make([]domain.EmailTemplateDeliverySetting, 0, len(s.delivery))
+	for _, setting := range s.delivery {
+		settings = append(settings, setting)
+	}
+	return settings, nil
+}
+
+func (s *operatorEmailTemplateStore) SetEmailTemplateDeliveryEnabled(
+	_ context.Context,
+	key domain.EmailTemplate,
+	enabled bool,
+	updatedByUserID uuid.UUID,
+) (domain.EmailTemplateDeliverySetting, error) {
+	setting := domain.EmailTemplateDeliverySetting{
+		Template:        key,
+		Enabled:         enabled,
+		UpdatedByUserID: &updatedByUserID,
+	}
+	s.delivery[key] = setting
+	return setting, nil
 }
 
 func (s *operatorEmailTemplateStore) GetEmailTemplateVersion(_ context.Context, key domain.EmailTemplate, version int64) (domain.EmailTemplateVersion, error) {

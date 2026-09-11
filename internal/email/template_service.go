@@ -36,6 +36,8 @@ const (
 type TemplateOverrideStore interface {
 	GetEmailTemplateOverride(context.Context, domain.EmailTemplate) (domain.EmailTemplateOverride, error)
 	ListEmailTemplateOverrides(context.Context) ([]domain.EmailTemplateOverride, error)
+	ListEmailTemplateDeliverySettings(context.Context) ([]domain.EmailTemplateDeliverySetting, error)
+	SetEmailTemplateDeliveryEnabled(context.Context, domain.EmailTemplate, bool, uuid.UUID) (domain.EmailTemplateDeliverySetting, error)
 	GetEmailTemplateVersion(context.Context, domain.EmailTemplate, int64) (domain.EmailTemplateVersion, error)
 	ListEmailTemplateVersions(context.Context, domain.EmailTemplate) ([]domain.EmailTemplateVersion, error)
 	UpsertEmailTemplateOverride(context.Context, domain.EmailTemplateOverride, int64) (domain.EmailTemplateOverride, error)
@@ -46,9 +48,10 @@ type TemplateOverrideStore interface {
 // EffectiveTemplate combines immutable catalog metadata with an optional
 // persisted customization.
 type EffectiveTemplate struct {
-	Definition TemplateDefinition
-	Source     TemplateSource
-	Override   *domain.EmailTemplateOverride
+	Definition       TemplateDefinition
+	Source           TemplateSource
+	Override         *domain.EmailTemplateOverride
+	DeliveryDisabled bool
 }
 
 type SaveTemplateOverrideInput struct {
@@ -106,6 +109,10 @@ func (s *TemplateService) List(ctx context.Context) ([]EffectiveTemplate, error)
 	if err != nil {
 		return nil, fmt.Errorf("list email template overrides: %w", err)
 	}
+	settings, err := s.store.ListEmailTemplateDeliverySettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list email template delivery settings: %w", err)
+	}
 
 	byKey := make(map[domain.EmailTemplate]domain.EmailTemplateOverride, len(overrides))
 	for _, override := range overrides {
@@ -118,13 +125,21 @@ func (s *TemplateService) List(ctx context.Context) ([]EffectiveTemplate, error)
 		}
 		byKey[override.Template] = override
 	}
+	disabledByKey := make(map[domain.EmailTemplate]bool, len(settings))
+	for _, setting := range settings {
+		if err := ValidateTemplate(setting.Template); err != nil {
+			return nil, fmt.Errorf("validate stored email template delivery setting: %w", err)
+		}
+		disabledByKey[setting.Template] = !setting.Enabled
+	}
 
 	catalog := TemplateCatalog()
 	out := make([]EffectiveTemplate, 0, len(catalog))
 	for _, definition := range catalog {
 		effective := EffectiveTemplate{
-			Definition: definition,
-			Source:     TemplateSourceBuiltIn,
+			Definition:       definition,
+			Source:           TemplateSourceBuiltIn,
+			DeliveryDisabled: disabledByKey[definition.Key],
 		}
 		if override, ok := byKey[definition.Key]; ok {
 			effective.Source = TemplateSourceOverride
@@ -133,6 +148,24 @@ func (s *TemplateService) List(ctx context.Context) ([]EffectiveTemplate, error)
 		out = append(out, effective)
 	}
 	return out, nil
+}
+
+func (s *TemplateService) SetDeliveryEnabled(
+	ctx context.Context,
+	key domain.EmailTemplate,
+	enabled bool,
+	updatedByUserID uuid.UUID,
+) error {
+	if err := ValidateTemplate(key); err != nil {
+		return err
+	}
+	if updatedByUserID == uuid.Nil {
+		return ErrMissingTemplateUpdater
+	}
+	if _, err := s.store.SetEmailTemplateDeliveryEnabled(ctx, key, enabled, updatedByUserID); err != nil {
+		return fmt.Errorf("set email template delivery for %q: %w", key, err)
+	}
+	return nil
 }
 
 func (s *TemplateService) SaveOverride(ctx context.Context, in SaveTemplateOverrideInput) (EffectiveTemplate, error) {

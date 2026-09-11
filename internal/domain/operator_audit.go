@@ -8,9 +8,11 @@ import (
 )
 
 const (
-	OperatorAuditActionEmailTemplateSaved           = "email_template.saved"
-	OperatorAuditActionEmailTemplateRestoredBuiltIn = "email_template.restored_builtin"
-	OperatorAuditResourceEmailTemplate              = "email_template"
+	OperatorAuditActionEmailTemplateSaved            = "email_template.saved"
+	OperatorAuditActionEmailTemplateRestoredBuiltIn  = "email_template.restored_builtin"
+	OperatorAuditActionEmailTemplateDeliveryEnabled  = "email_template.delivery_enabled"
+	OperatorAuditActionEmailTemplateDeliveryDisabled = "email_template.delivery_disabled"
+	OperatorAuditResourceEmailTemplate               = "email_template"
 )
 
 // OperatorAuditEvent records a control-plane mutation without storing the

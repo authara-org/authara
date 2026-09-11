@@ -82,6 +82,7 @@ func TestOperatorEmailTemplateMutationsRequireCSRF(t *testing.T) {
 		"/auth/operator/emails/signup_code",
 		"/auth/operator/emails/signup_code/preview",
 		"/auth/operator/emails/signup_code/reset",
+		"/auth/operator/emails/signup_code/delivery",
 	} {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		rr := httptest.NewRecorder()
