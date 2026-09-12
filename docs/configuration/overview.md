@@ -1,6 +1,8 @@
 # Configuration Overview
 
-Authara is configured entirely through **environment variables**.
+Authara bootstrap and infrastructure configuration is supplied through
+**environment variables**. A small, explicitly registered subset of product
+policy can also be overridden at runtime by an Authara operator.
 
 Configuration is typically provided via:
 
@@ -9,6 +11,10 @@ Configuration is typically provided via:
 - orchestration platforms (Kubernetes, ECS, etc.)
 
 Authara does **not load configuration files directly**.
+
+See [Operator runtime settings](../operations/runtime-settings.md) for the
+hybrid precedence and locking model. Environment-only settings and all secrets
+remain deployment-controlled.
 
 ---
 

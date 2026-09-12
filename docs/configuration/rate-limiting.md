@@ -17,6 +17,13 @@ See also: [Configuration Reference](reference.md)
 
 ---
 
+All rate-limit variables are also available on the operator runtime-settings
+page. Leave an environment variable unset to use the built-in default and keep
+that setting live-editable. Setting one in the environment pins and locks only
+that value until Core is restarted without it.
+
+---
+
 ## Login limits
 
 ### AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT
@@ -147,7 +154,36 @@ Default:
 
 ---
 
+## Password-reset limits
+
+Password-reset requests use independent IP and email buckets configured by:
+
+- `AUTHARA_RATE_LIMIT_PASSWORD_RESET_IP_LIMIT` (default `5`)
+- `AUTHARA_RATE_LIMIT_PASSWORD_RESET_IP_WINDOW` (default `1h`)
+- `AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_LIMIT` (default `3`)
+- `AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW` (default `24h`)
+
+## Challenge limits
+
+Challenge verification and resend requests use independent IP buckets:
+
+- `AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_LIMIT` (default `30`)
+- `AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_WINDOW` (default `10m`)
+- `AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_LIMIT` (default `10`)
+- `AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_WINDOW` (default `1h`)
+
+Changing a threshold applies to the next limiter check. Changing a window does
+not rewrite an existing bucket's reset deadline; it applies when the next
+bucket is created.
+
+---
+
 ## Safety limits
+
+### AUTHARA_RATE_LIMIT_CLEANUP_EVERY
+
+Number of in-memory limiter calls between expired-entry sweeps. The default is
+`200`. This setting is unused by the Redis limiter.
 
 ### AUTHARA_RATE_LIMIT_MAX_ENTRIES
 
@@ -160,6 +196,8 @@ Default:
 ```
 
 This acts as a safety valve against memory exhaustion.
+
+Both safety settings are live-editable for the in-memory limiter.
 
 ---
 

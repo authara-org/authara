@@ -77,6 +77,8 @@ When disabled:
 - signup completes immediately
 - no email verification is required
 
+This setting is environment-only and startup-only.
+
 ---
 
 ### AUTHARA_CHALLENGE_TTL
@@ -155,6 +157,20 @@ Prevents:
 - email spam
 - abuse of resend functionality
 
+## Runtime overrides
+
+The five challenge lifetime and limit settings above are hybrid. If their
+environment variable is absent, an operator can set or clear a runtime
+override at `/auth/operator/settings`. An explicitly supplied environment
+value locks that setting and takes precedence. `AUTHARA_CHALLENGE_ENABLED` is
+not runtime-editable.
+
+Runtime changes affect newly created challenges and newly generated codes.
+Existing rows keep their stored expiry and limits. The accepting replica
+changes immediately; other replicas normally update on the next two-second
+PostgreSQL reconciliation poll. See
+[Operator runtime settings](../operations/runtime-settings.md).
+
 ---
 
 ## Security considerations
@@ -209,4 +225,3 @@ User sees:
 Cause:
 
 - wrong code submitted
-

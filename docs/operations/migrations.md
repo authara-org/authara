@@ -165,3 +165,13 @@ Authara migrations are:
 - validated through schema version checks at startup
 
 This keeps schema evolution predictable and prevents hidden runtime database changes.
+
+## Runtime-settings upgrade
+
+Schema version 24 adds `runtime_settings_state`,
+`runtime_setting_overrides`, and the per-challenge
+`minimum_resend_interval_ns` column. Apply migration 024 before deploying the
+matching Core binary. With no override rows, effective behavior remains the
+same as the existing environment configuration and built-in defaults. The new
+column remains null on pre-v24 challenge rows so their resend delay continues
+to follow the effective policy, as it did before the value was persisted.

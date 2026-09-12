@@ -130,6 +130,12 @@ This usually includes:
 
 Secrets should be stored in a secure secret management system rather than committed files.
 
+Challenge-policy and rate-limit values may be changed by an operator only when
+the corresponding environment variable is absent. Supplying one explicitly
+locks that individual value to deployment configuration. Secrets and bootstrap
+settings are never runtime-editable. See
+[Operator runtime settings](../operations/runtime-settings.md).
+
 See:
 
 - [Configuration Reference](../configuration/reference.md)
@@ -151,6 +157,10 @@ Some features, such as the default in-memory rate limiter, are instance-local.
 
 Set `AUTHARA_CACHE_PROVIDER=redis` to share rate limits and access-token
 revocations across instances.
+
+Runtime-setting writes take effect immediately on the accepting Core replica.
+Other replicas reconcile the PostgreSQL revision every two seconds. Plan for
+that bounded delay during concurrent rollouts and policy changes.
 
 ---
 
