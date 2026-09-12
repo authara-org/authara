@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
@@ -19,14 +20,24 @@ import (
 
 type VerificationCodeService struct {
 	store   *store.Store
-	ttl     time.Duration
+	policy  config.ChallengePolicyReader
 	secrets [][]byte
 }
 
 func NewVerificationCodeService(store *store.Store, ttl time.Duration, secrets ...[]byte) *VerificationCodeService {
+	return NewVerificationCodeServiceWithPolicy(store, config.StaticChallengePolicy{Policy: config.ChallengePolicy{
+		VerificationCodeTTL: ttl,
+	}}, secrets...)
+}
+
+func NewVerificationCodeServiceWithPolicy(
+	store *store.Store,
+	policy config.ChallengePolicyReader,
+	secrets ...[]byte,
+) *VerificationCodeService {
 	return &VerificationCodeService{
 		store:   store,
-		ttl:     ttl,
+		policy:  policy,
 		secrets: cloneSecrets(secrets),
 	}
 }
@@ -39,13 +50,14 @@ func (s *VerificationCodeService) GenerateCode(
 	if len(s.secrets) == 0 {
 		return "", errors.New("verification code secret is not configured")
 	}
+	policy := s.policy.Current()
 
 	code, err := generateSixDigitCode()
 	if err != nil {
 		return "", err
 	}
 
-	expiresAt := now.Add(s.ttl)
+	expiresAt := now.Add(policy.VerificationCodeTTL)
 	if expiresAt.After(challenge.ExpiresAt) {
 		expiresAt = challenge.ExpiresAt
 	}

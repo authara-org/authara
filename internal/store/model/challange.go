@@ -22,6 +22,9 @@ type Challenge struct {
 	ResendCount int        `db:"resend_count"`
 	MaxResends  int        `db:"max_resends"`
 	LastSentAt  *time.Time `db:"last_sent_at"`
+
+	MinimumResendInterval    time.Duration `db:"minimum_resend_interval_ns"`
+	HasMinimumResendInterval bool
 }
 
 func (Challenge) TableName() string {

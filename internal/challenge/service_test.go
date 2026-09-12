@@ -3,13 +3,123 @@ package challenge
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/testutil"
 )
+
+func TestRunningChallengeServicesObservePolicyChangesWithoutReconstruction(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+		reader := newTestChallengePolicyReader(config.ChallengePolicy{
+			TTL: 30 * time.Minute, VerificationCodeTTL: 10 * time.Minute,
+			MaxAttempts: 5, MaxResends: 3, MinimumResendInterval: 30 * time.Second,
+		})
+		service := New(Config{Store: tdb.Store, Tx: tdb.Tx, Policy: reader})
+		verification := NewVerificationCodeServiceWithPolicy(
+			tdb.Store,
+			reader,
+			[]byte("01234567890123456789012345678901"),
+		)
+
+		firstID, err := service.createChallenge(
+			ctx, domain.ChallengePurposeSignup, "first-policy@example.com", now,
+			func(context.Context, domain.Challenge) error { return nil },
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		first, err := tdb.Store.GetChallengeByID(ctx, firstID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := verification.GenerateCode(ctx, first, now); err != nil {
+			t.Fatal(err)
+		}
+		firstCode, err := tdb.Store.GetVerificationCodeByChallengeID(ctx, firstID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		reader.Store(config.ChallengePolicy{
+			TTL: 2 * time.Hour, VerificationCodeTTL: 20 * time.Minute,
+			MaxAttempts: 9, MaxResends: 4, MinimumResendInterval: 2 * time.Minute,
+		})
+		secondID, err := service.createChallenge(
+			ctx, domain.ChallengePurposeSignup, "second-policy@example.com", now,
+			func(context.Context, domain.Challenge) error { return nil },
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		second, err := tdb.Store.GetChallengeByID(ctx, secondID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := verification.GenerateCode(ctx, second, now); err != nil {
+			t.Fatal(err)
+		}
+		secondCode, err := tdb.Store.GetVerificationCodeByChallengeID(ctx, secondID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !first.ExpiresAt.Equal(now.Add(30*time.Minute)) || first.MaxAttempts != 5 || first.MaxResends != 3 || first.MinimumResendInterval != 30*time.Second || !first.HasMinimumResendInterval {
+			t.Fatalf("first artifact changed or was created with the wrong policy: %+v", first)
+		}
+		if !firstCode.ExpiresAt.Equal(now.Add(10 * time.Minute)) {
+			t.Fatalf("first code expiry = %s", firstCode.ExpiresAt)
+		}
+		if !second.ExpiresAt.Equal(now.Add(2*time.Hour)) || second.MaxAttempts != 9 || second.MaxResends != 4 || second.MinimumResendInterval != 2*time.Minute || !second.HasMinimumResendInterval {
+			t.Fatalf("second artifact did not use updated policy: %+v", second)
+		}
+		if !secondCode.ExpiresAt.Equal(now.Add(20 * time.Minute)) {
+			t.Fatalf("second code expiry = %s", secondCode.ExpiresAt)
+		}
+	})
+}
+
+func TestLegacyChallengeUsesCurrentResendIntervalFallback(t *testing.T) {
+	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	lastSentAt := now.Add(-30 * time.Second)
+	service := &Service{}
+	legacy := domain.Challenge{ExpiresAt: now.Add(time.Hour), MaxResends: 1, LastSentAt: &lastSentAt}
+	if err := service.validateChallengeForResend(legacy, now, time.Minute); !errors.Is(err, ErrResendTooSoon) {
+		t.Fatalf("legacy resend validation = %v", err)
+	}
+
+	stored := legacy
+	stored.HasMinimumResendInterval = true
+	stored.MinimumResendInterval = 10 * time.Second
+	if err := service.validateChallengeForResend(stored, now, time.Minute); err != nil {
+		t.Fatalf("stored resend validation = %v", err)
+	}
+}
+
+type testChallengePolicyReader struct {
+	current atomic.Pointer[config.ChallengePolicy]
+}
+
+func newTestChallengePolicyReader(policy config.ChallengePolicy) *testChallengePolicyReader {
+	reader := &testChallengePolicyReader{}
+	reader.Store(policy)
+	return reader
+}
+
+func (r *testChallengePolicyReader) Current() config.ChallengePolicy {
+	return *r.current.Load()
+}
+
+func (r *testChallengePolicyReader) Store(policy config.ChallengePolicy) {
+	copy := policy
+	r.current.Store(&copy)
+}
 
 func TestOpaqueChallengeCannotBeResent(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)

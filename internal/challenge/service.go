@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
@@ -21,6 +22,7 @@ type Config struct {
 	MaxAttempts            int
 	MaxResends             int
 	MinResendInterval      time.Duration
+	Policy                 config.ChallengePolicyReader
 	WebhookPublisher       webhook.Publisher
 	AccessTokenRevocations *token.AccessTokenRevocations
 }
@@ -29,10 +31,7 @@ type Service struct {
 	store                  *store.Store
 	tx                     *tx.Manager
 	allowlistEnabled       bool
-	challengeTTL           time.Duration
-	maxAttempts            int
-	maxResends             int
-	minResendInterval      time.Duration
+	policy                 config.ChallengePolicyReader
 	webhookPublisher       webhook.Publisher
 	accessTokenRevocations *token.AccessTokenRevocations
 }
@@ -43,14 +42,20 @@ func New(cfg Config) *Service {
 		pub = webhook.NoopPublisher{}
 	}
 
+	policy := cfg.Policy
+	if policy == nil {
+		policy = config.StaticChallengePolicy{Policy: config.ChallengePolicy{
+			Enabled: true, TTL: cfg.ChallengeTTL, VerificationCodeTTL: cfg.ChallengeTTL,
+			MaxAttempts: cfg.MaxAttempts, MaxResends: cfg.MaxResends,
+			MinimumResendInterval: cfg.MinResendInterval,
+		}}
+	}
+
 	return &Service{
 		store:                  cfg.Store,
 		tx:                     cfg.Tx,
 		allowlistEnabled:       cfg.AllowlistEnabled,
-		challengeTTL:           cfg.ChallengeTTL,
-		maxAttempts:            cfg.MaxAttempts,
-		maxResends:             cfg.MaxResends,
-		minResendInterval:      cfg.MinResendInterval,
+		policy:                 policy,
 		webhookPublisher:       pub,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
 	}
@@ -62,17 +67,20 @@ func (s *Service) CreateOpaqueChallenge(
 	purpose domain.ChallengePurpose,
 	email string,
 ) (uuid.UUID, error) {
+	policy := s.policy.Current()
 	var challengeID uuid.UUID
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		challenge, err := s.store.CreateChallenge(txCtx, domain.Challenge{
-			Purpose:      purpose,
-			Email:        email,
-			ExpiresAt:    now.Add(s.challengeTTL),
-			AttemptCount: 0,
-			MaxAttempts:  s.maxAttempts,
-			ResendCount:  0,
-			MaxResends:   0,
+			Purpose:                  purpose,
+			Email:                    email,
+			ExpiresAt:                now.Add(policy.TTL),
+			AttemptCount:             0,
+			MaxAttempts:              policy.MaxAttempts,
+			ResendCount:              0,
+			MaxResends:               0,
+			MinimumResendInterval:    policy.MinimumResendInterval,
+			HasMinimumResendInterval: true,
 		})
 
 		challengeID = challenge.ID
@@ -93,17 +101,20 @@ func (s *Service) createChallenge(
 	now time.Time,
 	createPendingAction func(context.Context, domain.Challenge) error,
 ) (uuid.UUID, error) {
+	policy := s.policy.Current()
 	var challengeID uuid.UUID
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		challenge, err := s.store.CreateChallenge(txCtx, domain.Challenge{
-			Purpose:      purpose,
-			Email:        email,
-			ExpiresAt:    now.Add(s.challengeTTL),
-			AttemptCount: 0,
-			MaxAttempts:  s.maxAttempts,
-			ResendCount:  0,
-			MaxResends:   s.maxResends,
+			Purpose:                  purpose,
+			Email:                    email,
+			ExpiresAt:                now.Add(policy.TTL),
+			AttemptCount:             0,
+			MaxAttempts:              policy.MaxAttempts,
+			ResendCount:              0,
+			MaxResends:               policy.MaxResends,
+			MinimumResendInterval:    policy.MinimumResendInterval,
+			HasMinimumResendInterval: true,
 		})
 		if err != nil {
 			return err
@@ -134,6 +145,7 @@ func (s *Service) ResendChallenge(
 	challengeID uuid.UUID,
 	now time.Time,
 ) error {
+	policy := s.policy.Current()
 	var resultErr error
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -142,7 +154,7 @@ func (s *Service) ResendChallenge(
 			return err
 		}
 
-		if err := s.validateChallengeForResend(challenge, now); err != nil {
+		if err := s.validateChallengeForResend(challenge, now, policy.MinimumResendInterval); err != nil {
 			resultErr = err
 			return nil
 		}
@@ -253,6 +265,7 @@ func (s *Service) validateChallengeForVerify(
 func (s *Service) validateChallengeForResend(
 	challenge domain.Challenge,
 	now time.Time,
+	legacyMinimumResendInterval time.Duration,
 ) error {
 	if challenge.IsConsumed() {
 		return ErrChallengeConsumed
@@ -263,7 +276,11 @@ func (s *Service) validateChallengeForResend(
 	if challenge.ResendCount >= challenge.MaxResends {
 		return ErrTooManyResends
 	}
-	if challenge.LastSentAt != nil && now.Before(challenge.LastSentAt.Add(s.minResendInterval)) {
+	minimumResendInterval := challenge.MinimumResendInterval
+	if !challenge.HasMinimumResendInterval {
+		minimumResendInterval = legacyMinimumResendInterval
+	}
+	if challenge.LastSentAt != nil && now.Before(challenge.LastSentAt.Add(minimumResendInterval)) {
 		return ErrResendTooSoon
 	}
 
