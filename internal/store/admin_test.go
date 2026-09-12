@@ -18,10 +18,6 @@ func TestAdminStoreCountsAndRoles(t *testing.T) {
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		recentSince := time.Now().Add(-24 * time.Hour)
-		recentBefore, err := tdb.Store.CountUsersCreatedSince(ctx, recentSince)
-		if err != nil {
-			t.Fatalf("CountUsersCreatedSince before setup failed: %v", err)
-		}
 
 		activeAdmin := createAdminStoreUser(t, ctx, tdb, "store-count-admin@example.com", "store-count-admin")
 		disabledAdmin := createAdminStoreUser(t, ctx, tdb, "store-count-disabled@example.com", "store-count-disabled")
@@ -45,14 +41,14 @@ func TestAdminStoreCountsAndRoles(t *testing.T) {
 			t.Fatalf("expected at least 3 users, got %d", total)
 		}
 
-		recentAfter, err := tdb.Store.CountUsersCreatedSince(ctx, recentSince)
+		recent, err := tdb.Store.CountUsersCreatedSince(ctx, recentSince)
 		if err != nil {
-			t.Fatalf("CountUsersCreatedSince after setup failed: %v", err)
+			t.Fatalf("CountUsersCreatedSince failed: %v", err)
 		}
-		// Other packages share this database and may create users concurrently.
-		// This transaction must contribute at least the three users above.
-		if recentAfter-recentBefore < 3 {
-			t.Fatalf("expected at least 3 recent users, got %d", recentAfter-recentBefore)
+		// Other packages share this database and may create or delete users concurrently.
+		// The three users in this transaction cannot be removed by those packages.
+		if recent < 3 {
+			t.Fatalf("expected at least 3 recent users, got %d", recent)
 		}
 
 		admins, err := tdb.Store.CountUsersWithRole(ctx, roles.DBAdminRoleName)
