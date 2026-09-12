@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/datatable"
@@ -13,7 +12,7 @@ templ Audit(page email.OperatorAuditPage) {
 		<div class="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-hidden">
 			<div class="shrink-0">
 				<h2 class="text-xl font-semibold">Operator audit log</h2>
-				<p class="mt-1 text-sm text-grey-600 dark:text-grey-400">Template changes recorded for operational accountability. Email contents and delivery secrets are never stored here.</p>
+				<p class="mt-1 text-sm text-grey-600 dark:text-grey-400">Template and runtime-policy changes recorded for operational accountability. Secrets are never stored here.</p>
 			</div>
 			<form class="grid shrink-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-end" method="get" action="/auth/operator/audit">
 				<div>
@@ -56,30 +55,31 @@ templ Audit(page email.OperatorAuditPage) {
 				Columns: []datatable.Column{
 					{Label: "Time", WidthClass: "w-48"},
 					{Label: "Action", WidthClass: "w-44"},
-					{Label: "Template", WidthClass: "w-56"},
+					{Label: "Resource", WidthClass: "w-56"},
 					{Label: "Operator", WidthClass: "w-56"},
 					{Label: "Revision", WidthClass: "w-24"},
 					{Label: "Version", WidthClass: "w-24"},
 				},
-				MinWidthClass:   "min-w-[58rem]",
-				Page:            page.Page,
-				RowCount:        len(page.Events),
-				RowLabel:        "event",
-				HasPrevious:     page.Page > 1,
-				HasNext:         page.HasNext,
-				PreviousHref:    operatorAuditPageHref(page, page.Page - 1),
-				NextHref:        operatorAuditPageHref(page, page.Page + 1),
-				EmptyTitle:      "No matching audit events",
-				EmptyDescription: "Template changes matching the selected filters will appear here.",
+				MinWidthClass:    "min-w-[58rem]",
+				ShowPagination:   true,
+				Page:             page.Page,
+				RowCount:         len(page.Events),
+				RowLabel:         "event",
+				HasPrevious:      page.Page > 1,
+				HasNext:          page.HasNext,
+				PreviousHref:     operatorAuditPageHref(page, page.Page-1),
+				NextHref:         operatorAuditPageHref(page, page.Page+1),
+				EmptyTitle:       "No matching audit events",
+				EmptyDescription: "Operator changes matching the selected filters will appear here.",
 			}) {
 				for _, event := range page.Events {
 					<tr data-operator-audit-event>
-								<td class="whitespace-nowrap px-4 py-3 align-top"><time datetime={ operatorAuditTimeValue(event.CreatedAt) }>{ operatorAuditTime(event.CreatedAt) }</time></td>
-								<td class="px-4 py-3 align-top font-medium">{ operatorAuditActionLabel(event.Action) }</td>
-								<td class="px-4 py-3 align-top"><a class="font-medium text-blue-700 hover:underline dark:text-blue-300" href={ emailTemplateHref(domain.EmailTemplate(event.ResourceID)) }>{ operatorAuditTemplateLabel(event.ResourceID) }</a></td>
-								<td class="truncate px-4 py-3 align-top" title={ operatorAuditActorTitle(event.ActorUserID) }>{ operatorAuditActorLabel(event.ActorEmail, event.ActorUserID) }</td>
-								<td class="px-4 py-3 align-top tabular-nums">{ operatorAuditMetadataValue(event.Metadata, "revision") }</td>
-								<td class="px-4 py-3 align-top tabular-nums">{ operatorAuditMetadataValue(event.Metadata, "version") }</td>
+						<td class="whitespace-nowrap px-4 py-3 align-top"><time datetime={ operatorAuditTimeValue(event.CreatedAt) }>{ operatorAuditTime(event.CreatedAt) }</time></td>
+						<td class="px-4 py-3 align-top font-medium">{ operatorAuditActionLabel(event.Action) }</td>
+						<td class="px-4 py-3 align-top"><a class="font-medium text-blue-700 hover:underline dark:text-blue-300" href={ operatorAuditResourceHref(event) }>{ operatorAuditResourceLabel(event) }</a></td>
+						<td class="truncate px-4 py-3 align-top" title={ operatorAuditActorTitle(event.ActorUserID) }>{ operatorAuditActorLabel(event.ActorEmail, event.ActorUserID) }</td>
+						<td class="px-4 py-3 align-top tabular-nums">{ operatorAuditMetadataValue(event.Metadata, "revision") }</td>
+						<td class="px-4 py-3 align-top tabular-nums">{ operatorAuditMetadataValue(event.Metadata, "version") }</td>
 					</tr>
 				}
 			}

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	emailpkg "github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
@@ -75,6 +76,7 @@ type ResendInvitationInput struct {
 
 func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput) (InvitationWithToken, error) {
 	now := normalizeNow(in.Now)
+	policy := s.policy.CurrentOrganization()
 
 	email, err := normalizeInvitationEmail(in.Email)
 	if err != nil {
@@ -151,7 +153,7 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 			Metadata:        metadata,
 			TokenHash:       tokenHash,
 			InvitedByUserID: &in.ActorUserID,
-			ExpiresAt:       now.Add(s.invitationTTL),
+			ExpiresAt:       now.Add(policy.InvitationTTL),
 		}
 
 		created, err := s.store.CreateOrganizationInvitation(txCtx, invitation)
@@ -181,6 +183,7 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 }
 
 func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput) (InvitationWithToken, error) {
+	policy := s.policy.CurrentOrganization()
 	if !s.mode.AllowsInvitations() {
 		return InvitationWithToken{}, ErrOrganizationInviteForbidden
 	}
@@ -248,7 +251,7 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 			Metadata:        old.Metadata,
 			TokenHash:       tokenHash,
 			InvitedByUserID: old.InvitedByUserID,
-			ExpiresAt:       now.Add(s.invitationTTL),
+			ExpiresAt:       now.Add(policy.InvitationTTL),
 		})
 		if err != nil {
 			if store.IsUniqueViolation(err, store.ConstraintActiveInvitation) {
@@ -363,6 +366,10 @@ func (s *Service) RevokeInvitation(ctx context.Context, in RevokeInvitationInput
 		if err := s.store.LockOrganizationForKeyShare(txCtx, in.OrganizationID); err != nil {
 			return err
 		}
+		org, err := s.store.GetOrganizationByID(txCtx, in.OrganizationID)
+		if err != nil {
+			return err
+		}
 
 		invitation, err := s.store.GetOrganizationInvitationByIDForUpdate(txCtx, in.InvitationID)
 		if err != nil {
@@ -387,6 +394,12 @@ func (s *Service) RevokeInvitation(ctx context.Context, in RevokeInvitationInput
 		invitation.RevokedAt = &now
 		invitation.RevokedByUserID = in.RevokedByUserID
 		out = invitation
+		if err := emailpkg.Enqueue(txCtx, s.store, invitation.Email, domain.EmailTemplateOrganizationInvitationRevoked, emailpkg.TemplateData{
+			emailpkg.TemplateVariableOrganizationName: org.Name,
+			emailpkg.TemplateVariableOccurredAt:       emailpkg.OccurredAt(now),
+		}, now); err != nil {
+			return err
+		}
 		return s.publish(txCtx, webhook.NewOrganizationInvitationRevoked(out, now))
 	})
 	if err != nil {
@@ -534,6 +547,20 @@ func (s *Service) acceptInvitation(
 		result.Organization = org
 		result.Membership = membership
 		result.InvitationAccepted = true
+		if invitation.InvitedByUserID != nil {
+			inviter, err := s.store.GetUserByID(txCtx, *invitation.InvitedByUserID)
+			if err != nil {
+				return err
+			}
+			if err := emailpkg.Enqueue(txCtx, s.store, inviter.Email, domain.EmailTemplateOrganizationInvitationAccepted, emailpkg.TemplateData{
+				emailpkg.TemplateVariableOrganizationName: org.Name,
+				emailpkg.TemplateVariableMemberEmail:      user.Email,
+				emailpkg.TemplateVariableRole:             string(membership.Role),
+				emailpkg.TemplateVariableOccurredAt:       emailpkg.OccurredAt(now),
+			}, now); err != nil {
+				return err
+			}
+		}
 		if err := s.publish(txCtx, webhook.NewOrganizationInvitationAccepted(result.Invitation, now)); err != nil {
 			return err
 		}

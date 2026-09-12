@@ -67,8 +67,9 @@ func (h *UIHandler) RefreshPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(w, newRefreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, newRefreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }
 

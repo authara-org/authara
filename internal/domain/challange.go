@@ -30,6 +30,9 @@ type Challenge struct {
 	ResendCount int
 	MaxResends  int
 	LastSentAt  *time.Time
+
+	MinimumResendInterval    time.Duration
+	HasMinimumResendInterval bool
 }
 
 type VerificationCode struct {

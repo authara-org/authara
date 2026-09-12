@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/authara-org/authara/internal/webhook"
@@ -360,6 +361,11 @@ func TestDeleteOrganizationRules(t *testing.T) {
 		if evt := mustFindWebhookEvent(t, pub.events, webhook.EventOrganizationDeleted); evt.Type != webhook.EventOrganizationDeleted {
 			t.Fatalf("unexpected event: %+v", evt)
 		}
+		for _, recipient := range []string{owner.Email, member.Email} {
+			if got := testutil.CountEmailJobs(t, ctx, recipient, domain.EmailTemplateOrganizationDeleted); got != 1 {
+				t.Fatalf("organization-deleted email jobs for %s = %d, want 1", recipient, got)
+			}
+		}
 	})
 }
 
@@ -425,6 +431,16 @@ func TestTransferOrganizationOwnership(t *testing.T) {
 		}
 		if oldMembership.Role != domain.OrganizationRoleAdmin || newMembership.Role != domain.OrganizationRoleOwner {
 			t.Fatalf("unexpected roles after transfer: old=%s new=%s", oldMembership.Role, newMembership.Role)
+		}
+		for _, recipient := range []string{owner.Email, newOwner.Email} {
+			if got := testutil.CountEmailJobs(t, ctx, recipient, domain.EmailTemplateOrganizationOwnershipTransferred); got != 1 {
+				t.Fatalf("ownership-transfer email jobs for %s = %d, want 1", recipient, got)
+			}
+		}
+		transferData := testutil.LatestEmailTemplateData(t, ctx, newOwner.Email, domain.EmailTemplateOrganizationOwnershipTransferred)
+		if transferData[email.TemplateVariablePreviousOwnerEmail] != owner.Email ||
+			transferData[email.TemplateVariableNewOwnerEmail] != newOwner.Email {
+			t.Fatalf("unexpected ownership-transfer template data: %#v", transferData)
 		}
 		if err := svc.RemoveOrganizationMember(ctx, RemoveOrganizationMemberInput{
 			OrganizationID: org.ID,

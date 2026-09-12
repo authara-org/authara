@@ -1,9 +1,11 @@
 package bootstrap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/config"
@@ -13,7 +15,7 @@ import (
 )
 
 type App struct {
-	Config        *config.Config
+	Config        *config.Service
 	Logger        *slog.Logger
 	Observability *observability.Service
 	Store         *store.Store
@@ -45,6 +47,15 @@ func NewApp(version string) (*App, error) {
 		_ = st.Close()
 		return nil, err
 	}
+	configCtx, cancelConfig := context.WithTimeout(context.Background(), 5*time.Second)
+	configuration, err := config.NewService(configCtx, config.ServiceOptions{
+		Startup: cfg, Store: st, Logger: logger, Environment: config.EnvironmentVariables(),
+	})
+	cancelConfig()
+	if err != nil {
+		_ = st.Close()
+		return nil, fmt.Errorf("initialize config service: %w", err)
+	}
 
 	ca, err := NewCache(cfg)
 	if err != nil {
@@ -64,7 +75,7 @@ func NewApp(version string) (*App, error) {
 	}
 
 	a := &App{
-		Config:        cfg,
+		Config:        configuration,
 		Logger:        logger,
 		Observability: metrics,
 		Store:         st,

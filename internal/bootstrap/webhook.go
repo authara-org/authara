@@ -3,25 +3,26 @@ package bootstrap
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/webhook"
 )
 
-func newWebhookPublisher(cfg *config.Config, store *store.Store) webhook.Publisher {
+func newWebhookPublisher(cfg *config.Service, store *store.Store) webhook.Publisher {
 	if !cfg.Webhook.Enabled() {
 		return webhook.NoopPublisher{}
 	}
 
-	return webhook.NewFilteringPublisher(
+	return webhook.NewFilteringPublisherWithPolicy(
 		webhook.NewQueuePublisher(store),
-		cfg.Webhook.EnabledEventSet,
+		func() []string { return cfg.CurrentWebhook().EnabledEvents },
 	)
 }
 
 func newWebhookWorker(
-	cfg *config.Config,
+	cfg *config.Service,
 	store *store.Store,
 	logger *slog.Logger,
 	metrics webhook.WorkerMetrics,
@@ -30,26 +31,30 @@ func newWebhookWorker(
 		return nil
 	}
 
-	sender := webhook.NewSender(
+	sender := webhook.NewSenderWithTimeout(
 		cfg.Webhook.URL,
 		cfg.Webhook.Secret,
-		&http.Client{Timeout: cfg.Webhook.Timeout},
+		&http.Client{},
+		func() time.Duration { return cfg.CurrentWebhook().Timeout },
 	)
 	return webhook.NewWorker(
 		store,
 		sender,
 		logger,
 		webhook.WorkerConfig{
-			WorkerCount:          cfg.Webhook.WorkerCount,
-			PollInterval:         webhook.DeliveryPoll,
-			MaxDeliveryAttempts:  cfg.Webhook.MaxDeliveryAttempts,
-			ProcessingStaleAfter: cfg.Webhook.ProcessingStaleAfter,
-			StaleReaperInterval:  cfg.Webhook.StaleReaperInterval,
-			DeliveredRetention:   cfg.Webhook.DeliveredRetention,
-			FailedRetention:      cfg.Webhook.FailedRetention,
-			CleanupInterval:      cfg.Webhook.CleanupInterval,
-			MaintenanceBatchSize: cfg.Webhook.MaintenanceBatchSize,
-			Metrics:              metrics,
+			WorkerCount:         cfg.Webhook.WorkerCount,
+			PollInterval:        webhook.DeliveryPoll,
+			StaleReaperInterval: cfg.Webhook.StaleReaperInterval,
+			CleanupInterval:     cfg.Webhook.CleanupInterval,
+			Metrics:             metrics,
+			Policy: func() webhook.WorkerPolicy {
+				policy := cfg.CurrentWebhook()
+				return webhook.WorkerPolicy{
+					MaxDeliveryAttempts: policy.MaxDeliveryAttempts, ProcessingStaleAfter: policy.ProcessingStaleAfter,
+					DeliveredRetention: policy.DeliveredRetention, FailedRetention: policy.FailedRetention,
+					MaintenanceBatchSize: policy.MaintenanceBatchSize,
+				}
+			},
 		},
 	)
 }

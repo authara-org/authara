@@ -43,8 +43,18 @@ func (s *TemplateService) ListAuditEvents(ctx context.Context, query OperatorAud
 	}
 	if query.Action != "" &&
 		query.Action != domain.OperatorAuditActionEmailTemplateSaved &&
-		query.Action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn {
+		query.Action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn &&
+		query.Action != domain.OperatorAuditActionEmailTemplateDeliveryEnabled &&
+		query.Action != domain.OperatorAuditActionEmailTemplateDeliveryDisabled &&
+		query.Action != domain.OperatorAuditActionRuntimeSettingSet &&
+		query.Action != domain.OperatorAuditActionRuntimeSettingCleared {
 		return OperatorAuditPage{}, fmt.Errorf("unknown operator audit action %q", query.Action)
+	}
+	resourceType := ""
+	if query.Template != "" || isEmailTemplateAuditAction(query.Action) {
+		resourceType = domain.OperatorAuditResourceEmailTemplate
+	} else if query.Action == domain.OperatorAuditActionRuntimeSettingSet || query.Action == domain.OperatorAuditActionRuntimeSettingCleared {
+		resourceType = domain.OperatorAuditResourceRuntimeSetting
 	}
 	maxInt := int(^uint(0) >> 1)
 	if page-1 > maxInt/size {
@@ -58,7 +68,7 @@ func (s *TemplateService) ListAuditEvents(ctx context.Context, query OperatorAud
 
 	events, err := s.store.ListOperatorAuditEvents(ctx, store.OperatorAuditEventFilter{
 		Action:       query.Action,
-		ResourceType: domain.OperatorAuditResourceEmailTemplate,
+		ResourceType: resourceType,
 		ResourceID:   string(query.Template),
 		Limit:        size + 1,
 		Offset:       (page - 1) * size,
@@ -79,4 +89,16 @@ func (s *TemplateService) ListAuditEvents(ctx context.Context, query OperatorAud
 		Action:   query.Action,
 		Template: query.Template,
 	}, nil
+}
+
+func isEmailTemplateAuditAction(action string) bool {
+	switch action {
+	case domain.OperatorAuditActionEmailTemplateSaved,
+		domain.OperatorAuditActionEmailTemplateRestoredBuiltIn,
+		domain.OperatorAuditActionEmailTemplateDeliveryEnabled,
+		domain.OperatorAuditActionEmailTemplateDeliveryDisabled:
+		return true
+	default:
+		return false
+	}
 }

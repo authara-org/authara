@@ -215,6 +215,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Route("/operator", func(r chi.Router) {
 					r.Get("/", uih.OperatorPage)
 					r.Get("/audit", uih.OperatorAuditPage)
+					r.Get("/settings", uih.OperatorSettingsPage)
 					r.Get("/emails", uih.OperatorEmailTemplatesPage)
 					r.Get("/emails/{templateKey}", uih.OperatorEmailTemplatePage)
 					r.Get("/emails/{templateKey}/versions/{version}", uih.OperatorEmailTemplateVersionPage)
@@ -225,6 +226,14 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 						r.Post("/emails/{templateKey}", uih.OperatorEmailTemplateSavePost)
 						r.Post("/emails/{templateKey}/preview", uih.OperatorEmailTemplatePreviewPost)
 						r.Post("/emails/{templateKey}/reset", uih.OperatorEmailTemplateResetPost)
+						r.Post("/emails/{templateKey}/delivery", uih.OperatorEmailTemplateDeliveryPost)
+					})
+
+					r.Group(func(r chi.Router) {
+						r.Use(httpmiddleware.LimitRequestBody(16 << 10))
+						r.Use(mw.RequireCSRF)
+						r.Post("/settings/{settingKey}", uih.OperatorSettingSetPost)
+						r.Post("/settings/{settingKey}/clear", uih.OperatorSettingClearPost)
 					})
 				})
 			})

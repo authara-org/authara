@@ -21,59 +21,60 @@ templ Audit(page adminsvc.AuditEventPage, features FeatureFlags) {
 					{Label: "Email", WidthClass: "w-48"},
 					{Label: "Details", WidthClass: "w-80"},
 				},
-				MinWidthClass:   "min-w-[72rem]",
-				Page:            page.Page,
-				RowCount:        len(page.Events),
-				RowLabel:        "event",
-				HasPrevious:     page.Page > 1,
-				HasNext:         page.HasNext,
-				PreviousHref:    pageHref("/auth/admin/audit", "", page.Page - 1),
-				NextHref:        pageHref("/auth/admin/audit", "", page.Page + 1),
-				EmptyTitle:      "No audit events yet",
+				MinWidthClass:    "min-w-[72rem]",
+				ShowPagination:   true,
+				Page:             page.Page,
+				RowCount:         len(page.Events),
+				RowLabel:         "event",
+				HasPrevious:      page.Page > 1,
+				HasNext:          page.HasNext,
+				PreviousHref:     pageHref("/auth/admin/audit", "", page.Page-1),
+				NextHref:         pageHref("/auth/admin/audit", "", page.Page+1),
+				EmptyTitle:       "No audit events yet",
 				EmptyDescription: "Security-sensitive admin changes will appear here.",
 			}) {
 				for _, event := range page.Events {
 					<tr>
-								<td class="px-3 py-3 align-top whitespace-nowrap">{ formatTime(event.CreatedAt) }</td>
-								<td class="px-3 py-3 align-top truncate">{ event.Action }</td>
-								<td class="truncate px-3 py-3 align-top" title={ uuidPtrString(event.ActorUserID) }>{ auditActorLabel(event.ActorEmail, event.ActorUserID) }</td>
-								<td class="px-3 py-3 align-top whitespace-nowrap">{ uuidPtrShort(event.TargetUserID) }</td>
-								<td class="px-3 py-3 align-top truncate">{ maskedStringPtr(event.TargetEmail) }</td>
-								<td class="min-w-[200px] px-3 py-3 align-top">
-									<details class="max-w-80 text-xs text-grey-600 dark:text-grey-400">
-										<summary class="cursor-pointer text-blue-700 dark:text-blue-300">Show personal data</summary>
-										<dl class="mt-2 grid gap-1">
-											<div>
-												<dt class="font-medium text-grey-700 dark:text-grey-200">Actor user ID</dt>
-												<dd class="break-all">{ uuidPtrString(event.ActorUserID) }</dd>
-											</div>
-											<div>
-												<dt class="font-medium text-grey-700 dark:text-grey-200">Target user ID</dt>
-												<dd class="break-all">{ uuidPtrString(event.TargetUserID) }</dd>
-											</div>
-											<div>
-												<dt class="font-medium text-grey-700 dark:text-grey-200">Target email</dt>
-												<dd class="break-all">{ stringPtr(event.TargetEmail) }</dd>
-											</div>
-											if event.IP != nil {
-												<div>
-													<dt class="font-medium text-grey-700 dark:text-grey-200">IP</dt>
-													<dd class="break-all">{ stringPtr(event.IP) }</dd>
-												</div>
-											}
-											if event.UserAgent != nil {
-												<div>
-													<dt class="font-medium text-grey-700 dark:text-grey-200">User agent</dt>
-													<dd class="break-all">{ stringPtr(event.UserAgent) }</dd>
-												</div>
-											}
-											<div>
-												<dt class="font-medium text-grey-700 dark:text-grey-200">Metadata</dt>
-												<dd class="break-all">{ compactJSON(event.Metadata) }</dd>
-											</div>
-										</dl>
-									</details>
-								</td>
+						<td class="px-3 py-3 align-top whitespace-nowrap">{ formatTime(event.CreatedAt) }</td>
+						<td class="px-3 py-3 align-top truncate">{ event.Action }</td>
+						<td class="truncate px-3 py-3 align-top" title={ uuidPtrString(event.ActorUserID) }>{ auditActorLabel(event.ActorEmail, event.ActorUserID) }</td>
+						<td class="px-3 py-3 align-top whitespace-nowrap">{ uuidPtrShort(event.TargetUserID) }</td>
+						<td class="px-3 py-3 align-top truncate">{ maskedStringPtr(event.TargetEmail) }</td>
+						<td class="min-w-[200px] px-3 py-3 align-top">
+							<details class="max-w-80 text-xs text-grey-600 dark:text-grey-400">
+								<summary class="cursor-pointer text-blue-700 dark:text-blue-300">Show personal data</summary>
+								<dl class="mt-2 grid gap-1">
+									<div>
+										<dt class="font-medium text-grey-700 dark:text-grey-200">Actor user ID</dt>
+										<dd class="break-all">{ uuidPtrString(event.ActorUserID) }</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-grey-700 dark:text-grey-200">Target user ID</dt>
+										<dd class="break-all">{ uuidPtrString(event.TargetUserID) }</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-grey-700 dark:text-grey-200">Target email</dt>
+										<dd class="break-all">{ stringPtr(event.TargetEmail) }</dd>
+									</div>
+									if event.IP != nil {
+										<div>
+											<dt class="font-medium text-grey-700 dark:text-grey-200">IP</dt>
+											<dd class="break-all">{ stringPtr(event.IP) }</dd>
+										</div>
+									}
+									if event.UserAgent != nil {
+										<div>
+											<dt class="font-medium text-grey-700 dark:text-grey-200">User agent</dt>
+											<dd class="break-all">{ stringPtr(event.UserAgent) }</dd>
+										</div>
+									}
+									<div>
+										<dt class="font-medium text-grey-700 dark:text-grey-200">Metadata</dt>
+										<dd class="break-all">{ compactJSON(event.Metadata) }</dd>
+									</div>
+								</dl>
+							</details>
+						</td>
 					</tr>
 				}
 			}

@@ -12,9 +12,9 @@ func newVerificationCodeService(app *App) *challenge.VerificationCodeService {
 		verificationSecrets = append(verificationSecrets, secret)
 	}
 
-	return challenge.NewVerificationCodeService(
+	return challenge.NewVerificationCodeServiceWithPolicy(
 		app.Store,
-		app.Config.Challenge.VerificationCodeTTL,
+		app.Config,
 		verificationSecrets...,
 	)
 }

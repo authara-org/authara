@@ -7,11 +7,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 )
+
+func TestEmailWorkerReadsCurrentPolicy(t *testing.T) {
+	policy := config.EmailPolicy{JobMaxAttempts: 3, CleanupSentAfter: time.Hour, CleanupFailedAfter: 2 * time.Hour}
+	worker := NewWorker(nil, nil, nil, nil, nil, WorkerConfig{
+		Policy: config.EmailPolicyReaderFunc(func() config.EmailPolicy { return policy }),
+	})
+	if got := worker.policy.CurrentEmail().JobMaxAttempts; got != 3 {
+		t.Fatalf("initial max attempts = %d", got)
+	}
+	policy.JobMaxAttempts = 8
+	if got := worker.policy.CurrentEmail().JobMaxAttempts; got != 8 {
+		t.Fatalf("updated max attempts = %d", got)
+	}
+}
 
 func TestWorkerSuppliesCodeToEveryCodeTemplate(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
@@ -133,6 +148,44 @@ func TestWorkerRendersInvitationAtDeliveryTime(t *testing.T) {
 	}
 	if sender.messages[1].Text != "Join at https://authara.example/auth/invitations/accept?token=abc with invite-123 as member before 2026-09-07T12:00:00Z." {
 		t.Fatalf("customized text = %q", sender.messages[1].Text)
+	}
+}
+
+func TestWorkerRendersNotificationTemplateData(t *testing.T) {
+	templateData := email.TemplateData{
+		email.TemplateVariableIPAddress:  "203.0.113.42",
+		email.TemplateVariableUserAgent:  "Test Browser",
+		email.TemplateVariableOccurredAt: "2026-09-09T18:30:00Z",
+	}
+	rawTemplateData, err := json.Marshal(templateData)
+	if err != nil {
+		t.Fatalf("marshal template data: %v", err)
+	}
+
+	var renderedData email.TemplateData
+	renderer := templateRendererFunc(func(_ context.Context, key domain.EmailTemplate, data email.TemplateData) (email.Message, error) {
+		if key != domain.EmailTemplateNewSignIn {
+			t.Fatalf("rendered template = %q, want %q", key, domain.EmailTemplateNewSignIn)
+		}
+		renderedData = data
+		return email.Message{Subject: "subject", Text: "text"}, nil
+	})
+	sender := &recordingEmailSender{}
+	worker := NewWorker(nil, nil, renderer, sender, nil, WorkerConfig{})
+	if err := worker.processJob(context.Background(), domain.EmailJob{
+		ToEmail:      "user@example.com",
+		Template:     domain.EmailTemplateNewSignIn,
+		TemplateData: rawTemplateData,
+	}, time.Now()); err != nil {
+		t.Fatalf("process notification job: %v", err)
+	}
+	if renderedData[email.TemplateVariableIPAddress] != "203.0.113.42" ||
+		renderedData[email.TemplateVariableUserAgent] != "Test Browser" ||
+		renderedData[email.TemplateVariableOccurredAt] != "2026-09-09T18:30:00Z" {
+		t.Fatalf("rendered template data = %#v", renderedData)
+	}
+	if len(sender.messages) != 1 {
+		t.Fatalf("sent messages = %d, want 1", len(sender.messages))
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
@@ -30,11 +31,24 @@ type APIHandler struct {
 	Logger         *slog.Logger
 	Google         GoogleVerifier
 	OAuthProviders oauth.OAuthProviders
+	Config         RuntimePolicyReader
 
 	ChallengeEnabled     bool
 	UsernameLoginEnabled bool
 	AccessTTL            time.Duration
 	RefreshTTL           time.Duration
+}
+
+type RuntimePolicyReader interface {
+	config.AuthenticationPolicyReader
+	config.SessionCookiePolicyReader
+}
+
+func (h *APIHandler) sessionCookiePolicy() config.SessionCookiePolicy {
+	if h.Config != nil {
+		return h.Config.CurrentSessionCookies()
+	}
+	return config.SessionCookiePolicy{AccessTokenTTL: h.AccessTTL, RefreshTokenTTL: h.RefreshTTL}
 }
 
 func New(
@@ -48,6 +62,7 @@ func New(
 	logger *slog.Logger,
 	google GoogleVerifier,
 	oauthProviders oauth.OAuthProviders,
+	configuration RuntimePolicyReader,
 	challengeEnabled bool,
 	usernameLoginEnabled bool,
 	accessTTL time.Duration,
@@ -64,9 +79,17 @@ func New(
 		Logger:               logger,
 		Google:               google,
 		OAuthProviders:       oauthProviders,
+		Config:               configuration,
 		ChallengeEnabled:     challengeEnabled,
 		UsernameLoginEnabled: usernameLoginEnabled,
 		AccessTTL:            accessTTL,
 		RefreshTTL:           refreshTTL,
 	}
+}
+
+func (h *APIHandler) usernameLoginEnabled() bool {
+	if h.Config != nil {
+		return h.Config.CurrentAuthentication().UsernameLoginEnabled
+	}
+	return h.UsernameLoginEnabled
 }

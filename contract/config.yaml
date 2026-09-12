@@ -1,5 +1,103 @@
 version: 1
 
+# Runtime-policy classification is deliberately separate from environment
+# parsing metadata. A variable is not operator-editable unless its control is
+# hybrid and its reload mode is dynamic here and it is registered by Core.
+settings_metadata:
+  APP_ENV: {control: env, reload: startup, sensitive: false, group: runtime}
+  LOG_LEVEL: {control: env, reload: startup, sensitive: false, group: runtime}
+  AUTHARA_METRICS_ENABLED: {control: env, reload: startup, sensitive: false, group: runtime}
+  POSTGRESQL_HOST: {control: env, reload: startup, sensitive: false, group: database}
+  POSTGRESQL_PORT: {control: env, reload: startup, sensitive: false, group: database}
+  POSTGRESQL_DATABASE: {control: env, reload: startup, sensitive: false, group: database}
+  POSTGRESQL_USERNAME: {control: env, reload: startup, sensitive: true, group: database}
+  POSTGRESQL_PASSWORD: {control: env, reload: startup, sensitive: true, group: database}
+  POSTGRESQL_SCHEMA: {control: env, reload: startup, sensitive: false, group: database}
+  POSTGRESQL_TIMEZONE: {control: env, reload: startup, sensitive: false, group: database}
+  POSTGRESQL_LOG_SQL: {control: env, reload: startup, sensitive: false, group: database}
+  AUTHARA_DB_MAX_OPEN_CONNS: {control: env, reload: startup, sensitive: false, group: database}
+  AUTHARA_DB_MAX_IDLE_CONNS: {control: env, reload: startup, sensitive: false, group: database}
+  AUTHARA_DB_CONN_MAX_LIFETIME: {control: env, reload: startup, sensitive: false, group: database}
+  AUTHARA_DB_CONN_MAX_IDLE_TIME: {control: env, reload: startup, sensitive: false, group: database}
+  AUTHARA_CACHE_PROVIDER: {control: env, reload: startup, sensitive: false, group: cache}
+  AUTHARA_REDIS_HOST: {control: env, reload: startup, sensitive: false, group: cache}
+  AUTHARA_REDIS_PORT: {control: env, reload: startup, sensitive: false, group: cache}
+  AUTHARA_REDIS_PASSWORD: {control: env, reload: startup, sensitive: true, group: cache}
+  AUTHARA_REDIS_DB: {control: env, reload: startup, sensitive: false, group: cache}
+  PUBLIC_URL: {control: env, reload: startup, sensitive: false, group: public_url}
+  AUTHARA_DEFAULT_RETURN_TO: {control: hybrid, reload: dynamic, sensitive: false, group: public_url}
+  AUTHARA_TRUST_PROXY_HEADERS: {control: env, reload: startup, sensitive: false, group: public_url}
+  AUTHARA_USERNAME_LOGIN_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
+  AUTHARA_JWT_ISSUER: {control: env, reload: startup, sensitive: false, group: tokens}
+  AUTHARA_JWT_ACTIVE_KEY_ID: {control: env, reload: startup, sensitive: false, group: tokens}
+  AUTHARA_JWT_KEYS: {control: env, reload: startup, sensitive: true, group: tokens}
+  AUTHARA_ACCESS_TOKEN_TTL_MINUTES: {control: hybrid, reload: dynamic, sensitive: false, group: tokens}
+  AUTHARA_SESSION_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
+  AUTHARA_REFRESH_TOKEN_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
+  AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
+  AUTHARA_ORG_MODE: {control: env, reload: startup, sensitive: false, group: organizations}
+  AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
+  AUTHARA_ORGANIZATION_INVITATION_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
+  AUTHARA_INTERNAL_API_TOKEN: {control: env, reload: startup, sensitive: true, group: internal_api}
+  AUTHARA_OAUTH_PROVIDERS: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_OAUTH_GOOGLE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_LOGIN_IP_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_LOGIN_EMAIL_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_LOGIN_EMAIL_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_SIGNUP_IP_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_SIGNUP_IP_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_PASSWORD_RESET_IP_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_PASSWORD_RESET_IP_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_CLEANUP_EVERY: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_RATE_LIMIT_MAX_ENTRIES: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
+  AUTHARA_WEBHOOK_URL: {control: env, reload: startup, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_SECRET: {control: env, reload: startup, sensitive: true, group: webhooks}
+  AUTHARA_WEBHOOK_ENABLED_EVENTS: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_TIMEOUT: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_WORKER_COUNT: {control: env, reload: startup, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_MAX_DELIVERY_ATTEMPTS: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_PROCESSING_STALE_AFTER: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_STALE_REAPER_INTERVAL: {control: env, reload: startup, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_DELIVERED_RETENTION: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_FAILED_RETENTION: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_CLEANUP_INTERVAL: {control: env, reload: startup, sensitive: false, group: webhooks}
+  AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
+  AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: access_policy}
+  AUTHARA_ADMIN_AUDIT_RETENTION_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
+  AUTHARA_CHALLENGE_ENABLED: {control: env, reload: startup, sensitive: false, group: challenges}
+  AUTHARA_CHALLENGE_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
+  AUTHARA_CHALLENGE_VERIFICATION_CODE_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
+  AUTHARA_CHALLENGE_MAX_ATTEMPTS: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
+  AUTHARA_CHALLENGE_MAX_RESENDS: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
+  AUTHARA_CHALLENGE_MIN_RESEND_INTERVAL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
+  AUTHARA_EMAIL_PROVIDER: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_FROM: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_SMTP_HOST: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_SMTP_PORT: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_SMTP_USERNAME: {control: env, reload: startup, sensitive: true, group: email}
+  AUTHARA_EMAIL_SMTP_PASSWORD: {control: env, reload: startup, sensitive: true, group: email}
+  AUTHARA_EMAIL_SMTP_TLS: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_SMTP_TIMEOUT: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_WORKER_COUNT: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_WORKER_POLL_INTERVAL: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_JOB_MAX_ATTEMPTS: {control: hybrid, reload: dynamic, sensitive: false, group: email}
+  AUTHARA_EMAIL_CLEANUP_SENT_AFTER: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
+  AUTHARA_EMAIL_CLEANUP_FAILED_AFTER: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
+
+# Operator-only settings live in purpose-built database tables rather than as
+# environment variables: email template contents and per-template delivery.
+
 variables:
 
   # ------------------------------------------------------------

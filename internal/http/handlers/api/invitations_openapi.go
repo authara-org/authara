@@ -386,7 +386,7 @@ func (h *APIHandler) finishRecoverySession(ctx context.Context, r *http.Request,
 
 func (h *APIHandler) contractInvitationSession(ctx context.Context, r *http.Request, user domain.User, organizationID contract.OrganizationID, audience token.Audience) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
 	now := time.Now().UTC()
-	accessToken, _, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)
+	accessToken, _, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		code, message := invitationSessionError(err)
 		return contract.AuthSession{}, nil, code, message, false
@@ -405,8 +405,9 @@ func (h *APIHandler) contractInvitationSession(ctx context.Context, r *http.Requ
 
 func sessionHeader(h *APIHandler, accessToken string, refreshToken string) http.Header {
 	header := make(http.Header)
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	return header
 }
 

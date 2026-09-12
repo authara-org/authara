@@ -303,8 +303,9 @@ func (h *UIHandler) InvitationAcceptPost(w http.ResponseWriter, r *http.Request)
 		h.renderInternalError(w, r)
 		return
 	}
-	authsession.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
-	authsession.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	authsession.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	authsession.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	redirect.Redirect(w, r, "/", http.StatusSeeOther)
 }
@@ -512,7 +513,7 @@ func (h *UIHandler) invitationPreview(w http.ResponseWriter, r *http.Request, to
 }
 
 func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.Request, user domain.User, invitationID uuid.UUID, now time.Time) {
-	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), r.UserAgent(), now)
+	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderInternalError(w, r)
 		return
@@ -528,8 +529,9 @@ func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.R
 		_ = h.Session.Logout(r.Context(), currentRefresh, currentAccess)
 	}
 	authsession.ClearSessionCookies(w)
-	authsession.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
-	authsession.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	authsession.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	authsession.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	if isOAuthCallback(r) {
 		writeOAuthRedirect(w, "/")
 		return

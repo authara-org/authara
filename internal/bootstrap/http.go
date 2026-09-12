@@ -20,10 +20,13 @@ import (
 const assetsManifestPath = "./internal/http/static/manifest.json"
 
 func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
+	authenticationPolicy := app.Config.CurrentAuthentication()
+	allowlistPolicy := app.Config.CurrentAllowlist()
+	cookiePolicy := app.Config.CurrentSessionCookies()
 	enabledFeatures := features.Features{
 		ChallengeEnabled:     app.Config.Challenge.Enabled,
-		AllowlistEnabled:     app.Config.AccessPolicy.AllowedEmailEnabled,
-		UsernameLoginEnabled: app.Config.Authentication.UsernameLoginEnabled,
+		AllowlistEnabled:     allowlistPolicy.AllowlistEnabled,
+		UsernameLoginEnabled: authenticationPolicy.UsernameLoginEnabled,
 	}
 
 	mw := httpserver.Middlewares{
@@ -33,11 +36,10 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			token.AudienceApp,
 			time.Now,
 		),
-		RequireAppAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefresh(
+		RequireAppAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefreshPolicy(
 			app.Services.Session,
 			token.AudienceApp,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			app.Config,
 			time.Now,
 		),
 		RequireAdminAccessAuthAPI: httpmiddleware.RequireAPIAccessAuth(
@@ -45,11 +47,10 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			token.AudienceAdmin,
 			time.Now,
 		),
-		RequireAdminAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefresh(
+		RequireAdminAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefreshPolicy(
 			app.Services.Session,
 			token.AudienceAdmin,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			app.Config,
 			time.Now,
 		),
 		RequireOperatorAccessAuthAPI: httpmiddleware.RequireAPIAccessAuth(
@@ -57,26 +58,23 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			token.AudienceOperator,
 			time.Now,
 		),
-		RequireOperatorAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefresh(
+		RequireOperatorAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefreshPolicy(
 			app.Services.Session,
 			token.AudienceOperator,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			app.Config,
 			time.Now,
 		),
-		RequireInternalAPIAuth: httpmiddleware.RequireInternalAPIAuth(app.Config.InternalAPI.Token),
-		RequirePublicOrganizationManagement: httpmiddleware.RequirePublicOrganizationManagement(
-			app.Config.Organization.PublicOrganizationManagementEnabled,
-		),
-		RequireAdminRole:          httpmiddleware.RequireAdmin,
-		RequireOperatorRole:       httpmiddleware.RequireOperator,
-		RequireCSRF:               httpmiddleware.RequireCSRF,
-		RequireAPICSRF:            httpmiddleware.RequireAPICSRF,
-		ReturnTo:                  httpmiddleware.ReturnToWithDefault(app.Config.UI.DefaultReturnTo),
-		HTMX:                      httpmiddleware.HTMXMiddleware,
-		RequireChallengeEnabled:   httpmiddleware.RequireChallengeEnabled(enabledFeatures.ChallengeEnabled),
-		RequireAllowlistEnabled:   httpmiddleware.RequireAllowlistEnabled(enabledFeatures.AllowlistEnabled),
-		OptionalAppAccessIdentity: httpmiddleware.OptionalAccessIdentity(app.Services.Session, token.AudienceApp, time.Now),
+		RequireInternalAPIAuth:              httpmiddleware.RequireInternalAPIAuth(app.Config.InternalAPI.Token),
+		RequirePublicOrganizationManagement: httpmiddleware.RequirePublicOrganizationManagementWithPolicy(app.Config),
+		RequireAdminRole:                    httpmiddleware.RequireAdmin,
+		RequireOperatorRole:                 httpmiddleware.RequireOperator,
+		RequireCSRF:                         httpmiddleware.RequireCSRF,
+		RequireAPICSRF:                      httpmiddleware.RequireAPICSRF,
+		ReturnTo:                            httpmiddleware.ReturnToWithPolicy(app.Config),
+		HTMX:                                httpmiddleware.HTMXMiddleware,
+		RequireChallengeEnabled:             httpmiddleware.RequireChallengeEnabled(enabledFeatures.ChallengeEnabled),
+		RequireAllowlistEnabled:             httpmiddleware.RequireAllowlistEnabledWithPolicy(app.Config),
+		OptionalAppAccessIdentity:           httpmiddleware.OptionalAccessIdentity(app.Services.Session, token.AudienceApp, time.Now),
 	}
 
 	assets, err := render.LoadAssetsManifest(assetsManifestPath)
@@ -97,12 +95,13 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			enabledFeatures,
 			app.Services.Verification,
 			app.Services.EmailTemplates,
+			app.Config,
 			authLimiter,
 			app.Logger,
 			googleClient,
 			app.Services.OAuthProviders,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			cookiePolicy.AccessTokenTTL,
+			cookiePolicy.RefreshTokenTTL,
 			renderer,
 		),
 		API: api.New(
@@ -116,15 +115,16 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Logger,
 			googleClient,
 			app.Services.OAuthProviders,
+			app.Config,
 			enabledFeatures.ChallengeEnabled,
 			enabledFeatures.UsernameLoginEnabled,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			cookiePolicy.AccessTokenTTL,
+			cookiePolicy.RefreshTokenTTL,
 		),
-		InternalAPI: internalapi.New(
+		InternalAPI: internalapi.NewWithPolicy(
 			app.Services.Auth,
 			app.Services.Organizations,
-			app.Config.Organization.PublicOrganizationManagementEnabled,
+			app.Config,
 		),
 	}
 
@@ -143,20 +143,35 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 }
 
 func newAuthLimiter(app *App) ratelimiter.AuthLimiter {
-	cfg := newLimiterConfig(app)
+	provider := func() ratelimiter.LimiterConfig { return newLimiterConfig(app) }
 
 	if app.Config.Cache.Provider == "redis" {
 		if counter, ok := app.Cache.(cachepkg.Counter); ok {
-			return ratelimiter.NewCacheLimiter(counter, cfg)
+			return ratelimiter.NewCacheLimiterWithConfig(counter, provider)
 		}
 
 		app.Logger.Warn("configured cache does not support atomic counters; falling back to in-memory rate limiter")
 	}
 
-	return ratelimiter.NewInMemoryLimiter(cfg)
+	return ratelimiter.NewInMemoryLimiterWithConfig(provider)
 }
 
 func newLimiterConfig(app *App) ratelimiter.LimiterConfig {
+	if app.Config != nil {
+		policy := app.Config.CurrentRateLimits()
+		return ratelimiter.LimiterConfig{
+			LoginIPLimit: policy.LoginIPLimit, LoginIPWindow: policy.LoginIPWindow,
+			LoginEmailLimit: policy.LoginEmailLimit, LoginEmailWindow: policy.LoginEmailWindow,
+			SignupIPLimit: policy.SignupIPLimit, SignupIPWindow: policy.SignupIPWindow,
+			SignupEmailLimit: policy.SignupEmailLimit, SignupEmailWindow: policy.SignupEmailWindow,
+			PasswordResetIPLimit: policy.PasswordResetIPLimit, PasswordResetIPWindow: policy.PasswordResetIPWindow,
+			PasswordResetEmailLimit: policy.PasswordResetEmailLimit, PasswordResetEmailWindow: policy.PasswordResetEmailWindow,
+			PasskeyLoginIPLimit: policy.PasskeyLoginIPLimit, PasskeyLoginIPWindow: policy.PasskeyLoginIPWindow,
+			ChallengeVerifyIPLimit: policy.ChallengeVerifyIPLimit, ChallengeVerifyIPWindow: policy.ChallengeVerifyIPWindow,
+			ChallengeResendIPLimit: policy.ChallengeResendIPLimit, ChallengeResendIPWindow: policy.ChallengeResendIPWindow,
+			CleanupEvery: policy.CleanupEvery, MaxEntries: policy.MaxEntries,
+		}
+	}
 	return ratelimiter.LimiterConfig{
 		LoginIPLimit:     app.Config.RateLimit.LoginIPLimit,
 		LoginIPWindow:    app.Config.RateLimit.LoginIPWindow,

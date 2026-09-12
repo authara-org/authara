@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
@@ -88,6 +89,9 @@ func TestDisableUserRevokesSessionsAndAudits(t *testing.T) {
 		}
 		if events[0].ActorUserID == nil || *events[0].ActorUserID != actor.ID {
 			t.Fatal("expected actor user id in audit event")
+		}
+		if got := testutil.CountEmailJobs(t, ctx, target.Email, domain.EmailTemplateAccountDisabled); got != 1 {
+			t.Fatalf("account-disabled email jobs = %d, want 1", got)
 		}
 	})
 }
@@ -188,6 +192,9 @@ func TestEnableUser(t *testing.T) {
 		if disabled {
 			t.Fatal("expected target user to be enabled")
 		}
+		if got := testutil.CountEmailJobs(t, ctx, target.Email, domain.EmailTemplateAccountEnabled); got != 1 {
+			t.Fatalf("account-enabled email jobs = %d, want 1", got)
+		}
 	})
 }
 
@@ -210,6 +217,9 @@ func TestGrantAndRevokeAdmin(t *testing.T) {
 		if !hasAdmin {
 			t.Fatal("expected target to have admin role")
 		}
+		if got := testutil.CountEmailJobs(t, ctx, target.Email, domain.EmailTemplateAdminAccessChanged); got != 1 {
+			t.Fatalf("admin-access email jobs after grant = %d, want 1", got)
+		}
 
 		if err := svc.RevokeAdmin(ctx, Actor{UserID: actor.ID}, target.ID, RequestMeta{}); err != nil {
 			t.Fatalf("RevokeAdmin failed: %v", err)
@@ -227,6 +237,19 @@ func TestGrantAndRevokeAdmin(t *testing.T) {
 		}
 		if activeSessions != 0 {
 			t.Fatalf("expected sessions to be revoked after admin revoke, got %d", activeSessions)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, target.Email, domain.EmailTemplateAdminAccessChanged); got != 2 {
+			t.Fatalf("admin-access email jobs after revoke = %d, want 2", got)
+		}
+		if got := testutil.CountEmailJobsWithTemplateDataValue(
+			t,
+			ctx,
+			target.Email,
+			domain.EmailTemplateAdminAccessChanged,
+			email.TemplateVariableAccessChange,
+			"revoked",
+		); got != 1 {
+			t.Fatalf("revoked admin-access email jobs = %d, want 1", got)
 		}
 	})
 }

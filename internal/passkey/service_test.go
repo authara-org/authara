@@ -8,6 +8,7 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
@@ -55,6 +56,13 @@ func TestDeletePasskey_AllowsOneOfMultiplePasskeys(t *testing.T) {
 		}
 		if len(passkeys) != 1 {
 			t.Fatalf("expected 1 remaining passkey, got %d", len(passkeys))
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateAuthMethodRemoved); got != 1 {
+			t.Fatalf("auth-method-removed email jobs = %d, want 1", got)
+		}
+		data := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateAuthMethodRemoved)
+		if data[email.TemplateVariableAuthMethod] != "passkey (Passkey)" {
+			t.Fatalf("unexpected passkey removal template data: %#v", data)
 		}
 	})
 }

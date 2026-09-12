@@ -34,7 +34,7 @@ func TestRefreshPostSetsCookiesOnly(t *testing.T) {
 		}
 
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
-		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -84,7 +84,7 @@ func TestTokenRefreshPostReturnsTokensFromBody(t *testing.T) {
 		}
 
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
-		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -135,7 +135,7 @@ func TestRefreshPostDisabledUserReturnsUnauthorized(t *testing.T) {
 		}
 
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
-		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now)
+		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}

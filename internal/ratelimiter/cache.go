@@ -11,76 +11,87 @@ import (
 
 type CacheLimiter struct {
 	cache cache.Counter
-	cfg   LimiterConfig
+	cfg   ConfigProvider
 }
 
 func NewCacheLimiter(c cache.Counter, cfg LimiterConfig) AuthLimiter {
+	return NewCacheLimiterWithConfig(c, func() LimiterConfig { return cfg })
+}
+
+func NewCacheLimiterWithConfig(c cache.Counter, provider ConfigProvider) AuthLimiter {
 	return &CacheLimiter{
 		cache: c,
-		cfg:   defaultLimiterConfig(cfg),
+		cfg:   normalizedConfigProvider(provider),
 	}
 }
 
 func (l *CacheLimiter) AllowLoginAttempt(ctx context.Context, ip net.IP, email string) (bool, error) {
+	cfg := l.cfg()
 	return l.allow(ctx, ip, email,
-		l.cfg.LoginIPLimit, l.cfg.LoginIPWindow,
-		l.cfg.LoginEmailLimit, l.cfg.LoginEmailWindow,
+		cfg.LoginIPLimit, cfg.LoginIPWindow,
+		cfg.LoginEmailLimit, cfg.LoginEmailWindow,
 		"login", "email",
 	)
 }
 
 func (l *CacheLimiter) AllowSignupAttempt(ctx context.Context, ip net.IP, email string) (bool, error) {
+	cfg := l.cfg()
 	return l.allow(ctx, ip, email,
-		l.cfg.SignupIPLimit, l.cfg.SignupIPWindow,
-		l.cfg.SignupEmailLimit, l.cfg.SignupEmailWindow,
+		cfg.SignupIPLimit, cfg.SignupIPWindow,
+		cfg.SignupEmailLimit, cfg.SignupEmailWindow,
 		"signup", "email",
 	)
 }
 
 func (l *CacheLimiter) AllowPasswordResetAttempt(ctx context.Context, ip net.IP, email string) (bool, error) {
+	cfg := l.cfg()
 	return l.allow(ctx, ip, email,
-		l.cfg.PasswordResetIPLimit, l.cfg.PasswordResetIPWindow,
-		l.cfg.PasswordResetEmailLimit, l.cfg.PasswordResetEmailWindow,
+		cfg.PasswordResetIPLimit, cfg.PasswordResetIPWindow,
+		cfg.PasswordResetEmailLimit, cfg.PasswordResetEmailWindow,
 		"password_reset", "email",
 	)
 }
 
 func (l *CacheLimiter) AllowPasskeyLoginAttempt(ctx context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
 	return l.allowIP(
 		ctx,
 		ip,
-		l.cfg.PasskeyLoginIPLimit,
-		l.cfg.PasskeyLoginIPWindow,
+		cfg.PasskeyLoginIPLimit,
+		cfg.PasskeyLoginIPWindow,
 		"passkey_login",
 	)
 }
 
 func (l *CacheLimiter) AllowPasskeyLoginFinishAttempt(ctx context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
 	return l.allowIP(
 		ctx,
 		ip,
-		l.cfg.PasskeyLoginIPLimit,
-		l.cfg.PasskeyLoginIPWindow,
+		cfg.PasskeyLoginIPLimit,
+		cfg.PasskeyLoginIPWindow,
 		"passkey_login_finish",
 	)
 }
 
 func (l *CacheLimiter) AllowChallengeVerifyAttempt(ctx context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
 	return l.allowIP(
 		ctx,
 		ip,
-		l.cfg.ChallengeVerifyIPLimit,
-		l.cfg.ChallengeVerifyIPWindow,
+		cfg.ChallengeVerifyIPLimit,
+		cfg.ChallengeVerifyIPWindow,
 		"challenge_verify",
 	)
 }
 
 func (l *CacheLimiter) AllowChallengeResendAttempt(ctx context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
 	return l.allowIP(
 		ctx,
 		ip,
-		l.cfg.ChallengeResendIPLimit,
-		l.cfg.ChallengeResendIPWindow,
+		cfg.ChallengeResendIPLimit,
+		cfg.ChallengeResendIPWindow,
 		"challenge_resend",
 	)
 }

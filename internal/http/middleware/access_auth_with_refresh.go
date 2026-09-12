@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/session"
@@ -20,7 +21,17 @@ func RequireAccessAuthWithRefresh(
 	refreshTTL time.Duration,
 	now func() time.Time,
 ) func(http.Handler) http.Handler {
+	return RequireAccessAuthWithRefreshPolicy(sessionSvc, audience, config.SessionCookiePolicyReaderFunc(func() config.SessionCookiePolicy {
+		return config.SessionCookiePolicy{AccessTokenTTL: accessTTL, RefreshTokenTTL: refreshTTL}
+	}), now)
+}
 
+func RequireAccessAuthWithRefreshPolicy(
+	sessionSvc *session.Service,
+	audience token.Audience,
+	policy config.SessionCookiePolicyReader,
+	now func() time.Time,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -50,8 +61,9 @@ func RequireAccessAuthWithRefresh(
 				)
 				if err == nil {
 					// set rotated cookies
-					session.SetAccessToken(w, newAccess, int(accessTTL.Seconds()))
-					session.SetRefreshToken(w, newRefresh, int(refreshTTL.Seconds()))
+					cookiePolicy := policy.CurrentSessionCookies()
+					session.SetAccessToken(w, newAccess, int(cookiePolicy.AccessTokenTTL.Seconds()))
+					session.SetRefreshToken(w, newRefresh, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 					// populate context from new access token
 					identity, err := sessionSvc.ValidateAccessToken(ctx, newAccess, audience, now())

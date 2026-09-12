@@ -39,9 +39,16 @@ type Publisher interface {
 }
 
 type Sender struct {
-	URL    string
-	Secret string
-	Client *http.Client
+	URL     string
+	Secret  string
+	Client  *http.Client
+	Timeout func() time.Duration
+}
+
+func NewSenderWithTimeout(url, secret string, client *http.Client, timeout func() time.Duration) *Sender {
+	sender := NewSender(url, secret, client)
+	sender.Timeout = timeout
+	return sender
 }
 
 func NewSender(url, secret string, client *http.Client) *Sender {
@@ -70,6 +77,13 @@ func (s *Sender) PublishPayload(ctx context.Context, eventType EventType, delive
 }
 
 func (s *Sender) sendOnce(ctx context.Context, eventType EventType, deliveryID string, body []byte) (bool, error) {
+	if s.Timeout != nil {
+		if timeout := s.Timeout(); timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.URL, bytes.NewReader(body))
 	if err != nil {
 		return false, fmt.Errorf("build webhook request: %w", err)

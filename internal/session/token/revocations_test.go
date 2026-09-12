@@ -55,6 +55,30 @@ func TestAccessTokenRevocations(t *testing.T) {
 	}
 }
 
+func TestAccessTokenRevocationsReadsCurrentTTLForEachScope(t *testing.T) {
+	store := &revocationTestCache{values: map[string][]byte{}, ttls: map[string]time.Duration{}}
+	ttl := 10 * time.Minute
+	revocations := NewAccessTokenRevocationsWithTTL(store, func() time.Duration { return ttl })
+	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+
+	first := uuid.New()
+	if err := revocations.RevokeSession(context.Background(), first, now); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.ttls[cache.RevokedAccessTokenSessionKey(first.String())]; got != 10*time.Minute {
+		t.Fatalf("first revocation TTL = %s", got)
+	}
+
+	ttl = 45 * time.Minute
+	second := uuid.New()
+	if err := revocations.RevokeSession(context.Background(), second, now); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.ttls[cache.RevokedAccessTokenSessionKey(second.String())]; got != 45*time.Minute {
+		t.Fatalf("updated revocation TTL = %s", got)
+	}
+}
+
 type revocationTestCache struct {
 	values map[string][]byte
 	ttls   map[string]time.Duration

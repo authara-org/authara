@@ -27,9 +27,10 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 	body := request.Body
 	identifier := strings.TrimSpace(body.Identifier)
 	password := body.Password
+	usernameLoginEnabled := h.usernameLoginEnabled()
 	if identifier == "" || password == "" {
 		message := "Email and password required."
-		if h.UsernameLoginEnabled {
+		if usernameLoginEnabled {
 			message = "Email or username and password required."
 		}
 		return loginWithPasswordError(responseCodeInvalidRequest(), message), nil
@@ -40,7 +41,7 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 		Password: password,
 	}
 	invalidCredentialsMessage := "Invalid email or password."
-	if h.UsernameLoginEnabled {
+	if usernameLoginEnabled {
 		loginInput.Identifier = identifier
 		loginInput.Email = ""
 		invalidCredentialsMessage = "Invalid email, username, or password."
@@ -161,7 +162,7 @@ func (h *APIHandler) contractSession(
 	user domain.User,
 	audience token.Audience,
 ) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now())
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
 		return contract.AuthSession{}, nil, response.CodeForbidden, "Account cannot access requested audience.", false
@@ -169,7 +170,8 @@ func (h *APIHandler) contractSession(
 		return contract.AuthSession{}, nil, response.CodeInternalError, "Session error.", false
 	}
 	header := make(http.Header)
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	return toContractAuthSession(user, accessToken, refreshToken), header, "", "", true
 }

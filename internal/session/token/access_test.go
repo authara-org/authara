@@ -23,6 +23,37 @@ func newTestAccessTokenService(t *testing.T, ttl time.Duration) *AccessTokenServ
 	return NewAccessTokenService(keySet, "authara-test", ttl)
 }
 
+func TestAccessTokenServiceReadsCurrentTTLForEachToken(t *testing.T) {
+	keySet, err := NewKeySet("test-key", map[string][]byte{
+		"test-key": []byte("01234567890123456789012345678901"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ttl := 10 * time.Minute
+	service := NewAccessTokenServiceWithTTL(keySet, "authara-test", func() time.Duration { return ttl })
+	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	generate := func() *AccessClaims {
+		raw, err := service.Generate(uuid.New(), uuid.New(), uuid.New(), "owner", AudienceApp, roles.Roles{}, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		claims, err := service.Parse(raw, AudienceApp, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return claims
+	}
+
+	if got := generate().ExpiresAt.Time.Sub(now); got != 10*time.Minute {
+		t.Fatalf("first token lifetime = %s", got)
+	}
+	ttl = 30 * time.Minute
+	if got := generate().ExpiresAt.Time.Sub(now); got != 30*time.Minute {
+		t.Fatalf("updated token lifetime = %s", got)
+	}
+}
+
 func TestAccessTokenService_GenerateAndParse_AppAudience(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestAccessTokenService(t, 10*time.Minute)
@@ -297,7 +328,7 @@ func TestAccessTokenService_Parse_MissingSubjectInvalidClaims(t *testing.T) {
 			Subject:   "",
 			Audience:  jwt.ClaimStrings{string(AudienceApp)},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(svc.ttl)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(svc.ttlProvider())),
 		},
 	}
 
@@ -330,7 +361,7 @@ func TestAccessTokenService_Parse_NilSessionIDInvalidClaims(t *testing.T) {
 			Subject:   uuid.New().String(),
 			Audience:  jwt.ClaimStrings{string(AudienceApp)},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(svc.ttl)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(svc.ttlProvider())),
 		},
 	}
 

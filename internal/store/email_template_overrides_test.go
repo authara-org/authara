@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
+	"github.com/google/uuid"
 )
 
 func TestEmailTemplateOverrideStoreLifecycle(t *testing.T) {
@@ -168,6 +170,106 @@ func TestEmailTemplateOverrideStoreLifecycle(t *testing.T) {
 		}
 		if err := tdb.Store.DeleteEmailTemplateOverride(ctx, input.Template, updated.Revision, updater.ID); !errors.Is(err, store.ErrEmailTemplateRevisionConflict) {
 			t.Fatalf("second DeleteEmailTemplateOverride error = %v", err)
+		}
+	})
+}
+
+func TestEmailTemplateDeliverySettingControlsJobCreation(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		operator, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "email-delivery-operator@example.com",
+			Username: "email-delivery-operator",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		now := time.Now().UTC()
+
+		defaultJob, err := tdb.Store.CreateEmailJob(ctx, domain.EmailJob{
+			ToEmail:       "default-enabled@example.com",
+			Template:      domain.EmailTemplatePasswordResetCode,
+			Status:        domain.EmailJobStatusPending,
+			NextAttemptAt: now,
+		})
+		if err != nil || defaultJob.ID == uuid.Nil {
+			t.Fatalf("default-enabled CreateEmailJob = %#v, err=%v", defaultJob, err)
+		}
+
+		disabled, err := tdb.Store.SetEmailTemplateDeliveryEnabled(
+			ctx,
+			domain.EmailTemplateNewSignIn,
+			false,
+			operator.ID,
+		)
+		if err != nil {
+			t.Fatalf("disable delivery failed: %v", err)
+		}
+		if disabled.Enabled || disabled.Template != domain.EmailTemplateNewSignIn ||
+			disabled.UpdatedByUserID == nil || *disabled.UpdatedByUserID != operator.ID {
+			t.Fatalf("disabled setting = %#v", disabled)
+		}
+
+		suppressedJob, err := tdb.Store.CreateEmailJob(ctx, domain.EmailJob{
+			ToEmail:       "suppressed@example.com",
+			Template:      domain.EmailTemplateNewSignIn,
+			Status:        domain.EmailJobStatusPending,
+			NextAttemptAt: now,
+		})
+		if err != nil {
+			t.Fatalf("disabled CreateEmailJob failed: %v", err)
+		}
+		if suppressedJob.ID != uuid.Nil {
+			t.Fatalf("disabled CreateEmailJob returned job %#v", suppressedJob)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, "suppressed@example.com", domain.EmailTemplateNewSignIn); got != 0 {
+			t.Fatalf("disabled email jobs = %d, want 0", got)
+		}
+
+		enabled, err := tdb.Store.SetEmailTemplateDeliveryEnabled(
+			ctx,
+			domain.EmailTemplateNewSignIn,
+			true,
+			operator.ID,
+		)
+		if err != nil || !enabled.Enabled {
+			t.Fatalf("enable delivery = %#v, err=%v", enabled, err)
+		}
+		createdJob, err := tdb.Store.CreateEmailJob(ctx, domain.EmailJob{
+			ToEmail:       "enabled@example.com",
+			Template:      domain.EmailTemplateNewSignIn,
+			Status:        domain.EmailJobStatusPending,
+			NextAttemptAt: now,
+		})
+		if err != nil || createdJob.ID == uuid.Nil {
+			t.Fatalf("enabled CreateEmailJob = %#v, err=%v", createdJob, err)
+		}
+
+		settings, err := tdb.Store.ListEmailTemplateDeliverySettings(ctx)
+		if err != nil {
+			t.Fatalf("ListEmailTemplateDeliverySettings failed: %v", err)
+		}
+		if len(settings) != 1 || settings[0].Template != domain.EmailTemplateNewSignIn || !settings[0].Enabled {
+			t.Fatalf("delivery settings = %#v", settings)
+		}
+
+		events, err := tdb.Store.ListOperatorAuditEvents(ctx, store.OperatorAuditEventFilter{
+			ActorUserID:  &operator.ID,
+			ResourceType: domain.OperatorAuditResourceEmailTemplate,
+			ResourceID:   string(domain.EmailTemplateNewSignIn),
+		})
+		if err != nil {
+			t.Fatalf("ListOperatorAuditEvents failed: %v", err)
+		}
+		actions := make(map[string]bool, len(events))
+		for _, event := range events {
+			actions[event.Action] = true
+		}
+		if len(events) != 2 ||
+			!actions[domain.OperatorAuditActionEmailTemplateDeliveryEnabled] ||
+			!actions[domain.OperatorAuditActionEmailTemplateDeliveryDisabled] {
+			t.Fatalf("delivery audit events = %#v", events)
 		}
 	})
 }

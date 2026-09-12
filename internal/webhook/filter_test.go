@@ -60,3 +60,24 @@ func TestFilteringPublisher_PublishesAllWhenEnabledSetIsEmpty(t *testing.T) {
 		t.Fatalf("expected second event %q, got %q", EventUserDeleted, inner.events[1].Type)
 	}
 }
+
+func TestFilteringPublisherReadsCurrentPolicyForEachEvent(t *testing.T) {
+	inner := &recordingInnerPublisher{}
+	enabled := []string{"user.created"}
+	publisher := NewFilteringPublisherWithPolicy(inner, func() []string { return enabled })
+
+	if err := publisher.Publish(context.Background(), NewUserCreated(uuid.New(), time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	if err := publisher.Publish(context.Background(), NewUserDeleted(uuid.New(), time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	enabled = []string{"user.deleted"}
+	if err := publisher.Publish(context.Background(), NewUserDeleted(uuid.New(), time.Now())); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(inner.events) != 2 || inner.events[0].Type != EventUserCreated || inner.events[1].Type != EventUserDeleted {
+		t.Fatalf("forwarded events = %+v", inner.events)
+	}
+}

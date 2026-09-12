@@ -23,7 +23,8 @@ type counter struct {
 }
 
 type InMemoryLimiter struct {
-	mu sync.Mutex
+	mu  sync.Mutex
+	cfg ConfigProvider
 
 	loginByIP    map[string]*counter
 	loginByEmail map[string]*counter
@@ -41,34 +42,8 @@ type InMemoryLimiter struct {
 
 	challengeResendByIP map[string]*counter
 
-	loginIPLimit     int
-	loginIPWindow    time.Duration
-	loginEmailLimit  int
-	loginEmailWindow time.Duration
-
-	signupIPLimit     int
-	signupIPWindow    time.Duration
-	signupEmailLimit  int
-	signupEmailWindow time.Duration
-
-	passwordResetIPLimit     int
-	passwordResetIPWindow    time.Duration
-	passwordResetEmailLimit  int
-	passwordResetEmailWindow time.Duration
-
-	passkeyLoginIPLimit  int
-	passkeyLoginIPWindow time.Duration
-
-	challengeVerifyIPLimit  int
-	challengeVerifyIPWindow time.Duration
-
-	challengeResendIPLimit  int
-	challengeResendIPWindow time.Duration
-
-	cleanupEvery int              // sweep every N calls
-	callCount    int              // increments each Allow* call
-	maxEntries   int              // hard cap to avoid runaway memory
-	now          func() time.Time // for tests
+	callCount int              // increments each Allow* call
+	now       func() time.Time // for tests
 }
 
 type LimiterConfig struct {
@@ -100,10 +75,15 @@ type LimiterConfig struct {
 	MaxEntries   int
 }
 
-func NewInMemoryLimiter(cfg LimiterConfig) AuthLimiter {
-	cfg = defaultLimiterConfig(cfg)
+type ConfigProvider func() LimiterConfig
 
+func NewInMemoryLimiter(cfg LimiterConfig) AuthLimiter {
+	return NewInMemoryLimiterWithConfig(func() LimiterConfig { return cfg })
+}
+
+func NewInMemoryLimiterWithConfig(provider ConfigProvider) AuthLimiter {
 	return &InMemoryLimiter{
+		cfg:                    normalizedConfigProvider(provider),
 		loginByIP:              make(map[string]*counter),
 		loginByEmail:           make(map[string]*counter),
 		signupByIP:             make(map[string]*counter),
@@ -114,35 +94,15 @@ func NewInMemoryLimiter(cfg LimiterConfig) AuthLimiter {
 		passkeyLoginFinishByIP: make(map[string]*counter),
 		challengeVerifyByIP:    make(map[string]*counter),
 		challengeResendByIP:    make(map[string]*counter),
-
-		loginIPLimit:     cfg.LoginIPLimit,
-		loginIPWindow:    cfg.LoginIPWindow,
-		loginEmailLimit:  cfg.LoginEmailLimit,
-		loginEmailWindow: cfg.LoginEmailWindow,
-
-		signupIPLimit:     cfg.SignupIPLimit,
-		signupIPWindow:    cfg.SignupIPWindow,
-		signupEmailLimit:  cfg.SignupEmailLimit,
-		signupEmailWindow: cfg.SignupEmailWindow,
-
-		passwordResetIPLimit:     cfg.PasswordResetIPLimit,
-		passwordResetIPWindow:    cfg.PasswordResetIPWindow,
-		passwordResetEmailLimit:  cfg.PasswordResetEmailLimit,
-		passwordResetEmailWindow: cfg.PasswordResetEmailWindow,
-
-		passkeyLoginIPLimit:  cfg.PasskeyLoginIPLimit,
-		passkeyLoginIPWindow: cfg.PasskeyLoginIPWindow,
-
-		challengeVerifyIPLimit:  cfg.ChallengeVerifyIPLimit,
-		challengeVerifyIPWindow: cfg.ChallengeVerifyIPWindow,
-
-		challengeResendIPLimit:  cfg.ChallengeResendIPLimit,
-		challengeResendIPWindow: cfg.ChallengeResendIPWindow,
-
-		cleanupEvery: cfg.CleanupEvery,
-		maxEntries:   cfg.MaxEntries,
-		now:          time.Now,
+		now:                    time.Now,
 	}
+}
+
+func normalizedConfigProvider(provider ConfigProvider) ConfigProvider {
+	if provider == nil {
+		provider = func() LimiterConfig { return LimiterConfig{} }
+	}
+	return func() LimiterConfig { return defaultLimiterConfig(provider()) }
 }
 
 func defaultLimiterConfig(cfg LimiterConfig) LimiterConfig {
@@ -189,68 +149,86 @@ func setDurationDefault(v *time.Duration, def time.Duration) {
 }
 
 func (l *InMemoryLimiter) AllowLoginAttempt(_ context.Context, ip net.IP, email string) (bool, error) {
+	cfg := l.cfg()
 	return l.allow(ip, email,
 		l.loginByIP, l.loginByEmail,
-		l.loginIPLimit, l.loginIPWindow,
-		l.loginEmailLimit, l.loginEmailWindow,
+		cfg.LoginIPLimit, cfg.LoginIPWindow,
+		cfg.LoginEmailLimit, cfg.LoginEmailWindow,
+		cfg.CleanupEvery, cfg.MaxEntries,
 		"login", "email",
 	)
 }
 
 func (l *InMemoryLimiter) AllowSignupAttempt(_ context.Context, ip net.IP, email string) (bool, error) {
+	cfg := l.cfg()
 	return l.allow(ip, email,
 		l.signupByIP, l.signupByEmail,
-		l.signupIPLimit, l.signupIPWindow,
-		l.signupEmailLimit, l.signupEmailWindow,
+		cfg.SignupIPLimit, cfg.SignupIPWindow,
+		cfg.SignupEmailLimit, cfg.SignupEmailWindow,
+		cfg.CleanupEvery, cfg.MaxEntries,
 		"signup", "email",
 	)
 }
 
 func (l *InMemoryLimiter) AllowPasswordResetAttempt(_ context.Context, ip net.IP, email string) (bool, error) {
+	cfg := l.cfg()
 	return l.allow(ip, email,
 		l.passwordResetByIP, l.passwordResetByEmail,
-		l.passwordResetIPLimit, l.passwordResetIPWindow,
-		l.passwordResetEmailLimit, l.passwordResetEmailWindow,
+		cfg.PasswordResetIPLimit, cfg.PasswordResetIPWindow,
+		cfg.PasswordResetEmailLimit, cfg.PasswordResetEmailWindow,
+		cfg.CleanupEvery, cfg.MaxEntries,
 		"password_reset", "email",
 	)
 }
 
 func (l *InMemoryLimiter) AllowPasskeyLoginAttempt(_ context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
 	return l.allowIP(
 		ip,
 		l.passkeyLoginByIP,
-		l.passkeyLoginIPLimit,
-		l.passkeyLoginIPWindow,
+		cfg.PasskeyLoginIPLimit,
+		cfg.PasskeyLoginIPWindow,
+		cfg.CleanupEvery,
+		cfg.MaxEntries,
 		"passkey_login",
 	)
 }
 
 func (l *InMemoryLimiter) AllowPasskeyLoginFinishAttempt(_ context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
 	return l.allowIP(
 		ip,
 		l.passkeyLoginFinishByIP,
-		l.passkeyLoginIPLimit,
-		l.passkeyLoginIPWindow,
+		cfg.PasskeyLoginIPLimit,
+		cfg.PasskeyLoginIPWindow,
+		cfg.CleanupEvery,
+		cfg.MaxEntries,
 		"passkey_login_finish",
 	)
 }
 
 func (l *InMemoryLimiter) AllowChallengeVerifyAttempt(_ context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
 	return l.allowIP(
 		ip,
 		l.challengeVerifyByIP,
-		l.challengeVerifyIPLimit,
-		l.challengeVerifyIPWindow,
+		cfg.ChallengeVerifyIPLimit,
+		cfg.ChallengeVerifyIPWindow,
+		cfg.CleanupEvery,
+		cfg.MaxEntries,
 		"challenge_verify",
 	)
 }
 
 func (l *InMemoryLimiter) AllowChallengeResendAttempt(_ context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
 	return l.allowIP(
 		ip,
 		l.challengeResendByIP,
-		l.challengeResendIPLimit,
-		l.challengeResendIPWindow,
+		cfg.ChallengeResendIPLimit,
+		cfg.ChallengeResendIPWindow,
+		cfg.CleanupEvery,
+		cfg.MaxEntries,
 		"challenge_resend",
 	)
 }
@@ -260,6 +238,8 @@ func (l *InMemoryLimiter) allowIP(
 	byIP map[string]*counter,
 	ipLimit int,
 	ipWindow time.Duration,
+	cleanupEvery int,
+	maxEntries int,
 	kind string,
 ) (bool, error) {
 	now := l.now()
@@ -269,9 +249,9 @@ func (l *InMemoryLimiter) allowIP(
 	defer l.mu.Unlock()
 
 	l.callCount++
-	if l.callCount%l.cleanupEvery == 0 {
+	if l.callCount%cleanupEvery == 0 {
 		l.sweepExpiredLocked(now)
-		l.enforceMaxEntriesLocked()
+		l.enforceMaxEntriesLocked(maxEntries)
 	}
 
 	ipCounter := getCounterLocked(byIP, ipKey, now, ipWindow)
@@ -296,6 +276,8 @@ func (l *InMemoryLimiter) allow(
 	ipWindow time.Duration,
 	keyLimit int,
 	keyWindow time.Duration,
+	cleanupEvery int,
+	maxEntries int,
 	kind string,
 	keyScope string,
 ) (bool, error) {
@@ -308,9 +290,9 @@ func (l *InMemoryLimiter) allow(
 	defer l.mu.Unlock()
 
 	l.callCount++
-	if l.callCount%l.cleanupEvery == 0 {
+	if l.callCount%cleanupEvery == 0 {
 		l.sweepExpiredLocked(now)
-		l.enforceMaxEntriesLocked()
+		l.enforceMaxEntriesLocked(maxEntries)
 	}
 
 	ipCounter := getCounterLocked(byIP, ipKey, now, ipWindow)
@@ -394,14 +376,14 @@ func (l *InMemoryLimiter) sweepExpiredLocked(now time.Time) {
 	sweep(l.challengeResendByIP)
 }
 
-func (l *InMemoryLimiter) enforceMaxEntriesLocked() {
+func (l *InMemoryLimiter) enforceMaxEntriesLocked(maxEntries int) {
 	total := len(l.loginByIP) + len(l.loginByEmail) +
 		len(l.signupByIP) + len(l.signupByEmail) +
 		len(l.passwordResetByIP) + len(l.passwordResetByEmail) +
 		len(l.passkeyLoginByIP) + len(l.passkeyLoginFinishByIP) +
 		len(l.challengeVerifyByIP) +
 		len(l.challengeResendByIP)
-	if total <= l.maxEntries {
+	if total <= maxEntries {
 		return
 	}
 
@@ -409,7 +391,7 @@ func (l *InMemoryLimiter) enforceMaxEntriesLocked() {
 		for k := range m {
 			delete(m, k)
 			total--
-			if total <= l.maxEntries {
+			if total <= maxEntries {
 				return
 			}
 		}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
@@ -157,6 +158,13 @@ func TestSignup_WithPassword_Succeeds(t *testing.T) {
 		org, membership := userOnlyOrganization(t, ctx, tdb, user.ID)
 		if org.Kind != domain.OrganizationKindTeam || membership.Role != domain.OrganizationRoleOwner {
 			t.Fatalf("expected team owner org, got org=%+v membership=%+v", org, membership)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateAccountCreated); got != 1 {
+			t.Fatalf("account-created email jobs = %d, want 1", got)
+		}
+		data := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateAccountCreated)
+		if data[email.TemplateVariableUsername] != user.Username || data[email.TemplateVariableAuthMethod] != string(domain.ProviderPassword) {
+			t.Fatalf("unexpected account-created template data: %#v", data)
 		}
 	})
 }
@@ -739,6 +747,13 @@ func TestLoginWithExternalIdentity_CreatesUserWhenMissing(t *testing.T) {
 		if org.Kind != domain.OrganizationKindTeam || membership.Role != domain.OrganizationRoleOwner {
 			t.Fatalf("expected team owner org, got org=%+v membership=%+v", org, membership)
 		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateAccountCreated); got != 1 {
+			t.Fatalf("OAuth account-created email jobs = %d, want 1", got)
+		}
+		data := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateAccountCreated)
+		if data[email.TemplateVariableAuthMethod] != string(domain.ProviderGoogle) {
+			t.Fatalf("unexpected OAuth account-created template data: %#v", data)
+		}
 	})
 }
 
@@ -891,6 +906,9 @@ func TestLoginWithExternalIdentity_ReturnsExistingProviderUser(t *testing.T) {
 		if user.ID != existing.ID {
 			t.Fatalf("expected user id %q, got %q", existing.ID, user.ID)
 		}
+		if got := testutil.CountEmailJobs(t, ctx, existing.Email, domain.EmailTemplateAccountCreated); got != 0 {
+			t.Fatalf("account-created email jobs for existing login = %d, want 0", got)
+		}
 	})
 }
 
@@ -1010,6 +1028,9 @@ func TestDisableUser(t *testing.T) {
 		}
 		if updated.DisabledAt == nil {
 			t.Fatal("expected DisabledAt to be set")
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateAccountDisabled); got != 1 {
+			t.Fatalf("account-disabled email jobs = %d, want 1", got)
 		}
 	})
 }
@@ -1660,6 +1681,115 @@ func TestUnlinkAuthProvider_AllowedWhenPasskeyExists(t *testing.T) {
 		if count != 1 {
 			t.Fatalf("expected only passkey to remain, got %d auth methods", count)
 		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateAuthMethodRemoved); got != 1 {
+			t.Fatalf("auth-method-removed email jobs = %d, want 1", got)
+		}
+		data := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateAuthMethodRemoved)
+		if data[email.TemplateVariableAuthMethod] != string(domain.ProviderPassword) {
+			t.Fatalf("unexpected auth-method-removed template data: %#v", data)
+		}
+	})
+}
+
+func TestAddAndChangePasswordQueueSecurityNotifications(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "password-notifications@example.com",
+			Username: "password-notifications",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		googleID := "password-notifications-google"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID:         user.ID,
+			Provider:       domain.ProviderGoogle,
+			ProviderUserID: &googleID,
+		}); err != nil {
+			t.Fatalf("CreateAuthProvider failed: %v", err)
+		}
+		currentHash, err := Hash("current-password")
+		if err != nil {
+			t.Fatalf("Hash current password failed: %v", err)
+		}
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx})
+		if err := svc.AddPassword(ctx, user.ID, currentHash); err != nil {
+			t.Fatalf("AddPassword failed: %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateAuthMethodAdded); got != 1 {
+			t.Fatalf("auth-method-added email jobs = %d, want 1", got)
+		}
+		addedData := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateAuthMethodAdded)
+		if addedData[email.TemplateVariableAuthMethod] != string(domain.ProviderPassword) {
+			t.Fatalf("unexpected auth-method-added template data: %#v", addedData)
+		}
+
+		newHash, err := Hash("new-password")
+		if err != nil {
+			t.Fatalf("Hash new password failed: %v", err)
+		}
+		if err := svc.ChangePassword(ctx, user.ID, "current-password", newHash); err != nil {
+			t.Fatalf("ChangePassword failed: %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 1 {
+			t.Fatalf("password-changed email jobs = %d, want 1", got)
+		}
+	})
+}
+
+func TestCompleteProviderLinkQueuesSecurityNotification(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		passwordHash, err := Hash("current-password")
+		if err != nil {
+			t.Fatalf("Hash failed: %v", err)
+		}
+		user := createPasswordUser(t, ctx, tdb, "provider-link-notification@example.com", "provider-link-notification", passwordHash)
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+			OAuthProviders: oauth.OAuthProviders{Providers: []oauth.OAuthProvider{
+				oauth.NewOAuthProvider(domain.ProviderGoogle, "client-id", "http://localhost:3000"),
+			}},
+		})
+		now := time.Date(2026, 9, 9, 18, 30, 0, 0, time.UTC)
+		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+		session, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID:               user.ID,
+			ActiveOrganizationID: organization.ID,
+			ExpiresAt:            now.Add(time.Hour),
+			UserAgent:            "provider-link-test",
+		})
+		if err != nil {
+			t.Fatalf("CreateSession failed: %v", err)
+		}
+		sessionID := session.ID
+		linkID, err := svc.StartProviderLink(ctx, user.ID, sessionID, domain.ProviderGoogle, now)
+		if err != nil {
+			t.Fatalf("StartProviderLink failed: %v", err)
+		}
+		if err := svc.CompleteProviderLink(
+			ctx,
+			linkID,
+			user.ID,
+			sessionID,
+			domain.ProviderGoogle,
+			"provider-link-google-id",
+			user.Email,
+			true,
+			now,
+		); err != nil {
+			t.Fatalf("CompleteProviderLink failed: %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateAuthMethodAdded); got != 1 {
+			t.Fatalf("auth-method-added email jobs = %d, want 1", got)
+		}
 	})
 }
 
@@ -1903,6 +2033,13 @@ func TestCompleteAccountRecoveryProviderLinkWithPassword_LinksProvider(t *testin
 		}
 		if provider.UserID != user.ID {
 			t.Fatalf("expected provider linked to %q, got %q", user.ID, provider.UserID)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateAuthMethodAdded); got != 1 {
+			t.Fatalf("recovery auth-method-added email jobs = %d, want 1", got)
+		}
+		data := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateAuthMethodAdded)
+		if data[email.TemplateVariableAuthMethod] != string(domain.ProviderGoogle) {
+			t.Fatalf("unexpected recovery auth-method-added template data: %#v", data)
 		}
 
 		_, err = svc.CompleteAccountRecoveryProviderLinkWithPassword(ctx, link.ID, "correct-password", now)

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/a-h/templ"
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/http/kit/flash"
@@ -35,11 +36,136 @@ func (h *UIHandler) OperatorPage(w http.ResponseWriter, r *http.Request) {
 	_ = h.Render(w, r, http.StatusOK, operatorview.Dashboard(len(email.TemplateCatalog())))
 }
 
+func (h *UIHandler) OperatorSettingsPage(w http.ResponseWriter, r *http.Request) {
+	msg, _ := flash.Read(w, r)
+	if msg != nil {
+		r = r.WithContext(httpctx.WithFlash(r.Context(), msg))
+	}
+	if h.Config == nil {
+		h.renderInternalError(w, r)
+		return
+	}
+	_ = h.Render(w, r, http.StatusOK, operatorview.Settings(operatorview.SettingsPageModel{
+		Settings: h.Config.List(),
+	}))
+}
+
+func (h *UIHandler) OperatorSettingSetPost(w http.ResponseWriter, r *http.Request) {
+	h.mutateOperatorSetting(w, r, false)
+}
+
+func (h *UIHandler) OperatorSettingClearPost(w http.ResponseWriter, r *http.Request) {
+	h.mutateOperatorSetting(w, r, true)
+}
+
+func (h *UIHandler) mutateOperatorSetting(w http.ResponseWriter, r *http.Request, clear bool) {
+	if h.Config == nil {
+		h.renderInternalError(w, r)
+		return
+	}
+	key := config.Key(chi.URLParam(r, "settingKey"))
+	if _, err := h.Config.Describe(key); errors.Is(err, config.ErrUnknownSetting) {
+		h.renderNotFound(w, r)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	if err := r.ParseForm(); err != nil {
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid runtime setting form.")
+		return
+	}
+	expectedRevision, err := strconv.ParseInt(r.Form.Get("revision"), 10, 64)
+	if err != nil || expectedRevision < 0 {
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid runtime setting revision.")
+		return
+	}
+	userID, ok := httpctx.UserID(r.Context())
+	if !ok {
+		h.renderUnauthorized(w, r)
+		return
+	}
+	var description config.Description
+	if clear {
+		description, err = h.Config.Clear(r.Context(), key, userID, expectedRevision)
+	} else {
+		description, err = h.Config.Set(r.Context(), key, r.Form.Get("value"), userID, expectedRevision)
+	}
+	if err == nil {
+		message := "Runtime setting updated. New operations now use the new value."
+		if clear {
+			message = "Operator override cleared. New operations now use the resolved fallback value."
+			if description.EffectiveSource == config.SourceEnvironment {
+				message = "Dormant operator override cleared. The environment value remains effective."
+			}
+		}
+		if httpctx.IsHTMX(r.Context()) {
+			_ = h.Render(w, r, http.StatusOK, templ.Join(
+				operatorview.RuntimeSettingRow(description, description.EffectiveValue, ""),
+				toast.ToastMessage(toast.Success, message),
+			))
+			return
+		}
+		_ = flash.Set(w, flash.Message{Kind: "success", Message: message})
+		http.Redirect(w, r, "/auth/operator/settings", http.StatusSeeOther)
+		return
+	}
+
+	status := http.StatusUnprocessableEntity
+	message := err.Error()
+	switch {
+	case errors.Is(err, config.ErrUnknownSetting):
+		h.renderNotFound(w, r)
+		return
+	case errors.Is(err, config.ErrSettingLocked):
+		status = http.StatusForbidden
+		message = "This setting is managed by deployment configuration and cannot be changed here."
+	case errors.Is(err, config.ErrRevisionConflict):
+		status = http.StatusConflict
+		message = "Another operator changed runtime config. Review the current values and try again."
+	case !errors.Is(err, config.ErrInvalidValue):
+		if h.Logger != nil {
+			h.Logger.Error("mutate runtime setting", "key", key, "err", err)
+		}
+		h.renderInternalError(w, r)
+		return
+	}
+	if httpctx.IsHTMX(r.Context()) {
+		current, describeErr := h.Config.Describe(key)
+		if describeErr != nil {
+			if h.Logger != nil {
+				h.Logger.Error("describe runtime setting after failed mutation", "key", key, "err", describeErr)
+			}
+			h.renderInternalError(w, r)
+			return
+		}
+		inputValue := current.EffectiveValue
+		if !clear {
+			inputValue = r.Form.Get("value")
+		}
+		_ = h.Render(w, r, status, templ.Join(
+			operatorview.RuntimeSettingRow(current, inputValue, message),
+			toast.ToastMessage(toast.Error, message),
+		))
+		return
+	}
+	var draftValue *string
+	if !clear {
+		value := r.Form.Get("value")
+		draftValue = &value
+	}
+	_ = h.Render(w, r, status, operatorview.Settings(operatorview.SettingsPageModel{
+		Settings: h.Config.List(), ErrorKey: key, Error: message, DraftValue: draftValue,
+	}))
+}
+
 func (h *UIHandler) OperatorAuditPage(w http.ResponseWriter, r *http.Request) {
 	requestedPage := pageFromRequest(r, 50)
 	action := r.URL.Query().Get("action")
 	if action != domain.OperatorAuditActionEmailTemplateSaved &&
-		action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn {
+		action != domain.OperatorAuditActionEmailTemplateRestoredBuiltIn &&
+		action != domain.OperatorAuditActionEmailTemplateDeliveryEnabled &&
+		action != domain.OperatorAuditActionEmailTemplateDeliveryDisabled &&
+		action != domain.OperatorAuditActionRuntimeSettingSet &&
+		action != domain.OperatorAuditActionRuntimeSettingCleared {
 		action = ""
 	}
 	template := domain.EmailTemplate(r.URL.Query().Get("template"))
@@ -64,6 +190,10 @@ func (h *UIHandler) OperatorAuditPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UIHandler) OperatorEmailTemplatesPage(w http.ResponseWriter, r *http.Request) {
+	msg, _ := flash.Read(w, r)
+	if msg != nil {
+		r = r.WithContext(httpctx.WithFlash(r.Context(), msg))
+	}
 	templates, err := h.EmailTemplates.List(r.Context())
 	if err != nil {
 		h.logEmailTemplateError("list operator email templates", err)
@@ -71,6 +201,45 @@ func (h *UIHandler) OperatorEmailTemplatesPage(w http.ResponseWriter, r *http.Re
 		return
 	}
 	_ = h.Render(w, r, http.StatusOK, operatorview.EmailTemplates(templates))
+}
+
+func (h *UIHandler) OperatorEmailTemplateDeliveryPost(w http.ResponseWriter, r *http.Request) {
+	key, ok := h.operatorEmailTemplateKey(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid email delivery setting.")
+		return
+	}
+	enabled, err := strconv.ParseBool(r.Form.Get("enabled"))
+	if err != nil {
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid email delivery setting.")
+		return
+	}
+	userID, ok := httpctx.UserID(r.Context())
+	if !ok {
+		h.renderUnauthorized(w, r)
+		return
+	}
+	if err := h.EmailTemplates.SetDeliveryEnabled(r.Context(), key, enabled, userID); err != nil {
+		h.logEmailTemplateError("set operator email template delivery", err)
+		h.renderInternalError(w, r)
+		return
+	}
+	message := "Email delivery disabled."
+	if enabled {
+		message = "Email delivery enabled."
+	}
+	if httpctx.IsHTMX(r.Context()) {
+		_ = h.Render(w, r, http.StatusOK, templ.Join(
+			operatorview.EmailTemplateDeliveryToggle(key, enabled),
+			toast.ToastMessage(toast.Success, message),
+		))
+		return
+	}
+	_ = flash.Set(w, flash.Message{Kind: "success", Message: message})
+	http.Redirect(w, r, "/auth/operator/emails", http.StatusSeeOther)
 }
 
 func (h *UIHandler) OperatorEmailTemplatePage(w http.ResponseWriter, r *http.Request) {

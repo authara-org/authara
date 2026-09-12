@@ -204,14 +204,15 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 
 	returnTo := normalizedReturnTo(in.ReturnTo, httpctx.ReturnToOrDefault(ctx))
 	audience := redirect.AudienceForPath(returnTo)
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now)
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not create session.")
 		return
 	}
 
-	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	response.JSON(w, http.StatusOK, map[string]any{
 		"ok":        true,

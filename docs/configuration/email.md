@@ -1,9 +1,15 @@
 # Email Delivery & Worker System
 
-Authara includes a built-in email system for sending transactional messages such as:
+Authara includes a built-in email system for verification, account-security,
+and organization notifications. Core queues messages for:
 
-- verification codes
-- authentication-related notifications
+- signup, password-reset, and email-change codes;
+- account creation, new sign-ins, account disablement, and re-enablement;
+- authentication-method additions and removals, password changes, and completed
+  email changes (to both the old and new addresses);
+- admin-access changes;
+- organization invitations, accepted or revoked invitations, membership and
+  role changes, ownership transfers, and organization deletion.
 
 Organization invitation emails always contain both the hosted invitation link
 and the raw invitation code. Deployments upgrading from versions that exposed
@@ -36,6 +42,17 @@ change uses the latest saved template when it is delivered. Restoring a
 template immediately returns subsequent deliveries to the built-in version.
 See [Operator email templates](../operations/operator-email-templates.md) for
 provisioning, history, audit, backup, and recovery guidance.
+
+Operators can also disable or re-enable each email type from the template
+catalog. Every type is enabled by default. A disabled type does not create new
+`email_jobs`; jobs already queued before it was disabled are unaffected. There
+are no per-notification environment toggles. When enabled, a new-sign-in
+notification is created for every new authenticated session and includes the
+observed client IP address and user agent when available.
+
+Account deletion intentionally does not queue an email. The deletion flow
+removes queued jobs and other direct references to the user's email address, so
+queuing a final message would conflict with that privacy boundary.
 
 ---
 
@@ -209,6 +226,10 @@ Default:
 10
 ```
 
+If the environment variable is absent, an operator can change this value at
+runtime. The new limit is used when the next failed attempt is evaluated,
+including for jobs that are already queued.
+
 ---
 
 ## Cleanup
@@ -223,6 +244,9 @@ Delete successfully sent emails after:
 720h (30 days)
 ```
 
+If the environment variable is absent, an operator can change this retention
+at runtime. The next cleanup run uses the new cutoff.
+
 ---
 
 ### AUTHARA_EMAIL_CLEANUP_FAILED_AFTER
@@ -232,6 +256,9 @@ Delete failed emails after:
 ```
 2160h (90 days)
 ```
+
+If the environment variable is absent, an operator can change this retention
+at runtime. The next cleanup run uses the new cutoff.
 
 ---
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"os"
 	"reflect"
 	"sort"
@@ -12,8 +13,16 @@ import (
 )
 
 type configContract struct {
-	Version   int                   `yaml:"version"`
-	Variables []configContractEntry `yaml:"variables"`
+	Version          int                               `yaml:"version"`
+	SettingsMetadata map[string]configSettingsMetadata `yaml:"settings_metadata"`
+	Variables        []configContractEntry             `yaml:"variables"`
+}
+
+type configSettingsMetadata struct {
+	Control   string `yaml:"control"`
+	Reload    string `yaml:"reload"`
+	Sensitive bool   `yaml:"sensitive"`
+	Group     string `yaml:"group"`
 }
 
 type configContractEntry struct {
@@ -24,9 +33,58 @@ type configContractEntry struct {
 }
 
 type codeEnvSpec struct {
-	Name     string
-	Required bool
-	Default  string
+	Name       string
+	Required   bool
+	Default    string
+	HasDefault bool
+}
+
+var dynamicHybridSettings = map[string]struct{}{
+	"AUTHARA_DEFAULT_RETURN_TO":                      {},
+	"AUTHARA_USERNAME_LOGIN_ENABLED":                 {},
+	"AUTHARA_ACCESS_TOKEN_TTL_MINUTES":               {},
+	"AUTHARA_SESSION_TTL_DAYS":                       {},
+	"AUTHARA_REFRESH_TOKEN_TTL_DAYS":                 {},
+	"AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL":        {},
+	"AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED": {},
+	"AUTHARA_ORGANIZATION_INVITATION_TTL":            {},
+	"AUTHARA_WEBHOOK_ENABLED_EVENTS":                 {},
+	"AUTHARA_WEBHOOK_TIMEOUT":                        {},
+	"AUTHARA_WEBHOOK_MAX_DELIVERY_ATTEMPTS":          {},
+	"AUTHARA_WEBHOOK_PROCESSING_STALE_AFTER":         {},
+	"AUTHARA_WEBHOOK_DELIVERED_RETENTION":            {},
+	"AUTHARA_WEBHOOK_FAILED_RETENTION":               {},
+	"AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE":         {},
+	"AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED":        {},
+	"AUTHARA_ADMIN_AUDIT_RETENTION_DAYS":             {},
+	"AUTHARA_EMAIL_JOB_MAX_ATTEMPTS":                 {},
+	"AUTHARA_EMAIL_CLEANUP_SENT_AFTER":               {},
+	"AUTHARA_EMAIL_CLEANUP_FAILED_AFTER":             {},
+	"AUTHARA_CHALLENGE_TTL":                          {},
+	"AUTHARA_CHALLENGE_VERIFICATION_CODE_TTL":        {},
+	"AUTHARA_CHALLENGE_MAX_ATTEMPTS":                 {},
+	"AUTHARA_CHALLENGE_MAX_RESENDS":                  {},
+	"AUTHARA_CHALLENGE_MIN_RESEND_INTERVAL":          {},
+	"AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT":              {},
+	"AUTHARA_RATE_LIMIT_LOGIN_IP_WINDOW":             {},
+	"AUTHARA_RATE_LIMIT_LOGIN_EMAIL_LIMIT":           {},
+	"AUTHARA_RATE_LIMIT_LOGIN_EMAIL_WINDOW":          {},
+	"AUTHARA_RATE_LIMIT_SIGNUP_IP_LIMIT":             {},
+	"AUTHARA_RATE_LIMIT_SIGNUP_IP_WINDOW":            {},
+	"AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_LIMIT":          {},
+	"AUTHARA_RATE_LIMIT_SIGNUP_EMAIL_WINDOW":         {},
+	"AUTHARA_RATE_LIMIT_PASSWORD_RESET_IP_LIMIT":     {},
+	"AUTHARA_RATE_LIMIT_PASSWORD_RESET_IP_WINDOW":    {},
+	"AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_LIMIT":  {},
+	"AUTHARA_RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW": {},
+	"AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_LIMIT":      {},
+	"AUTHARA_RATE_LIMIT_PASSKEY_LOGIN_IP_WINDOW":     {},
+	"AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_LIMIT":   {},
+	"AUTHARA_RATE_LIMIT_CHALLENGE_VERIFY_IP_WINDOW":  {},
+	"AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_LIMIT":   {},
+	"AUTHARA_RATE_LIMIT_CHALLENGE_RESEND_IP_WINDOW":  {},
+	"AUTHARA_RATE_LIMIT_CLEANUP_EVERY":               {},
+	"AUTHARA_RATE_LIMIT_MAX_ENTRIES":                 {},
 }
 
 func TestConfigContract_StableVariablesMatchCode(t *testing.T) {
@@ -38,6 +96,116 @@ func TestConfigContract_StableVariablesMatchCode(t *testing.T) {
 	assertSameVariables(t, contractSpecs, codeSpecs)
 	assertMatchingRequiredFlags(t, contractSpecs, codeSpecs)
 	assertMatchingDefaults(t, contractSpecs, codeSpecs)
+	assertSettingsMetadata(t, contractSpecs, contract.SettingsMetadata)
+}
+
+func TestEnvironmentCatalogMatchesConfigAndSettingsMetadata(t *testing.T) {
+	contract := loadConfigContract(t)
+	codeSpecs := codeEnvSpecMap(t)
+	variables := EnvironmentVariables()
+	if len(variables) != len(codeSpecs) {
+		t.Fatalf("environment catalog contains %d variables, want %d", len(variables), len(codeSpecs))
+	}
+
+	seen := make(map[string]struct{}, len(variables))
+	for _, variable := range variables {
+		if _, duplicate := seen[variable.Name]; duplicate {
+			t.Fatalf("environment catalog contains duplicate %q", variable.Name)
+		}
+		seen[variable.Name] = struct{}{}
+
+		spec, ok := codeSpecs[variable.Name]
+		if !ok {
+			t.Errorf("environment catalog contains unknown variable %q", variable.Name)
+			continue
+		}
+		if variable.Required != spec.Required || variable.Default != spec.Default {
+			t.Errorf("environment catalog %q required/default = %t/%q, want %t/%q", variable.Name, variable.Required, variable.Default, spec.Required, spec.Default)
+		}
+		if variable.HasDefault != spec.HasDefault {
+			t.Errorf("environment catalog %q has-default = %t, want %t", variable.Name, variable.HasDefault, spec.HasDefault)
+		}
+		if variable.DisplayName == "" || variable.Group == "" || variable.Type == "" {
+			t.Errorf("environment catalog %q has incomplete display metadata: %+v", variable.Name, variable)
+		}
+
+		metadata, ok := contract.SettingsMetadata[variable.Name]
+		if !ok {
+			t.Errorf("environment catalog %q has no settings metadata", variable.Name)
+			continue
+		}
+		if variable.Sensitive != metadata.Sensitive {
+			t.Errorf("environment catalog %q sensitive = %t, want %t", variable.Name, variable.Sensitive, metadata.Sensitive)
+		}
+		gotGroup := strings.ReplaceAll(strings.ToLower(variable.Group), " ", "_")
+		if gotGroup != metadata.Group {
+			t.Errorf("environment catalog %q group = %q, want %q", variable.Name, gotGroup, metadata.Group)
+		}
+	}
+}
+
+func TestEnvironmentExampleLeavesDynamicHybridSettingsUnset(t *testing.T) {
+	file, err := os.Open("../../.env.example")
+	if err != nil {
+		t.Fatalf("open .env.example: %v", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		for name := range dynamicHybridSettings {
+			if strings.HasPrefix(line, name+"=") {
+				t.Errorf(".env.example actively sets hybrid variable %s, which locks its operator override", name)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan .env.example: %v", err)
+	}
+}
+
+func assertSettingsMetadata(
+	t *testing.T,
+	variables map[string]configContractEntry,
+	metadata map[string]configSettingsMetadata,
+) {
+	t.Helper()
+	if len(metadata) != len(variables) {
+		t.Fatalf("settings metadata contains %d entries, want %d", len(metadata), len(variables))
+	}
+	for name := range variables {
+		entry, ok := metadata[name]
+		if !ok {
+			t.Errorf("settings metadata is missing %q", name)
+			continue
+		}
+		if entry.Control != "env" && entry.Control != "operator" && entry.Control != "hybrid" {
+			t.Errorf("settings metadata %q has invalid control %q", name, entry.Control)
+		}
+		if entry.Reload != "startup" && entry.Reload != "dynamic" {
+			t.Errorf("settings metadata %q has invalid reload %q", name, entry.Reload)
+		}
+		if entry.Group == "" {
+			t.Errorf("settings metadata %q has an empty group", name)
+		}
+		if entry.Control == "env" && entry.Reload == "dynamic" {
+			t.Errorf("settings metadata %q cannot be env-only and dynamic", name)
+		}
+		if entry.Sensitive && entry.Control != "env" {
+			t.Errorf("sensitive settings metadata %q must remain environment-only", name)
+		}
+	}
+	for name := range metadata {
+		if _, ok := variables[name]; !ok {
+			t.Errorf("settings metadata contains unknown variable %q", name)
+		}
+		_, wantDynamicHybrid := dynamicHybridSettings[name]
+		entry := metadata[name]
+		if gotDynamicHybrid := entry.Control == "hybrid" && entry.Reload == "dynamic"; gotDynamicHybrid != wantDynamicHybrid {
+			t.Errorf("settings metadata %q dynamic hybrid classification = %t, want %t", name, gotDynamicHybrid, wantDynamicHybrid)
+		}
+	}
 }
 
 func loadConfigContract(t *testing.T) configContract {
@@ -144,6 +312,7 @@ func parseEnvTag(t *testing.T, tag string) (codeEnvSpec, bool) {
 		case part == "required":
 			spec.Required = true
 		case strings.HasPrefix(part, "default="):
+			spec.HasDefault = true
 			spec.Default = strings.TrimPrefix(part, "default=")
 		}
 	}

@@ -25,6 +25,7 @@ func TestDropdownRendersAccessibleListboxAndFormValue(t *testing.T) {
 		`aria-controls="status-filter-listbox"`,
 		`id="status-filter-listbox"`,
 		`role="listbox"`,
+		`style="display: none"`,
 		`role="option"`,
 		`name="status"`,
 		`value="active"`,

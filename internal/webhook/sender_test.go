@@ -27,6 +27,24 @@ func TestSender_Publish_ReturnsErrorOnNon2xx(t *testing.T) {
 	}
 }
 
+func TestSenderReadsCurrentTimeoutForEachDelivery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(30 * time.Millisecond)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	timeout := 5 * time.Millisecond
+	sender := NewSenderWithTimeout(server.URL, "secret", server.Client(), func() time.Duration { return timeout })
+	if err := sender.Publish(context.Background(), NewUserCreated(uuid.New(), time.Now())); err == nil {
+		t.Fatal("delivery unexpectedly succeeded with short runtime timeout")
+	}
+	timeout = time.Second
+	if err := sender.Publish(context.Background(), NewUserCreated(uuid.New(), time.Now())); err != nil {
+		t.Fatalf("delivery with updated timeout failed: %v", err)
+	}
+}
+
 func TestSender_Publish_ReturnsServerErrorWithoutInlineRetry(t *testing.T) {
 	var calls int
 

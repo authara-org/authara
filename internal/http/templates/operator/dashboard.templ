@@ -36,7 +36,7 @@ templ Dashboard(templateCount int) {
 				<div class="overflow-hidden rounded-xl border border-grey-200 bg-white dark:border-grey-800 dark:bg-grey-900">
 					<div class="grid gap-0 md:grid-cols-3">
 						@workspaceItem("Email templates", "Available", "Edit subject, text, and HTML sources with a safe sample preview.", "/auth/operator/emails", true)
-						@workspaceItem("Runtime configuration", "Planned", "Manage reloadable deployment settings without restarting Core.", "", false)
+						@workspaceItem("Runtime configuration", "Available", "Inspect every supported environment variable and manage dynamic challenge and rate-limit policy.", "/auth/operator/settings", true)
 						@workspaceItem("Observability", "Planned", "Choose which operational metrics the deployment retains.", "", false)
 					</div>
 				</div>

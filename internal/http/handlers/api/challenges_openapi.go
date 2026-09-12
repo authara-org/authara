@@ -88,7 +88,7 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 			signupFailed = true
 			return err
 		}
-		accessToken, refreshToken, err = h.Session.CreateSession(txCtx, user.ID, token.AudienceApp, r.UserAgent(), now)
+		accessToken, refreshToken, err = h.Session.CreateSession(txCtx, user.ID, token.AudienceApp, r.UserAgent(), now, httputil.ClientIPString(r))
 		if err != nil {
 			sessionFailed = true
 		}
@@ -117,8 +117,9 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 		return verifySignupChallengeError(responseCodeInternalError(), "Challenge error."), nil
 	}
 	header := make(http.Header)
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	return contract.VerifySignupChallenge201HeadersResponse{
 		Header: header,
 		Body:   toContractAuthSession(user, accessToken, refreshToken),

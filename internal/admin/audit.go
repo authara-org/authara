@@ -60,14 +60,15 @@ func (s *Service) ListAuditEvents(ctx context.Context, page Page) (AuditEventPag
 }
 
 func (s *Service) CleanupExpiredAuditEvents(ctx context.Context, now time.Time) (int64, error) {
-	if s.auditRetention <= 0 {
+	retention := s.policy.CurrentAdmin().AuditRetention
+	if retention <= 0 {
 		return 0, nil
 	}
-	return s.store.DeleteAdminAuditEventsBefore(ctx, now.Add(-s.auditRetention))
+	return s.store.DeleteAdminAuditEventsBefore(ctx, now.Add(-retention))
 }
 
 func (s *Service) StartAuditCleanupWorker(ctx context.Context, logger *slog.Logger, interval time.Duration) {
-	if s.auditRetention <= 0 || interval <= 0 {
+	if interval <= 0 || s.policy.CurrentAdmin().AuditRetention <= 0 {
 		return
 	}
 	if logger == nil {
@@ -77,7 +78,7 @@ func (s *Service) StartAuditCleanupWorker(ctx context.Context, logger *slog.Logg
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
-		logger.Info("starting admin audit cleanup worker", "interval", interval.String(), "retention", s.auditRetention.String())
+		logger.Info("starting admin audit cleanup worker", "interval", interval.String())
 		for {
 			select {
 			case <-ctx.Done():

@@ -107,8 +107,9 @@ func (h *APIHandler) SwitchOrganization(ctx context.Context, request contract.Sw
 		return switchOrganizationError(responseCodeInternalError(), "Session error."), nil
 	}
 	header := make(http.Header)
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	return contract.SwitchOrganization200HeadersResponse{
 		Header: header,
 		Body:   contract.Tokens{AccessToken: accessToken, RefreshToken: refreshToken},

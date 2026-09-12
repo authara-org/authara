@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/useragent"
@@ -172,7 +173,7 @@ func (s *Service) FinishRegistration(
 		}
 
 		passkeyName := passkeyRegistrationName(metadata, credential, now)
-		_, err = s.store.CreatePasskey(txCtx, domainFromCredential(userID, credential, passkeyName))
+		created, err := s.store.CreatePasskey(txCtx, domainFromCredential(userID, credential, passkeyName))
 		if err != nil {
 			if errors.Is(err, store.ErrPasskeyAlreadyExists) ||
 				store.IsUniqueViolation(err, store.ConstraintPasskeyCredentialID) {
@@ -181,7 +182,13 @@ func (s *Service) FinishRegistration(
 			return err
 		}
 
-		return s.store.ConsumeWebAuthnChallenge(txCtx, challenge.ID, now)
+		if err := s.store.ConsumeWebAuthnChallenge(txCtx, challenge.ID, now); err != nil {
+			return err
+		}
+		return email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAuthMethodAdded, email.TemplateData{
+			email.TemplateVariableAuthMethod: passkeyMethodLabel(created.Name),
+			email.TemplateVariableOccurredAt: email.OccurredAt(now),
+		}, now)
 	})
 }
 
@@ -287,17 +294,42 @@ func (s *Service) DeletePasskey(ctx context.Context, userID uuid.UUID, passkeyID
 		if count <= 1 {
 			return ErrCannotRemoveLastAuthMethod
 		}
-
-		err = s.store.DeletePasskeyByIDAndUserID(txCtx, passkeyID, userID)
+		user, err := s.store.GetUserByID(txCtx, userID)
+		if err != nil {
+			return err
+		}
+		passkey, err := s.store.GetPasskeyByID(txCtx, passkeyID)
 		if err != nil {
 			if errors.Is(err, store.ErrPasskeyNotFound) {
 				return ErrPasskeyNotFound
 			}
 			return err
 		}
+		if passkey.UserID != userID {
+			return ErrPasskeyNotFound
+		}
 
-		return nil
+		if err := s.store.DeletePasskeyByIDAndUserID(txCtx, passkeyID, userID); err != nil {
+			if errors.Is(err, store.ErrPasskeyNotFound) {
+				return ErrPasskeyNotFound
+			}
+			return err
+		}
+
+		now := time.Now().UTC()
+		return email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAuthMethodRemoved, email.TemplateData{
+			email.TemplateVariableAuthMethod: passkeyMethodLabel(passkey.Name),
+			email.TemplateVariableOccurredAt: email.OccurredAt(now),
+		}, now)
 	})
+}
+
+func passkeyMethodLabel(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "passkey"
+	}
+	return "passkey (" + name + ")"
 }
 
 func (s *Service) registrationSession(

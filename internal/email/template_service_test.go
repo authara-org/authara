@@ -70,6 +70,41 @@ func TestTemplateServiceRendersPersistedOverride(t *testing.T) {
 	}
 }
 
+func TestTemplateServiceListsAndUpdatesDeliverySettings(t *testing.T) {
+	fakeStore := newFakeTemplateOverrideStore()
+	fakeStore.delivery[domain.EmailTemplateNewSignIn] = domain.EmailTemplateDeliverySetting{
+		Template: domain.EmailTemplateNewSignIn,
+		Enabled:  false,
+	}
+	service := NewTemplateService(fakeStore)
+
+	templates, err := service.List(context.Background())
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	for _, template := range templates {
+		wantDisabled := template.Definition.Key == domain.EmailTemplateNewSignIn
+		if template.DeliveryDisabled != wantDisabled {
+			t.Fatalf("template %q disabled = %t, want %t", template.Definition.Key, template.DeliveryDisabled, wantDisabled)
+		}
+	}
+
+	operatorID := uuid.New()
+	if err := service.SetDeliveryEnabled(context.Background(), domain.EmailTemplateNewSignIn, true, operatorID); err != nil {
+		t.Fatalf("SetDeliveryEnabled failed: %v", err)
+	}
+	setting := fakeStore.delivery[domain.EmailTemplateNewSignIn]
+	if !setting.Enabled || setting.UpdatedByUserID == nil || *setting.UpdatedByUserID != operatorID {
+		t.Fatalf("updated delivery setting = %#v", setting)
+	}
+	if err := service.SetDeliveryEnabled(context.Background(), "unknown", false, operatorID); !errors.Is(err, ErrUnknownTemplate) {
+		t.Fatalf("unknown template error = %v, want ErrUnknownTemplate", err)
+	}
+	if err := service.SetDeliveryEnabled(context.Background(), domain.EmailTemplateNewSignIn, false, uuid.Nil); !errors.Is(err, ErrMissingTemplateUpdater) {
+		t.Fatalf("missing updater error = %v, want ErrMissingTemplateUpdater", err)
+	}
+}
+
 func TestTemplateServiceSavesValidatedOverridesAndIncrementsRevision(t *testing.T) {
 	fakeStore := newFakeTemplateOverrideStore()
 	service := NewTemplateService(fakeStore)
@@ -483,6 +518,24 @@ func TestTemplateServiceRejectsUnknownOperatorAuditFilters(t *testing.T) {
 	}
 }
 
+func TestTemplateServiceSelectsRuntimeSettingAuditResource(t *testing.T) {
+	for _, action := range []string{
+		domain.OperatorAuditActionRuntimeSettingSet,
+		domain.OperatorAuditActionRuntimeSettingCleared,
+	} {
+		t.Run(action, func(t *testing.T) {
+			fakeStore := newFakeTemplateOverrideStore()
+			service := NewTemplateService(fakeStore)
+			if _, err := service.ListAuditEvents(context.Background(), OperatorAuditQuery{Action: action}); err != nil {
+				t.Fatalf("ListAuditEvents failed: %v", err)
+			}
+			if fakeStore.auditFilter.ResourceType != domain.OperatorAuditResourceRuntimeSetting {
+				t.Fatalf("audit resource type = %q", fakeStore.auditFilter.ResourceType)
+			}
+		})
+	}
+}
+
 func TestTemplateServiceDoesNotWrapOperatorAuditOffset(t *testing.T) {
 	fakeStore := newFakeTemplateOverrideStore()
 	service := NewTemplateService(fakeStore)
@@ -504,6 +557,7 @@ func TestTemplateServiceDoesNotWrapOperatorAuditOffset(t *testing.T) {
 
 type fakeTemplateOverrideStore struct {
 	overrides   map[domain.EmailTemplate]domain.EmailTemplateOverride
+	delivery    map[domain.EmailTemplate]domain.EmailTemplateDeliverySetting
 	versions    map[domain.EmailTemplate][]domain.EmailTemplateVersion
 	auditEvents []domain.OperatorAuditEvent
 	auditFilter store.OperatorAuditEventFilter
@@ -514,6 +568,7 @@ type fakeTemplateOverrideStore struct {
 func newFakeTemplateOverrideStore() *fakeTemplateOverrideStore {
 	return &fakeTemplateOverrideStore{
 		overrides: make(map[domain.EmailTemplate]domain.EmailTemplateOverride),
+		delivery:  make(map[domain.EmailTemplate]domain.EmailTemplateDeliverySetting),
 		versions:  make(map[domain.EmailTemplate][]domain.EmailTemplateVersion),
 	}
 }
@@ -532,6 +587,29 @@ func (s *fakeTemplateOverrideStore) ListEmailTemplateOverrides(context.Context) 
 		out = append(out, override)
 	}
 	return out, nil
+}
+
+func (s *fakeTemplateOverrideStore) ListEmailTemplateDeliverySettings(context.Context) ([]domain.EmailTemplateDeliverySetting, error) {
+	settings := make([]domain.EmailTemplateDeliverySetting, 0, len(s.delivery))
+	for _, setting := range s.delivery {
+		settings = append(settings, setting)
+	}
+	return settings, nil
+}
+
+func (s *fakeTemplateOverrideStore) SetEmailTemplateDeliveryEnabled(
+	_ context.Context,
+	key domain.EmailTemplate,
+	enabled bool,
+	updatedByUserID uuid.UUID,
+) (domain.EmailTemplateDeliverySetting, error) {
+	setting := domain.EmailTemplateDeliverySetting{
+		Template:        key,
+		Enabled:         enabled,
+		UpdatedByUserID: &updatedByUserID,
+	}
+	s.delivery[key] = setting
+	return setting, nil
 }
 
 func (s *fakeTemplateOverrideStore) GetEmailTemplateVersion(_ context.Context, key domain.EmailTemplate, version int64) (domain.EmailTemplateVersion, error) {

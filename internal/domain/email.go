@@ -18,10 +18,26 @@ const (
 type EmailTemplate string
 
 const (
-	EmailTemplateSignupCode         EmailTemplate = "signup_code"
-	EmailTemplatePasswordResetCode  EmailTemplate = "password_reset_code"
-	EmailTemplateEmailChangeCode    EmailTemplate = "email_change_code"
-	EmailTemplateOrganizationInvite EmailTemplate = "organization_invitation"
+	EmailTemplateSignupCode                       EmailTemplate = "signup_code"
+	EmailTemplatePasswordResetCode                EmailTemplate = "password_reset_code"
+	EmailTemplateEmailChangeCode                  EmailTemplate = "email_change_code"
+	EmailTemplateOrganizationInvite               EmailTemplate = "organization_invitation"
+	EmailTemplateAccountCreated                   EmailTemplate = "account_created"
+	EmailTemplateNewSignIn                        EmailTemplate = "new_sign_in"
+	EmailTemplateAuthMethodAdded                  EmailTemplate = "auth_method_added"
+	EmailTemplateAuthMethodRemoved                EmailTemplate = "auth_method_removed"
+	EmailTemplatePasswordChanged                  EmailTemplate = "password_changed"
+	EmailTemplateEmailChangedOldAddress           EmailTemplate = "email_changed_old_address"
+	EmailTemplateEmailChangedNewAddress           EmailTemplate = "email_changed_new_address"
+	EmailTemplateAccountDisabled                  EmailTemplate = "account_disabled"
+	EmailTemplateAccountEnabled                   EmailTemplate = "account_enabled"
+	EmailTemplateAdminAccessChanged               EmailTemplate = "admin_access_changed"
+	EmailTemplateOrganizationInvitationAccepted   EmailTemplate = "organization_invitation_accepted"
+	EmailTemplateOrganizationInvitationRevoked    EmailTemplate = "organization_invitation_revoked"
+	EmailTemplateOrganizationMembershipRemoved    EmailTemplate = "organization_membership_removed"
+	EmailTemplateOrganizationRoleChanged          EmailTemplate = "organization_role_changed"
+	EmailTemplateOrganizationOwnershipTransferred EmailTemplate = "organization_ownership_transferred"
+	EmailTemplateOrganizationDeleted              EmailTemplate = "organization_deleted"
 )
 
 // SupportedEmailTemplates returns every email template understood by Core in
@@ -32,6 +48,22 @@ func SupportedEmailTemplates() []EmailTemplate {
 		EmailTemplatePasswordResetCode,
 		EmailTemplateEmailChangeCode,
 		EmailTemplateOrganizationInvite,
+		EmailTemplateAccountCreated,
+		EmailTemplateNewSignIn,
+		EmailTemplateAuthMethodAdded,
+		EmailTemplateAuthMethodRemoved,
+		EmailTemplatePasswordChanged,
+		EmailTemplateEmailChangedOldAddress,
+		EmailTemplateEmailChangedNewAddress,
+		EmailTemplateAccountDisabled,
+		EmailTemplateAccountEnabled,
+		EmailTemplateAdminAccessChanged,
+		EmailTemplateOrganizationInvitationAccepted,
+		EmailTemplateOrganizationInvitationRevoked,
+		EmailTemplateOrganizationMembershipRemoved,
+		EmailTemplateOrganizationRoleChanged,
+		EmailTemplateOrganizationOwnershipTransferred,
+		EmailTemplateOrganizationDeleted,
 	}
 }
 
@@ -48,6 +80,18 @@ type EmailTemplateOverride struct {
 	TextTemplate    string
 	HTMLTemplate    string
 	Revision        int64
+	UpdatedByUserID *uuid.UUID
+}
+
+// EmailTemplateDeliverySetting is an explicit operator choice for whether new
+// jobs of a template type may be enqueued. A missing setting means enabled.
+type EmailTemplateDeliverySetting struct {
+	Template EmailTemplate
+	Enabled  bool
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
 	UpdatedByUserID *uuid.UUID
 }
 

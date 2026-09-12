@@ -37,7 +37,7 @@ func TestPasswordResetChallengeWorksWhenOptionalChallengesDisabled(t *testing.T)
 		if err != nil {
 			t.Fatalf("create user: %v", err)
 		}
-		if _, _, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, "reset-test", time.Now().UTC()); err != nil {
+		if _, _, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, "reset-test", time.Now().UTC(), ""); err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
 

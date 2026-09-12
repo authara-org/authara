@@ -21,13 +21,9 @@ func (c *Challenge) validate() error {
 	if c.VerificationCodeTTL <= 0 {
 		return fmt.Errorf("AUTHARA_CHALLENGE_VERIFICATION_CODE_TTL must be > 0")
 	}
-	if c.VerificationCodeTTL > c.TTL {
-		return fmt.Errorf(
-			"AUTHARA_CHALLENGE_VERIFICATION_CODE_TTL (%s) must not exceed AUTHARA_CHALLENGE_TTL (%s)",
-			c.VerificationCodeTTL,
-			c.TTL,
-		)
-	}
+	// The relationship between code and challenge lifetimes is validated after
+	// runtime overrides have been loaded. Comparing parser-resolved values here
+	// would reject a valid hybrid environment/database combination too early.
 	if c.MaxAttempts <= 0 {
 		return fmt.Errorf("AUTHARA_CHALLENGE_MAX_ATTEMPTS must be > 0")
 	}

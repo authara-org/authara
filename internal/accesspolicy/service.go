@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/store"
 )
 
@@ -14,22 +15,29 @@ type EmailAccessPolicy interface {
 type Config struct {
 	Store   *store.Store
 	Enabled bool
+	Policy  config.AllowlistPolicyReader
 }
 
 type Service struct {
-	store   *store.Store
-	enabled bool
+	store  *store.Store
+	policy config.AllowlistPolicyReader
 }
 
 func New(cfg Config) *Service {
+	policy := cfg.Policy
+	if policy == nil {
+		policy = config.AllowlistPolicyReaderFunc(func() config.AllowlistPolicy {
+			return config.AllowlistPolicy{AllowlistEnabled: cfg.Enabled}
+		})
+	}
 	return &Service{
-		store:   cfg.Store,
-		enabled: cfg.Enabled,
+		store:  cfg.Store,
+		policy: policy,
 	}
 }
 
 func (s *Service) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
-	if !s.enabled {
+	if !s.policy.CurrentAllowlist().AllowlistEnabled {
 		return true, nil
 	}
 
@@ -39,7 +47,7 @@ func (s *Service) IsEmailAllowed(ctx context.Context, email string) (bool, error
 }
 
 func (s *Service) AllowEmail(ctx context.Context, email string) error {
-	if !s.enabled {
+	if !s.policy.CurrentAllowlist().AllowlistEnabled {
 		return nil
 	}
 

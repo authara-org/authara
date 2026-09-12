@@ -23,7 +23,8 @@ import (
 )
 
 func (h *UIHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
-	if flow.TryRedirectAuthenticated(w, r, h.Session, h.AccessTTL, h.RefreshTTL) {
+	cookiePolicy := h.sessionCookiePolicy()
+	if flow.TryRedirectAuthenticated(w, r, h.Session, cookiePolicy.AccessTokenTTL, cookiePolicy.RefreshTokenTTL) {
 		return
 	}
 
@@ -255,7 +256,7 @@ func (h *UIHandler) finishSignupSession(
 	ua := r.UserAgent()
 	now := time.Now()
 
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, ua, now)
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, ua, now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderFormError(
 			w,
@@ -277,8 +278,9 @@ func (h *UIHandler) writeSignupSession(
 	refreshToken string,
 	returnTo string,
 ) {
-	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	redirect.Redirect(w, r, redirect.WithReturnTo("/auth/passkeys/setup", returnTo), http.StatusSeeOther)
 }

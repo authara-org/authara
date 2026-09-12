@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/authara-org/authara/internal/config"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
@@ -84,6 +85,20 @@ func TestPublicCapabilitiesGetReturnsOrganizationMode(t *testing.T) {
 		!got.AllowsUserCreatedTeamOrgs ||
 		!got.AllowsPublicOrganizationManagement {
 		t.Fatalf("unexpected capabilities: %+v", got)
+	}
+}
+
+func TestPublicCapabilitiesReadsCurrentOrganizationPolicy(t *testing.T) {
+	enabled := false
+	handler := NewWithPolicy(nil, organization.New(organization.Config{Mode: organization.OrgModeMulti}), config.OrganizationPolicyReaderFunc(func() config.OrganizationPolicy {
+		return config.OrganizationPolicy{PublicManagementEnabled: enabled}
+	}))
+	if handler.publicOrganizationManagementEnabled() {
+		t.Fatal("public organization management unexpectedly enabled")
+	}
+	enabled = true
+	if !handler.publicOrganizationManagementEnabled() {
+		t.Fatal("updated public organization management policy was not observed")
 	}
 }
 

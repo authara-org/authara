@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
+	emailpkg "github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -21,6 +23,7 @@ type Config struct {
 	WebhookPublisher       webhook.Publisher
 	Logger                 *slog.Logger
 	InvitationTTL          time.Duration
+	Policy                 config.OrganizationPolicyReader
 	PublicURL              string
 	Mode                   OrgMode
 	AccessTokenRevocations *token.AccessTokenRevocations
@@ -31,7 +34,7 @@ type Service struct {
 	tx                     *tx.Manager
 	webhookPublisher       webhook.Publisher
 	logger                 *slog.Logger
-	invitationTTL          time.Duration
+	policy                 config.OrganizationPolicyReader
 	publicURL              string
 	mode                   OrgMode
 	accessTokenRevocations *token.AccessTokenRevocations
@@ -52,13 +55,19 @@ func New(cfg Config) *Service {
 	if pub == nil {
 		pub = webhook.NoopPublisher{}
 	}
+	policy := cfg.Policy
+	if policy == nil {
+		policy = config.OrganizationPolicyReaderFunc(func() config.OrganizationPolicy {
+			return config.OrganizationPolicy{InvitationTTL: cfg.InvitationTTL}
+		})
+	}
 
 	return &Service{
 		store:                  cfg.Store,
 		tx:                     cfg.Tx,
 		webhookPublisher:       pub,
 		logger:                 cfg.Logger,
-		invitationTTL:          cfg.InvitationTTL,
+		policy:                 policy,
 		publicURL:              strings.TrimRight(cfg.PublicURL, "/"),
 		mode:                   cfg.Mode,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
@@ -253,7 +262,8 @@ func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID u
 	}
 	var membership domain.OrganizationMembership
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		if _, err := s.store.GetOrganizationByIDForUpdate(txCtx, organizationID); err != nil {
+		org, err := s.store.GetOrganizationByIDForUpdate(txCtx, organizationID)
+		if err != nil {
 			return err
 		}
 		current, err := s.store.GetOrganizationMembership(txCtx, organizationID, userID)
@@ -276,6 +286,20 @@ func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID u
 		now := time.Now().UTC()
 		if err := s.accessTokenRevocations.RevokeMembership(txCtx, userID, organizationID, now); err != nil {
 			return err
+		}
+		if current.Role != membership.Role {
+			user, err := s.store.GetUserByID(txCtx, userID)
+			if err != nil {
+				return err
+			}
+			if err := emailpkg.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateOrganizationRoleChanged, emailpkg.TemplateData{
+				emailpkg.TemplateVariableOrganizationName: org.Name,
+				emailpkg.TemplateVariablePreviousRole:     string(current.Role),
+				emailpkg.TemplateVariableRole:             string(membership.Role),
+				emailpkg.TemplateVariableOccurredAt:       emailpkg.OccurredAt(now),
+			}, now); err != nil {
+				return err
+			}
 		}
 		return s.publish(txCtx, webhook.NewOrganizationMembershipUpdated(membership, now))
 	})

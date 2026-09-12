@@ -51,6 +51,7 @@ func newTestHandlersWithAdmin(
 			nil,
 			email.NewTemplateService(testEmailTemplateStore{}),
 			nil,
+			nil,
 			logger,
 			googleClient,
 			oauth.OAuthProviders{},
@@ -69,6 +70,7 @@ func newTestHandlersWithAdmin(
 			logger,
 			googleClient,
 			oauth.OAuthProviders{},
+			nil,
 			features.ChallengeEnabled,
 			features.UsernameLoginEnabled,
 			10*time.Minute,
@@ -86,6 +88,19 @@ func (testEmailTemplateStore) GetEmailTemplateOverride(context.Context, domain.E
 
 func (testEmailTemplateStore) ListEmailTemplateOverrides(context.Context) ([]domain.EmailTemplateOverride, error) {
 	return nil, nil
+}
+
+func (testEmailTemplateStore) ListEmailTemplateDeliverySettings(context.Context) ([]domain.EmailTemplateDeliverySetting, error) {
+	return nil, nil
+}
+
+func (testEmailTemplateStore) SetEmailTemplateDeliveryEnabled(
+	context.Context,
+	domain.EmailTemplate,
+	bool,
+	uuid.UUID,
+) (domain.EmailTemplateDeliverySetting, error) {
+	return domain.EmailTemplateDeliverySetting{}, nil
 }
 
 func (testEmailTemplateStore) GetEmailTemplateVersion(context.Context, domain.EmailTemplate, int64) (domain.EmailTemplateVersion, error) {

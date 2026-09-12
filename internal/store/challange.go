@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
@@ -11,32 +12,36 @@ import (
 
 func toDomainChallenge(m model.Challenge) domain.Challenge {
 	return domain.Challenge{
-		ID:           m.ID,
-		CreatedAt:    m.CreatedAt,
-		UpdatedAt:    m.UpdatedAt,
-		ExpiresAt:    m.ExpiresAt,
-		ConsumedAt:   m.ConsumedAt,
-		Purpose:      domain.ChallengePurpose(m.Purpose),
-		Email:        m.Email,
-		AttemptCount: m.AttemptCount,
-		MaxAttempts:  m.MaxAttempts,
-		ResendCount:  m.ResendCount,
-		MaxResends:   m.MaxResends,
-		LastSentAt:   m.LastSentAt,
+		ID:                       m.ID,
+		CreatedAt:                m.CreatedAt,
+		UpdatedAt:                m.UpdatedAt,
+		ExpiresAt:                m.ExpiresAt,
+		ConsumedAt:               m.ConsumedAt,
+		Purpose:                  domain.ChallengePurpose(m.Purpose),
+		Email:                    m.Email,
+		AttemptCount:             m.AttemptCount,
+		MaxAttempts:              m.MaxAttempts,
+		ResendCount:              m.ResendCount,
+		MaxResends:               m.MaxResends,
+		LastSentAt:               m.LastSentAt,
+		MinimumResendInterval:    m.MinimumResendInterval,
+		HasMinimumResendInterval: m.HasMinimumResendInterval,
 	}
 }
 
 func toModelChallenge(d domain.Challenge) model.Challenge {
 	return model.Challenge{
-		Purpose:      string(d.Purpose),
-		Email:        d.Email,
-		ExpiresAt:    d.ExpiresAt,
-		ConsumedAt:   d.ConsumedAt,
-		AttemptCount: d.AttemptCount,
-		MaxAttempts:  d.MaxAttempts,
-		ResendCount:  d.ResendCount,
-		MaxResends:   d.MaxResends,
-		LastSentAt:   d.LastSentAt,
+		Purpose:                  string(d.Purpose),
+		Email:                    d.Email,
+		ExpiresAt:                d.ExpiresAt,
+		ConsumedAt:               d.ConsumedAt,
+		AttemptCount:             d.AttemptCount,
+		MaxAttempts:              d.MaxAttempts,
+		ResendCount:              d.ResendCount,
+		MaxResends:               d.MaxResends,
+		LastSentAt:               d.LastSentAt,
+		MinimumResendInterval:    d.MinimumResendInterval,
+		HasMinimumResendInterval: d.HasMinimumResendInterval,
 	}
 }
 
@@ -71,11 +76,13 @@ const challengeColumns = `
 	max_attempts,
 	resend_count,
 	max_resends,
-	last_sent_at
+	last_sent_at,
+	minimum_resend_interval_ns
 `
 
 func scanChallenge(row rowScanner, m *model.Challenge) error {
-	return row.Scan(
+	var minimumResendInterval sql.NullInt64
+	if err := row.Scan(
 		&m.ID,
 		&m.CreatedAt,
 		&m.UpdatedAt,
@@ -88,7 +95,15 @@ func scanChallenge(row rowScanner, m *model.Challenge) error {
 		&m.ResendCount,
 		&m.MaxResends,
 		&m.LastSentAt,
-	)
+		&minimumResendInterval,
+	); err != nil {
+		return err
+	}
+	if minimumResendInterval.Valid {
+		m.MinimumResendInterval = time.Duration(minimumResendInterval.Int64)
+		m.HasMinimumResendInterval = true
+	}
+	return nil
 }
 
 const verificationCodeColumns = `
@@ -122,9 +137,10 @@ func (s *Store) CreateChallenge(ctx context.Context, in domain.Challenge) (domai
 			max_attempts,
 			resend_count,
 			max_resends,
-			last_sent_at
+			last_sent_at,
+			minimum_resend_interval_ns
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING `+challengeColumns,
 		row.Purpose,
 		row.Email,
@@ -135,11 +151,19 @@ func (s *Store) CreateChallenge(ctx context.Context, in domain.Challenge) (domai
 		row.ResendCount,
 		row.MaxResends,
 		row.LastSentAt,
+		nullableMinimumResendInterval(row),
 	), &row); err != nil {
 		return domain.Challenge{}, err
 	}
 
 	return toDomainChallenge(row), nil
+}
+
+func nullableMinimumResendInterval(challenge model.Challenge) any {
+	if !challenge.HasMinimumResendInterval {
+		return nil
+	}
+	return challenge.MinimumResendInterval
 }
 
 func (s *Store) GetChallengeByID(ctx context.Context, challengeID uuid.UUID) (domain.Challenge, error) {

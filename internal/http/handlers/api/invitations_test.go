@@ -67,7 +67,7 @@ func TestAuthenticatedInvitationAcceptSwitchesCurrentSession(t *testing.T) {
 		h, orgs := newInvitationAPIHandler(t, tdb)
 		invited := createPasswordInvitationUser(t, ctx, tdb, "invitation-accept@example.com", "password123")
 		invite, invitedOrg := createAPIInvitation(t, ctx, tdb, orgs, invited.Email)
-		accessToken, _, err := h.Session.CreateSession(ctx, invited.ID, token.AudienceApp, "test", time.Now().UTC())
+		accessToken, _, err := h.Session.CreateSession(ctx, invited.ID, token.AudienceApp, "test", time.Now().UTC(), "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}

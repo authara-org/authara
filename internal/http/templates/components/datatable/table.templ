@@ -8,16 +8,17 @@ type Column struct {
 }
 
 type Config struct {
-	Columns         []Column
-	MinWidthClass   string
-	Page            int
-	RowCount        int
-	RowLabel        string
-	HasPrevious     bool
-	HasNext         bool
-	PreviousHref    string
-	NextHref        string
-	EmptyTitle      string
+	Columns          []Column
+	MinWidthClass    string
+	ShowPagination   bool
+	Page             int
+	RowCount         int
+	RowLabel         string
+	HasPrevious      bool
+	HasNext          bool
+	PreviousHref     string
+	NextHref         string
+	EmptyTitle       string
 	EmptyDescription string
 }
 
@@ -52,18 +53,20 @@ templ Table(cfg Config) {
 				</div>
 			}
 		</div>
-		<footer class="shrink-0 border-t border-grey-200 bg-grey-50 px-4 py-2.5 dark:border-grey-800 dark:bg-grey-950">
-			<div class="flex min-h-9 items-center justify-between gap-4 text-sm text-grey-600 dark:text-grey-400">
-				<p>{ rowSummary(cfg.RowCount, cfg.RowLabel) }</p>
-				<div class="flex items-center gap-4">
-					<span>Page { strconv.Itoa(pageNumber(cfg.Page)) }</span>
-					<nav aria-label="Table pagination" class="flex items-center gap-2">
-						@PaginationLink(cfg.PreviousHref, "Previous", cfg.HasPrevious)
-						@PaginationLink(cfg.NextHref, "Next", cfg.HasNext)
-					</nav>
+		if cfg.ShowPagination {
+			<footer class="shrink-0 border-t border-grey-200 bg-grey-50 px-4 py-2.5 dark:border-grey-800 dark:bg-grey-950">
+				<div class="flex min-h-9 items-center justify-between gap-4 text-sm text-grey-600 dark:text-grey-400">
+					<p>{ rowSummary(cfg.RowCount, cfg.RowLabel) }</p>
+					<div class="flex items-center gap-4">
+						<span>Page { strconv.Itoa(pageNumber(cfg.Page)) }</span>
+						<nav aria-label="Table pagination" class="flex items-center gap-2">
+							@PaginationLink(cfg.PreviousHref, "Previous", cfg.HasPrevious)
+							@PaginationLink(cfg.NextHref, "Next", cfg.HasNext)
+						</nav>
+					</div>
 				</div>
-			</div>
-		</footer>
+			</footer>
+		}
 	</section>
 }
 

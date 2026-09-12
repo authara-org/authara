@@ -88,8 +88,9 @@ func (h *APIHandler) contractRefreshTokens(
 		return contract.Tokens{}, header, response.CodeInternalError, "Session error", false
 	}
 	if cookieBacked {
-		session.SetAccessToken(contract.HeaderWriter(header), newAccessToken, int(h.AccessTTL.Seconds()))
-		session.SetRefreshToken(contract.HeaderWriter(header), newRefreshToken, int(h.RefreshTTL.Seconds()))
+		cookiePolicy := h.sessionCookiePolicy()
+		session.SetAccessToken(contract.HeaderWriter(header), newAccessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+		session.SetRefreshToken(contract.HeaderWriter(header), newRefreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	}
 	return contract.Tokens{AccessToken: newAccessToken, RefreshToken: newRefreshToken}, header, "", "", true
 }
