@@ -41,6 +41,10 @@ After successful authentication, Authara redirects the user to the provided path
 If `return_to` is not provided, Authara redirects to `AUTHARA_DEFAULT_RETURN_TO`.
 The default is `/`.
 
+If the environment variable is absent, an operator can change the default path
+at runtime under `/auth/operator/settings`. The new value applies to subsequent
+requests. Authara accepts only safe relative paths.
+
 ---
 
 # Example flow

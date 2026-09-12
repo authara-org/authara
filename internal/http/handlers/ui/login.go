@@ -18,7 +18,8 @@ import (
 )
 
 func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
-	if flow.TryRedirectAuthenticated(w, r, h.Session, h.AccessTTL, h.RefreshTTL) {
+	cookiePolicy := h.sessionCookiePolicy()
+	if flow.TryRedirectAuthenticated(w, r, h.Session, cookiePolicy.AccessTokenTTL, cookiePolicy.RefreshTokenTTL) {
 		return
 	}
 
@@ -31,15 +32,16 @@ func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		http.StatusOK,
-		authview.Login(h.OAuthProviders.Providers, h.Features.UsernameLoginEnabled),
+		authview.Login(h.OAuthProviders.Providers, h.usernameLoginEnabled()),
 	)
 }
 
 func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	usernameLoginEnabled := h.usernameLoginEnabled()
 
 	if err := r.ParseForm(); err != nil {
-		h.renderFormError(w, r, http.StatusBadRequest, "Bad Form", authview.LoginForm(h.Features.UsernameLoginEnabled))
+		h.renderFormError(w, r, http.StatusBadRequest, "Bad Form", authview.LoginForm(usernameLoginEnabled))
 		return
 	}
 
@@ -48,10 +50,10 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	if identifier == "" || password == "" {
 		message := "Email and password required."
-		if h.Features.UsernameLoginEnabled {
+		if usernameLoginEnabled {
 			message = "Email or username and password required."
 		}
-		h.renderFormError(w, r, http.StatusBadRequest, message, authview.LoginForm(h.Features.UsernameLoginEnabled))
+		h.renderFormError(w, r, http.StatusBadRequest, message, authview.LoginForm(usernameLoginEnabled))
 		return
 	}
 
@@ -61,7 +63,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		Password: password,
 	}
 	invalidCredentialsMessage := "Invalid email or password."
-	if h.Features.UsernameLoginEnabled {
+	if usernameLoginEnabled {
 		input.Identifier = identifier
 		input.Email = ""
 		invalidCredentialsMessage = "Invalid email, username, or password."
@@ -74,13 +76,13 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	rateLimitIdentifier := strings.ToLower(identifier)
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, ip, rateLimitIdentifier)
 	if err != nil || !allowed {
-		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.LoginForm(h.Features.UsernameLoginEnabled))
+		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.LoginForm(usernameLoginEnabled))
 		return
 	}
 
 	user, err := h.Auth.Login(ctx, input)
 	if err != nil {
-		h.renderFormError(w, r, http.StatusUnprocessableEntity, invalidCredentialsMessage, authview.LoginForm(h.Features.UsernameLoginEnabled))
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, invalidCredentialsMessage, authview.LoginForm(usernameLoginEnabled))
 		return
 	}
 
@@ -91,12 +93,13 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now, httputil.ClientIPString(r))
 	if err != nil {
-		h.renderFormError(w, r, http.StatusUnprocessableEntity, "This account is disabled.", authview.LoginForm(h.Features.UsernameLoginEnabled))
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, "This account is disabled.", authview.LoginForm(usernameLoginEnabled))
 		return
 	}
 
-	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }

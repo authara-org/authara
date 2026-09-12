@@ -405,8 +405,9 @@ func (h *APIHandler) contractInvitationSession(ctx context.Context, r *http.Requ
 
 func sessionHeader(h *APIHandler, accessToken string, refreshToken string) http.Header {
 	header := make(http.Header)
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	return header
 }
 

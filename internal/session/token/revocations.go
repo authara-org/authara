@@ -13,12 +13,16 @@ import (
 )
 
 type AccessTokenRevocations struct {
-	cache cache.Cache
-	ttl   time.Duration
+	cache       cache.Cache
+	ttlProvider func() time.Duration
 }
 
 func NewAccessTokenRevocations(cache cache.Cache, ttl time.Duration) *AccessTokenRevocations {
-	return &AccessTokenRevocations{cache: cache, ttl: ttl}
+	return NewAccessTokenRevocationsWithTTL(cache, func() time.Duration { return ttl })
+}
+
+func NewAccessTokenRevocationsWithTTL(cache cache.Cache, ttl func() time.Duration) *AccessTokenRevocations {
+	return &AccessTokenRevocations{cache: cache, ttlProvider: ttl}
 }
 
 func (r *AccessTokenRevocations) RevokeToken(ctx context.Context, accessToken string, ttl time.Duration) error {
@@ -100,5 +104,5 @@ func (r *AccessTokenRevocations) revokeScope(ctx context.Context, key string, re
 		return nil
 	}
 	value := []byte(strconv.FormatInt(revokedAt.UnixNano(), 10))
-	return r.cache.Set(ctx, key, value, r.ttl)
+	return r.cache.Set(ctx, key, value, r.ttlProvider())
 }

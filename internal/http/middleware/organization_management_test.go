@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/authara-org/authara/internal/config"
 )
 
 func TestRequirePublicOrganizationManagement(t *testing.T) {
@@ -29,5 +31,27 @@ func TestRequirePublicOrganizationManagement(t *testing.T) {
 				t.Fatalf("expected status %d, got %d", tc.status, rr.Code)
 			}
 		})
+	}
+}
+
+func TestRequirePublicOrganizationManagementReadsCurrentPolicy(t *testing.T) {
+	enabled := false
+	policy := config.OrganizationPolicyReaderFunc(func() config.OrganizationPolicy {
+		return config.OrganizationPolicy{PublicManagementEnabled: enabled}
+	})
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	handler := RequirePublicOrganizationManagementWithPolicy(policy)(next)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("disabled status = %d", rr.Code)
+	}
+
+	enabled = true
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("enabled status = %d", rr.Code)
 	}
 }

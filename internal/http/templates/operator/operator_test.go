@@ -53,6 +53,7 @@ func TestRuntimeSettingsRenderSourcesLocksAndResetControls(t *testing.T) {
 
 	for _, want := range []string{
 		"Environment and runtime settings", "Challenge", "Set · environment", "Deployment only", "Dormant operator override: 45m0s",
+		`action="/auth/operator/settings/challenge.ttl/clear"`, "Clear dormant override",
 		"Set · operator override", "Editable here", `action="/auth/operator/settings/challenge.max_attempts"`,
 		`action="/auth/operator/settings/challenge.max_attempts/clear"`, "Reset to default",
 		"Every environment variable supported by Core is listed below.", "1 live",
@@ -63,10 +64,7 @@ func TestRuntimeSettingsRenderSourcesLocksAndResetControls(t *testing.T) {
 			t.Fatalf("runtime settings page does not contain %q", want)
 		}
 	}
-	for _, action := range []string{
-		`action="/auth/operator/settings/challenge.ttl"`,
-		`action="/auth/operator/settings/challenge.ttl/clear"`,
-	} {
+	for _, action := range []string{`action="/auth/operator/settings/challenge.ttl"`} {
 		if strings.Contains(html, action) {
 			t.Fatalf("environment-managed setting rendered form %q", action)
 		}

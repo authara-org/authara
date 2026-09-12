@@ -226,6 +226,10 @@ Default:
 10
 ```
 
+If the environment variable is absent, an operator can change this value at
+runtime. The new limit is used when the next failed attempt is evaluated,
+including for jobs that are already queued.
+
 ---
 
 ## Cleanup
@@ -240,6 +244,9 @@ Delete successfully sent emails after:
 720h (30 days)
 ```
 
+If the environment variable is absent, an operator can change this retention
+at runtime. The next cleanup run uses the new cutoff.
+
 ---
 
 ### AUTHARA_EMAIL_CLEANUP_FAILED_AFTER
@@ -249,6 +256,9 @@ Delete failed emails after:
 ```
 2160h (90 days)
 ```
+
+If the environment variable is absent, an operator can change this retention
+at runtime. The next cleanup run uses the new cutoff.
 
 ---
 

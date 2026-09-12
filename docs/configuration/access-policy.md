@@ -36,6 +36,10 @@ Enable the feature via configuration:
 AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED=true
 ```
 
+If the environment variable is absent, an operator can toggle the policy at
+runtime under `/auth/operator/settings`. An explicitly supplied environment
+value locks the setting until it is removed and Core is restarted.
+
 When disabled, all emails are allowed and no additional access-policy checks are performed.
 The admin allowlist UI is hidden, admin allowlist routes return `404 Not Found`,
 and allowlist service methods reject use.

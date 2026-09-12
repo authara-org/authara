@@ -93,6 +93,9 @@ func (h *UIHandler) mutateOperatorSetting(w http.ResponseWriter, r *http.Request
 		message := "Runtime setting updated. New operations now use the new value."
 		if clear {
 			message = "Operator override cleared. New operations now use the resolved fallback value."
+			if description.EffectiveSource == config.SourceEnvironment {
+				message = "Dormant operator override cleared. The environment value remains effective."
+			}
 		}
 		if httpctx.IsHTMX(r.Context()) {
 			_ = h.Render(w, r, http.StatusOK, templ.Join(

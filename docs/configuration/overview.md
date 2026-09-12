@@ -1,8 +1,8 @@
 # Configuration Overview
 
 Authara bootstrap and infrastructure configuration is supplied through
-**environment variables**. A small, explicitly registered subset of product
-policy can also be overridden at runtime by an Authara operator.
+**environment variables**. An explicitly registered subset of product and
+operational policy can also be overridden at runtime by an Authara operator.
 
 Configuration is typically provided via:
 

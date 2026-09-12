@@ -23,6 +23,7 @@ type Config struct {
 	MaxResends             int
 	MinResendInterval      time.Duration
 	Policy                 config.ChallengePolicyReader
+	AllowlistPolicy        config.AllowlistPolicyReader
 	WebhookPublisher       webhook.Publisher
 	AccessTokenRevocations *token.AccessTokenRevocations
 }
@@ -30,8 +31,8 @@ type Config struct {
 type Service struct {
 	store                  *store.Store
 	tx                     *tx.Manager
-	allowlistEnabled       bool
 	policy                 config.ChallengePolicyReader
+	allowlistPolicy        config.AllowlistPolicyReader
 	webhookPublisher       webhook.Publisher
 	accessTokenRevocations *token.AccessTokenRevocations
 }
@@ -50,12 +51,18 @@ func New(cfg Config) *Service {
 			MinimumResendInterval: cfg.MinResendInterval,
 		}}
 	}
+	allowlistPolicy := cfg.AllowlistPolicy
+	if allowlistPolicy == nil {
+		allowlistPolicy = config.AllowlistPolicyReaderFunc(func() config.AllowlistPolicy {
+			return config.AllowlistPolicy{AllowlistEnabled: cfg.AllowlistEnabled}
+		})
+	}
 
 	return &Service{
 		store:                  cfg.Store,
 		tx:                     cfg.Tx,
-		allowlistEnabled:       cfg.AllowlistEnabled,
 		policy:                 policy,
+		allowlistPolicy:        allowlistPolicy,
 		webhookPublisher:       pub,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
 	}
@@ -67,7 +74,7 @@ func (s *Service) CreateOpaqueChallenge(
 	purpose domain.ChallengePurpose,
 	email string,
 ) (uuid.UUID, error) {
-	policy := s.policy.Current()
+	policy := s.policy.CurrentChallenge()
 	var challengeID uuid.UUID
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -101,7 +108,7 @@ func (s *Service) createChallenge(
 	now time.Time,
 	createPendingAction func(context.Context, domain.Challenge) error,
 ) (uuid.UUID, error) {
-	policy := s.policy.Current()
+	policy := s.policy.CurrentChallenge()
 	var challengeID uuid.UUID
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -145,7 +152,7 @@ func (s *Service) ResendChallenge(
 	challengeID uuid.UUID,
 	now time.Time,
 ) error {
-	policy := s.policy.Current()
+	policy := s.policy.CurrentChallenge()
 	var resultErr error
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {

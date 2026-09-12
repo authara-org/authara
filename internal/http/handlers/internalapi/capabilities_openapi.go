@@ -16,7 +16,7 @@ func (h *Handler) capabilities() contract.GetPublicCapabilitiesResponseObject {
 		OrganizationMode:                   contract.CapabilitiesOrganizationMode(mode),
 		HasVisibleOrganizations:            mode.HasVisibleOrganizations(),
 		AllowsInvitations:                  mode.AllowsInvitations(),
-		AllowsPublicOrganizationManagement: h.PublicOrganizationManagementEnabled,
+		AllowsPublicOrganizationManagement: h.publicOrganizationManagementEnabled(),
 		AllowsOrgSwitching:                 mode.AllowsOrgSwitching(),
 		AllowsUserCreatedTeamOrgs:          mode.AllowsUserCreatedTeamOrgs(),
 		AllowsOrganizationLeave:            mode.AllowsLeaveOrg(),

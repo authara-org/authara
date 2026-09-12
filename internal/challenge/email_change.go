@@ -75,7 +75,7 @@ func (s *Service) ExecuteEmailChange(
 		if err := s.store.UpdateUserEmail(txCtx, action.UserID, action.NewEmail); err != nil {
 			return err
 		}
-		if s.allowlistEnabled {
+		if s.allowlistPolicy.CurrentAllowlist().AllowlistEnabled {
 			if err := s.store.DeleteAllowedEmail(txCtx, action.OldEmail); err != nil {
 				return err
 			}

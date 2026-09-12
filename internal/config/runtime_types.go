@@ -13,6 +13,35 @@ import (
 type Key = configruntime.Key
 
 const (
+	KeyUIDefaultReturnTo Key = "ui.default_return_to"
+
+	KeyAuthenticationUsernameLoginEnabled Key = "authentication.username_login_enabled"
+
+	KeyTokenAccessTTL Key = "token.access_ttl"
+
+	KeySessionTTL             Key = "session.ttl"
+	KeySessionRefreshTokenTTL Key = "session.refresh_token_ttl"
+	KeySessionRotation        Key = "session.refresh_token_rotation"
+
+	KeyOrganizationPublicManagementEnabled Key = "organization.public_management_enabled"
+	KeyOrganizationInvitationTTL           Key = "organization.invitation_ttl"
+
+	KeyAccessPolicyAllowlistEnabled Key = "access_policy.allowlist_enabled"
+
+	KeyAdminAuditRetention Key = "admin.audit_retention"
+
+	KeyEmailJobMaxAttempts     Key = "email.job_max_attempts"
+	KeyEmailCleanupSentAfter   Key = "email.cleanup_sent_after"
+	KeyEmailCleanupFailedAfter Key = "email.cleanup_failed_after"
+
+	KeyWebhookEnabledEvents        Key = "webhook.enabled_events"
+	KeyWebhookTimeout              Key = "webhook.timeout"
+	KeyWebhookMaxDeliveryAttempts  Key = "webhook.max_delivery_attempts"
+	KeyWebhookProcessingStaleAfter Key = "webhook.processing_stale_after"
+	KeyWebhookDeliveredRetention   Key = "webhook.delivered_retention"
+	KeyWebhookFailedRetention      Key = "webhook.failed_retention"
+	KeyWebhookMaintenanceBatchSize Key = "webhook.maintenance_batch_size"
+
 	KeyChallengeEnabled               Key = "challenge.enabled"
 	KeyChallengeTTL                   Key = "challenge.ttl"
 	KeyChallengeVerificationCodeTTL   Key = "challenge.verification_code_ttl"
@@ -99,14 +128,148 @@ type ChallengePolicy struct {
 }
 
 type ChallengePolicyReader interface {
-	Current() ChallengePolicy
+	CurrentChallenge() ChallengePolicy
 }
 
 type StaticChallengePolicy struct {
 	Policy ChallengePolicy
 }
 
-func (s StaticChallengePolicy) Current() ChallengePolicy { return s.Policy }
+func (s StaticChallengePolicy) CurrentChallenge() ChallengePolicy { return s.Policy }
+
+type UIPolicy struct {
+	DefaultReturnTo string
+}
+
+type UIPolicyReader interface {
+	CurrentUI() UIPolicy
+}
+
+type UIPolicyReaderFunc func() UIPolicy
+
+func (f UIPolicyReaderFunc) CurrentUI() UIPolicy { return f() }
+
+type AuthenticationPolicy struct {
+	UsernameLoginEnabled bool
+}
+
+type AuthenticationPolicyReader interface {
+	CurrentAuthentication() AuthenticationPolicy
+}
+
+type AuthenticationPolicyReaderFunc func() AuthenticationPolicy
+
+func (f AuthenticationPolicyReaderFunc) CurrentAuthentication() AuthenticationPolicy { return f() }
+
+type TokenPolicy struct {
+	AccessTokenTTL time.Duration
+}
+
+type TokenPolicyReader interface {
+	CurrentToken() TokenPolicy
+}
+
+type TokenPolicyReaderFunc func() TokenPolicy
+
+func (f TokenPolicyReaderFunc) CurrentToken() TokenPolicy { return f() }
+
+type SessionPolicy struct {
+	SessionTTL           time.Duration
+	RefreshTokenTTL      time.Duration
+	RefreshTokenRotation time.Duration
+}
+
+type SessionPolicyReader interface {
+	CurrentSession() SessionPolicy
+}
+
+type SessionPolicyReaderFunc func() SessionPolicy
+
+func (f SessionPolicyReaderFunc) CurrentSession() SessionPolicy { return f() }
+
+// SessionCookiePolicy is an HTTP-consumer snapshot combining the two policy
+// groups needed to write a consistent access/refresh cookie pair.
+type SessionCookiePolicy struct {
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
+}
+
+type SessionCookiePolicyReader interface {
+	CurrentSessionCookies() SessionCookiePolicy
+}
+
+type SessionCookiePolicyReaderFunc func() SessionCookiePolicy
+
+func (f SessionCookiePolicyReaderFunc) CurrentSessionCookies() SessionCookiePolicy { return f() }
+
+type OrganizationPolicy struct {
+	PublicManagementEnabled bool
+	InvitationTTL           time.Duration
+}
+
+type OrganizationPolicyReader interface {
+	CurrentOrganization() OrganizationPolicy
+}
+
+type OrganizationPolicyReaderFunc func() OrganizationPolicy
+
+func (f OrganizationPolicyReaderFunc) CurrentOrganization() OrganizationPolicy { return f() }
+
+type AllowlistPolicy struct {
+	AllowlistEnabled bool
+}
+
+type AllowlistPolicyReader interface {
+	CurrentAllowlist() AllowlistPolicy
+}
+
+type AllowlistPolicyReaderFunc func() AllowlistPolicy
+
+func (f AllowlistPolicyReaderFunc) CurrentAllowlist() AllowlistPolicy { return f() }
+
+type AdminPolicy struct {
+	AuditRetention time.Duration
+}
+
+type AdminPolicyReader interface {
+	CurrentAdmin() AdminPolicy
+}
+
+type AdminPolicyReaderFunc func() AdminPolicy
+
+func (f AdminPolicyReaderFunc) CurrentAdmin() AdminPolicy { return f() }
+
+type EmailPolicy struct {
+	JobMaxAttempts     int
+	CleanupSentAfter   time.Duration
+	CleanupFailedAfter time.Duration
+}
+
+type EmailPolicyReader interface {
+	CurrentEmail() EmailPolicy
+}
+
+type EmailPolicyReaderFunc func() EmailPolicy
+
+func (f EmailPolicyReaderFunc) CurrentEmail() EmailPolicy { return f() }
+
+type WebhookPolicy struct {
+	EnabledEvents        []string
+	Timeout              time.Duration
+	MaxDeliveryAttempts  int
+	ProcessingStaleAfter time.Duration
+	DeliveredRetention   time.Duration
+	FailedRetention      time.Duration
+	MaintenanceBatchSize int
+}
+
+type WebhookPolicyReader interface {
+	CurrentWebhook() WebhookPolicy
+}
+
+type WebhookPolicyReaderFunc func() WebhookPolicy
+
+func (f WebhookPolicyReaderFunc) CurrentWebhook() WebhookPolicy { return f() }
 
 // RateLimitPolicy is published atomically so one limiter call observes a
 // consistent set of thresholds, windows, and in-memory safety controls.

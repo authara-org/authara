@@ -254,6 +254,20 @@ func testWorkerConfig() WorkerConfig {
 	}
 }
 
+func TestWebhookWorkerReadsCurrentPolicy(t *testing.T) {
+	policy := WorkerPolicy{MaxDeliveryAttempts: 3, MaintenanceBatchSize: 100}
+	config := testWorkerConfig()
+	config.Policy = func() WorkerPolicy { return policy }
+	worker := NewWorker(nil, nil, nil, config)
+	if got := worker.policy().MaxDeliveryAttempts; got != 3 {
+		t.Fatalf("initial max attempts = %d", got)
+	}
+	policy.MaxDeliveryAttempts = 9
+	if got := worker.policy().MaxDeliveryAttempts; got != 9 {
+		t.Fatalf("updated max attempts = %d", got)
+	}
+}
+
 func getWebhookEvent(t *testing.T, tdb *testutil.TestDB, eventID string) domain.WebhookEvent {
 	t.Helper()
 	event, err := tdb.Store.GetWebhookEventByID(context.Background(), eventID)

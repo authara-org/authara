@@ -97,7 +97,7 @@ func (s *Service) RemoveAllowedEmail(ctx context.Context, actor Actor, allowedEm
 }
 
 func (s *Service) requireAllowlistEnabled() error {
-	if !s.allowlistEnabled {
+	if !s.allowlistPolicy.CurrentAllowlist().AllowlistEnabled {
 		return ErrAllowlistDisabled
 	}
 	return nil

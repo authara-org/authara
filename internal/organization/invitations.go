@@ -76,6 +76,7 @@ type ResendInvitationInput struct {
 
 func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput) (InvitationWithToken, error) {
 	now := normalizeNow(in.Now)
+	policy := s.policy.CurrentOrganization()
 
 	email, err := normalizeInvitationEmail(in.Email)
 	if err != nil {
@@ -152,7 +153,7 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 			Metadata:        metadata,
 			TokenHash:       tokenHash,
 			InvitedByUserID: &in.ActorUserID,
-			ExpiresAt:       now.Add(s.invitationTTL),
+			ExpiresAt:       now.Add(policy.InvitationTTL),
 		}
 
 		created, err := s.store.CreateOrganizationInvitation(txCtx, invitation)
@@ -182,6 +183,7 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 }
 
 func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput) (InvitationWithToken, error) {
+	policy := s.policy.CurrentOrganization()
 	if !s.mode.AllowsInvitations() {
 		return InvitationWithToken{}, ErrOrganizationInviteForbidden
 	}
@@ -249,7 +251,7 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 			Metadata:        old.Metadata,
 			TokenHash:       tokenHash,
 			InvitedByUserID: old.InvitedByUserID,
-			ExpiresAt:       now.Add(s.invitationTTL),
+			ExpiresAt:       now.Add(policy.InvitationTTL),
 		})
 		if err != nil {
 			if store.IsUniqueViolation(err, store.ConstraintActiveInvitation) {

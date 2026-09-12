@@ -10,12 +10,45 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/testutil"
 )
+
+type mutableRuntimePolicy struct {
+	usernameLoginEnabled bool
+	accessTTL            time.Duration
+	refreshTTL           time.Duration
+}
+
+func (p *mutableRuntimePolicy) CurrentAuthentication() config.AuthenticationPolicy {
+	return config.AuthenticationPolicy{UsernameLoginEnabled: p.usernameLoginEnabled}
+}
+
+func (p *mutableRuntimePolicy) CurrentSessionCookies() config.SessionCookiePolicy {
+	return config.SessionCookiePolicy{AccessTokenTTL: p.accessTTL, RefreshTokenTTL: p.refreshTTL}
+}
+
+func TestAPIHandlerReadsCurrentRuntimePolicy(t *testing.T) {
+	policy := &mutableRuntimePolicy{accessTTL: time.Minute, refreshTTL: time.Hour}
+	h := &APIHandler{Config: policy}
+
+	if h.usernameLoginEnabled() {
+		t.Fatal("username login unexpectedly enabled")
+	}
+	policy.usernameLoginEnabled = true
+	policy.accessTTL = 2 * time.Minute
+	policy.refreshTTL = 2 * time.Hour
+	if !h.usernameLoginEnabled() {
+		t.Fatal("username login did not observe the live policy")
+	}
+	if got := h.sessionCookiePolicy(); got.AccessTokenTTL != 2*time.Minute || got.RefreshTokenTTL != 2*time.Hour {
+		t.Fatalf("cookie policy = %+v", got)
+	}
+}
 
 func TestCSRFGetReturnsTokenAndCookie(t *testing.T) {
 	h := &APIHandler{}

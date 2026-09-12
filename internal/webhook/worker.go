@@ -21,6 +21,15 @@ type WorkerConfig struct {
 	CleanupInterval      time.Duration
 	MaintenanceBatchSize int
 	Metrics              WorkerMetrics
+	Policy               func() WorkerPolicy
+}
+
+type WorkerPolicy struct {
+	MaxDeliveryAttempts  int
+	ProcessingStaleAfter time.Duration
+	DeliveredRetention   time.Duration
+	FailedRetention      time.Duration
+	MaintenanceBatchSize int
 }
 
 type WorkerMetrics interface {
@@ -33,13 +42,24 @@ type Worker struct {
 	logger  *slog.Logger
 	metrics WorkerMetrics
 	cfg     WorkerConfig
+	policy  func() WorkerPolicy
 }
 
 func NewWorker(store *store.Store, sender *Sender, logger *slog.Logger, cfg WorkerConfig) *Worker {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Worker{store: store, sender: sender, logger: logger, metrics: cfg.Metrics, cfg: cfg}
+	policy := cfg.Policy
+	if policy == nil {
+		policy = func() WorkerPolicy {
+			return WorkerPolicy{
+				MaxDeliveryAttempts: cfg.MaxDeliveryAttempts, ProcessingStaleAfter: cfg.ProcessingStaleAfter,
+				DeliveredRetention: cfg.DeliveredRetention, FailedRetention: cfg.FailedRetention,
+				MaintenanceBatchSize: cfg.MaintenanceBatchSize,
+			}
+		}
+	}
+	return &Worker{store: store, sender: sender, logger: logger, metrics: cfg.Metrics, cfg: cfg, policy: policy}
 }
 
 func (w *Worker) Run(ctx context.Context) {
@@ -77,6 +97,7 @@ func (w *Worker) run(ctx context.Context, workerID int) {
 }
 
 func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
+	policy := w.policy()
 	event, err := w.store.ClaimNextWebhookEvent(ctx, now)
 	if err != nil {
 		if errors.Is(err, store.ErrorWebhookEventNotFound) {
@@ -89,7 +110,7 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 	retryable, err := w.sender.sendOnce(ctx, EventType(event.EventType), event.ID, event.Payload)
 	if err != nil {
 		processingStartedAt := *event.ProcessingStartedAt
-		if retryable && event.AttemptCount < w.cfg.MaxDeliveryAttempts {
+		if retryable && event.AttemptCount < policy.MaxDeliveryAttempts {
 			nextAttemptAt := now.Add(deliveryRetryDelay(event.AttemptCount))
 			if requeueErr := w.store.RequeueWebhookEvent(
 				ctx,
@@ -152,24 +173,26 @@ func deliveryRetryDelay(attempt int) time.Duration {
 }
 
 func (w *Worker) reapStale(ctx context.Context, now time.Time) (int64, error) {
-	return drainBatches(w.cfg.MaintenanceBatchSize, func() (int64, error) {
+	policy := w.policy()
+	return drainBatches(policy.MaintenanceBatchSize, func() (int64, error) {
 		return w.store.ReapStaleWebhookEvents(
 			ctx,
-			now.Add(-w.cfg.ProcessingStaleAfter),
+			now.Add(-policy.ProcessingStaleAfter),
 			now,
-			w.cfg.MaxDeliveryAttempts,
-			w.cfg.MaintenanceBatchSize,
+			policy.MaxDeliveryAttempts,
+			policy.MaintenanceBatchSize,
 		)
 	})
 }
 
 func (w *Worker) cleanup(ctx context.Context, now time.Time) (int64, error) {
-	return drainBatches(w.cfg.MaintenanceBatchSize, func() (int64, error) {
+	policy := w.policy()
+	return drainBatches(policy.MaintenanceBatchSize, func() (int64, error) {
 		return w.store.DeleteExpiredWebhookEvents(
 			ctx,
-			now.Add(-w.cfg.DeliveredRetention),
-			now.Add(-w.cfg.FailedRetention),
-			w.cfg.MaintenanceBatchSize,
+			now.Add(-policy.DeliveredRetention),
+			now.Add(-policy.FailedRetention),
+			policy.MaintenanceBatchSize,
 		)
 	})
 }

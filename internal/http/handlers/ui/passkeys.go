@@ -210,8 +210,9 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 		return
 	}
 
-	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	response.JSON(w, http.StatusOK, map[string]any{
 		"ok":        true,

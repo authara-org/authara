@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
@@ -21,6 +22,7 @@ type WorkerConfig struct {
 	CleanupFailedAfter time.Duration
 	CleanupInterval    time.Duration
 	SendTimeout        time.Duration
+	Policy             config.EmailPolicyReader
 	Metrics            WorkerMetrics
 }
 
@@ -40,6 +42,7 @@ type Worker struct {
 	logger    *slog.Logger
 	metrics   WorkerMetrics
 	cfg       WorkerConfig
+	policy    config.EmailPolicyReader
 }
 
 func NewWorker(
@@ -53,6 +56,15 @@ func NewWorker(
 	if logger == nil {
 		logger = slog.Default()
 	}
+	policy := cfg.Policy
+	if policy == nil {
+		policy = config.EmailPolicyReaderFunc(func() config.EmailPolicy {
+			return config.EmailPolicy{
+				JobMaxAttempts: cfg.JobMaxAttempts, CleanupSentAfter: cfg.CleanupSentAfter,
+				CleanupFailedAfter: cfg.CleanupFailedAfter,
+			}
+		})
+	}
 
 	return &Worker{
 		store:     store,
@@ -62,6 +74,7 @@ func NewWorker(
 		logger:    logger,
 		metrics:   cfg.Metrics,
 		cfg:       cfg,
+		policy:    policy,
 	}
 }
 
@@ -111,6 +124,7 @@ func (w *Worker) runWorker(ctx context.Context, workerID int) {
 }
 
 func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
+	policy := w.policy.CurrentEmail()
 	job, err := w.store.ClaimNextEmailJob(ctx, now)
 	if err != nil {
 		if errors.Is(err, store.ErrorEmailJobNotFound) {
@@ -124,7 +138,7 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 	defer cancel()
 
 	if err := w.processJob(sendCtx, job, now); err != nil {
-		if job.AttemptCount+1 >= w.cfg.JobMaxAttempts {
+		if job.AttemptCount+1 >= policy.JobMaxAttempts {
 			if markErr := w.store.MarkEmailJobFailed(ctx, job.ID, err.Error()); markErr != nil {
 				w.observeJob("error", started)
 			} else {
@@ -258,15 +272,16 @@ func (w *Worker) runCleanupLoop(ctx context.Context) {
 }
 
 func (w *Worker) cleanup(ctx context.Context, now time.Time) {
-	if w.cfg.CleanupSentAfter > 0 {
-		cutoff := now.Add(-w.cfg.CleanupSentAfter)
+	policy := w.policy.CurrentEmail()
+	if policy.CleanupSentAfter > 0 {
+		cutoff := now.Add(-policy.CleanupSentAfter)
 		if err := w.store.DeleteSentEmailJobsBefore(ctx, cutoff); err != nil {
 			w.logger.ErrorContext(ctx, "failed to cleanup sent email jobs", "error", err)
 		}
 	}
 
-	if w.cfg.CleanupFailedAfter > 0 {
-		cutoff := now.Add(-w.cfg.CleanupFailedAfter)
+	if policy.CleanupFailedAfter > 0 {
+		cutoff := now.Add(-policy.CleanupFailedAfter)
 		if err := w.store.DeleteFailedEmailJobsBefore(ctx, cutoff); err != nil {
 			w.logger.ErrorContext(ctx, "failed to cleanup failed email jobs", "error", err)
 		}

@@ -20,10 +20,13 @@ import (
 const assetsManifestPath = "./internal/http/static/manifest.json"
 
 func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
+	authenticationPolicy := app.Config.CurrentAuthentication()
+	allowlistPolicy := app.Config.CurrentAllowlist()
+	cookiePolicy := app.Config.CurrentSessionCookies()
 	enabledFeatures := features.Features{
 		ChallengeEnabled:     app.Config.Challenge.Enabled,
-		AllowlistEnabled:     app.Config.AccessPolicy.AllowedEmailEnabled,
-		UsernameLoginEnabled: app.Config.Authentication.UsernameLoginEnabled,
+		AllowlistEnabled:     allowlistPolicy.AllowlistEnabled,
+		UsernameLoginEnabled: authenticationPolicy.UsernameLoginEnabled,
 	}
 
 	mw := httpserver.Middlewares{
@@ -33,11 +36,10 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			token.AudienceApp,
 			time.Now,
 		),
-		RequireAppAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefresh(
+		RequireAppAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefreshPolicy(
 			app.Services.Session,
 			token.AudienceApp,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			app.Config,
 			time.Now,
 		),
 		RequireAdminAccessAuthAPI: httpmiddleware.RequireAPIAccessAuth(
@@ -45,11 +47,10 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			token.AudienceAdmin,
 			time.Now,
 		),
-		RequireAdminAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefresh(
+		RequireAdminAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefreshPolicy(
 			app.Services.Session,
 			token.AudienceAdmin,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			app.Config,
 			time.Now,
 		),
 		RequireOperatorAccessAuthAPI: httpmiddleware.RequireAPIAccessAuth(
@@ -57,26 +58,23 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			token.AudienceOperator,
 			time.Now,
 		),
-		RequireOperatorAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefresh(
+		RequireOperatorAccessAuthWithRefresh: httpmiddleware.RequireAccessAuthWithRefreshPolicy(
 			app.Services.Session,
 			token.AudienceOperator,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			app.Config,
 			time.Now,
 		),
-		RequireInternalAPIAuth: httpmiddleware.RequireInternalAPIAuth(app.Config.InternalAPI.Token),
-		RequirePublicOrganizationManagement: httpmiddleware.RequirePublicOrganizationManagement(
-			app.Config.Organization.PublicOrganizationManagementEnabled,
-		),
-		RequireAdminRole:          httpmiddleware.RequireAdmin,
-		RequireOperatorRole:       httpmiddleware.RequireOperator,
-		RequireCSRF:               httpmiddleware.RequireCSRF,
-		RequireAPICSRF:            httpmiddleware.RequireAPICSRF,
-		ReturnTo:                  httpmiddleware.ReturnToWithDefault(app.Config.UI.DefaultReturnTo),
-		HTMX:                      httpmiddleware.HTMXMiddleware,
-		RequireChallengeEnabled:   httpmiddleware.RequireChallengeEnabled(enabledFeatures.ChallengeEnabled),
-		RequireAllowlistEnabled:   httpmiddleware.RequireAllowlistEnabled(enabledFeatures.AllowlistEnabled),
-		OptionalAppAccessIdentity: httpmiddleware.OptionalAccessIdentity(app.Services.Session, token.AudienceApp, time.Now),
+		RequireInternalAPIAuth:              httpmiddleware.RequireInternalAPIAuth(app.Config.InternalAPI.Token),
+		RequirePublicOrganizationManagement: httpmiddleware.RequirePublicOrganizationManagementWithPolicy(app.Config),
+		RequireAdminRole:                    httpmiddleware.RequireAdmin,
+		RequireOperatorRole:                 httpmiddleware.RequireOperator,
+		RequireCSRF:                         httpmiddleware.RequireCSRF,
+		RequireAPICSRF:                      httpmiddleware.RequireAPICSRF,
+		ReturnTo:                            httpmiddleware.ReturnToWithPolicy(app.Config),
+		HTMX:                                httpmiddleware.HTMXMiddleware,
+		RequireChallengeEnabled:             httpmiddleware.RequireChallengeEnabled(enabledFeatures.ChallengeEnabled),
+		RequireAllowlistEnabled:             httpmiddleware.RequireAllowlistEnabledWithPolicy(app.Config),
+		OptionalAppAccessIdentity:           httpmiddleware.OptionalAccessIdentity(app.Services.Session, token.AudienceApp, time.Now),
 	}
 
 	assets, err := render.LoadAssetsManifest(assetsManifestPath)
@@ -102,8 +100,8 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Logger,
 			googleClient,
 			app.Services.OAuthProviders,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			cookiePolicy.AccessTokenTTL,
+			cookiePolicy.RefreshTokenTTL,
 			renderer,
 		),
 		API: api.New(
@@ -117,15 +115,16 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Logger,
 			googleClient,
 			app.Services.OAuthProviders,
+			app.Config,
 			enabledFeatures.ChallengeEnabled,
 			enabledFeatures.UsernameLoginEnabled,
-			app.Config.Token.AccessTokenTTL,
-			app.Config.Session.RefreshTokenTTL,
+			cookiePolicy.AccessTokenTTL,
+			cookiePolicy.RefreshTokenTTL,
 		),
-		InternalAPI: internalapi.New(
+		InternalAPI: internalapi.NewWithPolicy(
 			app.Services.Auth,
 			app.Services.Organizations,
-			app.Config.Organization.PublicOrganizationManagementEnabled,
+			app.Config,
 		),
 	}
 

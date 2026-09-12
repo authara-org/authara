@@ -42,17 +42,22 @@ func NewServices(app *App) (Services, error) {
 	txManager := tx.New(app.Store)
 	accessPolicy := newAccessPolicy(app)
 	oauthProviders := newOAuthProviders(app.Config.Startup())
-	webhookPublisher := newWebhookPublisher(app.Config.Startup(), app.Store)
-	webhookWorker := newWebhookWorker(app.Config.Startup(), app.Store, app.Logger, app.Observability)
+	webhookPublisher := newWebhookPublisher(app.Config, app.Store)
+	webhookWorker := newWebhookWorker(app.Config, app.Store, app.Logger, app.Observability)
 
-	accessTokenService := token.NewAccessTokenService(
+	accessTokenService := token.NewAccessTokenServiceWithTTL(
 		app.Config.Token.KeySet,
 		app.Config.Token.Issuer,
-		app.Config.Token.AccessTokenTTL,
+		func() time.Duration { return app.Config.CurrentToken().AccessTokenTTL },
 	)
-	accessTokenRevocations := token.NewAccessTokenRevocations(
+	accessTokenRevocations := token.NewAccessTokenRevocationsWithTTL(
 		app.Cache,
-		app.Config.Token.AccessTokenTTL,
+		func() time.Duration {
+			// Operator-managed access-token lifetimes are capped at 24 hours.
+			// Keep scope revocations for at least that long so lowering the
+			// policy cannot let an older, longer-lived token outlast its marker.
+			return max(app.Config.CurrentToken().AccessTokenTTL, 24*time.Hour)
+		},
 	)
 
 	organizationService := organization.New(organization.Config{
@@ -60,7 +65,7 @@ func NewServices(app *App) (Services, error) {
 		Tx:                     txManager,
 		WebhookPublisher:       webhookPublisher,
 		Logger:                 app.Logger,
-		InvitationTTL:          app.Config.Organization.InvitationTTL,
+		Policy:                 app.Config,
 		PublicURL:              app.Config.Values.PublicURL,
 		Mode:                   organization.OrgMode(app.Config.Organization.Mode),
 		AccessTokenRevocations: accessTokenRevocations,
@@ -83,9 +88,7 @@ func NewServices(app *App) (Services, error) {
 		Tx:                     txManager,
 		AccessTokens:           accessTokenService,
 		AccessTokenRevocations: accessTokenRevocations,
-		SessionTTL:             app.Config.Session.SessionTTL,
-		RefreshTokenTTL:        app.Config.Session.RefreshTokenTTL,
-		RefreshTokenRotation:   app.Config.Session.RefreshTokenRotation,
+		Policy:                 app.Config,
 		AccessPolicy:           accessPolicy,
 		Organizations:          organizationService,
 	})
@@ -93,8 +96,8 @@ func NewServices(app *App) (Services, error) {
 	adminService := admin.New(admin.Config{
 		Store:                  app.Store,
 		Tx:                     txManager,
-		AllowlistEnabled:       app.Config.AccessPolicy.AllowedEmailEnabled,
-		AuditRetention:         time.Duration(app.Config.Admin.AuditRetentionDays) * 24 * time.Hour,
+		Policy:                 app.Config,
+		AllowlistPolicy:        app.Config,
 		WebhookPublisher:       webhookPublisher,
 		AccessTokenRevocations: accessTokenRevocations,
 	})
@@ -109,8 +112,8 @@ func NewServices(app *App) (Services, error) {
 	challengeService := challenge.New(challenge.Config{
 		Store:                  app.Store,
 		Tx:                     txManager,
-		AllowlistEnabled:       app.Config.AccessPolicy.AllowedEmailEnabled,
 		Policy:                 app.Config,
+		AllowlistPolicy:        app.Config,
 		WebhookPublisher:       webhookPublisher,
 		AccessTokenRevocations: accessTokenRevocations,
 	})
@@ -122,14 +125,12 @@ func NewServices(app *App) (Services, error) {
 		newEmailSender(app.Config.Startup(), app.Logger),
 		app.Logger,
 		challenge.WorkerConfig{
-			WorkerCount:        app.Config.Email.WorkerCount,
-			PollInterval:       app.Config.Email.WorkerPollInterval,
-			JobMaxAttempts:     app.Config.Email.JobMaxAttempts,
-			CleanupSentAfter:   app.Config.Email.CleanupSentAfter,
-			CleanupFailedAfter: app.Config.Email.CleanupFailedAfter,
-			CleanupInterval:    time.Hour,
-			SendTimeout:        app.Config.Email.SMTPTimeout,
-			Metrics:            app.Observability,
+			WorkerCount:     app.Config.Email.WorkerCount,
+			PollInterval:    app.Config.Email.WorkerPollInterval,
+			CleanupInterval: time.Hour,
+			SendTimeout:     app.Config.Email.SMTPTimeout,
+			Policy:          app.Config,
+			Metrics:         app.Observability,
 		},
 	)
 

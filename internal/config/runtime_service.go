@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/google/uuid"
 )
 
@@ -30,11 +31,21 @@ type ServiceOptions struct {
 }
 
 type snapshot struct {
-	revision     int64
-	challenge    ChallengePolicy
-	rateLimits   RateLimitPolicy
-	descriptions map[Key]Description
-	overrides    map[Key]PersistedOverride
+	revision       int64
+	ui             UIPolicy
+	authentication AuthenticationPolicy
+	token          TokenPolicy
+	session        SessionPolicy
+	organization   OrganizationPolicy
+	allowlist      AllowlistPolicy
+	admin          AdminPolicy
+	email          EmailPolicy
+	webhook        WebhookPolicy
+	challenge      ChallengePolicy
+	rateLimits     RateLimitPolicy
+	descriptions   map[Key]Description
+	overrides      map[Key]PersistedOverride
+	fallbackValues map[Key]any
 }
 
 type Service struct {
@@ -89,7 +100,8 @@ func NewService(ctx context.Context, cfg ServiceOptions) (*Service, error) {
 		if !explicit {
 			continue
 		}
-		if raw == "" && !definition.Required && (!definition.HasDefault || definition.Environment == "LOG_LEVEL") {
+		if raw == "" && definition.Control != ControlHybrid && !definition.Required &&
+			(!definition.HasDefault || definition.Environment == "LOG_LEVEL") {
 			// Optional empty values represent an unconfigured setting. LOG_LEVEL
 			// also resolves an explicitly empty value to its environment-specific
 			// default in config.Load.
@@ -103,7 +115,7 @@ func NewService(ctx context.Context, cfg ServiceOptions) (*Service, error) {
 			continue
 		}
 		value := any(raw)
-		if isRuntimePolicyKey(definition.Key) {
+		if _, isTypedPolicy := definitionFor(definition.Key); isTypedPolicy {
 			var err error
 			value, err = parseText(definition, raw, false)
 			if err != nil {
@@ -130,8 +142,58 @@ func (s *Service) Startup() *Config {
 	return s.Config
 }
 
-func (s *Service) Current() ChallengePolicy {
+func (s *Service) CurrentChallenge() ChallengePolicy {
 	return s.current.Load().challenge
+}
+
+// Current is retained for compatibility with the initial challenge-policy
+// API. New consumers should use the service-specific CurrentChallenge method.
+func (s *Service) Current() ChallengePolicy { return s.CurrentChallenge() }
+
+func (s *Service) CurrentUI() UIPolicy {
+	return s.current.Load().ui
+}
+
+func (s *Service) CurrentAuthentication() AuthenticationPolicy {
+	return s.current.Load().authentication
+}
+
+func (s *Service) CurrentToken() TokenPolicy {
+	return s.current.Load().token
+}
+
+func (s *Service) CurrentSession() SessionPolicy {
+	return s.current.Load().session
+}
+
+func (s *Service) CurrentSessionCookies() SessionCookiePolicy {
+	snapshot := s.current.Load()
+	return SessionCookiePolicy{
+		AccessTokenTTL:  snapshot.token.AccessTokenTTL,
+		RefreshTokenTTL: snapshot.session.RefreshTokenTTL,
+	}
+}
+
+func (s *Service) CurrentOrganization() OrganizationPolicy {
+	return s.current.Load().organization
+}
+
+func (s *Service) CurrentAllowlist() AllowlistPolicy {
+	return s.current.Load().allowlist
+}
+
+func (s *Service) CurrentAdmin() AdminPolicy {
+	return s.current.Load().admin
+}
+
+func (s *Service) CurrentEmail() EmailPolicy {
+	return s.current.Load().email
+}
+
+func (s *Service) CurrentWebhook() WebhookPolicy {
+	policy := s.current.Load().webhook
+	policy.EnabledEvents = append([]string(nil), policy.EnabledEvents...)
+	return policy
 }
 
 func (s *Service) CurrentRateLimits() RateLimitPolicy {
@@ -193,6 +255,9 @@ func (s *Service) Set(ctx context.Context, key Key, rawValue string, actorID uui
 	if err != nil {
 		return Description{}, err
 	}
+	if err := s.validateEnvironmentRemovalProjections(key, proposed.fallbackValues); err != nil {
+		return Description{}, err
+	}
 	metadata := mutationAuditMetadata(before.descriptions[key], proposed.descriptions[key])
 	saved, err := s.store.UpsertRuntimeSettingOverride(ctx, Mutation{
 		Key: key, Value: encoded, ExpectedRevision: expectedRevision, ExpectedStateRevision: before.revision,
@@ -232,7 +297,8 @@ func (s *Service) Clear(ctx context.Context, key Key, actorID uuid.UUID, expecte
 	if expectedRevision <= 0 {
 		return Description{}, fmt.Errorf("%w: an active override revision is required", ErrRevisionConflict)
 	}
-	if _, err := s.mutableDefinition(key); err != nil {
+	definition, err := s.operatorDefinition(key)
+	if err != nil {
 		return Description{}, err
 	}
 	if err := s.reloadLocked(ctx, true); err != nil {
@@ -240,13 +306,27 @@ func (s *Service) Clear(ctx context.Context, key Key, actorID uuid.UUID, expecte
 	}
 	before := s.current.Load()
 	overrides := cloneOverrides(before.overrides)
-	if current, ok := overrides[key]; !ok || current.Revision != expectedRevision {
+	current, ok := overrides[key]
+	if !ok && definition.Control == ControlHybrid && s.explicitEnvironment[key] {
+		return Description{}, fmt.Errorf("%w: %q is managed by %s", ErrSettingLocked, key, definition.Environment)
+	}
+	if !ok || current.Revision != expectedRevision {
 		return Description{}, ErrRevisionConflict
 	}
 	delete(overrides, key)
 	proposed, err := s.buildSnapshot(PersistedState{Revision: before.revision, Overrides: overrideSlice(overrides)})
 	if err != nil {
 		return Description{}, err
+	}
+	beforeProjectionErrors := s.environmentRemovalProjectionErrors(key, before.fallbackValues)
+	afterProjectionErrors := s.environmentRemovalProjectionErrors(key, proposed.fallbackValues)
+	for mask, projectionErr := range afterProjectionErrors {
+		// Legacy dormant states may already contain unsafe projections. A clear is
+		// a recovery operation only when it introduces no newly invalid
+		// environment-presence mask.
+		if projectionErr != nil && beforeProjectionErrors[mask] == nil {
+			return Description{}, environmentRemovalProjectionError(projectionErr)
+		}
 	}
 	metadata := mutationAuditMetadata(before.descriptions[key], proposed.descriptions[key])
 	revision, err := s.store.DeleteRuntimeSettingOverride(ctx, key, expectedRevision, before.revision, actorID, metadata)
@@ -269,17 +349,23 @@ func (s *Service) refreshAfterConflict(ctx context.Context, key Key, mutationErr
 }
 
 func (s *Service) mutableDefinition(key Key) (Definition, error) {
+	definition, err := s.operatorDefinition(key)
+	if err != nil {
+		return Definition{}, err
+	}
+	if definition.Control == ControlHybrid && s.explicitEnvironment[key] {
+		return Definition{}, fmt.Errorf("%w: %q is managed by %s", ErrSettingLocked, key, definition.Environment)
+	}
+	return definition, nil
+}
+
+func (s *Service) operatorDefinition(key Key) (Definition, error) {
 	definition, ok := s.definitionByKey[key]
 	if !ok {
 		return Definition{}, fmt.Errorf("%w: %q", ErrUnknownSetting, key)
 	}
 	if definition.Sensitive || definition.Reload != ReloadDynamic || definition.Control == ControlEnvironment {
 		return Definition{}, fmt.Errorf("%w: %q is managed at startup", ErrSettingLocked, key)
-	}
-	if definition.Control == ControlHybrid {
-		if s.explicitEnvironment[key] {
-			return Definition{}, fmt.Errorf("%w: %q is managed by %s", ErrSettingLocked, key, definition.Environment)
-		}
 	}
 	return definition, nil
 }
@@ -347,6 +433,7 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 
 	descriptions := make(map[Key]Description, len(s.definitions))
 	values := make(map[Key]any, len(s.definitions))
+	fallbackValues := make(map[Key]any, len(s.definitions))
 	for _, definition := range cloneCatalog(s.definitions) {
 		value := s.defaultValues[definition.Key]
 		source := SourceDefault
@@ -368,6 +455,7 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 			persisted = &formatted
 			revision = override.Revision
 		}
+		fallbackValues[definition.Key] = value
 		if s.explicitEnvironment[definition.Key] {
 			if environmentValue, ok := s.environmentValues[definition.Key]; ok {
 				value = environmentValue
@@ -387,7 +475,52 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		}
 	}
 
-	policy := ChallengePolicy{
+	ui := UIPolicy{DefaultReturnTo: values[KeyUIDefaultReturnTo].(string)}
+	if _, ok := redirect.NormalizeReturnTo(ui.DefaultReturnTo); !ok {
+		return nil, fmt.Errorf("%w: default return path must be a safe relative path", ErrInvalidValue)
+	}
+	authentication := AuthenticationPolicy{
+		UsernameLoginEnabled: values[KeyAuthenticationUsernameLoginEnabled].(bool),
+	}
+	tokenPolicy := TokenPolicy{
+		AccessTokenTTL: time.Duration(values[KeyTokenAccessTTL].(int)) * time.Minute,
+	}
+	rotation, err := parseRotationInterval(strings.ToLower(strings.TrimSpace(values[KeySessionRotation].(string))))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidValue, err)
+	}
+	sessionPolicy := SessionPolicy{
+		SessionTTL:           time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
+		RefreshTokenTTL:      time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
+		RefreshTokenRotation: rotation,
+	}
+	if err := validateSessionPolicies(tokenPolicy, sessionPolicy); err != nil {
+		return nil, err
+	}
+	organization := OrganizationPolicy{
+		PublicManagementEnabled: values[KeyOrganizationPublicManagementEnabled].(bool),
+		InvitationTTL:           values[KeyOrganizationInvitationTTL].(time.Duration),
+	}
+	allowlist := AllowlistPolicy{AllowlistEnabled: values[KeyAccessPolicyAllowlistEnabled].(bool)}
+	adminPolicy := AdminPolicy{AuditRetention: time.Duration(values[KeyAdminAuditRetention].(int)) * 24 * time.Hour}
+	emailPolicy := EmailPolicy{
+		JobMaxAttempts:     values[KeyEmailJobMaxAttempts].(int),
+		CleanupSentAfter:   values[KeyEmailCleanupSentAfter].(time.Duration),
+		CleanupFailedAfter: values[KeyEmailCleanupFailedAfter].(time.Duration),
+	}
+	webhookPolicy := WebhookPolicy{
+		EnabledEvents:        parseCSV(values[KeyWebhookEnabledEvents].(string)),
+		Timeout:              values[KeyWebhookTimeout].(time.Duration),
+		MaxDeliveryAttempts:  values[KeyWebhookMaxDeliveryAttempts].(int),
+		ProcessingStaleAfter: values[KeyWebhookProcessingStaleAfter].(time.Duration),
+		DeliveredRetention:   values[KeyWebhookDeliveredRetention].(time.Duration),
+		FailedRetention:      values[KeyWebhookFailedRetention].(time.Duration),
+		MaintenanceBatchSize: values[KeyWebhookMaintenanceBatchSize].(int),
+	}
+	if err := validateWebhookRuntimePolicy(webhookPolicy); err != nil {
+		return nil, err
+	}
+	challengePolicy := ChallengePolicy{
 		Enabled:               values[KeyChallengeEnabled].(bool),
 		TTL:                   values[KeyChallengeTTL].(time.Duration),
 		VerificationCodeTTL:   values[KeyChallengeVerificationCodeTTL].(time.Duration),
@@ -395,7 +528,7 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		MaxResends:            values[KeyChallengeMaxResends].(int),
 		MinimumResendInterval: values[KeyChallengeMinimumResendInterval].(time.Duration),
 	}
-	if err := validateChallengePolicy(policy); err != nil {
+	if err := validateChallengePolicy(challengePolicy); err != nil {
 		return nil, err
 	}
 	rateLimits := RateLimitPolicy{
@@ -429,7 +562,148 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 	if err := validateRateLimitPolicy(rateLimits); err != nil {
 		return nil, err
 	}
-	return &snapshot{revision: state.Revision, challenge: policy, rateLimits: rateLimits, descriptions: descriptions, overrides: overrides}, nil
+	return &snapshot{
+		revision: state.Revision,
+		ui:       ui, authentication: authentication, token: tokenPolicy, session: sessionPolicy,
+		organization: organization, allowlist: allowlist, admin: adminPolicy,
+		email: emailPolicy, webhook: webhookPolicy, challenge: challengePolicy, rateLimits: rateLimits,
+		descriptions: descriptions, overrides: overrides, fallbackValues: fallbackValues,
+	}, nil
+}
+
+func (s *Service) validateEnvironmentRemovalProjections(key Key, fallbackValues map[Key]any) error {
+	for _, err := range s.environmentRemovalProjectionErrors(key, fallbackValues) {
+		if err != nil {
+			return environmentRemovalProjectionError(err)
+		}
+	}
+	return nil
+}
+
+func environmentRemovalProjectionError(err error) error {
+	return fmt.Errorf("runtime policy could become invalid after removing an environment override: %w", err)
+}
+
+func (s *Service) environmentRemovalProjectionErrors(key Key, fallbackValues map[Key]any) []error {
+	keys, validate := environmentRemovalProjectionValidator(key)
+	if len(keys) == 0 {
+		return nil
+	}
+	errorsByMask := make([]error, 1<<len(keys))
+	for mask := range errorsByMask {
+		values := make(map[Key]any, len(keys))
+		for index, candidateKey := range keys {
+			value := fallbackValues[candidateKey]
+			if mask&(1<<index) != 0 && s.explicitEnvironment[candidateKey] {
+				if environmentValue, ok := s.environmentValues[candidateKey]; ok {
+					value = environmentValue
+				}
+			}
+			values[candidateKey] = value
+		}
+		errorsByMask[mask] = validate(values)
+	}
+	return errorsByMask
+}
+
+func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) error) {
+	switch key {
+	case KeyUIDefaultReturnTo:
+		return []Key{KeyUIDefaultReturnTo}, func(values map[Key]any) error {
+			if _, ok := redirect.NormalizeReturnTo(values[KeyUIDefaultReturnTo].(string)); !ok {
+				return fmt.Errorf("%w: default return path must be a safe relative path", ErrInvalidValue)
+			}
+			return nil
+		}
+	case KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation:
+		return []Key{KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation}, func(values map[Key]any) error {
+			rotation, err := parseRotationInterval(strings.ToLower(strings.TrimSpace(values[KeySessionRotation].(string))))
+			if err != nil {
+				return fmt.Errorf("%w: %v", ErrInvalidValue, err)
+			}
+			return validateSessionPolicies(
+				TokenPolicy{AccessTokenTTL: time.Duration(values[KeyTokenAccessTTL].(int)) * time.Minute},
+				SessionPolicy{
+					SessionTTL:           time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
+					RefreshTokenTTL:      time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
+					RefreshTokenRotation: rotation,
+				},
+			)
+		}
+	case KeyWebhookEnabledEvents:
+		return []Key{KeyWebhookEnabledEvents}, func(values map[Key]any) error {
+			return validateWebhookRuntimePolicy(WebhookPolicy{
+				EnabledEvents:        parseCSV(values[KeyWebhookEnabledEvents].(string)),
+				Timeout:              time.Second,
+				ProcessingStaleAfter: 2 * time.Second,
+			})
+		}
+	case KeyWebhookTimeout, KeyWebhookProcessingStaleAfter:
+		return []Key{KeyWebhookTimeout, KeyWebhookProcessingStaleAfter}, func(values map[Key]any) error {
+			return validateWebhookRuntimePolicy(WebhookPolicy{
+				Timeout:              values[KeyWebhookTimeout].(time.Duration),
+				ProcessingStaleAfter: values[KeyWebhookProcessingStaleAfter].(time.Duration),
+			})
+		}
+	case KeyChallengeTTL, KeyChallengeVerificationCodeTTL:
+		return []Key{KeyChallengeTTL, KeyChallengeVerificationCodeTTL}, func(values map[Key]any) error {
+			return validateChallengePolicy(ChallengePolicy{
+				TTL:                   values[KeyChallengeTTL].(time.Duration),
+				VerificationCodeTTL:   values[KeyChallengeVerificationCodeTTL].(time.Duration),
+				MaxAttempts:           1,
+				MinimumResendInterval: 0,
+			})
+		}
+	}
+	return nil, nil
+}
+
+func validateSessionPolicies(token TokenPolicy, session SessionPolicy) error {
+	if token.AccessTokenTTL <= 0 || session.SessionTTL <= 0 || session.RefreshTokenTTL <= 0 {
+		return fmt.Errorf("%w: token and session lifetimes must be greater than zero", ErrInvalidValue)
+	}
+	if session.RefreshTokenTTL > session.SessionTTL {
+		return fmt.Errorf("%w: refresh-token lifetime must not exceed session lifetime", ErrInvalidValue)
+	}
+	if token.AccessTokenTTL >= session.RefreshTokenTTL {
+		return fmt.Errorf("%w: access-token lifetime must be shorter than refresh-token lifetime", ErrInvalidValue)
+	}
+	if session.RefreshTokenRotation > 0 && session.RefreshTokenRotation >= session.RefreshTokenTTL {
+		return fmt.Errorf("%w: refresh-token rotation interval must be shorter than refresh-token lifetime", ErrInvalidValue)
+	}
+	return nil
+}
+
+func validateWebhookRuntimePolicy(policy WebhookPolicy) error {
+	if policy.Timeout <= 0 || policy.ProcessingStaleAfter <= 0 || policy.Timeout >= policy.ProcessingStaleAfter {
+		return fmt.Errorf("%w: webhook timeout must be positive and shorter than the processing timeout", ErrInvalidValue)
+	}
+	seen := make(map[string]struct{}, len(policy.EnabledEvents))
+	for _, event := range policy.EnabledEvents {
+		if _, ok := seen[event]; ok {
+			return fmt.Errorf("%w: duplicate webhook event %q", ErrInvalidValue, event)
+		}
+		seen[event] = struct{}{}
+		if !supportedWebhookEvent(event) {
+			return fmt.Errorf("%w: unsupported webhook event %q", ErrInvalidValue, event)
+		}
+	}
+	return nil
+}
+
+func parseCSV(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	values := strings.Split(raw, ",")
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func validateChallengePolicy(policy ChallengePolicy) error {

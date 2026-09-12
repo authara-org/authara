@@ -26,9 +26,9 @@ type AccessClaims struct {
 }
 
 type AccessTokenService struct {
-	keys   *KeySet
-	issuer string
-	ttl    time.Duration
+	keys        *KeySet
+	issuer      string
+	ttlProvider func() time.Duration
 }
 
 func NewAccessTokenService(
@@ -36,10 +36,18 @@ func NewAccessTokenService(
 	issuer string,
 	ttl time.Duration,
 ) *AccessTokenService {
+	return NewAccessTokenServiceWithTTL(keys, issuer, func() time.Duration { return ttl })
+}
+
+func NewAccessTokenServiceWithTTL(
+	keys *KeySet,
+	issuer string,
+	ttl func() time.Duration,
+) *AccessTokenService {
 	return &AccessTokenService{
-		keys:   keys,
-		issuer: issuer,
-		ttl:    ttl,
+		keys:        keys,
+		issuer:      issuer,
+		ttlProvider: ttl,
 	}
 }
 
@@ -64,7 +72,7 @@ func (s *AccessTokenService) Generate(
 			Subject:   userID.String(),
 			Audience:  jwt.ClaimStrings{string(audience)},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(s.ttl)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.ttlProvider())),
 		},
 	}
 

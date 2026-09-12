@@ -59,8 +59,13 @@ func TestResolutionPrecedenceAndEnvironmentLocking(t *testing.T) {
 	if _, err := locked.Set(ctx, KeyChallengeTTL, "2h", uuid.New(), 3); !errors.Is(err, ErrSettingLocked) {
 		t.Fatalf("locked Set error = %v", err)
 	}
-	if _, err := locked.Clear(ctx, KeyChallengeTTL, uuid.New(), 3); !errors.Is(err, ErrSettingLocked) {
-		t.Fatalf("locked Clear error = %v", err)
+	cleared, err := locked.Clear(ctx, KeyChallengeTTL, uuid.New(), 3)
+	if err != nil {
+		t.Fatalf("clear dormant override: %v", err)
+	}
+	if locked.Current().TTL != time.Hour || cleared.EffectiveSource != SourceEnvironment ||
+		!cleared.Locked || cleared.DormantOverride || cleared.PersistedOverride != nil {
+		t.Fatalf("description after dormant clear = %+v, policy = %+v", cleared, locked.Current())
 	}
 
 	// Lookup returning false is authoritative: parser-provided defaults are not
@@ -74,6 +79,51 @@ func TestResolutionPrecedenceAndEnvironmentLocking(t *testing.T) {
 	described, _ = absent.Describe(KeyChallengeTTL)
 	if described.EffectiveSource != SourceDefault || described.Locked {
 		t.Fatalf("absent environment description = %+v", described)
+	}
+}
+
+func TestExplicitEmptyHybridEnvironmentValueOverridesAndLocksDormantOverride(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	store.seed(KeyWebhookEnabledEvents, `"user.created"`, 3)
+	service, err := NewService(ctx, ServiceOptions{
+		Startup:     &Config{},
+		Store:       store,
+		Environment: EnvironmentVariables(),
+		LookupEnvironment: environment(map[string]string{
+			"AUTHARA_WEBHOOK_ENABLED_EVENTS": "",
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	description, err := service.Describe(KeyWebhookEnabledEvents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if events := service.CurrentWebhook().EnabledEvents; len(events) != 0 {
+		t.Fatalf("enabled events = %v, want all events", events)
+	}
+	if description.EffectiveSource != SourceEnvironment || description.EffectiveValue != "" ||
+		!description.HasDefault || !description.Locked || !description.DormantOverride ||
+		description.PersistedOverride == nil || *description.PersistedOverride != "user.created" {
+		t.Fatalf("explicit empty environment description = %+v", description)
+	}
+	if _, err := service.Set(ctx, KeyWebhookEnabledEvents, "organization.created", uuid.New(), 3); !errors.Is(err, ErrSettingLocked) {
+		t.Fatalf("Set error = %v, want environment lock", err)
+	}
+
+	cleared, err := service.Clear(ctx, KeyWebhookEnabledEvents, uuid.New(), 3)
+	if err != nil {
+		t.Fatalf("clear dormant override: %v", err)
+	}
+	if cleared.EffectiveSource != SourceEnvironment || !cleared.Locked ||
+		cleared.DormantOverride || cleared.PersistedOverride != nil || len(service.CurrentWebhook().EnabledEvents) != 0 {
+		t.Fatalf("description after dormant clear = %+v, policy = %+v", cleared, service.CurrentWebhook())
+	}
+	if _, err := service.Clear(ctx, KeyWebhookEnabledEvents, uuid.New(), 3); !errors.Is(err, ErrSettingLocked) {
+		t.Fatalf("Clear without a dormant override error = %v, want environment lock", err)
 	}
 }
 
@@ -146,6 +196,30 @@ func TestEnvironmentCatalogResolvesProductionLogLevelDefault(t *testing.T) {
 	assertEnvironmentDescription(t, logLevel, SourceDefault, "info", true)
 }
 
+func TestStartupOnlyTypedPolicyEnvironmentValueIsParsed(t *testing.T) {
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup:     &Config{},
+		Store:       newMemoryStore(),
+		Environment: EnvironmentVariables(),
+		LookupEnvironment: environment(map[string]string{
+			"AUTHARA_CHALLENGE_ENABLED": "true",
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !service.CurrentChallenge().Enabled {
+		t.Fatal("challenge enabled environment value was not parsed")
+	}
+	description, err := service.Describe(KeyChallengeEnabled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description.EffectiveSource != SourceEnvironment || description.EffectiveValue != "true" || !description.Locked {
+		t.Fatalf("challenge enabled description = %+v", description)
+	}
+}
+
 func TestRateLimitPolicySupportsLiveOverridesAndEnvironmentLocks(t *testing.T) {
 	store := newMemoryStore()
 	service, err := NewService(context.Background(), ServiceOptions{Startup: &Config{}, Store: store, LookupEnvironment: environment(nil)})
@@ -205,6 +279,152 @@ func TestRateLimitPolicySupportsLiveOverridesAndEnvironmentLocks(t *testing.T) {
 	}
 }
 
+func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{}, Store: newMemoryStore(), LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := uuid.New()
+	set := func(key Key, value string) {
+		t.Helper()
+		if _, err := service.Set(context.Background(), key, value, actor, 0); err != nil {
+			t.Fatalf("set %s: %v", key, err)
+		}
+	}
+
+	set(KeyUIDefaultReturnTo, "/dashboard")
+	set(KeyAuthenticationUsernameLoginEnabled, "true")
+	set(KeyTokenAccessTTL, "20")
+	set(KeySessionTTL, "90")
+	set(KeySessionRefreshTokenTTL, "30")
+	set(KeySessionRotation, "always")
+	set(KeyOrganizationPublicManagementEnabled, "true")
+	set(KeyOrganizationInvitationTTL, "48h")
+	set(KeyAccessPolicyAllowlistEnabled, "true")
+	set(KeyAdminAuditRetention, "365")
+	set(KeyEmailJobMaxAttempts, "7")
+	set(KeyEmailCleanupSentAfter, "48h")
+	set(KeyEmailCleanupFailedAfter, "96h")
+	set(KeyWebhookEnabledEvents, "user.created, organization.created")
+	set(KeyWebhookTimeout, "8s")
+	set(KeyWebhookMaxDeliveryAttempts, "8")
+	set(KeyWebhookProcessingStaleAfter, "30s")
+	set(KeyWebhookDeliveredRetention, "48h")
+	set(KeyWebhookFailedRetention, "96h")
+	set(KeyWebhookMaintenanceBatchSize, "250")
+
+	if got := service.CurrentUI().DefaultReturnTo; got != "/dashboard" {
+		t.Fatalf("default return path = %q", got)
+	}
+	if !service.CurrentAuthentication().UsernameLoginEnabled {
+		t.Fatal("username login policy was not updated")
+	}
+	if got := service.CurrentToken().AccessTokenTTL; got != 20*time.Minute {
+		t.Fatalf("access-token lifetime = %s", got)
+	}
+	session := service.CurrentSession()
+	if session.SessionTTL != 90*24*time.Hour || session.RefreshTokenTTL != 30*24*time.Hour || session.RefreshTokenRotation != -1 {
+		t.Fatalf("session policy = %+v", session)
+	}
+	organization := service.CurrentOrganization()
+	if !organization.PublicManagementEnabled || organization.InvitationTTL != 48*time.Hour {
+		t.Fatalf("organization policy = %+v", organization)
+	}
+	if !service.CurrentAllowlist().AllowlistEnabled {
+		t.Fatal("allowlist policy was not updated")
+	}
+	if got := service.CurrentAdmin().AuditRetention; got != 365*24*time.Hour {
+		t.Fatalf("admin audit retention = %s", got)
+	}
+	emailPolicy := service.CurrentEmail()
+	if emailPolicy.JobMaxAttempts != 7 || emailPolicy.CleanupSentAfter != 48*time.Hour || emailPolicy.CleanupFailedAfter != 96*time.Hour {
+		t.Fatalf("email policy = %+v", emailPolicy)
+	}
+	webhookPolicy := service.CurrentWebhook()
+	if strings.Join(webhookPolicy.EnabledEvents, ",") != "user.created,organization.created" ||
+		webhookPolicy.Timeout != 8*time.Second || webhookPolicy.MaxDeliveryAttempts != 8 ||
+		webhookPolicy.ProcessingStaleAfter != 30*time.Second || webhookPolicy.DeliveredRetention != 48*time.Hour ||
+		webhookPolicy.FailedRetention != 96*time.Hour || webhookPolicy.MaintenanceBatchSize != 250 {
+		t.Fatalf("webhook policy = %+v", webhookPolicy)
+	}
+	cookies := service.CurrentSessionCookies()
+	if cookies.AccessTokenTTL != 20*time.Minute || cookies.RefreshTokenTTL != 30*24*time.Hour {
+		t.Fatalf("session cookie policy = %+v", cookies)
+	}
+}
+
+func TestGeneralRuntimePoliciesRejectUnsafeCombinations(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   Key
+		value string
+	}{
+		{name: "unsafe return path", key: KeyUIDefaultReturnTo, value: "//evil.example"},
+		{name: "refresh longer than session", key: KeySessionRefreshTokenTTL, value: "61"},
+		{name: "rotation longer than refresh", key: KeySessionRotation, value: "400h"},
+		{name: "webhook timeout longer than processing timeout", key: KeyWebhookTimeout, value: "3m"},
+		{name: "unsupported webhook event", key: KeyWebhookEnabledEvents, value: "unsupported.created"},
+		{name: "duplicate webhook event", key: KeyWebhookEnabledEvents, value: "user.created,user.created"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service, err := NewService(context.Background(), ServiceOptions{
+				Startup: &Config{}, Store: newMemoryStore(), LookupEnvironment: environment(nil),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.Set(context.Background(), test.key, test.value, uuid.New(), 0); !errors.Is(err, ErrInvalidValue) {
+				t.Fatalf("Set error = %v", err)
+			}
+		})
+	}
+}
+
+func TestRuntimePolicySelectionKeepsInfrastructureAndSchedulingAtStartup(t *testing.T) {
+	dynamic := []Key{
+		KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
+		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation,
+		KeyOrganizationPublicManagementEnabled, KeyOrganizationInvitationTTL,
+		KeyAccessPolicyAllowlistEnabled, KeyAdminAuditRetention,
+		KeyEmailJobMaxAttempts, KeyEmailCleanupSentAfter, KeyEmailCleanupFailedAfter,
+		KeyWebhookEnabledEvents, KeyWebhookTimeout, KeyWebhookMaxDeliveryAttempts,
+		KeyWebhookProcessingStaleAfter, KeyWebhookDeliveredRetention,
+		KeyWebhookFailedRetention, KeyWebhookMaintenanceBatchSize,
+	}
+	for _, key := range dynamic {
+		definition, ok := LookupDefinition(key)
+		if !ok || definition.Control != ControlHybrid || definition.Reload != ReloadDynamic {
+			t.Errorf("dynamic definition %q = %+v, found=%t", key, definition, ok)
+		}
+	}
+
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{}, Store: newMemoryStore(), Environment: EnvironmentVariables(), LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, environmentName := range []string{
+		"POSTGRESQL_HOST", "AUTHARA_REDIS_HOST", "APP_ENV", "LOG_LEVEL",
+		"AUTHARA_EMAIL_WORKER_COUNT", "AUTHARA_EMAIL_WORKER_POLL_INTERVAL",
+		"AUTHARA_WEBHOOK_WORKER_COUNT", "AUTHARA_WEBHOOK_STALE_REAPER_INTERVAL", "AUTHARA_WEBHOOK_CLEANUP_INTERVAL",
+	} {
+		var found Description
+		for _, description := range service.List() {
+			if description.Environment == environmentName {
+				found = description
+				break
+			}
+		}
+		if !found.Locked || found.Reload != ReloadStartup || found.Control != ControlEnvironment {
+			t.Errorf("startup-only setting %s = %+v", environmentName, found)
+		}
+	}
+}
+
 func assertEnvironmentDescription(t *testing.T, description Description, source Source, value string, locked bool) {
 	t.Helper()
 	if description.EffectiveSource != source || description.EffectiveValue != value || description.Locked != locked {
@@ -227,6 +447,168 @@ func TestCrossFieldValidationUsesTheFullyResolvedHybridPolicy(t *testing.T) {
 	if got := service.Current(); got.TTL != 5*time.Minute || got.VerificationCodeTTL != 5*time.Minute {
 		t.Fatalf("resolved policy = %+v", got)
 	}
+}
+
+func TestSetValidatesPoliciesAfterEnvironmentOverrideRemoval(t *testing.T) {
+	tests := []struct {
+		name        string
+		seed        func(*memoryStore)
+		environment map[string]string
+		key         Key
+		value       string
+	}{
+		{
+			name: "session lifetime fallback",
+			environment: map[string]string{
+				"AUTHARA_SESSION_TTL_DAYS": "365",
+			},
+			key:   KeySessionRefreshTokenTTL,
+			value: "100",
+		},
+		{
+			name: "webhook timeout fallback",
+			seed: func(store *memoryStore) {
+				store.seed(KeyWebhookTimeout, `"90s"`, 1)
+			},
+			environment: map[string]string{
+				"AUTHARA_WEBHOOK_TIMEOUT": "1s",
+			},
+			key:   KeyWebhookProcessingStaleAfter,
+			value: "1m",
+		},
+		{
+			name: "challenge lifetime fallback",
+			environment: map[string]string{
+				"AUTHARA_CHALLENGE_TTL": "1h",
+			},
+			key:   KeyChallengeVerificationCodeTTL,
+			value: "45m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newMemoryStore()
+			if tt.seed != nil {
+				tt.seed(store)
+			}
+			service, err := NewService(context.Background(), ServiceOptions{
+				Startup: &Config{}, Store: store, LookupEnvironment: environment(tt.environment),
+			})
+			if err != nil {
+				t.Fatalf("New with valid effective policy: %v", err)
+			}
+			if _, err := service.Set(context.Background(), tt.key, tt.value, uuid.New(), 0); !errors.Is(err, ErrInvalidValue) || !strings.Contains(err.Error(), "after removing an environment override") {
+				t.Fatalf("Set error = %v, want unsafe environment-removal projection", err)
+			}
+			if store.auditCount() != 0 {
+				t.Fatal("unsafe dormant policy was persisted or audited")
+			}
+		})
+	}
+}
+
+func TestEnvironmentRemovalValidationChecksMixedProjections(t *testing.T) {
+	store := newMemoryStore()
+	store.seed(KeyWebhookTimeout, `"90s"`, 1)
+	store.seed(KeyWebhookProcessingStaleAfter, `"2m"`, 2)
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{}, Store: store,
+		LookupEnvironment: environment(map[string]string{
+			"AUTHARA_WEBHOOK_TIMEOUT":                "1s",
+			"AUTHARA_WEBHOOK_PROCESSING_STALE_AFTER": "1m",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("New with valid all-environment and all-fallback policies: %v", err)
+	}
+	if err := service.validateEnvironmentRemovalProjections(KeyWebhookTimeout, service.current.Load().fallbackValues); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("mixed projection validation error = %v", err)
+	}
+
+	cleared, err := service.Clear(context.Background(), KeyWebhookTimeout, uuid.New(), 1)
+	if err != nil {
+		t.Fatalf("clear dormant override that repairs mixed projections: %v", err)
+	}
+	if cleared.DormantOverride || cleared.PersistedOverride != nil || !cleared.Locked ||
+		cleared.EffectiveSource != SourceEnvironment {
+		t.Fatalf("description after mixed-projection repair = %+v", cleared)
+	}
+	if err := service.validateEnvironmentRemovalProjections(KeyWebhookTimeout, service.current.Load().fallbackValues); err != nil {
+		t.Fatalf("projection remained unsafe after dormant clear: %v", err)
+	}
+}
+
+func TestClearDoesNotIntroduceUnsafeFallbackAndCanRepairLegacyDormantState(t *testing.T) {
+	t.Run("reject newly unsafe fallback", func(t *testing.T) {
+		store := newMemoryStore()
+		store.seed(KeyWebhookTimeout, `"5m"`, 1)
+		store.seed(KeyWebhookProcessingStaleAfter, `"6m"`, 2)
+		service, err := NewService(context.Background(), ServiceOptions{
+			Startup: &Config{}, Store: store,
+			LookupEnvironment: environment(map[string]string{"AUTHARA_WEBHOOK_TIMEOUT": "1s"}),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := service.Clear(context.Background(), KeyWebhookProcessingStaleAfter, uuid.New(), 2); !errors.Is(err, ErrInvalidValue) {
+			t.Fatalf("Clear error = %v, want unsafe fallback rejection", err)
+		}
+		if store.auditCount() != 0 {
+			t.Fatal("unsafe clear was persisted or audited")
+		}
+	})
+
+	t.Run("reject new invalid mask when another mask is already invalid", func(t *testing.T) {
+		store := newMemoryStore()
+		store.seed(KeyWebhookTimeout, `"5m"`, 1)
+		store.seed(KeyWebhookProcessingStaleAfter, `"6m"`, 2)
+		service, err := NewService(context.Background(), ServiceOptions{
+			Startup: &Config{}, Store: store,
+			LookupEnvironment: environment(map[string]string{
+				"AUTHARA_WEBHOOK_TIMEOUT":                "1s",
+				"AUTHARA_WEBHOOK_PROCESSING_STALE_AFTER": "1m",
+			}),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := service.Clear(context.Background(), KeyWebhookProcessingStaleAfter, uuid.New(), 2); !errors.Is(err, ErrInvalidValue) {
+			t.Fatalf("Clear error = %v, want newly unsafe removal mask rejection", err)
+		}
+		state, err := store.LoadRuntimeSettings(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(state.Overrides) != 2 || store.auditCount() != 0 {
+			t.Fatalf("unsafe clear changed store: state=%+v audits=%d", state, store.auditCount())
+		}
+	})
+
+	t.Run("repair legacy dormant fallback", func(t *testing.T) {
+		store := newMemoryStore()
+		store.seed(KeyWebhookTimeout, `"5m"`, 1)
+		service, err := NewService(context.Background(), ServiceOptions{
+			Startup: &Config{}, Store: store,
+			LookupEnvironment: environment(map[string]string{"AUTHARA_WEBHOOK_TIMEOUT": "1s"}),
+		})
+		if err != nil {
+			t.Fatalf("New should retain the emergency environment pin for recovery: %v", err)
+		}
+		if err := service.validateEnvironmentRemovalProjections(KeyWebhookTimeout, service.current.Load().fallbackValues); !errors.Is(err, ErrInvalidValue) {
+			t.Fatalf("legacy projection error = %v", err)
+		}
+
+		cleared, err := service.Clear(context.Background(), KeyWebhookTimeout, uuid.New(), 1)
+		if err != nil {
+			t.Fatalf("clear legacy dormant override: %v", err)
+		}
+		if cleared.DormantOverride || cleared.PersistedOverride != nil || service.CurrentWebhook().Timeout != time.Second {
+			t.Fatalf("description after legacy recovery = %+v, policy = %+v", cleared, service.CurrentWebhook())
+		}
+	})
 }
 
 func TestSetClearValidationAndOptimisticConcurrency(t *testing.T) {

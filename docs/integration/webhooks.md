@@ -116,6 +116,14 @@ Default:
 | `AUTHARA_WEBHOOK_CLEANUP_INTERVAL` | `1h` |
 | `AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE` | `1000` |
 
+The event selection, request timeout, delivery-attempt limit, processing
+timeout, retention values, and maintenance batch size are hybrid settings. If
+their individual environment variables are absent, an operator can change them
+under `/auth/operator/settings` without restarting Core. Event filtering is
+applied before the next event is enqueued; delivery and maintenance workers
+read the current policy for each operation. Worker counts and the stale-reaper
+and cleanup schedules remain startup-only.
+
 ---
 
 # Event Delivery

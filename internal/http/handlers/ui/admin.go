@@ -156,7 +156,7 @@ func (h *UIHandler) RevokeAllAdminUserSessionsPost(w http.ResponseWriter, r *htt
 }
 
 func (h *UIHandler) AdminAllowlistPage(w http.ResponseWriter, r *http.Request) {
-	if !h.Features.AllowlistEnabled {
+	if !h.allowlistEnabled() {
 		h.renderNotFound(w, r)
 		return
 	}
@@ -165,7 +165,7 @@ func (h *UIHandler) AdminAllowlistPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UIHandler) AdminAllowlistResultsGet(w http.ResponseWriter, r *http.Request) {
-	if !h.Features.AllowlistEnabled {
+	if !h.allowlistEnabled() {
 		h.renderNotFound(w, r)
 		return
 	}
@@ -184,7 +184,7 @@ func (h *UIHandler) AdminAllowlistResultsGet(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *UIHandler) AdminAllowlistCreatePost(w http.ResponseWriter, r *http.Request) {
-	if !h.Features.AllowlistEnabled {
+	if !h.allowlistEnabled() {
 		h.renderNotFound(w, r)
 		return
 	}
@@ -198,7 +198,7 @@ func (h *UIHandler) AdminAllowlistCreatePost(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *UIHandler) AdminAllowlistDeletePost(w http.ResponseWriter, r *http.Request) {
-	if !h.Features.AllowlistEnabled {
+	if !h.allowlistEnabled() {
 		h.renderNotFound(w, r)
 		return
 	}
@@ -325,7 +325,16 @@ func (h *UIHandler) renderAllowlistMutationResult(w http.ResponseWriter, r *http
 }
 
 func (h *UIHandler) adminFeatures() adminview.FeatureFlags {
-	return h.Features
+	features := h.Features
+	features.AllowlistEnabled = h.allowlistEnabled()
+	return features
+}
+
+func (h *UIHandler) allowlistEnabled() bool {
+	if h.Config != nil {
+		return h.Config.CurrentAllowlist().AllowlistEnabled
+	}
+	return h.Features.AllowlistEnabled
 }
 
 func allowlistQueryFromRequest(r *http.Request) string {

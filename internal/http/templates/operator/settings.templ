@@ -83,6 +83,20 @@ templ RuntimeSettingRow(setting config.Description, inputValue string, errorMess
 				<p class="mt-0.5 text-xs text-grey-500 dark:text-grey-400">{ string(setting.Type) } · Restart required</p>
 				if setting.DormantOverride && setting.PersistedOverride != nil {
 					<p class="mt-1.5 rounded-md bg-amber-50 px-2.5 py-2 text-xs leading-5 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">Dormant operator override: { *setting.PersistedOverride }. It may become effective if the environment value is removed on a later restart.</p>
+					<form
+						method="post"
+						action={ runtimeSettingClearHref(setting.Key) }
+						hx-post={ runtimeSettingClearHref(setting.Key) }
+						hx-target="closest article"
+						hx-swap="outerHTML"
+						hx-sync="closest article:replace"
+						hx-disabled-elt="find button"
+						class="mt-1.5"
+					>
+						@csrf.CSRFInput()
+						<input type="hidden" name="revision" value={ strconv.FormatInt(setting.Revision, 10) }/>
+						<button type="submit" class="text-xs font-medium text-blue-700 hover:underline disabled:opacity-50 dark:text-blue-300">Clear dormant override</button>
+					</form>
 				}
 			} else {
 				<form

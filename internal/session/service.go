@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/accesspolicy"
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/organization"
@@ -28,6 +29,7 @@ type SessionConfig struct {
 	SessionTTL             time.Duration
 	RefreshTokenTTL        time.Duration
 	RefreshTokenRotation   time.Duration
+	Policy                 config.SessionPolicyReader
 	AccessPolicy           accesspolicy.EmailAccessPolicy
 	Organizations          *organization.Service
 }
@@ -37,9 +39,7 @@ type Service struct {
 	tx                     *tx.Manager
 	accessTokens           *token.AccessTokenService
 	accessTokenRevocations *token.AccessTokenRevocations
-	sessionTTL             time.Duration
-	refreshTokenTTL        time.Duration
-	refreshTokenRotation   time.Duration
+	policy                 config.SessionPolicyReader
 	accessPolicy           accesspolicy.EmailAccessPolicy
 	organizations          *organization.Service
 }
@@ -49,15 +49,22 @@ func New(cfg SessionConfig) *Service {
 	if access == nil {
 		access = accesspolicy.NoopEmailAccessPolicy{}
 	}
+	policy := cfg.Policy
+	if policy == nil {
+		policy = config.SessionPolicyReaderFunc(func() config.SessionPolicy {
+			return config.SessionPolicy{
+				SessionTTL: cfg.SessionTTL, RefreshTokenTTL: cfg.RefreshTokenTTL,
+				RefreshTokenRotation: cfg.RefreshTokenRotation,
+			}
+		})
+	}
 
 	return &Service{
 		store:                  cfg.Store,
 		tx:                     cfg.Tx,
 		accessTokens:           cfg.AccessTokens,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
-		sessionTTL:             cfg.SessionTTL,
-		refreshTokenTTL:        cfg.RefreshTokenTTL,
-		refreshTokenRotation:   cfg.RefreshTokenRotation,
+		policy:                 policy,
 		accessPolicy:           access,
 		organizations:          cfg.Organizations,
 	}
@@ -75,6 +82,7 @@ func (s *Service) CreateSession(
 	refreshToken string,
 	err error,
 ) {
+	policy := s.policy.CurrentSession()
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		user, err := s.ensureUserAllowed(ctx, userID)
 		if err != nil {
@@ -122,7 +130,7 @@ func (s *Service) CreateSession(
 			UserID:               userID,
 			ActiveOrganizationID: org.ID,
 			UserAgent:            userAgent,
-			ExpiresAt:            now.Add(s.sessionTTL),
+			ExpiresAt:            now.Add(policy.SessionTTL),
 		}
 
 		createdSession, err := s.store.CreateSession(ctx, session)
@@ -141,7 +149,7 @@ func (s *Service) CreateSession(
 			SessionID:      createdSession.ID,
 			OrganizationID: org.ID,
 			TokenHash:      hashedRefreshToken,
-			ExpiresAt:      now.Add(s.refreshTokenTTL),
+			ExpiresAt:      now.Add(policy.RefreshTokenTTL),
 		}
 
 		err = s.store.CreateRefreshToken(ctx, rt)
@@ -191,6 +199,7 @@ func (s *Service) SwitchSessionOrganization(
 	refreshToken string,
 	err error,
 ) {
+	policy := s.policy.CurrentSession()
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		_, err := s.ensureUserAllowed(ctx, userID)
 		if err != nil {
@@ -253,7 +262,7 @@ func (s *Service) SwitchSessionOrganization(
 		if err != nil {
 			return err
 		}
-		expiresAt := now.Add(s.refreshTokenTTL)
+		expiresAt := now.Add(policy.RefreshTokenTTL)
 		if expiresAt.After(session.ExpiresAt) {
 			expiresAt = session.ExpiresAt
 		}
@@ -285,6 +294,7 @@ func (s *Service) SwitchSessionOrganization(
 }
 
 func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audience token.Audience, now time.Time) (newAccessToken string, newRefreshToken string, err error) {
+	policy := s.policy.CurrentSession()
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		hashed := hashRefreshToken(refreshToken)
 
@@ -366,7 +376,7 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrUserDisabled
 		}
 
-		needToRotate := shouldRotate(rt, now, s.refreshTokenRotation)
+		needToRotate := shouldRotate(rt, now, policy.RefreshTokenRotation)
 		if needToRotate {
 			err = s.store.ConsumeRefreshToken(ctx, rt.ID, now)
 			if err != nil {
@@ -379,7 +389,7 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			}
 
 			newHashed := hashRefreshToken(newRefreshToken)
-			newExpiresAt := now.Add(s.refreshTokenTTL)
+			newExpiresAt := now.Add(policy.RefreshTokenTTL)
 			if newExpiresAt.After(session.ExpiresAt) {
 				newExpiresAt = session.ExpiresAt
 			}

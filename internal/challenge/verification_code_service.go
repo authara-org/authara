@@ -50,7 +50,7 @@ func (s *VerificationCodeService) GenerateCode(
 	if len(s.secrets) == 0 {
 		return "", errors.New("verification code secret is not configured")
 	}
-	policy := s.policy.Current()
+	policy := s.policy.CurrentChallenge()
 
 	code, err := generateSixDigitCode()
 	if err != nil {

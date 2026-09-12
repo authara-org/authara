@@ -19,9 +19,11 @@ effective non-secret value, and whether it can be changed by an operator.
 Unset optional variables without defaults are reported separately from values
 using a default.
 
-This is not a generic environment editor. Database, cache, SMTP, OAuth, JWT,
-internal-token, provider, worker, server, metrics, proxy, and other bootstrap
-settings remain deployment-controlled and require a restart to change.
+This is not a generic environment editor. Database and cache connections,
+SMTP/provider identity and credentials, OAuth and JWT trust material, internal
+tokens, public server identity, worker topology and scheduling, metrics, proxy,
+and other bootstrap settings remain deployment-controlled and require a
+restart to change.
 Sensitive values are reduced to presence information before the settings
 snapshot is built: the page can report that one is configured but never holds
 or renders its value. Email-template content and per-template delivery remain
@@ -49,13 +51,42 @@ variable whose parser tag supplies a default therefore does not lock the
 setting.
 
 An explicit environment value locks its hybrid setting. The page shows the
-effective value as **Environment**, rejects set and clear requests on the
-server, and explains that deployment configuration and a restart are needed.
-A previous operator override remains dormant in PostgreSQL. If the environment
-value is removed on a later restart, that override becomes effective again.
+effective value as **Environment**, rejects attempts to replace the value, and
+explains that deployment configuration and a restart are needed. A previous
+operator override remains dormant in PostgreSQL. Operators may clear that
+dormant override without changing the effective environment value; otherwise,
+it becomes effective again if the environment value is removed on a later
+restart.
 
 **Reset to built-in default** deletes the override rather than storing a copy
 of today's default. Future default changes can therefore take effect.
+
+## Dynamic product and operational policy
+
+The following settings are hybrid. When their environment variable is absent,
+an operator can change them without restarting Core:
+
+| Area | Settings | Runtime effect |
+| --- | --- | --- |
+| Redirects | `AUTHARA_DEFAULT_RETURN_TO` | Subsequent requests without an explicit `return_to` use the new safe relative path. |
+| Authentication | `AUTHARA_USERNAME_LOGIN_ENABLED` | Subsequent hosted and API password-login requests accept or reject usernames. Email login remains available. |
+| Tokens and sessions | `AUTHARA_ACCESS_TOKEN_TTL_MINUTES`, `AUTHARA_SESSION_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL` | New tokens and sessions use the new lifetimes. Existing artifacts keep their stored expiry; rotation policy applies on the next refresh. |
+| Organizations | `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED`, `AUTHARA_ORGANIZATION_INVITATION_TTL` | Public organization routes change immediately. Newly created or resent invitations use the new lifetime. |
+| Access policy | `AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED` | Subsequent signup, login, session, and admin allowlist requests use the new enforcement state. |
+| Admin retention | `AUTHARA_ADMIN_AUDIT_RETENTION_DAYS` | The next cleanup run uses the new cutoff. Lowering retention can delete older audit events. |
+| Email queue | `AUTHARA_EMAIL_JOB_MAX_ATTEMPTS`, `AUTHARA_EMAIL_CLEANUP_SENT_AFTER`, `AUTHARA_EMAIL_CLEANUP_FAILED_AFTER` | The next delivery failure or cleanup run uses the new policy, including for existing jobs. |
+| Webhooks | `AUTHARA_WEBHOOK_ENABLED_EVENTS`, `AUTHARA_WEBHOOK_TIMEOUT`, `AUTHARA_WEBHOOK_MAX_DELIVERY_ATTEMPTS`, `AUTHARA_WEBHOOK_PROCESSING_STALE_AFTER`, `AUTHARA_WEBHOOK_DELIVERED_RETENTION`, `AUTHARA_WEBHOOK_FAILED_RETENTION`, `AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE` | Event filtering changes before enqueue; deliveries and maintenance read the policy again for each operation. |
+
+Related values are validated as a complete policy before publication. Access
+tokens must remain shorter-lived than refresh tokens; refresh tokens cannot
+outlive their session; a positive rotation interval must be shorter than the
+refresh-token lifetime; and the webhook request timeout must be shorter than
+the webhook processing timeout. New or changed overrides are also rejected when
+any mix of current environment values and persisted/default fallbacks would
+violate these rules after environment overrides are removed. Clearing a dormant
+override cannot introduce a newly invalid mix, while legacy unsafe dormant rows
+remain clearable for recovery. Runtime consumers read typed snapshots rather
+than parsing strings or inspecting the effective source.
 
 ## Dynamic challenge policy
 
@@ -117,10 +148,11 @@ Polling is also reconciliation: there is no notification that can be lost,
 and a temporarily failed query is retried on the next interval. Reads on hot
 paths only load an atomic in-memory snapshot and never query PostgreSQL.
 
-Invalid values, unknown keys, locked settings, and stale revisions are rejected
-without persistence or publication. Startup fails clearly if a stored override
-is unknown, malformed, outside operator safety bounds, or makes a complete
-typed policy invalid.
+Invalid values, unknown keys, attempts to replace locked settings, and stale
+revisions are rejected without persistence or publication. The only locked
+state an operator can mutate is removal of an existing dormant override. Startup
+fails clearly if a stored override is unknown, malformed, outside operator
+safety bounds, or makes the effective typed policy invalid.
 
 ## Backup and rollback
 
@@ -136,11 +168,15 @@ The normal rollback path is to clear an override in the operator page. A
 deployment environment value can enforce an emergency value on every replica
 after restart while preserving the dormant override for later review.
 
-## Later policy groups
+## Startup-only boundary
 
-Token/session lifetimes and rotation, username login, organization invitation
-policy, public organization management, webhook event selection,
-access-policy enablement, and applicable retention periods remain
-environment-only in this release. They are candidates for later vertical
-migrations after their services, middleware, workers, and cross-field
-validation consume typed snapshots safely.
+Settings stay environment-only when changing them would rebuild dependencies,
+alter process topology, rotate trust material, or reconfigure network
+connections. This includes database/cache settings, `PUBLIC_URL`, proxy trust,
+JWT keys and issuer, organization mode, OAuth providers and credentials,
+internal API credentials, SMTP/provider configuration, webhook URL and secret,
+worker counts, polling and maintenance intervals, metrics, logging, and the
+global challenge enablement flag.
+
+The operator page still inventories these settings and shows their source, but
+never exposes secret values and never offers controls for changing them.

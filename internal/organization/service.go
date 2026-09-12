@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	emailpkg "github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/session/token"
@@ -22,6 +23,7 @@ type Config struct {
 	WebhookPublisher       webhook.Publisher
 	Logger                 *slog.Logger
 	InvitationTTL          time.Duration
+	Policy                 config.OrganizationPolicyReader
 	PublicURL              string
 	Mode                   OrgMode
 	AccessTokenRevocations *token.AccessTokenRevocations
@@ -32,7 +34,7 @@ type Service struct {
 	tx                     *tx.Manager
 	webhookPublisher       webhook.Publisher
 	logger                 *slog.Logger
-	invitationTTL          time.Duration
+	policy                 config.OrganizationPolicyReader
 	publicURL              string
 	mode                   OrgMode
 	accessTokenRevocations *token.AccessTokenRevocations
@@ -53,13 +55,19 @@ func New(cfg Config) *Service {
 	if pub == nil {
 		pub = webhook.NoopPublisher{}
 	}
+	policy := cfg.Policy
+	if policy == nil {
+		policy = config.OrganizationPolicyReaderFunc(func() config.OrganizationPolicy {
+			return config.OrganizationPolicy{InvitationTTL: cfg.InvitationTTL}
+		})
+	}
 
 	return &Service{
 		store:                  cfg.Store,
 		tx:                     cfg.Tx,
 		webhookPublisher:       pub,
 		logger:                 cfg.Logger,
-		invitationTTL:          cfg.InvitationTTL,
+		policy:                 policy,
 		publicURL:              strings.TrimRight(cfg.PublicURL, "/"),
 		mode:                   cfg.Mode,
 		accessTokenRevocations: cfg.AccessTokenRevocations,

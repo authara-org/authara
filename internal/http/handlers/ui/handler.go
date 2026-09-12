@@ -42,6 +42,20 @@ type UIHandler struct {
 	Render render.Renderer
 }
 
+func (h *UIHandler) usernameLoginEnabled() bool {
+	if h.Config != nil {
+		return h.Config.CurrentAuthentication().UsernameLoginEnabled
+	}
+	return h.Features.UsernameLoginEnabled
+}
+
+func (h *UIHandler) sessionCookiePolicy() config.SessionCookiePolicy {
+	if h.Config != nil {
+		return h.Config.CurrentSessionCookies()
+	}
+	return config.SessionCookiePolicy{AccessTokenTTL: h.AccessTTL, RefreshTokenTTL: h.RefreshTTL}
+}
+
 func New(
 	admin *admin.Service,
 	auth *auth.Service,

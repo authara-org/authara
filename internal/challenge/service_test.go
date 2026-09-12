@@ -112,7 +112,7 @@ func newTestChallengePolicyReader(policy config.ChallengePolicy) *testChallengeP
 	return reader
 }
 
-func (r *testChallengePolicyReader) Current() config.ChallengePolicy {
+func (r *testChallengePolicyReader) CurrentChallenge() config.ChallengePolicy {
 	return *r.current.Load()
 }
 

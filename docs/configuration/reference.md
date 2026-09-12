@@ -1,8 +1,9 @@
 # Configuration Overview
 
 Authara bootstrap and infrastructure configuration is supplied through
-**environment variables**. A curated subset of challenge policy is hybrid and
-can be overridden by an operator when its environment variable is absent.
+**environment variables**. An explicitly registered subset of product and
+operational policy is hybrid and can be overridden by an operator when its
+environment variable is absent.
 
 Configuration is typically provided via:
 

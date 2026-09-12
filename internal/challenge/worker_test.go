@@ -7,11 +7,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 )
+
+func TestEmailWorkerReadsCurrentPolicy(t *testing.T) {
+	policy := config.EmailPolicy{JobMaxAttempts: 3, CleanupSentAfter: time.Hour, CleanupFailedAfter: 2 * time.Hour}
+	worker := NewWorker(nil, nil, nil, nil, nil, WorkerConfig{
+		Policy: config.EmailPolicyReaderFunc(func() config.EmailPolicy { return policy }),
+	})
+	if got := worker.policy.CurrentEmail().JobMaxAttempts; got != 3 {
+		t.Fatalf("initial max attempts = %d", got)
+	}
+	policy.JobMaxAttempts = 8
+	if got := worker.policy.CurrentEmail().JobMaxAttempts; got != 8 {
+		t.Fatalf("updated max attempts = %d", got)
+	}
+}
 
 func TestWorkerSuppliesCodeToEveryCodeTemplate(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)

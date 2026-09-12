@@ -70,6 +70,7 @@ func newTestHandlersWithAdmin(
 			logger,
 			googleClient,
 			oauth.OAuthProviders{},
+			nil,
 			features.ChallengeEnabled,
 			features.UsernameLoginEnabled,
 			10*time.Minute,

@@ -41,7 +41,9 @@ The dashboard supports:
 Allowlist management is available only when
 `AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED=true`. When the flag is false, the
 allowlist admin UI is hidden and direct allowlist admin routes return `404 Not
-Found`.
+Found`. If its environment variable is absent, an operator can change this flag
+at runtime from `/auth/operator/settings`; subsequent requests use the new
+state.
 
 ## Admin Privacy & Security
 
@@ -56,7 +58,11 @@ Technical identifiers are minimized in the UI:
 
 The audit log is for security and accountability, not casual monitoring. The default audit table shows timestamps, actions, shortened actor/target user IDs, and masked emails. Personal data and metadata are behind a disclosure. Audit events are personal data; choose retention based on your legal and security requirements.
 
-`AUTHARA_ADMIN_AUDIT_RETENTION_DAYS` controls admin audit retention. The default is `180` days and must be greater than zero. Authara runs a cleanup worker that removes older admin audit events.
+`AUTHARA_ADMIN_AUDIT_RETENTION_DAYS` controls admin audit retention. The default
+is `180` days and must be greater than zero. Authara runs a cleanup worker that
+removes older admin audit events. If the environment variable is absent, an
+operator can change the retention at runtime and the next cleanup run uses the
+new cutoff.
 
 ## Security Notes
 

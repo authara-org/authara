@@ -85,7 +85,8 @@ func (h *APIHandler) contractGoogleLogin(
 	case response.CodeInternalError:
 		return loginWithGoogleError(response.CodeInternalError, "Session error.")
 	}
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	return contract.LoginWithGoogle200HeadersResponse{Header: header, Body: toContractAuthSession(user, accessToken, refreshToken)}
 }

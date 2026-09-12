@@ -145,8 +145,9 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	session.SetAccessToken(w, accessToken, int(h.AccessTTL.Seconds()))
-	session.SetRefreshToken(w, refreshToken, int(h.RefreshTTL.Seconds()))
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	if h.Logger != nil {
 		h.Logger.Info("provider linked after account collision", "user_id", user.ID, "provider", "google")
