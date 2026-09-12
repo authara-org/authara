@@ -13,9 +13,9 @@ import (
 
 func TestNewAuthLimiterUsesInMemoryLimiterForNoopCache(t *testing.T) {
 	app := &App{
-		Config: &config.Config{
+		Config: newTestConfigService(t, &config.Config{
 			Cache: config.Cache{Provider: "noop"},
-		},
+		}),
 		Logger: slog.Default(),
 		Cache:  cache.NewNoop(),
 	}
@@ -29,9 +29,9 @@ func TestNewAuthLimiterUsesInMemoryLimiterForNoopCache(t *testing.T) {
 
 func TestNewAuthLimiterUsesCacheLimiterForRedisCache(t *testing.T) {
 	app := &App{
-		Config: &config.Config{
+		Config: newTestConfigService(t, &config.Config{
 			Cache: config.Cache{Provider: "redis"},
-		},
+		}),
 		Logger: slog.Default(),
 		Cache:  fakeBootstrapCounterCache{},
 	}
@@ -41,6 +41,37 @@ func TestNewAuthLimiterUsesCacheLimiterForRedisCache(t *testing.T) {
 	if _, ok := limiter.(*ratelimiter.CacheLimiter); !ok {
 		t.Fatalf("expected *CacheLimiter, got %T", limiter)
 	}
+}
+
+func TestNewLimiterConfigReadsRuntimePolicy(t *testing.T) {
+	app := &App{
+		Config: newTestConfigService(t, &config.Config{RateLimit: config.RateLimit{LoginIPLimit: 999}}),
+	}
+
+	if got := newLimiterConfig(app).LoginIPLimit; got != 5 {
+		t.Fatalf("limiter config login IP limit = %d, want runtime default 5", got)
+	}
+}
+
+func newTestConfigService(t *testing.T, startup *config.Config) *config.Service {
+	t.Helper()
+	service, err := config.NewService(context.Background(), config.ServiceOptions{
+		Startup:           startup,
+		Store:             emptyRuntimeSettingsStore{},
+		LookupEnvironment: func(string) (string, bool) { return "", false },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
+}
+
+type emptyRuntimeSettingsStore struct {
+	config.RuntimeSettingsStore
+}
+
+func (emptyRuntimeSettingsStore) LoadRuntimeSettings(context.Context) (config.PersistedState, error) {
+	return config.PersistedState{}, nil
 }
 
 type fakeBootstrapCounterCache struct{}

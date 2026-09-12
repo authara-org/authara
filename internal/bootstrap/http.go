@@ -97,6 +97,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			enabledFeatures,
 			app.Services.Verification,
 			app.Services.EmailTemplates,
+			app.Config,
 			authLimiter,
 			app.Logger,
 			googleClient,
@@ -143,20 +144,35 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 }
 
 func newAuthLimiter(app *App) ratelimiter.AuthLimiter {
-	cfg := newLimiterConfig(app)
+	provider := func() ratelimiter.LimiterConfig { return newLimiterConfig(app) }
 
 	if app.Config.Cache.Provider == "redis" {
 		if counter, ok := app.Cache.(cachepkg.Counter); ok {
-			return ratelimiter.NewCacheLimiter(counter, cfg)
+			return ratelimiter.NewCacheLimiterWithConfig(counter, provider)
 		}
 
 		app.Logger.Warn("configured cache does not support atomic counters; falling back to in-memory rate limiter")
 	}
 
-	return ratelimiter.NewInMemoryLimiter(cfg)
+	return ratelimiter.NewInMemoryLimiterWithConfig(provider)
 }
 
 func newLimiterConfig(app *App) ratelimiter.LimiterConfig {
+	if app.Config != nil {
+		policy := app.Config.CurrentRateLimits()
+		return ratelimiter.LimiterConfig{
+			LoginIPLimit: policy.LoginIPLimit, LoginIPWindow: policy.LoginIPWindow,
+			LoginEmailLimit: policy.LoginEmailLimit, LoginEmailWindow: policy.LoginEmailWindow,
+			SignupIPLimit: policy.SignupIPLimit, SignupIPWindow: policy.SignupIPWindow,
+			SignupEmailLimit: policy.SignupEmailLimit, SignupEmailWindow: policy.SignupEmailWindow,
+			PasswordResetIPLimit: policy.PasswordResetIPLimit, PasswordResetIPWindow: policy.PasswordResetIPWindow,
+			PasswordResetEmailLimit: policy.PasswordResetEmailLimit, PasswordResetEmailWindow: policy.PasswordResetEmailWindow,
+			PasskeyLoginIPLimit: policy.PasskeyLoginIPLimit, PasskeyLoginIPWindow: policy.PasskeyLoginIPWindow,
+			ChallengeVerifyIPLimit: policy.ChallengeVerifyIPLimit, ChallengeVerifyIPWindow: policy.ChallengeVerifyIPWindow,
+			ChallengeResendIPLimit: policy.ChallengeResendIPLimit, ChallengeResendIPWindow: policy.ChallengeResendIPWindow,
+			CleanupEvery: policy.CleanupEvery, MaxEntries: policy.MaxEntries,
+		}
+	}
 	return ratelimiter.LimiterConfig{
 		LoginIPLimit:     app.Config.RateLimit.LoginIPLimit,
 		LoginIPWindow:    app.Config.RateLimit.LoginIPWindow,

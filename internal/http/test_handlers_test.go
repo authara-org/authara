@@ -51,6 +51,7 @@ func newTestHandlersWithAdmin(
 			nil,
 			email.NewTemplateService(testEmailTemplateStore{}),
 			nil,
+			nil,
 			logger,
 			googleClient,
 			oauth.OAuthProviders{},

@@ -8,6 +8,7 @@ import (
 )
 
 func (a *App) StartBackgroundWorkers(ctx context.Context) {
+	a.Config.StartReconciler(ctx)
 	a.Services.Session.StartCleanupWorker(ctx, a.Logger, 5*time.Minute)
 	a.Services.Admin.StartAuditCleanupWorker(ctx, a.Logger, 24*time.Hour)
 

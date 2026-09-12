@@ -33,11 +33,17 @@ type Services struct {
 }
 
 func NewServices(app *App) (Services, error) {
+	if app == nil {
+		return Services{}, fmt.Errorf("app is required")
+	}
+	if app.Config == nil {
+		return Services{}, fmt.Errorf("config service is required")
+	}
 	txManager := tx.New(app.Store)
 	accessPolicy := newAccessPolicy(app)
-	oauthProviders := newOAuthProviders(app.Config)
-	webhookPublisher := newWebhookPublisher(app.Config, app.Store)
-	webhookWorker := newWebhookWorker(app.Config, app.Store, app.Logger, app.Observability)
+	oauthProviders := newOAuthProviders(app.Config.Startup())
+	webhookPublisher := newWebhookPublisher(app.Config.Startup(), app.Store)
+	webhookWorker := newWebhookWorker(app.Config.Startup(), app.Store, app.Logger, app.Observability)
 
 	accessTokenService := token.NewAccessTokenService(
 		app.Config.Token.KeySet,
@@ -104,10 +110,7 @@ func NewServices(app *App) (Services, error) {
 		Store:                  app.Store,
 		Tx:                     txManager,
 		AllowlistEnabled:       app.Config.AccessPolicy.AllowedEmailEnabled,
-		ChallengeTTL:           app.Config.Challenge.TTL,
-		MaxAttempts:            app.Config.Challenge.MaxAttempts,
-		MaxResends:             app.Config.Challenge.MaxResends,
-		MinResendInterval:      app.Config.Challenge.MinResendInterval,
+		Policy:                 app.Config,
 		WebhookPublisher:       webhookPublisher,
 		AccessTokenRevocations: accessTokenRevocations,
 	})
@@ -116,7 +119,7 @@ func NewServices(app *App) (Services, error) {
 		app.Store,
 		verificationCodeService,
 		emailTemplateService,
-		newEmailSender(app.Config, app.Logger),
+		newEmailSender(app.Config.Startup(), app.Logger),
 		app.Logger,
 		challenge.WorkerConfig{
 			WorkerCount:        app.Config.Email.WorkerCount,

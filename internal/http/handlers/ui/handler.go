@@ -7,6 +7,7 @@ import (
 	"github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/features"
 	"github.com/authara-org/authara/internal/http/kit/render"
@@ -28,6 +29,7 @@ type UIHandler struct {
 	Features       features.Features
 	Verification   *challenge.VerificationCodeService
 	EmailTemplates *email.TemplateService
+	Config         *config.Service
 
 	Limiter        ratelimiter.AuthLimiter
 	Logger         *slog.Logger
@@ -50,6 +52,7 @@ func New(
 	features features.Features,
 	verification *challenge.VerificationCodeService,
 	emailTemplates *email.TemplateService,
+	configuration *config.Service,
 	limiter ratelimiter.AuthLimiter,
 	logger *slog.Logger,
 	google *google.Client,
@@ -68,6 +71,7 @@ func New(
 		Features:       features,
 		Verification:   verification,
 		EmailTemplates: emailTemplates,
+		Config:         configuration,
 		Limiter:        limiter,
 		Logger:         logger,
 		Google:         google,
