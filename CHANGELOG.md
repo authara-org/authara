@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/authara-org/authara/compare/v0.20.0...v0.21.0) (2026-09-12)
+
+
+### Features
+
+* add live runtime configuration ([#50](https://github.com/authara-org/authara/issues/50)) ([b61b2e3](https://github.com/authara-org/authara/commit/b61b2e3962ce5e18828220f1ac34884494c04554))
+
 ## [0.20.0](https://github.com/authara-org/authara/compare/v0.19.0...v0.20.0) (2026-09-09)
 
 
