@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.1](https://github.com/authara-org/authara/compare/v0.21.0...v0.21.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **test:** isolate recent user count assertion ([#52](https://github.com/authara-org/authara/issues/52)) ([1f22cec](https://github.com/authara-org/authara/commit/1f22cecfc02158fee44f5591943d720b5b44e7e9))
+
 ## [0.21.0](https://github.com/authara-org/authara/compare/v0.20.0...v0.21.0) (2026-09-12)
 
 
