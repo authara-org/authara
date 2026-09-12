@@ -78,7 +78,7 @@ templ ToastWrapper() {
 	<div
 		id="toast-container"
 		hx-swap-oob="true"
-		class="fixed top-4 bottom-auto sm:top-auto sm:bottom-4 right-4 z-50 flex flex-col gap-3 max-w-xs sm:max-w-sm w-full"
+		class="fixed top-4 bottom-auto sm:top-auto sm:bottom-4 right-4 z-50 grid max-w-xs sm:max-w-sm w-full"
 	>
 		if flash, ok := httpctx.Flash(ctx); ok {
 			@ToastMessage(Kind(flash.Kind), flash.Message)
@@ -88,23 +88,53 @@ templ ToastWrapper() {
 	@ClientToastTemplate(Info)
 	@ClientToastTemplate(Error)
 	<style>
+		#toast-container > * {
+			--toast-stack-offset: 0px;
+			--toast-stack-scale: 1;
+			grid-area: 1 / 1;
+			position: relative;
+			transform: translateY(var(--toast-stack-offset)) scale(var(--toast-stack-scale));
+			transform-origin: top center;
+			transition: transform 180ms ease, opacity 180ms ease;
+		}
+		#toast-container > :nth-child(1) {
+			z-index: 3;
+		}
+		#toast-container > :nth-child(2) {
+			--toast-stack-offset: 8px;
+			--toast-stack-scale: 0.97;
+			z-index: 2;
+			opacity: 0.92;
+		}
+		#toast-container > :nth-child(3) {
+			--toast-stack-offset: 16px;
+			--toast-stack-scale: 0.94;
+			z-index: 1;
+			opacity: 0.78;
+		}
+		#toast-container > :nth-child(n + 4) {
+			--toast-stack-offset: 24px;
+			--toast-stack-scale: 0.91;
+			opacity: 0;
+			pointer-events: none;
+		}
 		@keyframes slideIn {
 			from {
-				transform: translateX(100%);
+				transform: translateX(calc(100% + 1rem)) translateY(var(--toast-stack-offset, 0px)) scale(var(--toast-stack-scale, 1));
 				opacity: 0;
 			}
 			to {
-				transform: translateX(0);
+				transform: translateX(0) translateY(var(--toast-stack-offset, 0px)) scale(var(--toast-stack-scale, 1));
 				opacity: 1;
 			}
 		}
 		@keyframes slideOut {
 			from {
-				transform: translateX(0);
+				transform: translateX(0) translateY(var(--toast-stack-offset, 0px)) scale(var(--toast-stack-scale, 1));
 				opacity: 1;
 			}
 			to {
-				transform: translateX(100%);
+				transform: translateX(calc(100% + 1rem)) translateY(var(--toast-stack-offset, 0px)) scale(var(--toast-stack-scale, 1));
 				opacity: 0;
 			}
 		}
