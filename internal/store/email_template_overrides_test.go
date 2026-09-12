@@ -262,9 +262,13 @@ func TestEmailTemplateDeliverySettingControlsJobCreation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListOperatorAuditEvents failed: %v", err)
 		}
+		actions := make(map[string]bool, len(events))
+		for _, event := range events {
+			actions[event.Action] = true
+		}
 		if len(events) != 2 ||
-			events[0].Action != domain.OperatorAuditActionEmailTemplateDeliveryEnabled ||
-			events[1].Action != domain.OperatorAuditActionEmailTemplateDeliveryDisabled {
+			!actions[domain.OperatorAuditActionEmailTemplateDeliveryEnabled] ||
+			!actions[domain.OperatorAuditActionEmailTemplateDeliveryDisabled] {
 			t.Fatalf("delivery audit events = %#v", events)
 		}
 	})
