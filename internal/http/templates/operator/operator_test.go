@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/google/uuid"
@@ -19,11 +20,128 @@ func TestDashboardLinksOperatorAndAccountPages(t *testing.T) {
 	for _, want := range []string{
 		"Operator workspace ready",
 		"/auth/operator/emails",
+		"/auth/operator/settings",
 		"/auth/account?return_to=/auth/operator",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("expected dashboard to contain %q", want)
 		}
+	}
+}
+
+func TestRuntimeSettingsRenderSourcesLocksAndResetControls(t *testing.T) {
+	dormant := "45m0s"
+	html := renderOperatorComponent(t, Settings(SettingsPageModel{Settings: []config.Description{
+		{
+			Definition: config.Definition{
+				Key: config.KeyChallengeTTL, Name: "Challenge lifetime", Description: "Maximum lifetime.",
+				Environment: "AUTHARA_CHALLENGE_TTL", Reload: config.ReloadDynamic,
+				Group: "Challenge", Type: config.TypeDuration, Minimum: "5m", Maximum: "24h", Impact: "New challenges only.",
+			},
+			EffectiveValue: "1h0m0s", EffectiveSource: config.SourceEnvironment,
+			Locked: true, PersistedOverride: &dormant, Revision: 4, DormantOverride: true,
+		},
+		{
+			Definition: config.Definition{
+				Key: config.KeyChallengeMaxAttempts, Name: "Maximum attempts", Description: "Attempt limit.",
+				Environment: "AUTHARA_CHALLENGE_MAX_ATTEMPTS", Reload: config.ReloadDynamic,
+				Group: "Challenge", Type: config.TypeInt, Minimum: "1", Maximum: "20", Impact: "New challenges only.",
+			},
+			EffectiveValue: "8", EffectiveSource: config.SourceOperator, Revision: 7,
+		},
+	}}))
+
+	for _, want := range []string{
+		"Environment and runtime settings", "Challenge", "Set · environment", "Deployment only", "Dormant operator override: 45m0s",
+		"Set · operator override", "Editable here", `action="/auth/operator/settings/challenge.max_attempts"`,
+		`action="/auth/operator/settings/challenge.max_attempts/clear"`, "Reset to default",
+		"Every environment variable supported by Core is listed below.", "1 live",
+		`hx-post="/auth/operator/settings/challenge.max_attempts"`, `hx-target="closest article"`,
+		`hx-swap="outerHTML"`, `hx-sync="closest article:replace"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("runtime settings page does not contain %q", want)
+		}
+	}
+	for _, action := range []string{
+		`action="/auth/operator/settings/challenge.ttl"`,
+		`action="/auth/operator/settings/challenge.ttl/clear"`,
+	} {
+		if strings.Contains(html, action) {
+			t.Fatalf("environment-managed setting rendered form %q", action)
+		}
+	}
+}
+
+func TestRuntimeSettingsPrioritizesGroupsWithLiveValues(t *testing.T) {
+	html := renderOperatorComponent(t, Settings(SettingsPageModel{Settings: []config.Description{
+		{Definition: config.Definition{Key: "APP_ENV", Environment: "APP_ENV", Group: "Runtime"}, Locked: true},
+		{Definition: config.Definition{Key: config.KeyRateLimitLoginIPLimit, Environment: "AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT", Group: "Rate limits"}},
+		{Definition: config.Definition{Key: "PUBLIC_URL", Environment: "PUBLIC_URL", Group: "Public URL"}, Locked: true},
+	}}))
+
+	rateLimits := strings.Index(html, ">Rate limits<")
+	runtime := strings.Index(html, ">Runtime<")
+	if rateLimits < 0 || runtime < 0 || rateLimits >= runtime {
+		t.Fatalf("live-editable group was not rendered before deployment-only groups: %s", html)
+	}
+	if !strings.Contains(html, "1 live") {
+		t.Fatal("live-editable group does not show its live-setting count")
+	}
+}
+
+func TestRuntimeSettingsRenderGroupsStatesMutabilityAndHideSecrets(t *testing.T) {
+	html := renderOperatorComponent(t, Settings(SettingsPageModel{Settings: []config.Description{
+		{
+			Definition:     config.Definition{Key: "APP_ENV", Name: "Application environment", Environment: "APP_ENV", Group: "Application", Type: config.TypeEnum, HasDefault: true},
+			EffectiveValue: "dev", EffectiveSource: config.SourceDefault, Locked: true,
+		},
+		{
+			Definition:     config.Definition{Key: "PUBLIC_URL", Name: "Public URL", Environment: "PUBLIC_URL", Group: "Application", Type: config.TypeURL, Required: true},
+			EffectiveValue: "https://auth.example", EffectiveSource: config.SourceEnvironment, Locked: true,
+		},
+		{
+			Definition:     config.Definition{Key: "AUTHARA_JWT_KEYS", Name: "JWT keys", Environment: "AUTHARA_JWT_KEYS", Group: "Token", Type: config.TypeMap, Required: true, Sensitive: true},
+			EffectiveValue: "must-never-render", EffectiveSource: config.SourceEnvironment, Locked: true,
+		},
+		{
+			Definition:      config.Definition{Key: "AUTHARA_OAUTH_GOOGLE_CLIENT_ID", Name: "Google client ID", Environment: "AUTHARA_OAUTH_GOOGLE_CLIENT_ID", Group: "OAuth", Type: config.TypeString},
+			EffectiveSource: config.SourceUnset, Locked: true,
+		},
+	}}))
+
+	for _, want := range []string{
+		"Application", "Token", "OAuth", "Not set · default used", "Not set", "Set · environment",
+		"Deployment only", "Required", "Optional", "https://auth.example", "Configured (value hidden)",
+		"No value is configured and there is no built-in default.", "1 variable", "2 variables",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("runtime settings page does not contain %q", want)
+		}
+	}
+	if strings.Contains(html, "must-never-render") {
+		t.Fatal("runtime settings page rendered a sensitive environment value")
+	}
+	if got := strings.Count(html, "<details"); got != 3 {
+		t.Fatalf("runtime settings groups rendered as details = %d, want 3", got)
+	}
+	if strings.Contains(html, " open>") {
+		t.Fatal("runtime settings groups must be closed by default")
+	}
+}
+
+func TestRuntimeSettingsOpensGroupContainingValidationError(t *testing.T) {
+	html := renderOperatorComponent(t, Settings(SettingsPageModel{
+		Settings: []config.Description{
+			{Definition: config.Definition{Key: config.KeyChallengeTTL, Environment: "AUTHARA_CHALLENGE_TTL", Group: "Challenge"}},
+			{Definition: config.Definition{Key: config.KeyRateLimitLoginIPLimit, Environment: "AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT", Group: "Rate limits"}},
+		},
+		ErrorKey: config.KeyRateLimitLoginIPLimit,
+		Error:    "must be at least 1",
+	}))
+
+	if got := strings.Count(html, " open>"); got != 1 {
+		t.Fatalf("open runtime settings groups = %d, want only the group containing the error", got)
 	}
 }
 
@@ -120,15 +238,26 @@ func TestAuditRendersOperationalMetadataWithoutTemplateSources(t *testing.T) {
 	actorID := uuid.New()
 	actorEmail := "operator@example.com"
 	html := renderOperatorComponent(t, Audit(email.OperatorAuditPage{
-		Events: []domain.OperatorAuditEvent{{
-			CreatedAt:    time.Date(2026, time.September, 6, 13, 15, 0, 0, time.UTC),
-			ActorUserID:  &actorID,
-			ActorEmail:   &actorEmail,
-			Action:       domain.OperatorAuditActionEmailTemplateSaved,
-			ResourceType: domain.OperatorAuditResourceEmailTemplate,
-			ResourceID:   string(domain.EmailTemplateSignupCode),
-			Metadata:     []byte(`{"revision":2,"version":5,"html_template":"secret source"}`),
-		}},
+		Events: []domain.OperatorAuditEvent{
+			{
+				CreatedAt:    time.Date(2026, time.September, 6, 13, 15, 0, 0, time.UTC),
+				ActorUserID:  &actorID,
+				ActorEmail:   &actorEmail,
+				Action:       domain.OperatorAuditActionEmailTemplateSaved,
+				ResourceType: domain.OperatorAuditResourceEmailTemplate,
+				ResourceID:   string(domain.EmailTemplateSignupCode),
+				Metadata:     []byte(`{"revision":2,"version":5,"html_template":"secret source"}`),
+			},
+			{
+				CreatedAt:    time.Date(2026, time.September, 6, 13, 16, 0, 0, time.UTC),
+				ActorUserID:  &actorID,
+				ActorEmail:   &actorEmail,
+				Action:       domain.OperatorAuditActionRuntimeSettingSet,
+				ResourceType: domain.OperatorAuditResourceRuntimeSetting,
+				ResourceID:   string(config.KeyChallengeTTL),
+				Metadata:     []byte(`{"revision":3,"old_effective_value":"secret-like-value"}`),
+			},
+		},
 		Page:     1,
 		Size:     50,
 		Action:   domain.OperatorAuditActionEmailTemplateSaved,
@@ -143,6 +272,9 @@ func TestAuditRendersOperationalMetadataWithoutTemplateSources(t *testing.T) {
 		actorID.String(),
 		"2026-09-06 13:15:00 UTC",
 		`href="/auth/operator/emails/signup_code"`,
+		`href="/auth/operator/settings#setting-challenge.ttl"`,
+		"Setting updated",
+		"Challenge lifetime",
 		`href="/auth/operator/audit"`,
 		`data-dropdown-value="email_template.saved"`,
 		`data-dropdown-value="signup_code"`,
@@ -153,8 +285,8 @@ func TestAuditRendersOperationalMetadataWithoutTemplateSources(t *testing.T) {
 			t.Fatalf("expected audit page to contain %q", want)
 		}
 	}
-	if strings.Contains(html, "secret source") || strings.Contains(html, "html_template") {
-		t.Fatal("operator audit page must not render template source metadata")
+	if strings.Contains(html, "secret source") || strings.Contains(html, "html_template") || strings.Contains(html, "secret-like-value") {
+		t.Fatal("operator audit page must not render value metadata")
 	}
 }
 

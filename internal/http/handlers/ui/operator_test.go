@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
@@ -21,6 +22,212 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+func TestOperatorRuntimeSettingMutationValidatesAndRejectsEnvironmentLocks(t *testing.T) {
+	settingsStore := newOperatorRuntimeSettingsStore()
+	runtimeSettings, err := config.NewService(context.Background(), config.ServiceOptions{Startup: &config.Config{},
+		Store:             settingsStore,
+		LookupEnvironment: func(string) (string, bool) { return "", false },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &UIHandler{
+		Config: runtimeSettings,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Render: render.New(render.Assets{}, false),
+	}
+	actor := uuid.New()
+
+	invalid := performOperatorRuntimeSettingRequest(t, h.OperatorSettingSetPost, config.KeyChallengeMaxAttempts, url.Values{
+		"revision": {"0"}, "value": {"100"},
+	}, actor)
+	if invalid.Code != http.StatusUnprocessableEntity || !strings.Contains(invalid.Body.String(), "must be at most 20") {
+		t.Fatalf("invalid response: status=%d body=%s", invalid.Code, invalid.Body.String())
+	}
+	if len(settingsStore.overrides) != 0 {
+		t.Fatal("invalid runtime setting was persisted")
+	}
+
+	valid := performOperatorRuntimeSettingRequest(t, h.OperatorSettingSetPost, config.KeyChallengeMaxAttempts, url.Values{
+		"revision": {"0"}, "value": {"8"},
+	}, actor)
+	if valid.Code != http.StatusSeeOther || runtimeSettings.Current().MaxAttempts != 8 {
+		t.Fatalf("valid response: status=%d policy=%+v", valid.Code, runtimeSettings.Current())
+	}
+
+	rateLimit := performOperatorRuntimeSettingRequest(t, h.OperatorSettingSetPost, config.KeyRateLimitLoginIPLimit, url.Values{
+		"revision": {"0"}, "value": {"25"},
+	}, actor)
+	if rateLimit.Code != http.StatusSeeOther || runtimeSettings.CurrentRateLimits().LoginIPLimit != 25 {
+		t.Fatalf("rate-limit response: status=%d policy=%+v", rateLimit.Code, runtimeSettings.CurrentRateLimits())
+	}
+
+	lockedService, err := config.NewService(context.Background(), config.ServiceOptions{Startup: &config.Config{},
+		Store: newOperatorRuntimeSettingsStore(),
+		LookupEnvironment: func(key string) (string, bool) {
+			if key == "AUTHARA_CHALLENGE_TTL" {
+				return "1h", true
+			}
+			return "", false
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Config = lockedService
+	locked := performOperatorRuntimeSettingRequest(t, h.OperatorSettingSetPost, config.KeyChallengeTTL, url.Values{
+		"revision": {"0"}, "value": {"2h"},
+	}, actor)
+	if locked.Code != http.StatusForbidden || !strings.Contains(locked.Body.String(), "managed by deployment configuration") {
+		t.Fatalf("locked response: status=%d body=%s", locked.Code, locked.Body.String())
+	}
+}
+
+func TestOperatorRuntimeSettingHTMXMutationSwapsOnlyUpdatedRow(t *testing.T) {
+	settingsStore := newOperatorRuntimeSettingsStore()
+	runtimeSettings, err := config.NewService(context.Background(), config.ServiceOptions{Startup: &config.Config{},
+		Store:             settingsStore,
+		LookupEnvironment: func(string) (string, bool) { return "", false },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &UIHandler{
+		Config: runtimeSettings,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Render: render.New(render.Assets{}, false),
+	}
+	actor := uuid.New()
+
+	saved := performOperatorRuntimeSettingHTMXRequest(t, h.OperatorSettingSetPost, config.KeyChallengeMaxAttempts, url.Values{
+		"revision": {"0"}, "value": {"8"},
+	}, actor)
+	if saved.Code != http.StatusOK || saved.Header().Get("Location") != "" {
+		t.Fatalf("HTMX save response: status=%d location=%q body=%s", saved.Code, saved.Header().Get("Location"), saved.Body.String())
+	}
+	for _, want := range []string{
+		`id="setting-challenge.max_attempts"`, `name="value" value="8"`, `name="revision" value="1"`,
+		"Set · operator override", `action="/auth/operator/settings/challenge.max_attempts/clear"`,
+		"Runtime setting updated.", `hx-swap-oob="afterbegin:#toast-container"`,
+	} {
+		if !strings.Contains(saved.Body.String(), want) {
+			t.Fatalf("HTMX save response does not contain %q: %s", want, saved.Body.String())
+		}
+	}
+	if strings.Contains(saved.Body.String(), "Environment and runtime settings") {
+		t.Fatal("HTMX save rendered the full settings page")
+	}
+
+	cleared := performOperatorRuntimeSettingHTMXRequest(t, h.OperatorSettingClearPost, config.KeyChallengeMaxAttempts, url.Values{
+		"revision": {"1"},
+	}, actor)
+	if cleared.Code != http.StatusOK || !strings.Contains(cleared.Body.String(), `name="value" value="5"`) ||
+		strings.Contains(cleared.Body.String(), `action="/auth/operator/settings/challenge.max_attempts/clear"`) {
+		t.Fatalf("HTMX clear response: status=%d body=%s", cleared.Code, cleared.Body.String())
+	}
+
+	invalid := performOperatorRuntimeSettingHTMXRequest(t, h.OperatorSettingSetPost, config.KeyChallengeMaxAttempts, url.Values{
+		"revision": {"0"}, "value": {"100"},
+	}, actor)
+	if invalid.Code != http.StatusUnprocessableEntity ||
+		!strings.Contains(invalid.Body.String(), `name="value" value="100"`) ||
+		!strings.Contains(invalid.Body.String(), "must be at most 20") ||
+		strings.Contains(invalid.Body.String(), "Environment and runtime settings") {
+		t.Fatalf("HTMX invalid response: status=%d body=%s", invalid.Code, invalid.Body.String())
+	}
+}
+
+func performOperatorRuntimeSettingRequest(
+	t *testing.T,
+	handler http.HandlerFunc,
+	key config.Key,
+	values url.Values,
+	userID uuid.UUID,
+) *httptest.ResponseRecorder {
+	return performOperatorRuntimeSettingRequestMode(t, handler, key, values, userID, false)
+}
+
+func performOperatorRuntimeSettingHTMXRequest(
+	t *testing.T,
+	handler http.HandlerFunc,
+	key config.Key,
+	values url.Values,
+	userID uuid.UUID,
+) *httptest.ResponseRecorder {
+	return performOperatorRuntimeSettingRequestMode(t, handler, key, values, userID, true)
+}
+
+func performOperatorRuntimeSettingRequestMode(
+	t *testing.T,
+	handler http.HandlerFunc,
+	key config.Key,
+	values url.Values,
+	userID uuid.UUID,
+	isHTMX bool,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/auth/operator/settings/"+string(key), strings.NewReader(values.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if isHTMX {
+		req.Header.Set("HX-Request", "true")
+	}
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("settingKey", string(key))
+	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx)
+	ctx = httpctx.WithUserID(ctx, userID)
+	if isHTMX {
+		ctx = httpctx.WithHTMX(ctx)
+	}
+	req = req.WithContext(ctx)
+	response := httptest.NewRecorder()
+	handler(response, req)
+	return response
+}
+
+type operatorRuntimeSettingsStore struct {
+	revision  int64
+	overrides map[config.Key]config.PersistedOverride
+}
+
+func newOperatorRuntimeSettingsStore() *operatorRuntimeSettingsStore {
+	return &operatorRuntimeSettingsStore{overrides: make(map[config.Key]config.PersistedOverride)}
+}
+
+func (s *operatorRuntimeSettingsStore) LoadRuntimeSettings(context.Context) (config.PersistedState, error) {
+	overrides := make([]config.PersistedOverride, 0, len(s.overrides))
+	for _, override := range s.overrides {
+		overrides = append(overrides, override)
+	}
+	return config.PersistedState{Revision: s.revision, Overrides: overrides}, nil
+}
+
+func (s *operatorRuntimeSettingsStore) UpsertRuntimeSettingOverride(_ context.Context, mutation config.Mutation) (config.PersistedOverride, error) {
+	if mutation.ExpectedStateRevision != s.revision {
+		return config.PersistedOverride{}, config.ErrRevisionConflict
+	}
+	current, exists := s.overrides[mutation.Key]
+	if (!exists && mutation.ExpectedRevision != 0) || (exists && current.Revision != mutation.ExpectedRevision) {
+		return config.PersistedOverride{}, config.ErrRevisionConflict
+	}
+	s.revision++
+	saved := config.PersistedOverride{Key: mutation.Key, Value: mutation.Value, Revision: s.revision, UpdatedByUserID: &mutation.ActorUserID}
+	s.overrides[mutation.Key] = saved
+	return saved, nil
+}
+
+func (s *operatorRuntimeSettingsStore) DeleteRuntimeSettingOverride(_ context.Context, key config.Key, expected, expectedState int64, _ uuid.UUID, _ json.RawMessage) (int64, error) {
+	if expectedState != s.revision {
+		return 0, config.ErrRevisionConflict
+	}
+	current, exists := s.overrides[key]
+	if !exists || current.Revision != expected {
+		return 0, config.ErrRevisionConflict
+	}
+	delete(s.overrides, key)
+	s.revision++
+	return s.revision, nil
+}
 
 func TestOperatorEmailTemplateSaveValidatesAndPreventsStaleOverwrite(t *testing.T) {
 	templateStore := newOperatorEmailTemplateStore()

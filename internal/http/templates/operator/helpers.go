@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/http/templates/components/dropdown"
@@ -29,6 +30,166 @@ type EmailTemplateEditorModel struct {
 
 	Error    string
 	Conflict bool
+}
+
+type SettingsPageModel struct {
+	Settings   []config.Description
+	ErrorKey   config.Key
+	Error      string
+	DraftValue *string
+}
+
+type SettingsGroup struct {
+	Name          string
+	Settings      []config.Description
+	EditableCount int
+}
+
+func runtimeSettingGroups(values []config.Description) []SettingsGroup {
+	groups := make([]SettingsGroup, 0)
+	groupIndexes := make(map[string]int)
+	for _, setting := range values {
+		index, ok := groupIndexes[setting.Group]
+		if !ok {
+			index = len(groups)
+			groupIndexes[setting.Group] = index
+			groups = append(groups, SettingsGroup{Name: setting.Group})
+		}
+		groups[index].Settings = append(groups[index].Settings, setting)
+		if !setting.Locked {
+			groups[index].EditableCount++
+		}
+	}
+	prioritized := make([]SettingsGroup, 0, len(groups))
+	for _, group := range groups {
+		if group.EditableCount > 0 {
+			prioritized = append(prioritized, group)
+		}
+	}
+	for _, group := range groups {
+		if group.EditableCount == 0 {
+			prioritized = append(prioritized, group)
+		}
+	}
+	return prioritized
+}
+
+func runtimeSettingGroupID(name string) string {
+	return "settings-group-" + strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+}
+
+func runtimeSettingGroupContainsKey(group SettingsGroup, key config.Key) bool {
+	for _, setting := range group.Settings {
+		if setting.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeSettingCountLabel(count int) string {
+	label := " variables"
+	if count == 1 {
+		label = " variable"
+	}
+	return strconv.Itoa(count) + label
+}
+
+func runtimeSettingLiveLabel(count int) string {
+	return strconv.Itoa(count) + " live"
+}
+
+func runtimeSettingError(model SettingsPageModel, setting config.Description) string {
+	if model.ErrorKey == setting.Key {
+		return model.Error
+	}
+	return ""
+}
+
+func runtimeSettingInputValue(model SettingsPageModel, setting config.Description) string {
+	if model.ErrorKey == setting.Key && model.DraftValue != nil {
+		return *model.DraftValue
+	}
+	return setting.EffectiveValue
+}
+
+func runtimeSettingHref(key config.Key) string {
+	return "/auth/operator/settings/" + string(key)
+}
+
+func runtimeSettingClearHref(key config.Key) string {
+	return runtimeSettingHref(key) + "/clear"
+}
+
+func runtimeSettingSourceLabel(source config.Source) string {
+	switch source {
+	case config.SourceEnvironment:
+		return "Set · environment"
+	case config.SourceOperator:
+		return "Set · operator override"
+	case config.SourceUnset:
+		return "Not set"
+	default:
+		return "Not set · default used"
+	}
+}
+
+func runtimeSettingSourceClass(source config.Source) string {
+	base := "inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+	switch source {
+	case config.SourceEnvironment:
+		return base + " bg-purple-50 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200"
+	case config.SourceOperator:
+		return base + " bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-200"
+	case config.SourceUnset:
+		return base + " bg-grey-100 text-grey-700 dark:bg-grey-800 dark:text-grey-200"
+	default:
+		return base + " bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200"
+	}
+}
+
+func runtimeSettingMutabilityLabel(setting config.Description) string {
+	if setting.Locked {
+		return "Deployment only"
+	}
+	return "Editable here"
+}
+
+func runtimeSettingMutabilityClass(setting config.Description) string {
+	base := "inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+	if setting.Locked {
+		return base + " bg-grey-100 text-grey-700 dark:bg-grey-800 dark:text-grey-200"
+	}
+	return base + " bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-200"
+}
+
+func runtimeSettingStateDescription(setting config.Description) string {
+	switch setting.EffectiveSource {
+	case config.SourceEnvironment:
+		if setting.Sensitive {
+			return "Provided by the environment. The value is hidden."
+		}
+		return "Provided by the environment."
+	case config.SourceOperator:
+		return "A saved operator override is active."
+	case config.SourceUnset:
+		if setting.Required {
+			return "No value is configured, although this variable is required."
+		}
+		return "No value is configured and there is no built-in default."
+	default:
+		return "Not provided in the environment; the built-in default is active."
+	}
+}
+
+func runtimeSettingDisplayValue(setting config.Description) string {
+	if setting.Sensitive && setting.EffectiveSource == config.SourceEnvironment {
+		return "Configured (value hidden)"
+	}
+	if setting.EffectiveSource == config.SourceUnset || setting.EffectiveValue == "" {
+		return "—"
+	}
+	return setting.EffectiveValue
 }
 
 type EmailTemplateDiagnostic struct {
@@ -137,6 +298,8 @@ func operatorAuditActionDropdownOptions() []dropdown.Option {
 		{Value: domain.OperatorAuditActionEmailTemplateRestoredBuiltIn, Label: "Built-in restored"},
 		{Value: domain.OperatorAuditActionEmailTemplateDeliveryEnabled, Label: "Delivery enabled"},
 		{Value: domain.OperatorAuditActionEmailTemplateDeliveryDisabled, Label: "Delivery disabled"},
+		{Value: domain.OperatorAuditActionRuntimeSettingSet, Label: "Runtime setting updated"},
+		{Value: domain.OperatorAuditActionRuntimeSettingCleared, Label: "Runtime override cleared"},
 	}
 }
 
@@ -168,9 +331,30 @@ func operatorAuditActionLabel(action string) string {
 		return "Delivery enabled"
 	case domain.OperatorAuditActionEmailTemplateDeliveryDisabled:
 		return "Delivery disabled"
+	case domain.OperatorAuditActionRuntimeSettingSet:
+		return "Setting updated"
+	case domain.OperatorAuditActionRuntimeSettingCleared:
+		return "Override cleared"
 	default:
 		return action
 	}
+}
+
+func operatorAuditResourceLabel(event domain.OperatorAuditEvent) string {
+	if event.ResourceType == domain.OperatorAuditResourceRuntimeSetting {
+		if definition, ok := config.LookupDefinition(config.Key(event.ResourceID)); ok {
+			return definition.Name
+		}
+		return event.ResourceID
+	}
+	return operatorAuditTemplateLabel(event.ResourceID)
+}
+
+func operatorAuditResourceHref(event domain.OperatorAuditEvent) string {
+	if event.ResourceType == domain.OperatorAuditResourceRuntimeSetting {
+		return "/auth/operator/settings#setting-" + event.ResourceID
+	}
+	return emailTemplateHref(domain.EmailTemplate(event.ResourceID))
 }
 
 func operatorAuditTemplateLabel(resourceID string) string {

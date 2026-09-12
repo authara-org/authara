@@ -34,6 +34,7 @@ document.body.addEventListener("htmx:beforeSwap", function (evt: any) {
   if (
     evt.detail.xhr.status === 422 ||
     evt.detail.xhr.status === 400 ||
+    evt.detail.xhr.status === 403 ||
     evt.detail.xhr.status === 409 ||
     evt.detail.xhr.status === 429
   ) {

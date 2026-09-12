@@ -518,6 +518,24 @@ func TestTemplateServiceRejectsUnknownOperatorAuditFilters(t *testing.T) {
 	}
 }
 
+func TestTemplateServiceSelectsRuntimeSettingAuditResource(t *testing.T) {
+	for _, action := range []string{
+		domain.OperatorAuditActionRuntimeSettingSet,
+		domain.OperatorAuditActionRuntimeSettingCleared,
+	} {
+		t.Run(action, func(t *testing.T) {
+			fakeStore := newFakeTemplateOverrideStore()
+			service := NewTemplateService(fakeStore)
+			if _, err := service.ListAuditEvents(context.Background(), OperatorAuditQuery{Action: action}); err != nil {
+				t.Fatalf("ListAuditEvents failed: %v", err)
+			}
+			if fakeStore.auditFilter.ResourceType != domain.OperatorAuditResourceRuntimeSetting {
+				t.Fatalf("audit resource type = %q", fakeStore.auditFilter.ResourceType)
+			}
+		})
+	}
+}
+
 func TestTemplateServiceDoesNotWrapOperatorAuditOffset(t *testing.T) {
 	fakeStore := newFakeTemplateOverrideStore()
 	service := NewTemplateService(fakeStore)

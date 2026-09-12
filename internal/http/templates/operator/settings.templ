@@ -1,0 +1,130 @@
+package operator
+
+import (
+	"strconv"
+
+	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+)
+
+templ Settings(model SettingsPageModel) {
+	@Shell("settings") {
+		<div class="space-y-5">
+			<div>
+				<p class="text-xs font-medium uppercase tracking-[0.16em] text-grey-500 dark:text-grey-400">Configuration</p>
+				<h2 class="mt-1 text-2xl font-semibold tracking-tight">Environment and runtime settings</h2>
+				<p class="mt-1.5 max-w-3xl text-sm leading-5 text-grey-600 dark:text-grey-400">Every environment variable supported by Core is listed below. Groups with live-editable values appear first. Each entry shows its source and where it can be changed. Sensitive values are always hidden.</p>
+			</div>
+			<div class="divide-y divide-grey-200 overflow-hidden rounded-xl border border-grey-200 bg-white dark:divide-grey-800 dark:border-grey-800 dark:bg-grey-900">
+				for _, group := range runtimeSettingGroups(model.Settings) {
+					<details
+						class="group"
+						aria-labelledby={ runtimeSettingGroupID(group.Name) }
+						open?={ model.Error != "" && runtimeSettingGroupContainsKey(group, model.ErrorKey) }
+					>
+						<summary id={ runtimeSettingGroupID(group.Name) } class="flex min-h-11 cursor-pointer list-none select-none items-center gap-3 px-4 py-2.5 hover:bg-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden dark:hover:bg-grey-800/60">
+							<span class="h-4 w-4 shrink-0 -rotate-90 stroke-2 text-grey-500 transition-transform duration-150 group-open:rotate-0 dark:text-grey-400" aria-hidden="true">
+								@icons.ChevronDown()
+							</span>
+							<span class="min-w-0 flex-1 truncate text-sm font-semibold" role="heading" aria-level="3">{ group.Name }</span>
+							if group.EditableCount > 0 {
+								<span class="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium tabular-nums text-green-800 dark:bg-green-900/30 dark:text-green-200">{ runtimeSettingLiveLabel(group.EditableCount) }</span>
+							}
+							<span class="shrink-0 text-xs tabular-nums text-grey-500 dark:text-grey-400">{ runtimeSettingCountLabel(len(group.Settings)) }</span>
+						</summary>
+						<div class="border-t border-grey-200 dark:border-grey-800">
+							<div class="hidden grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)_minmax(20rem,0.9fr)] gap-5 border-b border-grey-200 bg-grey-50 px-4 py-2 text-xs font-medium uppercase tracking-wide text-grey-500 dark:border-grey-800 dark:bg-grey-950/60 dark:text-grey-400 xl:grid">
+								<span>Setting</span>
+								<span>Status and behavior</span>
+								<span>Effective value</span>
+							</div>
+							<div class="divide-y divide-grey-200 dark:divide-grey-800">
+								for _, setting := range group.Settings {
+									@RuntimeSettingRow(setting, runtimeSettingInputValue(model, setting), runtimeSettingError(model, setting))
+								}
+							</div>
+						</div>
+					</details>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ RuntimeSettingRow(setting config.Description, inputValue string, errorMessage string) {
+	<article class="grid scroll-mt-4 gap-3 px-4 py-3 xl:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)_minmax(20rem,0.9fr)] xl:gap-5" id={ "setting-" + string(setting.Key) }>
+		<div class="min-w-0">
+			<p class="text-sm font-medium text-grey-900 dark:text-grey-100">{ setting.Name }</p>
+			<p class="mt-0.5 break-all font-mono text-xs text-grey-500 dark:text-grey-400">{ setting.Environment }</p>
+		</div>
+		<div class="min-w-0">
+			<div class="flex flex-wrap items-center gap-1.5">
+				<span class={ runtimeSettingSourceClass(setting.EffectiveSource) }>{ runtimeSettingSourceLabel(setting.EffectiveSource) }</span>
+				<span class={ runtimeSettingMutabilityClass(setting) }>{ runtimeSettingMutabilityLabel(setting) }</span>
+				if setting.Required {
+					<span class="text-xs font-medium text-grey-500 dark:text-grey-400">Required</span>
+				} else {
+					<span class="text-xs text-grey-500 dark:text-grey-400">Optional</span>
+				}
+			</div>
+			if setting.Description != "" {
+				<p class="mt-1.5 text-xs leading-5 text-grey-600 dark:text-grey-400">{ setting.Description }</p>
+			}
+			if setting.Impact != "" {
+				<p class="mt-0.5 text-xs leading-5 text-grey-500 dark:text-grey-400">{ setting.Impact }</p>
+			}
+		</div>
+		<div class="min-w-0">
+			if setting.Locked {
+				<p class="break-all font-mono text-sm font-medium">{ runtimeSettingDisplayValue(setting) }</p>
+				<p class="mt-1 text-xs leading-5 text-grey-600 dark:text-grey-300">{ runtimeSettingStateDescription(setting) }</p>
+				<p class="mt-0.5 text-xs text-grey-500 dark:text-grey-400">{ string(setting.Type) } · Restart required</p>
+				if setting.DormantOverride && setting.PersistedOverride != nil {
+					<p class="mt-1.5 rounded-md bg-amber-50 px-2.5 py-2 text-xs leading-5 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">Dormant operator override: { *setting.PersistedOverride }. It may become effective if the environment value is removed on a later restart.</p>
+				}
+			} else {
+				<form
+					method="post"
+					action={ runtimeSettingHref(setting.Key) }
+					hx-post={ runtimeSettingHref(setting.Key) }
+					hx-target="closest article"
+					hx-swap="outerHTML"
+					hx-sync="closest article:replace"
+					hx-disabled-elt="find button"
+					class="flex items-end gap-2"
+				>
+					@csrf.CSRFInput()
+					<input type="hidden" name="revision" value={ strconv.FormatInt(setting.Revision, 10) }/>
+					<div class="min-w-0 flex-1">
+						<label class="sr-only" for={ "runtime-setting-" + string(setting.Key) }>Effective value</label>
+						<input id={ "runtime-setting-" + string(setting.Key) } name="value" value={ inputValue } class="h-9 w-full rounded-lg border border-grey-200 bg-white px-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-grey-700 dark:bg-grey-950 dark:focus:ring-blue-900/40"/>
+					</div>
+					@button.Button(button.ButtonConfig{Label: "Save", Type: button.Submit, Size: button.Small, Class: " !h-9 !w-auto !rounded-lg"})
+				</form>
+				<div class="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+					<p class="text-xs text-grey-500 dark:text-grey-400">{ string(setting.Type) } · { setting.Minimum }–{ setting.Maximum }</p>
+					if setting.EffectiveSource == config.SourceOperator {
+						<form
+							method="post"
+							action={ runtimeSettingClearHref(setting.Key) }
+							hx-post={ runtimeSettingClearHref(setting.Key) }
+							hx-target="closest article"
+							hx-swap="outerHTML"
+							hx-sync="closest article:replace"
+							hx-disabled-elt="find button"
+						>
+							@csrf.CSRFInput()
+							<input type="hidden" name="revision" value={ strconv.FormatInt(setting.Revision, 10) }/>
+							<button type="submit" class="text-xs font-medium text-blue-700 hover:underline disabled:opacity-50 dark:text-blue-300">Reset to default</button>
+						</form>
+					}
+				</div>
+			}
+			if errorMessage != "" {
+				<p class="mt-1.5 text-sm text-red-700 dark:text-red-300" role="alert">{ errorMessage }</p>
+			}
+		</div>
+	</article>
+}
