@@ -29,10 +29,12 @@ templ Settings(model SettingsPageModel) {
 								@icons.ChevronDown()
 							</span>
 							<span class="min-w-0 flex-1 truncate text-sm font-semibold" role="heading" aria-level="3">{ group.Name }</span>
-							if group.EditableCount > 0 {
-								<span class="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium tabular-nums text-green-800 dark:bg-green-900/30 dark:text-green-200">{ runtimeSettingLiveLabel(group.EditableCount) }</span>
-							}
-							<span class="shrink-0 text-xs tabular-nums text-grey-500 dark:text-grey-400">{ runtimeSettingCountLabel(len(group.Settings)) }</span>
+							<span class="ml-auto grid shrink-0 grid-cols-[4.5rem_6.5rem] items-center gap-2">
+								if group.EditableCount > 0 {
+									<span class="justify-self-end rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium tabular-nums text-green-800 dark:bg-green-900/30 dark:text-green-200">{ runtimeSettingLiveLabel(group.EditableCount) }</span>
+								}
+								<span class="col-start-2 w-[6.5rem] text-right text-xs tabular-nums text-grey-500 dark:text-grey-400">{ runtimeSettingCountLabel(len(group.Settings)) }</span>
+							</span>
 						</summary>
 						<div class="border-t border-grey-200 dark:border-grey-800">
 							<div class="hidden grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)_minmax(20rem,0.9fr)] gap-5 border-b border-grey-200 bg-grey-50 px-4 py-2 text-xs font-medium uppercase tracking-wide text-grey-500 dark:border-grey-800 dark:bg-grey-950/60 dark:text-grey-400 xl:grid">
