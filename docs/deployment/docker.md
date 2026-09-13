@@ -54,6 +54,11 @@ services:
       POSTGRES_DB: authara
       POSTGRES_USER: authara
       POSTGRES_PASSWORD: authara
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authara -d authara"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
 
   app:
     image: nginx:alpine
@@ -62,13 +67,19 @@ services:
     image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
     env_file:
       - .env
+    environment:
+      POSTGRESQL_HOST: postgres
+    command: ["up", "-env=default", "-config=/migrations/dbconfig.yaml"]
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   authara:
     image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
     env_file:
       - .env
+    environment:
+      POSTGRESQL_HOST: postgres
     depends_on:
       authara-migrations:
         condition: service_completed_successfully

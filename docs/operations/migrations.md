@@ -58,7 +58,8 @@ Example:
 ```bash
 docker run --rm \
   --env-file .env \
-  ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
+  ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20} \
+  up -env=default -config=/migrations/dbconfig.yaml
 ```
 
 This applies all pending migrations and exits.
