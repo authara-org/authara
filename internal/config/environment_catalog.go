@@ -34,6 +34,7 @@ var sensitiveEnvironmentVariables = map[string]struct{}{
 
 var environmentVariableTypeOverrides = map[string]string{
 	"APP_ENV":                "enum",
+	"POSTGRESQL_SSL_MODE":    "enum",
 	"AUTHARA_CACHE_PROVIDER": "enum",
 	"AUTHARA_ORG_MODE":       "enum",
 	"AUTHARA_EMAIL_PROVIDER": "enum",

@@ -14,6 +14,8 @@ func NewStore(cfg *config.Config) (*store.Store, error) {
 		Database:        cfg.DB.Database,
 		Timezone:        cfg.DB.Timezone,
 		LogSql:          cfg.DB.LogSQL,
+		SSLMode:         cfg.DB.SSLMode,
+		SSLRootCert:     cfg.DB.SSLRootCert,
 		MaxOpenConns:    cfg.DB.MaxOpenConns,
 		MaxIdleConns:    cfg.DB.MaxIdleConns,
 		ConnMaxLifetime: cfg.DB.ConnMaxLifetime,

@@ -19,13 +19,15 @@ func OpenTestDB(t *testing.T) *TestDB {
 	t.Helper()
 
 	cfg := store.Config{
-		Host:     getenv("POSTGRESQL_HOST", "localhost"),
-		Port:     getenvInt("POSTGRESQL_PORT", 5432),
-		Database: getenv("POSTGRESQL_DATABASE", "authara_test"),
-		Username: getenv("POSTGRESQL_USERNAME", "authara"),
-		Password: getenv("POSTGRESQL_PASSWORD", "authara"),
-		Timezone: getenv("POSTGRESQL_TIMEZONE", "UTC"),
-		LogSql:   getenvBool("POSTGRESQL_LOG_SQL", false),
+		Host:        getenv("POSTGRESQL_HOST", "localhost"),
+		Port:        getenvInt("POSTGRESQL_PORT", 5432),
+		Database:    getenv("POSTGRESQL_DATABASE", "authara_test"),
+		Username:    getenv("POSTGRESQL_USERNAME", "authara"),
+		Password:    getenv("POSTGRESQL_PASSWORD", "authara"),
+		Timezone:    getenv("POSTGRESQL_TIMEZONE", "UTC"),
+		LogSql:      getenvBool("POSTGRESQL_LOG_SQL", false),
+		SSLMode:     getenv("POSTGRESQL_SSL_MODE", "disable"),
+		SSLRootCert: getenv("POSTGRESQL_SSL_ROOT_CERT", ""),
 	}
 
 	st, err := store.New(cfg)

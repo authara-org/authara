@@ -11,13 +11,15 @@ import (
 
 // Config is the configuration for the database.
 type Config struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
-	Database string
-	Timezone string
-	LogSql   bool
+	Host        string
+	Port        int
+	Username    string
+	Password    string
+	Database    string
+	Timezone    string
+	LogSql      bool
+	SSLMode     string
+	SSLRootCert string
 
 	MaxOpenConns    int
 	MaxIdleConns    int
@@ -49,10 +51,7 @@ func New(cfg Config) (*Store, error) {
 	}
 	_ = location
 
-	pgxConfig, err := pgx.ParseConfig(fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s",
-		cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database,
-	))
+	pgxConfig, err := pgx.ParseConfig(postgreSQLConnectionString(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing database config: %w", err)
 	}
@@ -71,4 +70,15 @@ func New(cfg Config) (*Store, error) {
 
 	c := Store{db: sqlDB, logSQL: cfg.LogSql}
 	return &c, nil
+}
+
+func postgreSQLConnectionString(cfg Config) string {
+	dsn := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database, cfg.SSLMode,
+	)
+	if cfg.SSLRootCert != "" {
+		dsn += " sslrootcert=" + cfg.SSLRootCert
+	}
+	return dsn
 }

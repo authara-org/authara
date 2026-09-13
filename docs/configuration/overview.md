@@ -46,7 +46,12 @@ POSTGRESQL_HOST
 POSTGRESQL_DATABASE
 POSTGRESQL_USERNAME
 POSTGRESQL_PASSWORD
+POSTGRESQL_SSL_MODE
+POSTGRESQL_SSL_ROOT_CERT
 ```
+
+Core and the migrations image use the same TLS values. See
+`configuration/database-connection.md`.
 
 ---
 

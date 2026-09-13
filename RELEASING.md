@@ -14,8 +14,8 @@ Authara Core and its SDKs are versioned independently. The OpenAPI contract in
    required checks pass.
 4. Release Please creates the version commit, changelog, release tag, and draft
    GitHub release. Do not create or commit any of these manually.
-5. A Core release tag checks for numbered SQL migration changes since the
-   latest migrations release. If any exist, CD publishes the next `0.X.0`
+5. A Core release tag checks whether the migrations image inputs changed since
+   the latest migrations release. If they did, CD publishes the next `0.X.0`
    migrations image and release; otherwise it keeps the current migrations
    version.
 6. CD deploys Core, attaches `authara-images.env`, adds the compatible image
@@ -55,8 +55,7 @@ recorded in each SDK repository's `.codegen/manifest.json`.
 
 Migrations are versioned independently. Each automatic migrations release bumps
 the minor version and resets the patch version (`0.1.20` → `0.2.0`). A Core
-release without numbered SQL migration changes reuses the previous migrations
-release.
+release without migrations image changes reuses the previous migrations release.
 
 Core releases remain drafts until CD has built both compatible image references,
 attached their machine-readable metadata, and added the same pairing to the

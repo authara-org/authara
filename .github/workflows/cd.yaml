@@ -51,7 +51,7 @@ jobs:
           echo "Core ${GITHUB_REF_NAME}: ${bump} release since ${previous_tag:-no previous tag}"
           echo "bump=$bump" >> "$GITHUB_OUTPUT"
 
-      - name: Detect migration changes
+      - name: Detect migration artifact changes
         id: migrations
         run: |
           previous_tag="$(git tag --list 'migrations-v*' --sort=-version:refname | head -n 1)"
@@ -69,7 +69,7 @@ jobs:
             exit 1
           fi
 
-          migration_changes="$(git diff --name-only "$previous_tag" "$GITHUB_SHA" -- 'migrations/[0-9][0-9][0-9]-*.sql')"
+          migration_changes="$(git diff --name-only "$previous_tag" "$GITHUB_SHA" -- migrations/Dockerfile migrations/dbconfig.yaml 'migrations/[0-9][0-9][0-9]-*.sql')"
           if test -z "$migration_changes"; then
             echo "No migration changes since $previous_tag."
             echo "publish=false" >> "$GITHUB_OUTPUT"
@@ -123,7 +123,7 @@ jobs:
         run: |
           notes="$RUNNER_TEMP/migrations-release-notes.md"
           printf 'Migrations for Authara Core `%s`:\n\n' "$GITHUB_REF_NAME" > "$notes"
-          git diff --name-only "$PREVIOUS_TAG" "$GITHUB_SHA" -- 'migrations/[0-9][0-9][0-9]-*.sql' |
+          git diff --name-only "$PREVIOUS_TAG" "$GITHUB_SHA" -- migrations/Dockerfile migrations/dbconfig.yaml 'migrations/[0-9][0-9][0-9]-*.sql' |
             while IFS= read -r migration; do
               printf -- '- `%s`\n' "$migration"
             done >> "$notes"

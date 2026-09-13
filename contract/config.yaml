@@ -14,6 +14,8 @@ settings_metadata:
   POSTGRESQL_PASSWORD: {control: env, reload: startup, sensitive: true, group: database}
   POSTGRESQL_TIMEZONE: {control: env, reload: startup, sensitive: false, group: database}
   POSTGRESQL_LOG_SQL: {control: env, reload: startup, sensitive: false, group: database}
+  POSTGRESQL_SSL_MODE: {control: env, reload: startup, sensitive: false, group: database}
+  POSTGRESQL_SSL_ROOT_CERT: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_DB_MAX_OPEN_CONNS: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_DB_MAX_IDLE_CONNS: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_DB_CONN_MAX_LIFETIME: {control: env, reload: startup, sensitive: false, group: database}
@@ -165,6 +167,18 @@ variables:
     required: false
     type: bool
     default: false
+
+  - name: POSTGRESQL_SSL_MODE
+    stability: stable
+    required: false
+    type: enum
+    default: disable
+    allowed_values: [disable, require, verify-ca, verify-full]
+
+  - name: POSTGRESQL_SSL_ROOT_CERT
+    stability: stable
+    required: false
+    type: string
 
   - name: AUTHARA_DB_MAX_OPEN_CONNS
     stability: stable

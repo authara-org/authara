@@ -96,7 +96,7 @@ sync begins only after the Core release tag exists.
    auto-merge, and merged it only after all required checks passed.
 4. Verify Release Please created the expected Core tag and draft GitHub release
    at the merged release commit. Do not create a replacement tag manually.
-5. Verify `.github/workflows/cd.yaml` checked for numbered SQL migration
+5. Verify `.github/workflows/cd.yaml` checked the migrations image inputs for
    changes. If any were present, verify it published the next `0.X.0`
    migrations image, tag, and GitHub release; otherwise verify it reused the
    current migrations release.

@@ -81,7 +81,18 @@ POSTGRESQL_PORT=5432
 POSTGRESQL_DATABASE=authara
 POSTGRESQL_USERNAME=authara
 POSTGRESQL_PASSWORD=authara
+POSTGRESQL_SSL_MODE=disable
 ```
+
+For TLS-enabled PostgreSQL, use the same values as Core:
+
+```env
+POSTGRESQL_SSL_MODE=verify-full
+POSTGRESQL_SSL_ROOT_CERT=/certs/postgresql-ca.pem
+```
+
+Mount a private CA file at that path in the migrations container. See the
+database connection documentation for all supported verification modes.
 
 These variables may be provided through:
 

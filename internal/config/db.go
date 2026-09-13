@@ -6,13 +6,15 @@ import (
 )
 
 type DB struct {
-	Host     string `env:"POSTGRESQL_HOST,required"`
-	Port     int    `env:"POSTGRESQL_PORT,required"`
-	Username string `env:"POSTGRESQL_USERNAME,required"`
-	Password string `env:"POSTGRESQL_PASSWORD,required"`
-	Database string `env:"POSTGRESQL_DATABASE,required"`
-	Timezone string `env:"POSTGRESQL_TIMEZONE,default=UTC"`
-	LogSQL   bool   `env:"POSTGRESQL_LOG_SQL,default=false"`
+	Host        string `env:"POSTGRESQL_HOST,required"`
+	Port        int    `env:"POSTGRESQL_PORT,required"`
+	Username    string `env:"POSTGRESQL_USERNAME,required"`
+	Password    string `env:"POSTGRESQL_PASSWORD,required"`
+	Database    string `env:"POSTGRESQL_DATABASE,required"`
+	Timezone    string `env:"POSTGRESQL_TIMEZONE,default=UTC"`
+	LogSQL      bool   `env:"POSTGRESQL_LOG_SQL,default=false"`
+	SSLMode     string `env:"POSTGRESQL_SSL_MODE,default=disable"`
+	SSLRootCert string `env:"POSTGRESQL_SSL_ROOT_CERT"`
 
 	MaxOpenConns    int           `env:"AUTHARA_DB_MAX_OPEN_CONNS,default=40"`
 	MaxIdleConns    int           `env:"AUTHARA_DB_MAX_IDLE_CONNS,default=20"`
@@ -32,6 +34,11 @@ func (db DB) validate() error {
 	}
 	if db.Timezone == "" {
 		return fmt.Errorf("POSTGRESQL_TIMEZONE must not be empty")
+	}
+	switch db.SSLMode {
+	case "disable", "require", "verify-ca", "verify-full":
+	default:
+		return fmt.Errorf("invalid POSTGRESQL_SSL_MODE %q", db.SSLMode)
 	}
 
 	// --- connection pool validation ---
