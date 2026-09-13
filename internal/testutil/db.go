@@ -24,7 +24,6 @@ func OpenTestDB(t *testing.T) *TestDB {
 		Database: getenv("POSTGRESQL_DATABASE", "authara_test"),
 		Username: getenv("POSTGRESQL_USERNAME", "authara"),
 		Password: getenv("POSTGRESQL_PASSWORD", "authara"),
-		Schema:   getenv("POSTGRESQL_SCHEMA", "public"),
 		Timezone: getenv("POSTGRESQL_TIMEZONE", "UTC"),
 		LogSql:   getenvBool("POSTGRESQL_LOG_SQL", false),
 	}

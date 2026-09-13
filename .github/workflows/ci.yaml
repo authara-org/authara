@@ -43,7 +43,6 @@ jobs:
       POSTGRESQL_DATABASE: authara_test
       POSTGRESQL_USERNAME: authara
       POSTGRESQL_PASSWORD: authara
-      POSTGRESQL_SCHEMA: authara
       POSTGRESQL_TIMEZONE: UTC
       POSTGRESQL_LOG_SQL: false
       AUTHARA_TEST_MAILPIT_HTTP_URL: http://localhost:8025
@@ -83,7 +82,6 @@ jobs:
             -e POSTGRESQL_DATABASE \
             -e POSTGRESQL_USERNAME \
             -e POSTGRESQL_PASSWORD \
-            -e POSTGRESQL_SCHEMA \
             authara-migrations:test \
             up \
             -env=default \

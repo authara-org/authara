@@ -11,7 +11,6 @@ type DB struct {
 	Username string `env:"POSTGRESQL_USERNAME,required"`
 	Password string `env:"POSTGRESQL_PASSWORD,required"`
 	Database string `env:"POSTGRESQL_DATABASE,required"`
-	Schema   string `env:"POSTGRESQL_SCHEMA,default=authara"`
 	Timezone string `env:"POSTGRESQL_TIMEZONE,default=UTC"`
 	LogSQL   bool   `env:"POSTGRESQL_LOG_SQL,default=false"`
 
@@ -30,9 +29,6 @@ func (db DB) validate() error {
 	}
 	if db.Database == "" {
 		return fmt.Errorf("POSTGRESQL_DATABASE must not be empty")
-	}
-	if db.Schema == "" {
-		return fmt.Errorf("POSTGRESQL_SCHEMA must not be empty")
 	}
 	if db.Timezone == "" {
 		return fmt.Errorf("POSTGRESQL_TIMEZONE must not be empty")

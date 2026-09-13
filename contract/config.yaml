@@ -12,7 +12,6 @@ settings_metadata:
   POSTGRESQL_DATABASE: {control: env, reload: startup, sensitive: false, group: database}
   POSTGRESQL_USERNAME: {control: env, reload: startup, sensitive: true, group: database}
   POSTGRESQL_PASSWORD: {control: env, reload: startup, sensitive: true, group: database}
-  POSTGRESQL_SCHEMA: {control: env, reload: startup, sensitive: false, group: database}
   POSTGRESQL_TIMEZONE: {control: env, reload: startup, sensitive: false, group: database}
   POSTGRESQL_LOG_SQL: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_DB_MAX_OPEN_CONNS: {control: env, reload: startup, sensitive: false, group: database}
@@ -154,12 +153,6 @@ variables:
     stability: stable
     required: true
     type: string
-
-  - name: POSTGRESQL_SCHEMA
-    stability: stable
-    required: false
-    type: string
-    default: authara
 
   - name: POSTGRESQL_TIMEZONE
     stability: stable

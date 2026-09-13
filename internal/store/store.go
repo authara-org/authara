@@ -17,7 +17,6 @@ type Config struct {
 	Password string
 	Database string
 	Timezone string
-	Schema   string
 	LogSql   bool
 
 	MaxOpenConns    int
@@ -57,7 +56,7 @@ func New(cfg Config) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error parsing database config: %w", err)
 	}
-	pgxConfig.RuntimeParams["search_path"] = cfg.Schema
+	pgxConfig.RuntimeParams["search_path"] = "authara"
 	pgxConfig.RuntimeParams["timezone"] = cfg.Timezone
 
 	sqlDB, err := sql.Open("pgx", stdlib.RegisterConnConfig(pgxConfig))
