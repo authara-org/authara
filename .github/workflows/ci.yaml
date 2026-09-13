@@ -145,17 +145,16 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build Tailwind CSS
-        working-directory: frontend
-        run: npm run build:tailwind
-
       - name: Check formatting
         working-directory: frontend
         run: npm run format:check
 
       - name: Build frontend bundle
         working-directory: frontend
-        run: npm run build:webpack
+        run: npm run build
+
+      - name: Test production static packaging
+        run: sh scripts/test-static-packaging.sh
 
       - name: Install SPA app dependencies
         working-directory: integrations/spa-app
