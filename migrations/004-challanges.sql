@@ -82,8 +82,14 @@ CREATE TABLE IF NOT EXISTS authara.pending_signup_actions (
 	CONSTRAINT unique_pending_signup_challenge UNIQUE (challenge_id)
 );
 
+INSERT INTO public.authara_schema_version (version)
+VALUES (4)
+ON CONFLICT (version) DO NOTHING;
 
 -- +migrate Down
+
+DELETE FROM public.authara_schema_version
+WHERE version = 4;
 
 DROP TABLE IF EXISTS authara.pending_signup_actions;
 DROP INDEX IF EXISTS authara.idx_email_jobs_pending;

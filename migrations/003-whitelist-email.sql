@@ -9,6 +9,13 @@ CREATE TABLE IF NOT EXISTS authara.allowed_emails (
 	CONSTRAINT unique_allowed_email UNIQUE (email)
 );
 
+INSERT INTO public.authara_schema_version (version)
+VALUES (3)
+ON CONFLICT (version) DO NOTHING;
+
 -- +migrate Down
+
+DELETE FROM public.authara_schema_version
+WHERE version = 3;
 
 DROP TABLE IF EXISTS authara.allowed_emails;

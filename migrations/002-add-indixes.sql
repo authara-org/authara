@@ -33,7 +33,14 @@ ON authara.refresh_tokens (expires_at);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_session_id
 ON authara.refresh_tokens(session_id);
 
+INSERT INTO public.authara_schema_version (version)
+VALUES (2)
+ON CONFLICT (version) DO NOTHING;
+
 -- +migrate Down
+
+DELETE FROM public.authara_schema_version
+WHERE version = 2;
 
 DROP INDEX IF EXISTS authara.idx_refresh_tokens_expires_at;
 DROP INDEX IF EXISTS authara.idx_sessions_expires_at;

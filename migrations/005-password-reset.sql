@@ -14,7 +14,14 @@ CREATE TABLE IF NOT EXISTS authara.pending_password_resets (
 CREATE INDEX IF NOT EXISTS idx_pending_password_resets_user_id
 ON authara.pending_password_resets (user_id);
 
+INSERT INTO public.authara_schema_version (version)
+VALUES (5)
+ON CONFLICT (version) DO NOTHING;
+
 -- +migrate Down
+
+DELETE FROM public.authara_schema_version
+WHERE version = 5;
 
 DROP INDEX IF EXISTS authara.idx_pending_password_resets_user_id;
 DROP TABLE IF EXISTS authara.pending_password_resets;

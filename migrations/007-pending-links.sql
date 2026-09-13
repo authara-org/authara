@@ -18,7 +18,14 @@ ON authara.pending_provider_links (user_id);
 CREATE INDEX IF NOT EXISTS idx_pending_provider_links_session_id
 ON authara.pending_provider_links (session_id);
 
+INSERT INTO public.authara_schema_version (version)
+VALUES (7)
+ON CONFLICT (version) DO NOTHING;
+
 -- +migrate Down
+
+DELETE FROM public.authara_schema_version
+WHERE version = 7;
 
 DROP INDEX IF EXISTS authara.idx_pending_provider_links_session_id;
 DROP INDEX IF EXISTS authara.idx_pending_provider_links_user_id;

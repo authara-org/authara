@@ -15,7 +15,14 @@ CREATE TABLE IF NOT EXISTS authara.pending_email_changes (
 CREATE INDEX IF NOT EXISTS idx_pending_email_changes_user_id
 ON authara.pending_email_changes (user_id);
 
+INSERT INTO public.authara_schema_version (version)
+VALUES (6)
+ON CONFLICT (version) DO NOTHING;
+
 -- +migrate Down
+
+DELETE FROM public.authara_schema_version
+WHERE version = 6;
 
 DROP INDEX IF EXISTS authara.idx_pending_email_changes_user_id;
 DROP TABLE IF EXISTS authara.pending_email_changes;
