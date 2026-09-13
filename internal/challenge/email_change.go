@@ -2,23 +2,28 @@ package challenge
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
 )
 
 type CreateEmailChangeChallengeInput struct {
-	UserID   uuid.UUID
-	OldEmail string
-	NewEmail string
+	UserID              uuid.UUID
+	InitiatingSessionID uuid.UUID
+	OldEmail            string
+	NewEmail            string
 }
 
-type VerifyEmailChangeChallengeResult struct {
-	Challenge domain.Challenge
-	Action    domain.PendingEmailChange
+type CompleteEmailChangeChallengeInput struct {
+	ChallengeID uuid.UUID
+	UserID      uuid.UUID
+	SessionID   uuid.UUID
+	Code        string
 }
 
 func (s *Service) CreateEmailChangeChallenge(
@@ -32,41 +37,91 @@ func (s *Service) CreateEmailChangeChallenge(
 		in.NewEmail,
 		now,
 		func(txCtx context.Context, challenge domain.Challenge) error {
+			if err := s.requireActiveEmailChangeSession(txCtx, in.UserID, in.InitiatingSessionID, now); err != nil {
+				return err
+			}
 			_, err := s.store.CreatePendingEmailChange(txCtx, domain.PendingEmailChange{
-				ChallengeID: challenge.ID,
-				UserID:      in.UserID,
-				OldEmail:    in.OldEmail,
-				NewEmail:    in.NewEmail,
+				ChallengeID:         challenge.ID,
+				UserID:              in.UserID,
+				InitiatingSessionID: in.InitiatingSessionID,
+				OldEmail:            in.OldEmail,
+				NewEmail:            in.NewEmail,
 			})
 			return err
 		},
 	)
 }
 
-func (s *Service) VerifyEmailChangeChallenge(
+func (s *Service) CompleteEmailChangeChallenge(
 	ctx context.Context,
-	challengeID uuid.UUID,
-	code string,
+	in CompleteEmailChangeChallengeInput,
 	verifier *VerificationCodeService,
 	now time.Time,
-) (*VerifyEmailChangeChallengeResult, error) {
-	challenge, err := s.verifyChallenge(ctx, challengeID, domain.ChallengePurposeEmailChange, code, verifier, now, nil)
-	if err != nil {
-		return nil, err
-	}
+) error {
+	var action domain.PendingEmailChange
+	_, err := s.verifyChallenge(
+		ctx,
+		in.ChallengeID,
+		domain.ChallengePurposeEmailChange,
+		in.Code,
+		verifier,
+		now,
+		func(txCtx context.Context, challenge domain.Challenge) error {
+			if err := s.requireActiveEmailChangeSession(txCtx, in.UserID, in.SessionID, now); err != nil {
+				return err
+			}
 
-	action, err := s.store.GetPendingEmailChangeByChallengeID(ctx, challenge.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &VerifyEmailChangeChallengeResult{
-		Challenge: *challenge,
-		Action:    action,
-	}, nil
+			var err error
+			action, err = s.store.GetPendingEmailChangeByChallengeIDForUpdate(txCtx, challenge.ID)
+			if err != nil {
+				if errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
+					return ErrEmailChangeNotAuthorized
+				}
+				return err
+			}
+			if action.UserID != in.UserID || action.InitiatingSessionID != in.SessionID {
+				return ErrEmailChangeNotAuthorized
+			}
+			return nil
+		},
+		func(txCtx context.Context, _ domain.Challenge) error {
+			return s.executeEmailChange(txCtx, action, now)
+		},
+	)
+	return err
 }
 
-func (s *Service) ExecuteEmailChange(
+func (s *Service) requireActiveEmailChangeSession(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	now time.Time,
+) error {
+	user, err := s.store.GetUserByIDForUpdate(ctx, userID)
+	if err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			return ErrEmailChangeNotAuthorized
+		}
+		return err
+	}
+	if user.DisabledAt != nil {
+		return ErrEmailChangeNotAuthorized
+	}
+
+	session, err := s.store.GetActiveSessionByIDForUpdate(ctx, sessionID, now)
+	if err != nil {
+		if errors.Is(err, store.ErrSessionNotFound) {
+			return ErrEmailChangeNotAuthorized
+		}
+		return err
+	}
+	if session.UserID != userID {
+		return ErrEmailChangeNotAuthorized
+	}
+	return nil
+}
+
+func (s *Service) executeEmailChange(
 	ctx context.Context,
 	action domain.PendingEmailChange,
 	now time.Time,

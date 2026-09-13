@@ -121,6 +121,10 @@ func (h *APIHandler) StartCurrentUserEmailChange(ctx context.Context, request co
 	if !ok {
 		return startCurrentUserEmailChangeError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		return startCurrentUserEmailChangeError(responseCodeUnauthorized(), "Unauthorized."), nil
+	}
 	if request.Body == nil {
 		return startCurrentUserEmailChangeError(responseCodeInvalidRequest(), "Invalid email address."), nil
 	}
@@ -143,12 +147,16 @@ func (h *APIHandler) StartCurrentUserEmailChange(ctx context.Context, request co
 		challengeID, err = h.Challenge.CreateOpaqueChallenge(ctx, now, domain.ChallengePurposeEmailChange, newEmail)
 	} else if err == nil {
 		challengeID, err = h.Challenge.CreateEmailChangeChallenge(ctx, challenge.CreateEmailChangeChallengeInput{
-			UserID:   user.ID,
-			OldEmail: user.Email,
-			NewEmail: newEmail,
+			UserID:              user.ID,
+			InitiatingSessionID: sessionID,
+			OldEmail:            user.Email,
+			NewEmail:            newEmail,
 		}, now)
 	}
 	if err != nil {
+		if errors.Is(err, challenge.ErrEmailChangeNotAuthorized) {
+			return startCurrentUserEmailChangeError(responseCodeForbidden(), "Email change cannot be started from this session."), nil
+		}
 		return startCurrentUserEmailChangeError(responseCodeInternalError(), "Email change error."), nil
 	}
 	return contract.StartCurrentUserEmailChange202JSONResponse{ChallengeId: challengeID}, nil
@@ -162,6 +170,10 @@ func (h *APIHandler) VerifyCurrentUserEmailChange(ctx context.Context, request c
 	if !ok {
 		return verifyCurrentUserEmailChangeError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		return verifyCurrentUserEmailChangeError(responseCodeUnauthorized(), "Unauthorized."), nil
+	}
 	if request.Body == nil || !isSixDigitCode(strings.TrimSpace(request.Body.Code)) {
 		return verifyCurrentUserEmailChangeError(responseCodeInvalidRequest(), "Invalid challenge request."), nil
 	}
@@ -172,18 +184,17 @@ func (h *APIHandler) VerifyCurrentUserEmailChange(ctx context.Context, request c
 		}
 	}
 
-	result, err := h.Challenge.VerifyEmailChangeChallenge(ctx, request.Body.ChallengeId, strings.TrimSpace(request.Body.Code), h.Verification, time.Now().UTC())
+	err := h.Challenge.CompleteEmailChangeChallenge(ctx, challenge.CompleteEmailChangeChallengeInput{
+		ChallengeID: request.Body.ChallengeId,
+		UserID:      userID,
+		SessionID:   sessionID,
+		Code:        strings.TrimSpace(request.Body.Code),
+	}, h.Verification, time.Now().UTC())
 	if err != nil {
-		if isExpectedEmailChangeVerifyError(err) {
+		if errors.Is(err, challenge.ErrEmailChangeNotAuthorized) || isExpectedEmailChangeVerifyError(err) {
 			return verifyCurrentUserEmailChangeError(responseCodeInvalidRequest(), "Invalid or expired verification code."), nil
 		}
 		return verifyCurrentUserEmailChangeError(responseCodeInternalError(), "Challenge error."), nil
-	}
-	if result.Action.UserID != userID {
-		return verifyCurrentUserEmailChangeError(responseCodeForbidden(), "Email change does not belong to the current user."), nil
-	}
-	if err := h.Challenge.ExecuteEmailChange(ctx, result.Action, time.Now().UTC()); err != nil {
-		return verifyCurrentUserEmailChangeError(responseCodeInternalError(), "Email change error."), nil
 	}
 	return contract.VerifyCurrentUserEmailChange204Response{}, nil
 }

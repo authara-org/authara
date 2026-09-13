@@ -1415,6 +1415,13 @@ func TestDeleteUser_RemovesEmailReferences(t *testing.T) {
 		if err := tdb.Store.MarkOrganizationInvitationAccepted(ctx, invitation.ID, user.ID, time.Now()); err != nil {
 			t.Fatalf("MarkOrganizationInvitationAccepted failed: %v", err)
 		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+			OrganizationID: org.ID,
+			UserID:         user.ID,
+			Role:           domain.OrganizationRoleMember,
+		}); err != nil {
+			t.Fatalf("CreateOrganizationMembership failed: %v", err)
+		}
 		if err := tdb.Store.CreateAllowedEmail(ctx, domain.AllowedEmail{Email: user.Email}); err != nil {
 			t.Fatalf("CreateAllowedEmail failed: %v", err)
 		}
@@ -1435,7 +1442,7 @@ func TestDeleteUser_RemovesEmailReferences(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("CreateAdminAuditEvent failed: %v", err)
 		}
-		createPendingEmailReferences(t, ctx, user.ID, user.Email)
+		createPendingEmailReferences(t, ctx, user.ID, org.ID, user.Email)
 
 		svc := New(Config{
 			Store: tdb.Store,
@@ -1477,7 +1484,7 @@ func queryerFromTxContext(t *testing.T, ctx context.Context) txQueryer {
 	return q
 }
 
-func createPendingEmailReferences(t *testing.T, ctx context.Context, userID uuid.UUID, email string) {
+func createPendingEmailReferences(t *testing.T, ctx context.Context, userID, organizationID uuid.UUID, email string) {
 	t.Helper()
 
 	q := queryerFromTxContext(t, ctx)
@@ -1495,10 +1502,18 @@ func createPendingEmailReferences(t *testing.T, ctx context.Context, userID uuid
 	`, challengeID, email); err != nil {
 		t.Fatalf("insert pending signup failed: %v", err)
 	}
+	var sessionID uuid.UUID
+	if err := q.QueryRowContext(ctx, `
+		INSERT INTO sessions (user_id, active_organization_id, expires_at, user_agent)
+		VALUES ($1, $2, now() + interval '1 hour', 'delete-email-reference')
+		RETURNING id
+	`, userID, organizationID).Scan(&sessionID); err != nil {
+		t.Fatalf("insert session failed: %v", err)
+	}
 	if _, err := q.ExecContext(ctx, `
-		INSERT INTO pending_email_changes (challenge_id, user_id, old_email, new_email)
-		VALUES ($1, $2, $3, $3)
-	`, challengeID, userID, email); err != nil {
+		INSERT INTO pending_email_changes (challenge_id, user_id, initiating_session_id, old_email, new_email)
+		VALUES ($1, $2, $3, $4, $4)
+	`, challengeID, userID, sessionID, email); err != nil {
 		t.Fatalf("insert pending email change failed: %v", err)
 	}
 	if _, err := q.ExecContext(ctx, `

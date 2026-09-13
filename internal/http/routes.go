@@ -115,6 +115,19 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				})
 			})
 
+			// Email-change completion must use the initiating authenticated session.
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireAppAccessAuthWithRefresh)
+
+				r.Get("/verify-challenge/email-change", uih.VerifyEmailChangeChallengePage)
+
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireCSRF)
+
+					r.Post("/verify-challenge/email-change", uih.VerifyEmailChangeChallengePost)
+				})
+			})
+
 			// Authenticated challenge-starting actions
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireChallengeEnabled)

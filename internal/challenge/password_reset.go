@@ -48,7 +48,7 @@ func (s *Service) VerifyPasswordResetChallenge(
 	verifier *VerificationCodeService,
 	now time.Time,
 ) (*VerifyPasswordResetChallengeResult, error) {
-	challenge, err := s.verifyChallenge(ctx, challengeID, domain.ChallengePurposePasswordReset, code, verifier, now, nil)
+	challenge, err := s.verifyChallenge(ctx, challengeID, domain.ChallengePurposePasswordReset, code, verifier, now, nil, nil)
 	if err != nil {
 		return nil, err
 	}

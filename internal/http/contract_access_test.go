@@ -17,6 +17,7 @@ import (
 
 const (
 	markerUserAPIAuth  = 419
+	markerUserUIAuth   = 421
 	markerInternalAuth = 423
 )
 
@@ -61,6 +62,30 @@ func TestRouteAccessContract(t *testing.T) {
 	}
 }
 
+func TestUIEmailChangeVerificationRequiresAuthentication(t *testing.T) {
+	router := newAccessContractTestRouter()
+
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		t.Run(method+" canonical", func(t *testing.T) {
+			req := httptest.NewRequest(method, "/auth/verify-challenge/email-change", nil)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+			if rr.Code != markerUserUIAuth {
+				t.Fatalf("expected user UI auth marker %d, got %d", markerUserUIAuth, rr.Code)
+			}
+		})
+
+		t.Run(method+" alternate case", func(t *testing.T) {
+			req := httptest.NewRequest(method, "/auth/verify-challenge/EMAIL-CHANGE", nil)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+			if rr.Code != http.StatusUnauthorized {
+				t.Fatalf("expected alternate-case public route to fail closed with %d, got %d", http.StatusUnauthorized, rr.Code)
+			}
+		})
+	}
+}
+
 func newAccessContractTestRouter() chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -97,7 +122,7 @@ func newAccessContractTestRouter() chi.Router {
 		RequireAPICSRF:            pass,
 		OptionalAppAccessIdentity: pass,
 
-		RequireAppAccessAuthWithRefresh:      pass,
+		RequireAppAccessAuthWithRefresh:      marker(markerUserUIAuth, "user-ui-auth"),
 		RequireAppAccessAuthAPI:              marker(markerUserAPIAuth, "user-api-auth"),
 		RequireAdminAccessAuthWithRefresh:    pass,
 		RequireAdminAccessAuthAPI:            pass,

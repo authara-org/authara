@@ -191,3 +191,9 @@ matching Core binary. With no override rows, effective behavior remains the
 same as the existing environment configuration and built-in defaults. The new
 column remains null on pre-v24 challenge rows so their resend delay continues
 to follow the effective policy, as it did before the value was persisted.
+
+## Session-bound email-change upgrade
+
+Schema version 25 binds pending email changes to the session that initiated
+them. Applying migration 025 cancels existing email-change challenges because
+they cannot be safely attributed to an initiating session.

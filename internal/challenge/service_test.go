@@ -10,7 +10,9 @@ import (
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
+	"github.com/google/uuid"
 )
 
 func TestRunningChallengeServicesObservePolicyChangesWithoutReconstruction(t *testing.T) {
@@ -380,6 +382,7 @@ func TestExecuteEmailChangeMovesAllowlistEntryWhenEnabled(t *testing.T) {
 		if err := tdb.Store.EnsureAllowedEmail(ctx, oldEmail); err != nil {
 			t.Fatalf("EnsureAllowedEmail failed: %v", err)
 		}
+		session := createEmailChangeTestSession(t, ctx, tdb, user, now)
 
 		svc := New(Config{
 			Store:            tdb.Store,
@@ -390,9 +393,10 @@ func TestExecuteEmailChangeMovesAllowlistEntryWhenEnabled(t *testing.T) {
 			MaxResends:       3,
 		})
 		challengeID, err := svc.CreateEmailChangeChallenge(ctx, CreateEmailChangeChallengeInput{
-			UserID:   user.ID,
-			OldEmail: oldEmail,
-			NewEmail: newEmail,
+			UserID:              user.ID,
+			InitiatingSessionID: session.ID,
+			OldEmail:            oldEmail,
+			NewEmail:            newEmail,
 		}, now)
 		if err != nil {
 			t.Fatalf("CreateEmailChangeChallenge failed: %v", err)
@@ -402,8 +406,8 @@ func TestExecuteEmailChangeMovesAllowlistEntryWhenEnabled(t *testing.T) {
 			t.Fatalf("GetPendingEmailChangeByChallengeID failed: %v", err)
 		}
 
-		if err := svc.ExecuteEmailChange(ctx, action, now); err != nil {
-			t.Fatalf("ExecuteEmailChange failed: %v", err)
+		if err := svc.executeEmailChange(ctx, action, now); err != nil {
+			t.Fatalf("executeEmailChange failed: %v", err)
 		}
 
 		updatedUser, err := tdb.Store.GetUserByID(ctx, user.ID)
@@ -437,6 +441,210 @@ func TestExecuteEmailChangeMovesAllowlistEntryWhenEnabled(t *testing.T) {
 			t.Fatalf("unexpected email-change template data: %#v", data)
 		}
 	})
+}
+
+func TestCompleteEmailChangeRejectsAnotherSessionBeforeConsumingChallenge(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "session-bound-old@example.com", Username: "session-bound"})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		initiatingSession := createEmailChangeTestSession(t, ctx, tdb, user, now)
+		otherSession, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID:               user.ID,
+			ActiveOrganizationID: initiatingSession.ActiveOrganizationID,
+			ExpiresAt:            now.Add(time.Hour),
+			UserAgent:            "other",
+		})
+		if err != nil {
+			t.Fatalf("CreateSession failed: %v", err)
+		}
+
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, ChallengeTTL: 30 * time.Minute, MaxAttempts: 5, MaxResends: 3})
+		verification := NewVerificationCodeService(tdb.Store, 10*time.Minute, []byte("01234567890123456789012345678901"))
+		challengeID, code := createEmailChangeTestChallenge(t, ctx, tdb, svc, verification, user, initiatingSession.ID, "session-bound-new@example.com", now)
+
+		err = svc.CompleteEmailChangeChallenge(ctx, CompleteEmailChangeChallengeInput{
+			ChallengeID: challengeID,
+			UserID:      user.ID,
+			SessionID:   otherSession.ID,
+			Code:        code,
+		}, verification, now)
+		if !errors.Is(err, ErrEmailChangeNotAuthorized) {
+			t.Fatalf("cross-session completion error = %v", err)
+		}
+		row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		if row.ConsumedAt != nil || row.AttemptCount != 0 {
+			t.Fatalf("cross-session attempt changed challenge: consumed_at=%v attempt_count=%d", row.ConsumedAt, row.AttemptCount)
+		}
+
+		wrongCode := "000000"
+		if code == wrongCode {
+			wrongCode = "111111"
+		}
+		err = svc.CompleteEmailChangeChallenge(ctx, CompleteEmailChangeChallengeInput{
+			ChallengeID: challengeID,
+			UserID:      user.ID,
+			SessionID:   initiatingSession.ID,
+			Code:        wrongCode,
+		}, verification, now)
+		if !errors.Is(err, ErrInvalidVerificationCode) {
+			t.Fatalf("wrong-code completion error = %v", err)
+		}
+		row, err = tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		if row.AttemptCount != 1 || row.ConsumedAt != nil {
+			t.Fatalf("wrong-code challenge state: attempts=%d consumed_at=%v", row.AttemptCount, row.ConsumedAt)
+		}
+
+		if err := svc.CompleteEmailChangeChallenge(ctx, CompleteEmailChangeChallengeInput{
+			ChallengeID: challengeID,
+			UserID:      user.ID,
+			SessionID:   initiatingSession.ID,
+			Code:        code,
+		}, verification, now); err != nil {
+			t.Fatalf("initiating-session completion failed: %v", err)
+		}
+	})
+}
+
+func TestCompleteEmailChangeRejectsRevokedSession(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 13, 13, 0, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "revoked-old@example.com", Username: "revoked-email-change"})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		session := createEmailChangeTestSession(t, ctx, tdb, user, now)
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, ChallengeTTL: 30 * time.Minute, MaxAttempts: 5, MaxResends: 3})
+		verification := NewVerificationCodeService(tdb.Store, 10*time.Minute, []byte("01234567890123456789012345678901"))
+		challengeID, code := createEmailChangeTestChallenge(t, ctx, tdb, svc, verification, user, session.ID, "revoked-new@example.com", now)
+
+		if err := tdb.Store.RevokeSession(ctx, session.ID, now.Add(time.Minute)); err != nil {
+			t.Fatalf("RevokeSession failed: %v", err)
+		}
+		err = svc.CompleteEmailChangeChallenge(ctx, CompleteEmailChangeChallengeInput{
+			ChallengeID: challengeID,
+			UserID:      user.ID,
+			SessionID:   session.ID,
+			Code:        code,
+		}, verification, now.Add(2*time.Minute))
+		if !errors.Is(err, ErrEmailChangeNotAuthorized) {
+			t.Fatalf("revoked-session completion error = %v", err)
+		}
+		updated, err := tdb.Store.GetUserByID(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("GetUserByID failed: %v", err)
+		}
+		if updated.Email != user.Email {
+			t.Fatalf("email changed after revocation: %q", updated.Email)
+		}
+		if _, err := tdb.Store.GetPendingEmailChangeByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
+			t.Fatalf("pending email change survived revocation: %v", err)
+		}
+		if _, err := svc.CreateEmailChangeChallenge(ctx, CreateEmailChangeChallengeInput{
+			UserID:              user.ID,
+			InitiatingSessionID: session.ID,
+			OldEmail:            user.Email,
+			NewEmail:            "revoked-new@example.com",
+		}, now.Add(2*time.Minute)); !errors.Is(err, ErrEmailChangeNotAuthorized) {
+			t.Fatalf("email change started from revoked session: %v", err)
+		}
+	})
+}
+
+func TestCompleteEmailChangeRejectsDisabledUser(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 13, 13, 30, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "disabled-old@example.com", Username: "disabled-email-change"})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		session := createEmailChangeTestSession(t, ctx, tdb, user, now)
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, ChallengeTTL: 30 * time.Minute, MaxAttempts: 5, MaxResends: 3})
+		verification := NewVerificationCodeService(tdb.Store, 10*time.Minute, []byte("01234567890123456789012345678901"))
+		challengeID, code := createEmailChangeTestChallenge(t, ctx, tdb, svc, verification, user, session.ID, "disabled-new@example.com", now)
+
+		if err := tdb.Store.DisableUser(ctx, user.ID, now.Add(time.Minute)); err != nil {
+			t.Fatalf("DisableUser failed: %v", err)
+		}
+		err = svc.CompleteEmailChangeChallenge(ctx, CompleteEmailChangeChallengeInput{
+			ChallengeID: challengeID,
+			UserID:      user.ID,
+			SessionID:   session.ID,
+			Code:        code,
+		}, verification, now.Add(2*time.Minute))
+		if !errors.Is(err, ErrEmailChangeNotAuthorized) {
+			t.Fatalf("disabled-user completion error = %v", err)
+		}
+		if _, err := tdb.Store.GetPendingEmailChangeByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
+			t.Fatalf("pending email change survived account disable: %v", err)
+		}
+	})
+}
+
+func createEmailChangeTestSession(t *testing.T, ctx context.Context, tdb *testutil.TestDB, user domain.User, now time.Time) domain.Session {
+	t.Helper()
+
+	org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+	if err != nil {
+		t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+	}
+	session, err := tdb.Store.CreateSession(ctx, domain.Session{
+		UserID:               user.ID,
+		ActiveOrganizationID: org.ID,
+		ExpiresAt:            now.Add(time.Hour),
+		UserAgent:            "initiating",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession failed: %v", err)
+	}
+	return session
+}
+
+func createEmailChangeTestChallenge(
+	t *testing.T,
+	ctx context.Context,
+	tdb *testutil.TestDB,
+	svc *Service,
+	verification *VerificationCodeService,
+	user domain.User,
+	sessionID uuid.UUID,
+	newEmail string,
+	now time.Time,
+) (uuid.UUID, string) {
+	t.Helper()
+
+	challengeID, err := svc.CreateEmailChangeChallenge(ctx, CreateEmailChangeChallengeInput{
+		UserID:              user.ID,
+		InitiatingSessionID: sessionID,
+		OldEmail:            user.Email,
+		NewEmail:            newEmail,
+	}, now)
+	if err != nil {
+		t.Fatalf("CreateEmailChangeChallenge failed: %v", err)
+	}
+	row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+	if err != nil {
+		t.Fatalf("GetChallengeByID failed: %v", err)
+	}
+	code, err := verification.GenerateCode(ctx, row, now)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+	return challengeID, code
 }
 
 func TestExecutePasswordResetQueuesPasswordChangedNotification(t *testing.T) {

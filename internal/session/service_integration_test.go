@@ -213,6 +213,59 @@ func TestCreateSessionAddsOrganizationContext(t *testing.T) {
 	})
 }
 
+func TestLogoutCancelsPendingEmailChange(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Now().UTC()
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "logout-email-change@example.com",
+			Username: "logout-email-change",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+
+		svc := newDBSessionService(t, tdb, 10*time.Minute)
+		accessToken, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "logout-test", now, "")
+		if err != nil {
+			t.Fatalf("CreateSession failed: %v", err)
+		}
+		refresh, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(refreshToken))
+		if err != nil {
+			t.Fatalf("GetRefreshTokenByHash failed: %v", err)
+		}
+		challengeRow, err := tdb.Store.CreateChallenge(ctx, domain.Challenge{
+			Purpose:     domain.ChallengePurposeEmailChange,
+			Email:       "logout-email-change-new@example.com",
+			ExpiresAt:   now.Add(time.Hour),
+			MaxAttempts: 5,
+		})
+		if err != nil {
+			t.Fatalf("CreateChallenge failed: %v", err)
+		}
+		if _, err := tdb.Store.CreatePendingEmailChange(ctx, domain.PendingEmailChange{
+			ChallengeID:         challengeRow.ID,
+			UserID:              user.ID,
+			InitiatingSessionID: refresh.SessionID,
+			OldEmail:            user.Email,
+			NewEmail:            "logout-email-change-new@example.com",
+		}); err != nil {
+			t.Fatalf("CreatePendingEmailChange failed: %v", err)
+		}
+
+		if err := svc.Logout(ctx, refreshToken, accessToken); err != nil {
+			t.Fatalf("Logout failed: %v", err)
+		}
+		if _, err := tdb.Store.GetPendingEmailChangeByChallengeID(ctx, challengeRow.ID); !errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
+			t.Fatalf("pending email change survived logout: %v", err)
+		}
+	})
+}
+
 func TestSwitchSessionOrganizationRotatesTokens(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

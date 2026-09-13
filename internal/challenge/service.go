@@ -195,6 +195,7 @@ func (s *Service) verifyChallenge(
 	code string,
 	verifier *VerificationCodeService,
 	now time.Time,
+	beforeVerify func(context.Context, domain.Challenge) error,
 	afterVerify func(context.Context, domain.Challenge) error,
 ) (*domain.Challenge, error) {
 	var challenge domain.Challenge
@@ -214,6 +215,11 @@ func (s *Service) verifyChallenge(
 		if challenge.Purpose != purpose {
 			resultErr = ErrUnsupportedChallengePurpose
 			return nil
+		}
+		if beforeVerify != nil {
+			if err := beforeVerify(txCtx, challenge); err != nil {
+				return err
+			}
 		}
 
 		if err := verifier.VerifyCode(txCtx, challengeID, code, now); err != nil {

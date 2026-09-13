@@ -54,13 +54,25 @@ func (a VerifyChallengeAction) Header() string {
 }
 
 func (h *UIHandler) VerifyChallengePage(w http.ResponseWriter, r *http.Request) {
-	challengeIDStr := strings.TrimSpace(r.URL.Query().Get("challenge_id"))
-
 	action, ok := parseVerifyChallengeAction(chi.URLParam(r, "action"))
 	if !ok {
 		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid verification action.")
 		return
 	}
+	if action == VerifyChallengeActionEmailChange {
+		h.renderUnauthorized(w, r)
+		return
+	}
+
+	h.verifyChallengePage(w, r, action)
+}
+
+func (h *UIHandler) VerifyEmailChangeChallengePage(w http.ResponseWriter, r *http.Request) {
+	h.verifyChallengePage(w, r, VerifyChallengeActionEmailChange)
+}
+
+func (h *UIHandler) verifyChallengePage(w http.ResponseWriter, r *http.Request, action VerifyChallengeAction) {
+	challengeIDStr := strings.TrimSpace(r.URL.Query().Get("challenge_id"))
 
 	_ = h.Render(
 		w,
@@ -100,14 +112,26 @@ func (h *UIHandler) renderVerifyChallengeRedirect(
 }
 
 func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid form.")
-		return
-	}
-
 	action, ok := parseVerifyChallengeAction(chi.URLParam(r, "action"))
 	if !ok {
 		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid verification action.")
+		return
+	}
+	if action == VerifyChallengeActionEmailChange {
+		h.renderUnauthorized(w, r)
+		return
+	}
+
+	h.verifyChallengePost(w, r, action)
+}
+
+func (h *UIHandler) VerifyEmailChangeChallengePost(w http.ResponseWriter, r *http.Request) {
+	h.verifyChallengePost(w, r, VerifyChallengeActionEmailChange)
+}
+
+func (h *UIHandler) verifyChallengePost(w http.ResponseWriter, r *http.Request, action VerifyChallengeAction) {
+	if err := r.ParseForm(); err != nil {
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid form.")
 		return
 	}
 

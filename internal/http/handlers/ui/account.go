@@ -193,6 +193,11 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 		h.renderUnauthorized(w, r)
 		return
 	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		h.renderUnauthorized(w, r)
+		return
+	}
 
 	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil {
@@ -272,9 +277,10 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 		challengeID, err = h.Challenge.CreateEmailChangeChallenge(
 			ctx,
 			challenge.CreateEmailChangeChallengeInput{
-				UserID:   user.ID,
-				OldEmail: user.Email,
-				NewEmail: newEmail,
+				UserID:              user.ID,
+				InitiatingSessionID: sessionID,
+				OldEmail:            user.Email,
+				NewEmail:            newEmail,
 			},
 			time.Now().UTC(),
 		)
@@ -308,10 +314,21 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 ) {
 	ctx := r.Context()
 
-	result, err := h.Challenge.VerifyEmailChangeChallenge(
+	userID, userOK := httpctx.UserID(ctx)
+	sessionID, sessionOK := httpctx.SessionID(ctx)
+	if !userOK || !sessionOK {
+		h.renderUnauthorized(w, r)
+		return
+	}
+
+	err := h.Challenge.CompleteEmailChangeChallenge(
 		ctx,
-		challengeID,
-		code,
+		challenge.CompleteEmailChangeChallengeInput{
+			ChallengeID: challengeID,
+			UserID:      userID,
+			SessionID:   sessionID,
+			Code:        code,
+		},
 		h.Verification,
 		time.Now().UTC(),
 	)
@@ -322,17 +339,6 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 			VerifyChallengeActionEmailChange,
 			challengeIDStr,
 			h.verifyChallengeErrorMessage(err),
-		)
-		return
-	}
-
-	if err := h.Challenge.ExecuteEmailChange(ctx, result.Action, time.Now().UTC()); err != nil {
-		h.renderVerifyChallengeError(
-			w,
-			r,
-			VerifyChallengeActionEmailChange,
-			challengeIDStr,
-			"Could not change email. Please try again.",
 		)
 		return
 	}

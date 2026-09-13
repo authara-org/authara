@@ -329,13 +329,26 @@ func (s *Store) ListSessionsByUserID(ctx context.Context, userID uuid.UUID) ([]d
 }
 
 func (s *Store) GetActiveSessionByID(ctx context.Context, sessionID uuid.UUID, now time.Time) (domain.Session, error) {
+	return s.getActiveSessionByID(ctx, sessionID, now, false)
+}
+
+func (s *Store) GetActiveSessionByIDForUpdate(ctx context.Context, sessionID uuid.UUID, now time.Time) (domain.Session, error) {
+	return s.getActiveSessionByID(ctx, sessionID, now, true)
+}
+
+func (s *Store) getActiveSessionByID(ctx context.Context, sessionID uuid.UUID, now time.Time, forUpdate bool) (domain.Session, error) {
 	var m model.Session
 
-	err := scanSession(s.queryRow(ctx, `
-		SELECT `+sessionColumns+`
+	query := `
+		SELECT ` + sessionColumns + `
 		FROM sessions
 		WHERE id = $1 AND revoked_at IS NULL AND expires_at > $2
-	`, sessionID, now), &m)
+	`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+
+	err := scanSession(s.queryRow(ctx, query, sessionID, now), &m)
 	if err != nil {
 		return domain.Session{}, mapNoRows(err, ErrSessionNotFound)
 	}

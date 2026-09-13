@@ -175,12 +175,13 @@ func (s *Store) DeletePendingPasswordResetsByUserID(ctx context.Context, userID 
 
 func toDomainPendingEmailChange(m model.PendingEmailChange) domain.PendingEmailChange {
 	return domain.PendingEmailChange{
-		ID:          m.ID,
-		CreatedAt:   m.CreatedAt,
-		ChallengeID: m.ChallengeID,
-		UserID:      m.UserID,
-		OldEmail:    m.OldEmail,
-		NewEmail:    m.NewEmail,
+		ID:                  m.ID,
+		CreatedAt:           m.CreatedAt,
+		ChallengeID:         m.ChallengeID,
+		UserID:              m.UserID,
+		InitiatingSessionID: m.InitiatingSessionID,
+		OldEmail:            m.OldEmail,
+		NewEmail:            m.NewEmail,
 	}
 }
 
@@ -189,6 +190,7 @@ const pendingEmailChangeColumns = `
 	created_at,
 	challenge_id,
 	user_id,
+	initiating_session_id,
 	old_email,
 	new_email
 `
@@ -199,6 +201,7 @@ func scanPendingEmailChange(row rowScanner, m *model.PendingEmailChange) error {
 		&m.CreatedAt,
 		&m.ChallengeID,
 		&m.UserID,
+		&m.InitiatingSessionID,
 		&m.OldEmail,
 		&m.NewEmail,
 	)
@@ -206,10 +209,11 @@ func scanPendingEmailChange(row rowScanner, m *model.PendingEmailChange) error {
 
 func toModelPendingEmailChange(d domain.PendingEmailChange) model.PendingEmailChange {
 	return model.PendingEmailChange{
-		ChallengeID: d.ChallengeID,
-		UserID:      d.UserID,
-		OldEmail:    d.OldEmail,
-		NewEmail:    d.NewEmail,
+		ChallengeID:         d.ChallengeID,
+		UserID:              d.UserID,
+		InitiatingSessionID: d.InitiatingSessionID,
+		OldEmail:            d.OldEmail,
+		NewEmail:            d.NewEmail,
 	}
 }
 
@@ -217,11 +221,12 @@ func (s *Store) CreatePendingEmailChange(ctx context.Context, in domain.PendingE
 	row := toModelPendingEmailChange(in)
 
 	if err := scanPendingEmailChange(s.queryRow(ctx, `
-		INSERT INTO pending_email_changes (challenge_id, user_id, old_email, new_email)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO pending_email_changes (challenge_id, user_id, initiating_session_id, old_email, new_email)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING `+pendingEmailChangeColumns,
 		row.ChallengeID,
 		row.UserID,
+		row.InitiatingSessionID,
 		row.OldEmail,
 		row.NewEmail,
 	), &row); err != nil {
@@ -232,13 +237,26 @@ func (s *Store) CreatePendingEmailChange(ctx context.Context, in domain.PendingE
 }
 
 func (s *Store) GetPendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID) (domain.PendingEmailChange, error) {
+	return s.getPendingEmailChangeByChallengeID(ctx, challengeID, false)
+}
+
+func (s *Store) GetPendingEmailChangeByChallengeIDForUpdate(ctx context.Context, challengeID uuid.UUID) (domain.PendingEmailChange, error) {
+	return s.getPendingEmailChangeByChallengeID(ctx, challengeID, true)
+}
+
+func (s *Store) getPendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID, forUpdate bool) (domain.PendingEmailChange, error) {
 	var row model.PendingEmailChange
 
-	err := scanPendingEmailChange(s.queryRow(ctx, `
-		SELECT `+pendingEmailChangeColumns+`
+	query := `
+		SELECT ` + pendingEmailChangeColumns + `
 		FROM pending_email_changes
 		WHERE challenge_id = $1
-	`, challengeID), &row)
+	`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+
+	err := scanPendingEmailChange(s.queryRow(ctx, query, challengeID), &row)
 	if err != nil {
 		return domain.PendingEmailChange{}, mapNoRows(err, ErrorPendingEmailChangeNotFound)
 	}

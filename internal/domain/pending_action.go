@@ -28,10 +28,11 @@ type PendingPasswordReset struct {
 }
 
 type PendingEmailChange struct {
-	ID          uuid.UUID
-	CreatedAt   time.Time
-	ChallengeID uuid.UUID
-	UserID      uuid.UUID
-	OldEmail    string
-	NewEmail    string
+	ID                  uuid.UUID
+	CreatedAt           time.Time
+	ChallengeID         uuid.UUID
+	UserID              uuid.UUID
+	InitiatingSessionID uuid.UUID
+	OldEmail            string
+	NewEmail            string
 }
