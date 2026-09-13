@@ -59,14 +59,14 @@ services:
     image: nginx:alpine
 
   authara-migrations:
-    image: ghcr.io/authara-org/authara-migrations:latest
+    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
     env_file:
       - .env
     depends_on:
       - postgres
 
   authara:
-    image: ghcr.io/authara-org/authara-core:latest
+    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
     env_file:
       - .env
     depends_on:
@@ -85,6 +85,10 @@ services:
       - authara
       - app
 ```
+
+Each Core release lists its compatible image tags and immutable digests in the
+release notes. The attached `authara-images.env` contains the same pairing for
+deployment tooling.
 
 This example shows the network shape only.
 

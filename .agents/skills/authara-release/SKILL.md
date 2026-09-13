@@ -38,8 +38,9 @@ unavailable, report that limitation instead of inventing its state.
 - SDKs are generated from the exact released Core tag and commit, never from a
   moving branch such as `main`.
 - Core, Go SDK, and browser SDK versions are independent and need not match.
-- Release Please owns release version files, changelogs, tags, and GitHub
-  releases. Do not bump or tag them manually during the normal flow.
+- Release Please owns release version files, changelogs, tags, and draft GitHub
+  release creation. Core CD attaches compatibility metadata and publishes the
+  completed draft. Do not bump or tag releases manually during the normal flow.
 - Pull requests are squash-merged, and the pull request title becomes the
   Conventional Commit title on `main`.
 - Do not edit generated SDK files by hand. Change Core's contract or the SDK
@@ -93,22 +94,28 @@ sync begins only after the Core release tag exists.
    Merge it only when release execution is in scope.
 3. Verify Release Please created or updated its release pull request, enabled
    auto-merge, and merged it only after all required checks passed.
-4. Verify Release Please created the expected Core tag and GitHub release at
-   the merged release commit. Do not create a replacement tag manually.
-5. Verify `.github/workflows/cd.yaml` built and pushed the tagged and `latest`
+4. Verify Release Please created the expected Core tag and draft GitHub release
+   at the merged release commit. Do not create a replacement tag manually.
+5. Verify `.github/workflows/cd.yaml` checked for numbered SQL migration
+   changes. If any were present, verify it published the next `0.X.0`
+   migrations image, tag, and GitHub release; otherwise verify it reused the
+   current migrations release.
+6. Verify CD attached `authara-images.env`, added the same compatible image tags
+   and digests to the release notes, and then published the Core release.
+7. Verify `.github/workflows/cd.yaml` built and pushed the tagged and `latest`
    Core images successfully.
-6. Verify the CD workflow dispatched `authara-core-released` to both SDKs with
+8. Verify the CD workflow dispatched `authara-core-released` to both SDKs with
    the exact Core tag, commit SHA, and release bump.
-7. In each SDK, verify the sync workflow checked out that exact tag, confirmed
+9. In each SDK, verify the sync workflow checked out that exact tag, confirmed
    its SHA, regenerated the SDK, ran its tests, and recorded the source in
    `.codegen/manifest.json`.
-8. If generated output or initial provenance changed, verify the automation PR
+10. If generated output or initial provenance changed, verify the automation PR
    contains only the expected generated files and provenance update and that CI
    passed.
-9. Verify each SDK's Release Please workflow selected a version from that SDK's
+11. Verify each SDK's Release Please workflow selected a version from that SDK's
    own unreleased commits, auto-merged its tested release pull request, and
    created its own tag and GitHub release.
-10. For the browser SDK, verify `.github/workflows/publish.yaml` tested and built
+12. For the browser SDK, verify `.github/workflows/publish.yaml` tested and built
     the released commit and that the same version was published to npm with
     provenance.
 
@@ -145,6 +152,9 @@ generator that reproducibly creates it.
 - If release-PR auto-merge fails, diagnose the visible workflow failure and
   retry after fixing the prerequisite. Do not bypass branch protection or
   create the release tag manually.
+- If Core CD fails after Release Please creates the draft release, leave it in
+  draft, fix the failure, and rerun CD. Do not publish a release without its
+  compatibility asset and release-note pairing.
 - Never move, overwrite, or delete a published tag or package version as routine
   recovery. Correct the problem in a subsequent release unless the user
   explicitly authorizes an exceptional rollback procedure.

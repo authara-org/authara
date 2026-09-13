@@ -37,14 +37,14 @@ services:
     image: nginx:alpine
 
   authara-migrations:
-    image: ghcr.io/authara-org/authara-migrations:latest
+    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
     env_file:
       - .env
     depends_on:
       - postgres
 
   authara:
-    image: ghcr.io/authara-org/authara-core:latest
+    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
     env_file:
       - .env
     depends_on:
@@ -63,6 +63,9 @@ services:
       - authara
       - app
 ```
+
+Each Core release lists the compatible image tags and immutable digests in its
+release notes and includes the same pairing as an `authara-images.env` asset.
 
 Create a `.env` file with your Authara configuration, then start the stack:
 

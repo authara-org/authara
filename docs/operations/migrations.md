@@ -58,10 +58,14 @@ Example:
 ```bash
 docker run --rm \
   --env-file .env \
-  ghcr.io/authara-org/authara-migrations:latest
+  ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
 ```
 
 This applies all pending migrations and exits.
+
+Use the migrations image listed in the Core release notes. The attached
+`authara-images.env` contains the same version and immutable image reference for
+deployment tooling.
 
 ---
 

@@ -48,9 +48,12 @@ Authara requires a PostgreSQL database with the correct schema.
 Run the migrations container:
 
 ```bash
+export AUTHARA_CORE_VERSION=v0.21.1
+export AUTHARA_MIGRATIONS_VERSION=v0.1.20
+
 docker run --rm \
   --env-file .env \
-  ghcr.io/authara-org/authara-migrations:latest
+  ghcr.io/authara-org/authara-migrations:$AUTHARA_MIGRATIONS_VERSION
 ```
 
 This applies the required database schema.
@@ -64,7 +67,7 @@ docker run -d \
   --name authara \
   --env-file .env \
   -p 8080:8080 \
-  ghcr.io/authara-org/authara-core:latest
+  ghcr.io/authara-org/authara-core:$AUTHARA_CORE_VERSION
 ```
 
 ---
@@ -130,14 +133,14 @@ services:
     image: nginx:alpine
 
   authara-migrations:
-    image: ghcr.io/authara-org/authara-migrations:latest
+    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
     env_file:
       - .env
     depends_on:
       - postgres
 
   authara:
-    image: ghcr.io/authara-org/authara-core:latest
+    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
     env_file:
       - .env
     depends_on:
@@ -156,6 +159,10 @@ services:
       - authara
       - app
 ```
+
+Use the compatible Core and migrations images in the Core release notes when
+upgrading. The attached `authara-images.env` provides the same pairing for
+deployment tooling.
 
 Create a `.env` file containing the Authara configuration.
 
