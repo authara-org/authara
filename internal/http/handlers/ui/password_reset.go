@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -162,7 +163,7 @@ func (h *UIHandler) verifyPasswordResetChallengePost(
 ) {
 	ctx := r.Context()
 
-	result, err := h.Challenge.VerifyPasswordResetChallenge(
+	err := h.Challenge.CompletePasswordResetChallenge(
 		ctx,
 		challengeID,
 		code,
@@ -170,23 +171,16 @@ func (h *UIHandler) verifyPasswordResetChallengePost(
 		time.Now().UTC(),
 	)
 	if err != nil {
+		message := h.verifyChallengeErrorMessage(err)
+		if errors.Is(err, challenge.ErrPasswordResetUnavailable) {
+			message = "Password reset is no longer available for this request. Start again or sign in with your configured provider or passkey."
+		}
 		h.renderVerifyChallengeError(
 			w,
 			r,
 			VerifyChallengeActionPasswordReset,
 			challengeIDStr,
-			h.verifyChallengeErrorMessage(err),
-		)
-		return
-	}
-
-	if err := h.Challenge.ExecutePasswordReset(ctx, result.Action, time.Now().UTC()); err != nil {
-		h.renderVerifyChallengeError(
-			w,
-			r,
-			VerifyChallengeActionPasswordReset,
-			challengeIDStr,
-			"Could not reset password. Please try again.",
+			message,
 		)
 		return
 	}

@@ -915,6 +915,11 @@ func (s *Service) UnlinkAuthProvider(ctx context.Context, userID uuid.UUID, prov
 		if err := s.store.DeleteAuthProviderByMethodAndUserID(txCtx, provider, userID); err != nil {
 			return err
 		}
+		if provider == domain.ProviderPassword {
+			if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
+				return err
+			}
+		}
 
 		return s.enqueueAuthMethodChanged(txCtx, user, provider, domain.EmailTemplateAuthMethodRemoved, time.Now().UTC())
 	})
@@ -922,6 +927,9 @@ func (s *Service) UnlinkAuthProvider(ctx context.Context, userID uuid.UUID, prov
 
 func (s *Service) AddPassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {
+			return err
+		}
 		_, err := s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
 		if err == nil {
 			return ErrPasswordAlreadyExists
@@ -943,12 +951,18 @@ func (s *Service) AddPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err != nil {
 			return err
 		}
+		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
+			return err
+		}
 		return s.enqueueAuthMethodChanged(txCtx, user, domain.ProviderPassword, domain.EmailTemplateAuthMethodAdded, time.Now().UTC())
 	})
 }
 
 func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword string, newPasswordHash string) error {
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {
+			return err
+		}
 		provider, err := s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
 		if err != nil {
 			return err
@@ -967,6 +981,9 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 		}
 		now := time.Now().UTC()
 		if err := s.store.UpdatePasswordHash(txCtx, userID, newPasswordHash); err != nil {
+			return err
+		}
+		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
 			return err
 		}
 		return s.enqueuePasswordChanged(txCtx, user, now)

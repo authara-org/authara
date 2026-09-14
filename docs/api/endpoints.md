@@ -254,9 +254,15 @@ POST /auth/api/v1/password-reset/challenges
 }
 ```
 
-Returns `202 Accepted` with a `challenge_id`. The response is identical when
-the email does not belong to an account, preventing account enumeration. This
-endpoint remains available when optional challenge-based signup is disabled.
+Returns `202 Accepted` with a `challenge_id`. Password reset rotates an existing
+password; it never adds password authentication to a passwordless account. The
+response is identical when the email is unknown or the account only uses OAuth
+or passkeys, preventing account and sign-in-method enumeration. No reset code is
+sent in those cases. A passwordless user must sign in with an existing provider
+or passkey and add a password from account settings. If all configured methods
+are unavailable, recovery requires the deployment operator's account-recovery
+process. This endpoint remains available when optional challenge-based signup
+is disabled.
 
 Errors: `400 invalid_request`, `403 forbidden`, `429 rate_limited`, or
 `500 internal_error`.
@@ -276,9 +282,12 @@ POST /auth/api/v1/password-reset/challenges/verify
 }
 ```
 
-Returns `204 No Content`. The password is changed and all existing sessions
-for the account are revoked. The user must log in with the new password. This
-endpoint remains available when optional challenge-based signup is disabled.
+Returns `204 No Content`. The existing password is changed and all existing
+sessions for the account are revoked. The user must log in with the new
+password. Verification, password mutation, session revocation, notification
+queueing, and challenge consumption complete as one database transaction, so a
+failed mutation does not consume a valid code. This endpoint remains available
+when optional challenge-based signup is disabled.
 
 Errors: `400 invalid_request`, `403 forbidden`, `429 rate_limited`, or
 `500 internal_error`.

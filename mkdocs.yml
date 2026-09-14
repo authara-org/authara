@@ -34,6 +34,7 @@ nav:
 
   - Architecture:
       - Overview: architecture/overview.md
+      - Password Recovery Security: architecture/password-recovery.md
 
   - Components:
       - Overview: components/overview.md

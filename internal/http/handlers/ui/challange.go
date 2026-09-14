@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
+	"github.com/authara-org/authara/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -221,25 +223,12 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 	}
 
 	err = h.Challenge.ResendChallenge(ctx, challengeID, time.Now().UTC())
-	if err != nil {
-		msg := "Could not resend verification code."
-
-		switch err {
-		case challenge.ErrChallengeExpired:
-			msg = "This verification request has expired."
-		case challenge.ErrChallengeConsumed:
-			msg = "This verification request has already been completed."
-		case challenge.ErrTooManyResends:
-			msg = "Too many resend attempts. Please start again."
-		case challenge.ErrResendTooSoon:
-			msg = "Please wait a moment before requesting another code."
-		}
-
+	if err != nil && !isExpectedChallengeResendError(err) {
 		_ = h.Render(
 			w,
 			r,
 			http.StatusOK,
-			toast.ToastMessage(toast.Error, msg),
+			toast.ToastMessage(toast.Error, "Could not resend verification code."),
 		)
 		return
 	}
@@ -250,6 +239,14 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 		http.StatusOK,
 		toast.ToastMessage(toast.Success, "A new verification code has been sent."),
 	)
+}
+
+func isExpectedChallengeResendError(err error) bool {
+	return errors.Is(err, challenge.ErrChallengeExpired) ||
+		errors.Is(err, challenge.ErrChallengeConsumed) ||
+		errors.Is(err, challenge.ErrTooManyResends) ||
+		errors.Is(err, challenge.ErrResendTooSoon) ||
+		errors.Is(err, store.ErrorChallengeNotFound)
 }
 
 func (h *UIHandler) renderVerifyChallengeError(

@@ -10,5 +10,6 @@ var (
 	ErrResendTooSoon               = errors.New("resend requested too soon")
 	ErrInvalidVerificationCode     = errors.New("invalid verification code")
 	ErrUnsupportedChallengePurpose = errors.New("unsupported challenge purpose")
+	ErrPasswordResetUnavailable    = errors.New("password reset unavailable for account")
 	ErrEmailChangeNotAuthorized    = errors.New("email change not authorized for session")
 )

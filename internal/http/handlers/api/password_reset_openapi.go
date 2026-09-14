@@ -84,7 +84,7 @@ func (h *APIHandler) VerifyPasswordResetChallenge(ctx context.Context, request c
 		}
 	}
 
-	result, err := h.Challenge.VerifyPasswordResetChallenge(
+	err := h.Challenge.CompletePasswordResetChallenge(
 		ctx,
 		request.Body.ChallengeId,
 		strings.TrimSpace(request.Body.Code),
@@ -92,13 +92,13 @@ func (h *APIHandler) VerifyPasswordResetChallenge(ctx context.Context, request c
 		time.Now().UTC(),
 	)
 	if err != nil {
+		if errors.Is(err, challenge.ErrPasswordResetUnavailable) {
+			return verifyPasswordResetChallengeError(responseCodeInvalidRequest(), "Password reset is no longer available for this request. Start again or sign in with a configured provider or passkey."), nil
+		}
 		if isExpectedPasswordResetVerifyError(err) {
 			return verifyPasswordResetChallengeError(responseCodeInvalidRequest(), "Invalid or expired verification code."), nil
 		}
 		return verifyPasswordResetChallengeError(responseCodeInternalError(), "Challenge error."), nil
-	}
-	if err := h.Challenge.ExecutePasswordReset(ctx, result.Action, time.Now().UTC()); err != nil {
-		return verifyPasswordResetChallengeError(responseCodeInternalError(), "Password reset error."), nil
 	}
 
 	return contract.VerifyPasswordResetChallenge204Response{}, nil

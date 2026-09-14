@@ -208,6 +208,24 @@ Core and server-side SDK middleware share the Redis key templates in
 `contract/access-token-revocations.json`. An incompatible change is breaking
 unless a compatible rollout supports both formats.
 
+## 8.2 Password recovery contract
+
+Password reset rotates an existing password provider. It does not add password
+authentication to an OAuth-only or passkey-only account. Unknown and
+passwordless accounts receive the same public accepted response as eligible
+accounts, without a usable reset code, to prevent account and authentication
+method enumeration.
+
+A passwordless user must authenticate with an existing provider or passkey
+before adding a password. Reset completion revalidates the user, current email,
+and existing password provider before atomically changing the password,
+revoking sessions, invalidating pending resets, queueing the security
+notification, and consuming the challenge.
+
+Authenticated password additions, changes, replacements, and removals
+invalidate outstanding password-reset requests so an older code cannot gain
+authority over a newly created or changed credential.
+
 ---
 
 # 9. Webhook Contract

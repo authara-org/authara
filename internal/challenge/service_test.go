@@ -242,7 +242,7 @@ func TestVerifyChallengeWrongPurposeDoesNotConsumeIt(t *testing.T) {
 			t.Fatalf("GenerateCode failed: %v", err)
 		}
 
-		_, err = svc.VerifyPasswordResetChallenge(ctx, challengeID, code, verifier, now)
+		err = svc.CompletePasswordResetChallenge(ctx, challengeID, code, verifier, now)
 		if !errors.Is(err, ErrUnsupportedChallengePurpose) {
 			t.Fatalf("expected ErrUnsupportedChallengePurpose, got %v", err)
 		}
@@ -647,7 +647,159 @@ func createEmailChangeTestChallenge(
 	return challengeID, code
 }
 
-func TestExecutePasswordResetQueuesPasswordChangedNotification(t *testing.T) {
+func TestCreatePasswordResetChallengeUsesOpaqueChallengeWithoutPasswordProvider(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 9, 18, 0, 0, 0, time.UTC)
+		svc := New(Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			ChallengeTTL: 30 * time.Minute,
+			MaxAttempts:  5,
+			MaxResends:   3,
+		})
+		verification := NewVerificationCodeService(tdb.Store, 10*time.Minute, []byte("01234567890123456789012345678901"))
+		for _, method := range []string{"oauth", "passkey"} {
+			t.Run(method, func(t *testing.T) {
+				user, err := tdb.Store.CreateUser(ctx, domain.User{
+					Email:    "password-reset-" + method + "@example.com",
+					Username: "password-reset-" + method,
+				})
+				if err != nil {
+					t.Fatalf("CreateUser failed: %v", err)
+				}
+				if method == "oauth" {
+					providerUserID := "google-password-reset-user"
+					_, err = tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+						UserID: user.ID, Provider: domain.ProviderGoogle, ProviderUserID: &providerUserID,
+					})
+				} else {
+					_, err = tdb.Store.CreatePasskey(ctx, domain.Passkey{
+						UserID: user.ID, CredentialID: []byte("password-reset-passkey"), PublicKey: []byte("public-key"),
+					})
+				}
+				if err != nil {
+					t.Fatalf("create %s method: %v", method, err)
+				}
+
+				challengeID, err := svc.CreatePasswordResetChallenge(ctx, CreatePasswordResetChallengeInput{
+					UserID:       user.ID,
+					Email:        user.Email,
+					PasswordHash: "new-password-hash",
+				}, now)
+				if err != nil {
+					t.Fatalf("CreatePasswordResetChallenge failed: %v", err)
+				}
+
+				row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+				if err != nil {
+					t.Fatalf("GetChallengeByID failed: %v", err)
+				}
+				if row.MaxResends != 0 {
+					t.Fatalf("passwordless challenge max_resends = %d, want 0", row.MaxResends)
+				}
+				if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+					t.Fatalf("passwordless challenge created pending reset: %v", err)
+				}
+				if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordResetCode); got != 0 {
+					t.Fatalf("passwordless reset-code email jobs = %d, want 0", got)
+				}
+
+				// Even an injected verification code cannot turn an opaque
+				// challenge into authority to create a password provider.
+				code, err := verification.GenerateCode(ctx, row, now)
+				if err != nil {
+					t.Fatalf("GenerateCode failed: %v", err)
+				}
+				if err := svc.CompletePasswordResetChallenge(ctx, challengeID, code, verification, now); !errors.Is(err, ErrPasswordResetUnavailable) {
+					t.Fatalf("opaque completion error = %v, want ErrPasswordResetUnavailable", err)
+				}
+				if _, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID); !errors.Is(err, store.ErrorAuthProviderNotFound) {
+					t.Fatalf("opaque completion linked a password provider: %v", err)
+				}
+			})
+		}
+	})
+}
+
+func TestPasswordResetCompletionFailureDoesNotConsumeChallenge(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 9, 18, 15, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "password-reset-retry@example.com",
+			Username: "password-reset-retry",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		oldHash := "old-password-hash"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID:       user.ID,
+			Provider:     domain.ProviderPassword,
+			PasswordHash: &oldHash,
+		}); err != nil {
+			t.Fatalf("CreateAuthProvider failed: %v", err)
+		}
+		svc := New(Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			ChallengeTTL: 30 * time.Minute,
+			MaxAttempts:  5,
+			MaxResends:   3,
+		})
+		verification := NewVerificationCodeService(
+			tdb.Store,
+			10*time.Minute,
+			[]byte("01234567890123456789012345678901"),
+		)
+		challengeID, err := svc.CreatePasswordResetChallenge(ctx, CreatePasswordResetChallengeInput{
+			UserID:       user.ID,
+			Email:        user.Email,
+			PasswordHash: "new-password-hash",
+		}, now)
+		if err != nil {
+			t.Fatalf("CreatePasswordResetChallenge failed: %v", err)
+		}
+		row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		code, err := verification.GenerateCode(ctx, row, now)
+		if err != nil {
+			t.Fatalf("GenerateCode failed: %v", err)
+		}
+
+		if err := tdb.Store.DeleteAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID); err != nil {
+			t.Fatalf("DeleteAuthProviderByMethodAndUserID failed: %v", err)
+		}
+		err = svc.CompletePasswordResetChallenge(ctx, challengeID, code, verification, now)
+		if !errors.Is(err, ErrPasswordResetUnavailable) {
+			t.Fatalf("expected ErrPasswordResetUnavailable, got %v", err)
+		}
+
+		row, err = tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		if row.ConsumedAt != nil || row.AttemptCount != 0 {
+			t.Fatalf("failed completion changed challenge: consumed_at=%v attempt_count=%d", row.ConsumedAt, row.AttemptCount)
+		}
+		if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID); err != nil {
+			t.Fatalf("failed completion removed pending reset: %v", err)
+		}
+		if _, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID); !errors.Is(err, store.ErrorAuthProviderNotFound) {
+			t.Fatalf("failed completion linked a password provider: %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 0 {
+			t.Fatalf("failed completion queued password-changed jobs = %d, want 0", got)
+		}
+	})
+}
+
+func TestCompletePasswordResetChallengeQueuesPasswordChangedNotification(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
@@ -674,6 +826,11 @@ func TestExecutePasswordResetQueuesPasswordChangedNotification(t *testing.T) {
 			MaxAttempts:  5,
 			MaxResends:   3,
 		})
+		verification := NewVerificationCodeService(
+			tdb.Store,
+			10*time.Minute,
+			[]byte("01234567890123456789012345678901"),
+		)
 		challengeID, err := svc.CreatePasswordResetChallenge(ctx, CreatePasswordResetChallengeInput{
 			UserID:       user.ID,
 			Email:        user.Email,
@@ -682,12 +839,16 @@ func TestExecutePasswordResetQueuesPasswordChangedNotification(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreatePasswordResetChallenge failed: %v", err)
 		}
-		action, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID)
+		row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
 		if err != nil {
-			t.Fatalf("GetPendingPasswordResetByChallengeID failed: %v", err)
+			t.Fatalf("GetChallengeByID failed: %v", err)
 		}
-		if err := svc.ExecutePasswordReset(ctx, action, now); err != nil {
-			t.Fatalf("ExecutePasswordReset failed: %v", err)
+		code, err := verification.GenerateCode(ctx, row, now)
+		if err != nil {
+			t.Fatalf("GenerateCode failed: %v", err)
+		}
+		if err := svc.CompletePasswordResetChallenge(ctx, challengeID, code, verification, now); err != nil {
+			t.Fatalf("CompletePasswordResetChallenge failed: %v", err)
 		}
 		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 1 {
 			t.Fatalf("password-changed email jobs = %d, want 1", got)

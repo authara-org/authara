@@ -629,7 +629,12 @@ paths:
       operationId: startPasswordResetChallenge
       tags: [Authentication]
       summary: Start a password reset challenge
-      description: Starts password recovery without revealing whether the email address belongs to an account.
+      description: >
+        Starts recovery for an existing password without revealing whether the
+        email belongs to an account or whether the account has a password.
+        Unknown and passwordless accounts receive the same accepted response but
+        no reset code. Passwordless users must authenticate with an existing
+        provider or passkey before adding a password.
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -667,7 +672,10 @@ paths:
       operationId: verifyPasswordResetChallenge
       tags: [Authentication]
       summary: Verify a password reset challenge
-      description: Verifies the emailed code, changes the password, and revokes all existing sessions for the account.
+      description: >
+        Verifies the emailed code, atomically changes an existing password,
+        revokes all existing sessions, and consumes the challenge. This operation
+        never adds a password provider to a passwordless account.
       security:
         - csrfCookie: []
           csrfHeader: []
