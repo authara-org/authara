@@ -30,6 +30,7 @@ Authara exports:
 - `authara_http_requests_in_flight` for in-flight requests
 - `authara_background_jobs_total` by worker and outcome (`succeeded`, `retried`, `failed`, or `error`)
 - `authara_background_job_duration_seconds` by worker and outcome
+- `authara_email_queue_age_seconds` by bounded delivery outcome
 - standard `go_sql_*` database pool metrics for the primary PostgreSQL connection
 - standard `go_*` runtime metrics
 - standard `process_*` CPU, memory, file descriptor, and process-start metrics where supported

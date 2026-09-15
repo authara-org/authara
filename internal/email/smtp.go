@@ -46,18 +46,21 @@ func NewSMTPSender(
 }
 
 func (s *SMTPSender) Send(ctx context.Context, to string, msg Message) error {
+	if (s.username == "") != (s.password == "") {
+		return PermanentError("configuration_error", fmt.Errorf("smtp: username and password must be configured together"))
+	}
 	fromAddr, err := parseEnvelopeAddress("from", s.from)
 	if err != nil {
-		return err
+		return PermanentError("invalid_sender", err)
 	}
 	toAddr, err := parseEnvelopeAddress("to", to)
 	if err != nil {
-		return err
+		return PermanentError("invalid_recipient", err)
 	}
 
 	raw, err := buildMIMEMessage(s.from, to, msg)
 	if err != nil {
-		return fmt.Errorf("smtp: build message: %w", err)
+		return PermanentError("invalid_message", fmt.Errorf("smtp: build message: %w", err))
 	}
 
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
@@ -65,9 +68,13 @@ func (s *SMTPSender) Send(ctx context.Context, to string, msg Message) error {
 	dialer := net.Dialer{Timeout: s.timeout}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return fmt.Errorf("smtp: dial: %w", err)
+		return TransientError("smtp_unavailable", fmt.Errorf("smtp: dial: %w", err))
 	}
 	defer conn.Close()
+	stopCancellationWatch := context.AfterFunc(ctx, func() {
+		_ = conn.Close()
+	})
+	defer stopCancellationWatch()
 
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
@@ -77,7 +84,7 @@ func (s *SMTPSender) Send(ctx context.Context, to string, msg Message) error {
 
 	client, err := smtp.NewClient(conn, s.host)
 	if err != nil {
-		return fmt.Errorf("smtp: client: %w", err)
+		return classifySMTPError("smtp_protocol_error", fmt.Errorf("smtp: client: %w", err))
 	}
 	defer client.Close()
 
@@ -88,44 +95,45 @@ func (s *SMTPSender) Send(ctx context.Context, to string, msg Message) error {
 		}
 
 		if ok, _ := client.Extension("STARTTLS"); !ok {
-			return fmt.Errorf("smtp: server does not support STARTTLS")
+			return PermanentError("smtp_tls_unavailable", fmt.Errorf("smtp: server does not support STARTTLS"))
 		}
 
 		if err := client.StartTLS(tlsConfig); err != nil {
-			return fmt.Errorf("smtp: starttls: %w", err)
+			return classifySMTPTLSError(fmt.Errorf("smtp: starttls: %w", err))
 		}
 	}
 
 	if s.username != "" && s.password != "" {
 		auth := smtp.PlainAuth("", s.username, s.password, s.host)
 		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("smtp: auth: %w", err)
+			return classifySMTPAuthError(fmt.Errorf("smtp: auth: %w", err))
 		}
 	}
 
 	if err := client.Mail(fromAddr); err != nil {
-		return fmt.Errorf("smtp: mail: %w", err)
+		return classifySMTPError("smtp_sender_rejected", fmt.Errorf("smtp: mail: %w", err))
 	}
 	if err := client.Rcpt(toAddr); err != nil {
-		return fmt.Errorf("smtp: rcpt: %w", err)
+		return classifySMTPError("smtp_recipient_rejected", fmt.Errorf("smtp: rcpt: %w", err))
 	}
 
 	w, err := client.Data()
 	if err != nil {
-		return fmt.Errorf("smtp: data: %w", err)
+		return classifySMTPError("smtp_data_rejected", fmt.Errorf("smtp: data: %w", err))
 	}
 
 	if _, err := w.Write(raw); err != nil {
 		_ = w.Close()
-		return fmt.Errorf("smtp: write: %w", err)
+		return TransientError("smtp_write_failed", fmt.Errorf("smtp: write: %w", err))
 	}
 	if err := w.Close(); err != nil {
-		return fmt.Errorf("smtp: close: %w", err)
+		return classifySMTPError("smtp_message_rejected", fmt.Errorf("smtp: close: %w", err))
 	}
 
-	if err := client.Quit(); err != nil {
-		return fmt.Errorf("smtp: quit: %w", err)
-	}
+	// A successful DATA close includes the server's acceptance response. A
+	// subsequent QUIT failure only affects connection cleanup; retrying the
+	// message here could deliver a duplicate.
+	_ = client.Quit()
 
 	return nil
 }

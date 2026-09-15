@@ -248,7 +248,7 @@ func (s *Store) DeleteSentEmailJobsBefore(ctx context.Context, t time.Time) erro
 }
 
 func (s *Store) DeleteFailedEmailJobsBefore(ctx context.Context, t time.Time) error {
-	_, err := s.exec(ctx, `DELETE FROM email_jobs WHERE status = $1 AND created_at < $2`, string(domain.EmailJobStatusFailed), t)
+	_, err := s.exec(ctx, `DELETE FROM email_jobs WHERE status = $1 AND COALESCE(failed_at, created_at) < $2`, string(domain.EmailJobStatusFailed), t)
 	return err
 }
 

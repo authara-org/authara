@@ -124,5 +124,8 @@ type EmailJob struct {
 	ProcessingStartedAt *time.Time
 	LastError           *string
 	NextAttemptAt       time.Time
+	DeliveryDeadlineAt  time.Time
+	TerminalReason      *string
+	FailedAt            *time.Time
 	SentAt              *time.Time
 }

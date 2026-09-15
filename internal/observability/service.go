@@ -25,6 +25,7 @@ type Service struct {
 	httpRequestsInFlight  prometheus.Gauge
 	backgroundJobs        *prometheus.CounterVec
 	backgroundJobDuration *prometheus.HistogramVec
+	emailQueueAge         *prometheus.HistogramVec
 }
 
 func New(version string) *Service {
@@ -72,6 +73,13 @@ func New(version string) *Service {
 		Help:      "Time spent processing background jobs in Authara.",
 		Buckets:   prometheus.DefBuckets,
 	}, []string{"worker", "outcome"})
+	emailQueueAge := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "authara",
+		Subsystem: "email",
+		Name:      "queue_age_seconds",
+		Help:      "Age of email jobs when a delivery outcome is recorded.",
+		Buckets:   prometheus.ExponentialBuckets(1, 4, 10),
+	}, []string{"outcome"})
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "authara",
 		Name:      "build_info",
@@ -89,6 +97,7 @@ func New(version string) *Service {
 		httpRequestsInFlight,
 		backgroundJobs,
 		backgroundJobDuration,
+		emailQueueAge,
 	)
 
 	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{
@@ -105,6 +114,7 @@ func New(version string) *Service {
 		httpRequestsInFlight:  httpRequestsInFlight,
 		backgroundJobs:        backgroundJobs,
 		backgroundJobDuration: backgroundJobDuration,
+		emailQueueAge:         emailQueueAge,
 	}
 }
 
@@ -135,6 +145,16 @@ func (s *Service) ObserveBackgroundJob(worker, outcome string, duration time.Dur
 	outcome = normalizeBackgroundOutcome(outcome)
 	s.backgroundJobs.WithLabelValues(worker, outcome).Inc()
 	s.backgroundJobDuration.WithLabelValues(worker, outcome).Observe(duration.Seconds())
+}
+
+func (s *Service) ObserveEmailQueueAge(outcome string, age time.Duration) {
+	if s == nil {
+		return
+	}
+	if age < 0 {
+		age = 0
+	}
+	s.emailQueueAge.WithLabelValues(normalizeBackgroundOutcome(outcome)).Observe(age.Seconds())
 }
 
 func (s *Service) Handler() http.Handler {

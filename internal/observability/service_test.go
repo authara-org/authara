@@ -86,12 +86,14 @@ func TestDatabaseAndBackgroundMetrics(t *testing.T) {
 	}
 	service.ObserveBackgroundJob("email", "retried", 250*time.Millisecond)
 	service.ObserveBackgroundJob("webhook", "succeeded", 100*time.Millisecond)
+	service.ObserveEmailQueueAge("retried", 25*time.Minute)
 
 	metrics := scrape(t, service)
 	assertContains(t, metrics, `go_sql_open_connections{db_name="primary"} 0`)
 	assertContains(t, metrics, `authara_background_jobs_total{outcome="retried",worker="email"} 1`)
 	assertContains(t, metrics, `authara_background_jobs_total{outcome="succeeded",worker="webhook"} 1`)
 	assertContains(t, metrics, `authara_background_job_duration_seconds_count{outcome="retried",worker="email"} 1`)
+	assertContains(t, metrics, `authara_email_queue_age_seconds_count{outcome="retried"} 1`)
 }
 
 func TestBackgroundMetricLabelsAreBounded(t *testing.T) {

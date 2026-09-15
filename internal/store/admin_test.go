@@ -294,26 +294,52 @@ func TestAdminStoreRecentFailures(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateChallenge failed: %v", err)
 		}
+		processingStartedAt := adminStoreNow()
 		job, err := tdb.Store.CreateEmailJob(ctx, domain.EmailJob{
-			ChallengeID:   &challenge.ID,
-			ToEmail:       "failure@example.com",
-			Template:      domain.EmailTemplateSignupCode,
-			Status:        domain.EmailJobStatusPending,
-			NextAttemptAt: adminStoreNow(),
+			ChallengeID:         &challenge.ID,
+			ToEmail:             "failure@example.com",
+			Template:            domain.EmailTemplateSignupCode,
+			Status:              domain.EmailJobStatusProcessing,
+			AttemptCount:        1,
+			ProcessingStartedAt: &processingStartedAt,
+			NextAttemptAt:       adminStoreNow(),
 		})
 		if err != nil {
 			t.Fatalf("CreateEmailJob failed: %v", err)
 		}
-		if err := tdb.Store.MarkEmailJobFailed(ctx, job.ID, "smtp failed"); err != nil {
+		if err := tdb.Store.MarkEmailJobFailed(ctx, job.ID, processingStartedAt, "smtp failed", "smtp_permanent_failure", adminStoreNow()); err != nil {
 			t.Fatalf("MarkEmailJobFailed failed: %v", err)
 		}
-
-		jobs, err := tdb.Store.ListRecentFailedEmailJobs(ctx, 10, 0)
+		pendingJob, err := tdb.Store.CreateEmailJob(ctx, domain.EmailJob{
+			ToEmail:            "queued@example.com",
+			Template:           domain.EmailTemplateNewSignIn,
+			Status:             domain.EmailJobStatusPending,
+			NextAttemptAt:      adminStoreNow().Add(time.Minute),
+			DeliveryDeadlineAt: adminStoreNow().Add(time.Hour),
+		})
 		if err != nil {
-			t.Fatalf("ListRecentFailedEmailJobs failed: %v", err)
+			t.Fatalf("CreateEmailJob pending failed: %v", err)
 		}
-		if len(jobs) != 1 || jobs[0].ID != job.ID {
-			t.Fatalf("expected failed email job, got %+v", jobs)
+
+		jobs, err := tdb.Store.ListActiveOrFailedEmailJobs(ctx, 10, 0)
+		if err != nil {
+			t.Fatalf("ListActiveOrFailedEmailJobs failed: %v", err)
+		}
+		foundFailedJob := false
+		foundPendingJob := false
+		for _, emailJob := range jobs {
+			switch emailJob.ID {
+			case job.ID:
+				if emailJob.TerminalReason == nil || *emailJob.TerminalReason != "smtp_permanent_failure" || emailJob.FailedAt == nil {
+					t.Fatalf("failed email observability fields = %+v", emailJob)
+				}
+				foundFailedJob = true
+			case pendingJob.ID:
+				foundPendingJob = true
+			}
+		}
+		if !foundFailedJob || !foundPendingJob {
+			t.Fatalf("expected failed job %s and pending job %s, got %+v", job.ID, pendingJob.ID, jobs)
 		}
 
 		challenges, err := tdb.Store.ListRecentRiskyChallenges(ctx, adminStoreNow(), 10, 0)

@@ -125,12 +125,15 @@ func NewServices(app *App) (Services, error) {
 		newEmailSender(app.Config.Startup(), app.Logger),
 		app.Logger,
 		challenge.WorkerConfig{
-			WorkerCount:     app.Config.Email.WorkerCount,
-			PollInterval:    app.Config.Email.WorkerPollInterval,
-			CleanupInterval: time.Hour,
-			SendTimeout:     app.Config.Email.SMTPTimeout,
-			Policy:          app.Config,
-			Metrics:         app.Observability,
+			WorkerCount:          app.Config.Email.WorkerCount,
+			PollInterval:         app.Config.Email.WorkerPollInterval,
+			ProcessingStaleAfter: app.Config.Email.ProcessingStaleAfter,
+			StaleReaperInterval:  app.Config.Email.StaleReaperInterval,
+			MaintenanceBatchSize: app.Config.Email.MaintenanceBatchSize,
+			CleanupInterval:      time.Hour,
+			SendTimeout:          app.Config.Email.SMTPTimeout,
+			Policy:               app.Config,
+			Metrics:              app.Observability,
 		},
 	)
 

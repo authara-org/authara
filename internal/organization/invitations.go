@@ -692,11 +692,12 @@ func (s *Service) enqueueInvitationEmail(ctx context.Context, invitation domain.
 	}
 
 	_, err = s.store.CreateEmailJob(ctx, domain.EmailJob{
-		ToEmail:       invitation.Email,
-		Template:      domain.EmailTemplateOrganizationInvite,
-		TemplateData:  data,
-		Status:        domain.EmailJobStatusPending,
-		NextAttemptAt: now,
+		ToEmail:            invitation.Email,
+		Template:           domain.EmailTemplateOrganizationInvite,
+		TemplateData:       data,
+		Status:             domain.EmailJobStatusPending,
+		NextAttemptAt:      now,
+		DeliveryDeadlineAt: invitation.ExpiresAt,
 	})
 	return err
 }

@@ -11,8 +11,8 @@ templ Failures(failures adminsvc.RecentFailures, features FeatureFlags) {
 	@AdminShell("failures", features) {
 		<div class="space-y-6">
 			<div>
-				<h2 class="text-xl font-semibold">Recent Failures</h2>
-				<p class="text-sm text-grey-600 dark:text-grey-400">Operational failures from email delivery and challenge flows.</p>
+				<h2 class="text-xl font-semibold">Delivery Queue and Recent Failures</h2>
+				<p class="text-sm text-grey-600 dark:text-grey-400">Queued email delivery and operational failures from email and challenge flows.</p>
 			</div>
 			@emailFailures(failures.EmailJobs)
 			@challengeFailures(failures.Challenges)
@@ -34,12 +34,15 @@ templ emailFailures(jobs []domain.EmailJob) {
 						<th class="px-3 py-2">Attempts</th>
 						<th class="px-3 py-2">Last error</th>
 						<th class="px-3 py-2">Next attempt</th>
+						<th class="px-3 py-2">Delivery deadline</th>
+						<th class="px-3 py-2">Terminal reason</th>
+						<th class="px-3 py-2">Queue age</th>
 						<th class="px-3 py-2">Sent</th>
 					</tr>
 				</thead>
 				<tbody>
 					if len(jobs) == 0 {
-						<tr><td class="px-3 py-4 text-grey-600 dark:text-grey-400" colspan="8">No failed email jobs found.</td></tr>
+						<tr><td class="px-3 py-4 text-grey-600 dark:text-grey-400" colspan="11">No queued or failed email jobs found.</td></tr>
 					}
 					for _, job := range jobs {
 						<tr class="border-t border-grey-200 dark:border-grey-800">
@@ -49,7 +52,10 @@ templ emailFailures(jobs []domain.EmailJob) {
 							<td class="px-3 py-3 whitespace-nowrap">{ string(job.Status) }</td>
 							<td class="px-3 py-3 whitespace-nowrap">{ fmt.Sprint(job.AttemptCount) }</td>
 							<td class="px-3 py-3 max-w-sm truncate">{ stringPtr(job.LastError) }</td>
-							<td class="px-3 py-3 whitespace-nowrap">{ formatTime(job.NextAttemptAt) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ formatEmailNextAttempt(job) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ formatTime(job.DeliveryDeadlineAt) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ stringPtr(job.TerminalReason) }</td>
+							<td class="px-3 py-3 whitespace-nowrap">{ formatEmailQueueAge(job) }</td>
 							<td class="px-3 py-3 whitespace-nowrap">{ formatTimePtr(job.SentAt) }</td>
 						</tr>
 					}

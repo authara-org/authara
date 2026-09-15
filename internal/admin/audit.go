@@ -27,7 +27,7 @@ func (s *Service) RecentFailures(ctx context.Context, page Page) (RecentFailures
 	page = normalizePage(page, 25)
 	offset := (page.Page - 1) * page.Size
 
-	jobs, err := s.store.ListRecentFailedEmailJobs(ctx, page.Size, offset)
+	jobs, err := s.store.ListActiveOrFailedEmailJobs(ctx, page.Size, offset)
 	if err != nil {
 		return RecentFailures{}, err
 	}

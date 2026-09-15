@@ -145,8 +145,8 @@ func generalPolicyDefinitions() []Definition {
 			Key: KeyEmailJobMaxAttempts, Name: "Email delivery attempts",
 			Description: "Maximum attempts before an email job is marked failed.",
 			Environment: "AUTHARA_EMAIL_JOB_MAX_ATTEMPTS", Control: ControlHybrid, Reload: ReloadDynamic,
-			Group: "Email", Type: TypeInt, DefaultValue: "10", HasDefault: true, Minimum: "1", Maximum: "100",
-			defaultValue: 10, minInt: intPointer(1), maxInt: intPointer(100),
+			Group: "Email", Type: TypeInt, DefaultValue: "100", HasDefault: true, Minimum: "1", Maximum: "100",
+			defaultValue: 100, minInt: intPointer(1), maxInt: intPointer(100),
 			Impact: "Applies when the next failed delivery attempt is evaluated, including existing jobs.",
 		},
 		{

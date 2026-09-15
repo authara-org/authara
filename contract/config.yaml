@@ -93,6 +93,9 @@ settings_metadata:
   AUTHARA_EMAIL_WORKER_COUNT: {control: env, reload: startup, sensitive: false, group: email}
   AUTHARA_EMAIL_WORKER_POLL_INTERVAL: {control: env, reload: startup, sensitive: false, group: email}
   AUTHARA_EMAIL_JOB_MAX_ATTEMPTS: {control: hybrid, reload: dynamic, sensitive: false, group: email}
+  AUTHARA_EMAIL_PROCESSING_STALE_AFTER: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_STALE_REAPER_INTERVAL: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_MAINTENANCE_BATCH_SIZE: {control: env, reload: startup, sensitive: false, group: email}
   AUTHARA_EMAIL_CLEANUP_SENT_AFTER: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
   AUTHARA_EMAIL_CLEANUP_FAILED_AFTER: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
 
@@ -747,7 +750,26 @@ variables:
     stability: stable
     required: false
     type: int
-    default: 10
+    default: 100
+
+  - name: AUTHARA_EMAIL_PROCESSING_STALE_AFTER
+    stability: stable
+    required: false
+    type: duration
+    default: 2m
+    notes: Must be greater than AUTHARA_EMAIL_SMTP_TIMEOUT
+
+  - name: AUTHARA_EMAIL_STALE_REAPER_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 1m
+
+  - name: AUTHARA_EMAIL_MAINTENANCE_BATCH_SIZE
+    stability: stable
+    required: false
+    type: int
+    default: 1000
 
   # ------------------------------------------------------------
   # Email Cleanup

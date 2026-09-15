@@ -35,7 +35,7 @@ The dashboard supports:
 - granting and removing the admin role
 - revoking one session or all active sessions for a user
 - allowlist list, live search, pagination, add, and remove
-- recent failed email jobs and risky challenges
+- queued or failed email jobs and risky challenges
 - recent admin audit events
 
 Allowlist management is available only when

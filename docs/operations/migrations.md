@@ -197,3 +197,11 @@ to follow the effective policy, as it did before the value was persisted.
 Schema version 25 binds pending email changes to the session that initiated
 them. Applying migration 025 cancels existing email-change challenges because
 they cannot be safely attributed to an initiating session.
+
+## Durable email-delivery upgrade
+
+Schema version 26 adds delivery deadlines, terminal failure metadata, and an
+index for reclaiming expired email-processing leases. Existing challenge email
+jobs inherit their challenge expiry; other existing jobs receive a deadline 72
+hours after their original creation time. Apply migration 026 before deploying
+the matching Core binary.

@@ -138,7 +138,7 @@ func (s *Service) createChallenge(
 			return err
 		}
 
-		return s.enqueueChallengeEmail(txCtx, challenge.ID, email, template, now)
+		return s.enqueueChallengeEmail(txCtx, challenge.ID, email, template, now, challenge.ExpiresAt)
 	})
 	if err != nil {
 		return uuid.Nil, err
@@ -187,7 +187,7 @@ func (s *Service) ResendChallenge(
 			return err
 		}
 
-		return s.enqueueChallengeEmail(txCtx, challengeID, challenge.Email, template, now)
+		return s.enqueueChallengeEmail(txCtx, challengeID, challenge.Email, template, now, challenge.ExpiresAt)
 	})
 	if err != nil {
 		return err
@@ -353,14 +353,16 @@ func (s *Service) enqueueChallengeEmail(
 	toEmail string,
 	template domain.EmailTemplate,
 	now time.Time,
+	deliveryDeadline time.Time,
 ) error {
 	_, err := s.store.CreateEmailJob(ctx, domain.EmailJob{
-		ChallengeID:   &challengeID,
-		ToEmail:       toEmail,
-		Template:      template,
-		Status:        domain.EmailJobStatusPending,
-		AttemptCount:  0,
-		NextAttemptAt: now,
+		ChallengeID:        &challengeID,
+		ToEmail:            toEmail,
+		Template:           template,
+		Status:             domain.EmailJobStatusPending,
+		AttemptCount:       0,
+		NextAttemptAt:      now,
+		DeliveryDeadlineAt: deliveryDeadline,
 	})
 	return err
 }

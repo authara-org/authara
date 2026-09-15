@@ -75,5 +75,11 @@ func main() {
 		app.Logger.Error("graceful shutdown failed", "err", err)
 	}
 
+	emailShutdownCtx, emailShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer emailShutdownCancel()
+	if err := app.Services.EmailWorker.Shutdown(emailShutdownCtx); err != nil {
+		app.Logger.Warn("email worker drain timed out; in-flight jobs will be recovered from their leases", "err", err)
+	}
+
 	app.Logger.Info("authara stopped")
 }
