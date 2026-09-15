@@ -165,6 +165,13 @@ func (s *Service) ResendChallenge(
 			resultErr = err
 			return nil
 		}
+		if err := s.lockPendingActionForResend(txCtx, challenge); err != nil {
+			if errors.Is(err, ErrChallengeConsumed) {
+				resultErr = err
+				return nil
+			}
+			return err
+		}
 
 		ok, err := s.store.IncrementChallengeResendCount(txCtx, challengeID, now)
 		if err != nil {
@@ -186,6 +193,46 @@ func (s *Service) ResendChallenge(
 		return err
 	}
 	return resultErr
+}
+
+func (s *Service) lockPendingActionForResend(ctx context.Context, challenge domain.Challenge) error {
+	userID, guarded, err := s.pendingActionUserID(ctx, challenge)
+	if err != nil || !guarded {
+		return err
+	}
+	if _, err := s.store.GetUserByIDForUpdate(ctx, userID); err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			return ErrChallengeConsumed
+		}
+		return err
+	}
+	currentUserID, _, err := s.pendingActionUserID(ctx, challenge)
+	if err != nil {
+		return err
+	}
+	if currentUserID != userID {
+		return ErrChallengeConsumed
+	}
+	return nil
+}
+
+func (s *Service) pendingActionUserID(ctx context.Context, challenge domain.Challenge) (uuid.UUID, bool, error) {
+	switch challenge.Purpose {
+	case domain.ChallengePurposePasswordReset:
+		action, err := s.store.GetPendingPasswordResetByChallengeID(ctx, challenge.ID)
+		if errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+			return uuid.Nil, true, ErrChallengeConsumed
+		}
+		return action.UserID, true, err
+	case domain.ChallengePurposeEmailChange:
+		action, err := s.store.GetPendingEmailChangeByChallengeID(ctx, challenge.ID)
+		if errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
+			return uuid.Nil, true, ErrChallengeConsumed
+		}
+		return action.UserID, true, err
+	default:
+		return uuid.Nil, false, nil
+	}
 }
 
 func (s *Service) verifyChallenge(

@@ -8,11 +8,9 @@ CREATE TABLE IF NOT EXISTS authara.pending_password_resets (
 	user_id uuid NOT NULL REFERENCES authara.users(id) ON DELETE CASCADE,
 	password_hash varchar(255) NOT NULL,
 
-	CONSTRAINT unique_pending_password_reset_challenge UNIQUE (challenge_id)
+	CONSTRAINT unique_pending_password_reset_challenge UNIQUE (challenge_id),
+	CONSTRAINT unique_pending_password_reset_user UNIQUE (user_id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_pending_password_resets_user_id
-ON authara.pending_password_resets (user_id);
 
 INSERT INTO public.authara_schema_version (version)
 VALUES (5)
@@ -23,5 +21,4 @@ ON CONFLICT (version) DO NOTHING;
 DELETE FROM public.authara_schema_version
 WHERE version = 5;
 
-DROP INDEX IF EXISTS authara.idx_pending_password_resets_user_id;
 DROP TABLE IF EXISTS authara.pending_password_resets;

@@ -133,6 +133,10 @@ func (s *Store) CreatePendingPasswordReset(ctx context.Context, in domain.Pendin
 	if err := scanPendingPasswordReset(s.queryRow(ctx, `
 		INSERT INTO pending_password_resets (challenge_id, user_id, password_hash)
 		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET created_at = now(),
+			challenge_id = EXCLUDED.challenge_id,
+			password_hash = EXCLUDED.password_hash
 		RETURNING `+pendingPasswordResetColumns,
 		row.ChallengeID,
 		row.UserID,
@@ -223,6 +227,12 @@ func (s *Store) CreatePendingEmailChange(ctx context.Context, in domain.PendingE
 	if err := scanPendingEmailChange(s.queryRow(ctx, `
 		INSERT INTO pending_email_changes (challenge_id, user_id, initiating_session_id, old_email, new_email)
 		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (user_id) DO UPDATE
+		SET created_at = now(),
+			challenge_id = EXCLUDED.challenge_id,
+			initiating_session_id = EXCLUDED.initiating_session_id,
+			old_email = EXCLUDED.old_email,
+			new_email = EXCLUDED.new_email
 		RETURNING `+pendingEmailChangeColumns,
 		row.ChallengeID,
 		row.UserID,
@@ -264,32 +274,23 @@ func (s *Store) getPendingEmailChangeByChallengeID(ctx context.Context, challeng
 	return toDomainPendingEmailChange(row), nil
 }
 
-func (s *Store) DeletePendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID) error {
-	res, err := s.exec(ctx, `DELETE FROM pending_email_changes WHERE challenge_id = $1`, challengeID)
-	if err != nil {
-		return err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
-		return ErrorPendingEmailChangeNotFound
-	}
-	return nil
+func (s *Store) DeletePendingEmailChangesByUserID(ctx context.Context, userID uuid.UUID) error {
+	_, err := s.exec(ctx, `DELETE FROM pending_email_changes WHERE user_id = $1`, userID)
+	return err
 }
 
-func (s *Store) UpdateUserEmail(ctx context.Context, userID uuid.UUID, email string) error {
-	res, err := s.exec(ctx, `UPDATE users SET email = $1 WHERE id = $2`, email, userID)
+func (s *Store) UpdateUserEmailIfCurrent(ctx context.Context, userID uuid.UUID, currentEmail, newEmail string) (bool, error) {
+	res, err := s.exec(ctx, `
+		UPDATE users
+		SET email = $1
+		WHERE id = $2 AND lower(email) = lower($3)
+	`, newEmail, userID, currentEmail)
 	if err != nil {
-		return err
+		return false, err
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return false, err
 	}
-	if affected == 0 {
-		return ErrUserNotFound
-	}
-	return nil
+	return affected == 1, nil
 }

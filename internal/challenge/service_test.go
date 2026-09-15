@@ -855,3 +855,166 @@ func TestCompletePasswordResetChallengeQueuesPasswordChangedNotification(t *test
 		}
 	})
 }
+
+func TestNewPasswordResetSupersedesPreviousReset(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 15, 10, 0, 0, 0, time.UTC)
+		user := createPendingActionTestUser(t, ctx, tdb, "superseded-reset@example.com")
+		svc, verifier := newPendingActionTestServices(tdb)
+
+		firstID, firstCode := createPasswordResetTestChallenge(t, ctx, tdb, svc, verifier, user, "first-hash", now)
+		secondID, secondCode := createPasswordResetTestChallenge(t, ctx, tdb, svc, verifier, user, "second-hash", now.Add(time.Minute))
+
+		if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, firstID); !errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+			t.Fatalf("first reset remained authoritative: %v", err)
+		}
+		if err := svc.ResendChallenge(ctx, firstID, now.Add(2*time.Minute)); !errors.Is(err, ErrChallengeConsumed) {
+			t.Fatalf("superseded reset resend error = %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordResetCode); got != 2 {
+			t.Fatalf("reset code email jobs after stale resend = %d, want 2", got)
+		}
+		if err := svc.CompletePasswordResetChallenge(ctx, firstID, firstCode, verifier, now.Add(2*time.Minute)); !errors.Is(err, ErrPasswordResetUnavailable) {
+			t.Fatalf("superseded reset completion error = %v", err)
+		}
+		assertPasswordHash(t, ctx, tdb, user.ID, "old-hash")
+
+		if err := svc.CompletePasswordResetChallenge(ctx, secondID, secondCode, verifier, now.Add(2*time.Minute)); err != nil {
+			t.Fatalf("latest reset failed: %v", err)
+		}
+		assertPasswordHash(t, ctx, tdb, user.ID, "second-hash")
+	})
+}
+
+func TestNewEmailChangeSupersedesPreviousAndInvalidatesReset(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 15, 11, 0, 0, 0, time.UTC)
+		user := createPendingActionTestUser(t, ctx, tdb, "superseded-email@example.com")
+		session := createEmailChangeTestSession(t, ctx, tdb, user, now)
+		svc, verifier := newPendingActionTestServices(tdb)
+
+		firstID, firstCode := createEmailChangeTestChallenge(t, ctx, tdb, svc, verifier, user, session.ID, "first-email@example.com", now)
+		secondID, secondCode := createEmailChangeTestChallenge(t, ctx, tdb, svc, verifier, user, session.ID, "second-email@example.com", now.Add(time.Minute))
+		resetID, resetCode := createPasswordResetTestChallenge(t, ctx, tdb, svc, verifier, user, "reset-hash", now.Add(time.Minute))
+
+		if _, err := tdb.Store.GetPendingEmailChangeByChallengeID(ctx, firstID); !errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
+			t.Fatalf("first email change remained authoritative: %v", err)
+		}
+		if err := svc.ResendChallenge(ctx, firstID, now.Add(2*time.Minute)); !errors.Is(err, ErrChallengeConsumed) {
+			t.Fatalf("superseded email change resend error = %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, "first-email@example.com", domain.EmailTemplateEmailChangeCode); got != 1 {
+			t.Fatalf("email-change code jobs after stale resend = %d, want 1", got)
+		}
+		if err := svc.CompleteEmailChangeChallenge(ctx, CompleteEmailChangeChallengeInput{
+			ChallengeID: firstID, UserID: user.ID, SessionID: session.ID, Code: firstCode,
+		}, verifier, now.Add(2*time.Minute)); !errors.Is(err, ErrEmailChangeNotAuthorized) {
+			t.Fatalf("superseded email change completion error = %v", err)
+		}
+
+		if err := svc.CompleteEmailChangeChallenge(ctx, CompleteEmailChangeChallengeInput{
+			ChallengeID: secondID, UserID: user.ID, SessionID: session.ID, Code: secondCode,
+		}, verifier, now.Add(2*time.Minute)); err != nil {
+			t.Fatalf("latest email change failed: %v", err)
+		}
+		updated, err := tdb.Store.GetUserByID(ctx, user.ID)
+		if err != nil || updated.Email != "second-email@example.com" {
+			t.Fatalf("email after latest change = %q, err=%v", updated.Email, err)
+		}
+		if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, resetID); !errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+			t.Fatalf("old-address reset survived email change: %v", err)
+		}
+		if err := svc.CompletePasswordResetChallenge(ctx, resetID, resetCode, verifier, now.Add(3*time.Minute)); !errors.Is(err, ErrPasswordResetUnavailable) {
+			t.Fatalf("old-address reset completion error = %v", err)
+		}
+		assertPasswordHash(t, ctx, tdb, user.ID, "old-hash")
+	})
+}
+
+func TestEmailChangeRejectsStaleExpectedEmailWithoutConsumingCode(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
+		user := createPendingActionTestUser(t, ctx, tdb, "expected-email@example.com")
+		session := createEmailChangeTestSession(t, ctx, tdb, user, now)
+		svc, verifier := newPendingActionTestServices(tdb)
+		challengeID, code := createEmailChangeTestChallenge(t, ctx, tdb, svc, verifier, user, session.ID, "stale-target@example.com", now)
+
+		updated, err := tdb.Store.UpdateUserEmailIfCurrent(ctx, user.ID, user.Email, "newer-email@example.com")
+		if err != nil || !updated {
+			t.Fatalf("simulate newer email mutation: updated=%t err=%v", updated, err)
+		}
+		if err := svc.CompleteEmailChangeChallenge(ctx, CompleteEmailChangeChallengeInput{
+			ChallengeID: challengeID, UserID: user.ID, SessionID: session.ID, Code: code,
+		}, verifier, now.Add(time.Minute)); !errors.Is(err, ErrEmailChangeNotAuthorized) {
+			t.Fatalf("stale email change completion error = %v", err)
+		}
+		current, err := tdb.Store.GetUserByID(ctx, user.ID)
+		if err != nil || current.Email != "newer-email@example.com" {
+			t.Fatalf("stale action changed email to %q, err=%v", current.Email, err)
+		}
+		challenge, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil || challenge.ConsumedAt != nil {
+			t.Fatalf("stale action consumed challenge: consumed_at=%v err=%v", challenge.ConsumedAt, err)
+		}
+	})
+}
+
+func newPendingActionTestServices(tdb *testutil.TestDB) (*Service, *VerificationCodeService) {
+	svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, ChallengeTTL: 30 * time.Minute, MaxAttempts: 5, MaxResends: 3})
+	verifier := NewVerificationCodeService(tdb.Store, 10*time.Minute, []byte("01234567890123456789012345678901"))
+	return svc, verifier
+}
+
+func createPendingActionTestUser(t *testing.T, ctx context.Context, tdb *testutil.TestDB, address string) domain.User {
+	t.Helper()
+	user, err := tdb.Store.CreateUser(ctx, domain.User{Email: address, Username: address})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldHash := "old-hash"
+	if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+		UserID: user.ID, Provider: domain.ProviderPassword, PasswordHash: &oldHash,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return user
+}
+
+func createPasswordResetTestChallenge(
+	t *testing.T,
+	ctx context.Context,
+	tdb *testutil.TestDB,
+	svc *Service,
+	verifier *VerificationCodeService,
+	user domain.User,
+	passwordHash string,
+	now time.Time,
+) (uuid.UUID, string) {
+	t.Helper()
+	challengeID, err := svc.CreatePasswordResetChallenge(ctx, CreatePasswordResetChallengeInput{
+		UserID: user.ID, Email: user.Email, PasswordHash: passwordHash,
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	challenge, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := verifier.GenerateCode(ctx, challenge, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return challengeID, code
+}
+
+func assertPasswordHash(t *testing.T, ctx context.Context, tdb *testutil.TestDB, userID uuid.UUID, want string) {
+	t.Helper()
+	provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, userID)
+	if err != nil || provider.PasswordHash == nil || *provider.PasswordHash != want {
+		t.Fatalf("password hash = %v, err=%v, want %q", provider.PasswordHash, err, want)
+	}
+}

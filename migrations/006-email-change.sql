@@ -9,11 +9,9 @@ CREATE TABLE IF NOT EXISTS authara.pending_email_changes (
 	old_email varchar(255) NOT NULL,
 	new_email varchar(255) NOT NULL,
 
-	CONSTRAINT unique_pending_email_change_challenge UNIQUE (challenge_id)
+	CONSTRAINT unique_pending_email_change_challenge UNIQUE (challenge_id),
+	CONSTRAINT unique_pending_email_change_user UNIQUE (user_id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_pending_email_changes_user_id
-ON authara.pending_email_changes (user_id);
 
 INSERT INTO public.authara_schema_version (version)
 VALUES (6)
@@ -24,5 +22,4 @@ ON CONFLICT (version) DO NOTHING;
 DELETE FROM public.authara_schema_version
 WHERE version = 6;
 
-DROP INDEX IF EXISTS authara.idx_pending_email_changes_user_id;
 DROP TABLE IF EXISTS authara.pending_email_changes;

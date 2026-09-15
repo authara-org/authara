@@ -3,6 +3,7 @@ package challenge
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
@@ -37,14 +38,18 @@ func (s *Service) CreateEmailChangeChallenge(
 		in.NewEmail,
 		now,
 		func(txCtx context.Context, challenge domain.Challenge) error {
-			if err := s.requireActiveEmailChangeSession(txCtx, in.UserID, in.InitiatingSessionID, now); err != nil {
+			user, err := s.requireActiveEmailChangeSession(txCtx, in.UserID, in.InitiatingSessionID, now)
+			if err != nil {
 				return err
 			}
-			_, err := s.store.CreatePendingEmailChange(txCtx, domain.PendingEmailChange{
+			if !sameEmail(user.Email, in.OldEmail) {
+				return ErrEmailChangeNotAuthorized
+			}
+			_, err = s.store.CreatePendingEmailChange(txCtx, domain.PendingEmailChange{
 				ChallengeID:         challenge.ID,
 				UserID:              in.UserID,
 				InitiatingSessionID: in.InitiatingSessionID,
-				OldEmail:            in.OldEmail,
+				OldEmail:            user.Email,
 				NewEmail:            in.NewEmail,
 			})
 			return err
@@ -67,11 +72,11 @@ func (s *Service) CompleteEmailChangeChallenge(
 		verifier,
 		now,
 		func(txCtx context.Context, challenge domain.Challenge) error {
-			if err := s.requireActiveEmailChangeSession(txCtx, in.UserID, in.SessionID, now); err != nil {
+			user, err := s.requireActiveEmailChangeSession(txCtx, in.UserID, in.SessionID, now)
+			if err != nil {
 				return err
 			}
 
-			var err error
 			action, err = s.store.GetPendingEmailChangeByChallengeIDForUpdate(txCtx, challenge.ID)
 			if err != nil {
 				if errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
@@ -79,7 +84,7 @@ func (s *Service) CompleteEmailChangeChallenge(
 				}
 				return err
 			}
-			if action.UserID != in.UserID || action.InitiatingSessionID != in.SessionID {
+			if action.UserID != in.UserID || action.InitiatingSessionID != in.SessionID || !sameEmail(user.Email, action.OldEmail) {
 				return ErrEmailChangeNotAuthorized
 			}
 			return nil
@@ -96,29 +101,33 @@ func (s *Service) requireActiveEmailChangeSession(
 	userID uuid.UUID,
 	sessionID uuid.UUID,
 	now time.Time,
-) error {
+) (domain.User, error) {
 	user, err := s.store.GetUserByIDForUpdate(ctx, userID)
 	if err != nil {
 		if errors.Is(err, store.ErrUserNotFound) {
-			return ErrEmailChangeNotAuthorized
+			return domain.User{}, ErrEmailChangeNotAuthorized
 		}
-		return err
+		return domain.User{}, err
 	}
 	if user.DisabledAt != nil {
-		return ErrEmailChangeNotAuthorized
+		return domain.User{}, ErrEmailChangeNotAuthorized
 	}
 
 	session, err := s.store.GetActiveSessionByIDForUpdate(ctx, sessionID, now)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
-			return ErrEmailChangeNotAuthorized
+			return domain.User{}, ErrEmailChangeNotAuthorized
 		}
-		return err
+		return domain.User{}, err
 	}
 	if session.UserID != userID {
-		return ErrEmailChangeNotAuthorized
+		return domain.User{}, ErrEmailChangeNotAuthorized
 	}
-	return nil
+	return user, nil
+}
+
+func sameEmail(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
 
 func (s *Service) executeEmailChange(
@@ -127,8 +136,12 @@ func (s *Service) executeEmailChange(
 	now time.Time,
 ) error {
 	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		if err := s.store.UpdateUserEmail(txCtx, action.UserID, action.NewEmail); err != nil {
+		updated, err := s.store.UpdateUserEmailIfCurrent(txCtx, action.UserID, action.OldEmail, action.NewEmail)
+		if err != nil {
 			return err
+		}
+		if !updated {
+			return ErrEmailChangeNotAuthorized
 		}
 		if s.allowlistPolicy.CurrentAllowlist().AllowlistEnabled {
 			if err := s.store.DeleteAllowedEmail(txCtx, action.OldEmail); err != nil {
@@ -138,7 +151,10 @@ func (s *Service) executeEmailChange(
 				return err
 			}
 		}
-		if err := s.store.DeletePendingEmailChangeByChallengeID(txCtx, action.ChallengeID); err != nil {
+		if err := s.store.DeletePendingEmailChangesByUserID(txCtx, action.UserID); err != nil {
+			return err
+		}
+		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, action.UserID); err != nil {
 			return err
 		}
 		data := email.TemplateData{
