@@ -14,10 +14,10 @@ var runtimeDefinitions = func() []Definition {
 	definitions = append(definitions, []Definition{
 		{
 			Key: KeyChallengeEnabled, Name: "Challenge flows enabled",
-			Description: "Controls whether signup, password-reset, and email-change verification flows are available.",
+			Description: "Controls whether signup and email-change verification flows are available. Password reset remains available independently.",
 			Environment: "AUTHARA_CHALLENGE_ENABLED", Control: ControlEnvironment, Reload: ReloadStartup,
 			Group: "Challenge", Type: TypeBool, DefaultValue: "false", HasDefault: true, defaultValue: false,
-			Impact: "Startup-only because this setting changes routes, rendered flows, and worker startup.",
+			Impact: "Startup-only because this setting changes routes and rendered flows.",
 		},
 		{
 			Key: KeyChallengeTTL, Name: "Challenge lifetime",

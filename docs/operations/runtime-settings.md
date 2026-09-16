@@ -101,8 +101,8 @@ The first runtime policy group contains:
 | `AUTHARA_CHALLENGE_MIN_RESEND_INTERVAL` | 0s–15m | New challenges |
 
 `AUTHARA_CHALLENGE_ENABLED` remains environment-only and startup-only because
-it currently controls middleware, rendered authentication flows, and email
-worker startup.
+it controls middleware and rendered authentication flows. Password recovery
+and email worker startup are independent of this setting.
 
 Each request reads one immutable challenge-policy snapshot at the beginning of
 the operation. New challenges persist their expiry, attempt limit, resend

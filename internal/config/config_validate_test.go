@@ -20,6 +20,40 @@ func validProdConfigForValidate() Config {
 		Admin: Admin{
 			AuditRetentionDays: 180,
 		},
+		Email: Email{
+			Provider: "smtp",
+			SMTPTLS:  true,
+		},
+	}
+}
+
+func TestConfigValidate_ProdRequiresDeliverableEmailForPasswordRecovery(t *testing.T) {
+	cfg := validProdConfigForValidate()
+	cfg.Challenge.Enabled = false
+	cfg.Email.Provider = "noop"
+
+	err := cfg.validate()
+	if err == nil || !strings.Contains(err.Error(), "password recovery routes are enabled") {
+		t.Fatalf("validate error = %v, want password recovery email delivery error", err)
+	}
+}
+
+func TestConfigValidate_ProdAllowsSMTPWhenChallengesAreDisabled(t *testing.T) {
+	cfg := validProdConfigForValidate()
+	cfg.Challenge.Enabled = false
+
+	if err := cfg.validate(); err != nil {
+		t.Fatalf("validate failed: %v", err)
+	}
+}
+
+func TestConfigValidate_DevAllowsNoopEmail(t *testing.T) {
+	cfg := validProdConfigForValidate()
+	cfg.Values.AppEnv = "dev"
+	cfg.Email.Provider = "noop"
+
+	if err := cfg.validate(); err != nil {
+		t.Fatalf("validate failed: %v", err)
 	}
 }
 

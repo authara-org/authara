@@ -33,6 +33,7 @@ func NewApp(version string) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create logger: %w", err)
 	}
+	warnIfEmailDeliveryUnavailable(cfg, logger)
 
 	st, err := NewStore(cfg)
 	if err != nil {

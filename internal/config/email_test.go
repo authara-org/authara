@@ -42,3 +42,19 @@ func TestEmailConfigRequiresLeaseLongerThanSendTimeout(t *testing.T) {
 		t.Fatalf("validate error = %v, want stale-after constraint", err)
 	}
 }
+
+func TestEmailIsDeliverable(t *testing.T) {
+	for _, test := range []struct {
+		provider string
+		want     bool
+	}{
+		{provider: "noop", want: false},
+		{provider: " SMTP ", want: true},
+	} {
+		t.Run(strings.TrimSpace(test.provider), func(t *testing.T) {
+			if got := (Email{Provider: test.provider}).IsDeliverable(); got != test.want {
+				t.Fatalf("IsDeliverable() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}

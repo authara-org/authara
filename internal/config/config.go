@@ -128,10 +128,8 @@ func (c *Config) validate() error {
 		)
 	}
 
-	if c.Challenge.Enabled &&
-		c.Email.Provider == "noop" &&
-		c.Values.AppEnv == "prod" {
-		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must not be noop when AUTHARA_CHALLENGE_ENABLED=true in production")
+	if c.Values.AppEnv == "prod" && !c.Email.IsDeliverable() {
+		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must be smtp in production because password recovery routes are enabled")
 	}
 
 	if c.Values.AppEnv == "prod" && c.DB.LogSQL {

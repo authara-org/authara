@@ -645,6 +645,7 @@ variables:
     required: false
     type: bool
     default: false
+    notes: Controls signup and email-change verification. Password recovery and email delivery remain available independently.
 
   - name: AUTHARA_CHALLENGE_TTL
     stability: stable
@@ -689,6 +690,7 @@ variables:
     allowed_values:
       - noop
       - smtp
+    notes: SMTP is required in production because password recovery routes are always enabled. Noop is a development sink and does not deliver mail.
 
   - name: AUTHARA_EMAIL_FROM
     stability: stable

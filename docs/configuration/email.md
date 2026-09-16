@@ -105,8 +105,13 @@ AUTHARA_EMAIL_PROVIDER=noop
 ```
 
 - no emails are sent
-- the emails logged
+- email metadata is logged
 - useful for development
+
+The noop provider is rejected in production because password recovery routes
+are always available and require deliverable email. Development starts the
+worker with this provider but emits an explicit warning that recovery and
+security messages will not reach recipients.
 
 ---
 
@@ -117,6 +122,9 @@ AUTHARA_EMAIL_PROVIDER=smtp
 ```
 
 Uses an SMTP server (e.g. Mailgun, Mailjet, SES).
+
+SMTP is required in production, independently of
+`AUTHARA_CHALLENGE_ENABLED`.
 
 ---
 

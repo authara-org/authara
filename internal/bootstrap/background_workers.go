@@ -12,6 +12,8 @@ func (a *App) StartBackgroundWorkers(ctx context.Context) {
 	a.Services.Session.StartCleanupWorker(ctx, a.Logger, 5*time.Minute)
 	a.Services.Admin.StartAuditCleanupWorker(ctx, a.Logger, 24*time.Hour)
 
+	// Recovery and security flows enqueue email even when optional challenge
+	// verification is disabled, so email delivery has its own lifecycle.
 	a.Services.EmailWorker.Run(ctx)
 	a.Logger.Info("email workers started",
 		"worker_count", a.Config.Email.WorkerCount,

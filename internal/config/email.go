@@ -28,6 +28,13 @@ type Email struct {
 	CleanupFailedAfter   time.Duration `env:"AUTHARA_EMAIL_CLEANUP_FAILED_AFTER,default=2160h"` // 90d
 }
 
+// IsDeliverable reports whether the configured provider can deliver email to
+// recipients. The noop provider is a development sink and is not suitable for
+// user-facing flows such as password recovery.
+func (e Email) IsDeliverable() bool {
+	return strings.EqualFold(strings.TrimSpace(e.Provider), "smtp")
+}
+
 func (e *Email) validate() error {
 	e.Provider = strings.ToLower(strings.TrimSpace(e.Provider))
 
