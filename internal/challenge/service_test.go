@@ -3,17 +3,40 @@ package challenge
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
+	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
 )
+
+type challengePublisherFunc func(context.Context, webhook.Envelope) error
+
+func (f challengePublisherFunc) Publish(ctx context.Context, event webhook.Envelope) error {
+	return f(ctx, event)
+}
+
+type toggleFailureCache struct {
+	cache.Noop
+	fail atomic.Bool
+	err  error
+}
+
+func (c *toggleFailureCache) Set(context.Context, string, []byte, time.Duration) error {
+	if c.fail.Load() {
+		return c.err
+	}
+	return nil
+}
 
 func TestRunningChallengeServicesObservePolicyChangesWithoutReconstruction(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
@@ -960,6 +983,300 @@ func TestEmailChangeRejectsStaleExpectedEmailWithoutConsumingCode(t *testing.T) 
 			t.Fatalf("stale action consumed challenge: consumed_at=%v err=%v", challenge.ConsumedAt, err)
 		}
 	})
+}
+
+func TestPasswordResetLateFailureRollsBackMutationAndChallenge(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 16, 10, 0, 0, 0, time.UTC)
+	suffix := uuid.NewString()
+	address := "atomic-reset-" + suffix + "@example.com"
+	user := createPendingActionTestUser(t, ctx, tdb, address)
+	organizationID := uuid.Nil
+	cleanupCommittedChallengeTest(t, tdb, user.ID, &organizationID, address)
+
+	session := createEmailChangeTestSession(t, ctx, tdb, user, now)
+	organizationID = session.ActiveOrganizationID
+	completionErr := errors.New("access-token revocation unavailable")
+	revocationCache := &toggleFailureCache{err: completionErr}
+	revocationCache.fail.Store(true)
+	svc := New(Config{
+		Store:                  tdb.Store,
+		Tx:                     tdb.Tx,
+		ChallengeTTL:           30 * time.Minute,
+		MaxAttempts:            5,
+		MaxResends:             3,
+		AccessTokenRevocations: token.NewAccessTokenRevocations(revocationCache, time.Hour),
+	})
+	verifier := NewVerificationCodeService(tdb.Store, 10*time.Minute, []byte("01234567890123456789012345678901"))
+	challengeID, code := createPasswordResetTestChallenge(t, ctx, tdb, svc, verifier, user, "new-hash", now)
+
+	if err := svc.CompletePasswordResetChallenge(ctx, challengeID, code, verifier, now.Add(time.Minute)); !errors.Is(err, completionErr) {
+		t.Fatalf("completion error = %v, want %v", err, completionErr)
+	}
+	assertPasswordHash(t, ctx, tdb, user.ID, "old-hash")
+	storedSession, err := tdb.Store.GetSessionByID(ctx, session.ID)
+	if err != nil || storedSession.RevokedAt != nil {
+		t.Fatalf("session after failed completion = (%+v, %v), want active", storedSession, err)
+	}
+	challenge, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+	if err != nil || challenge.ConsumedAt != nil {
+		t.Fatalf("challenge after failed completion = (%+v, %v), want unconsumed", challenge, err)
+	}
+	if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID); err != nil {
+		t.Fatalf("pending reset after failed completion: %v", err)
+	}
+	if got := countCommittedEmailJobs(t, tdb, address, domain.EmailTemplatePasswordChanged); got != 0 {
+		t.Fatalf("password-changed jobs after failed completion = %d, want 0", got)
+	}
+
+	revocationCache.fail.Store(false)
+	if err := svc.CompletePasswordResetChallenge(ctx, challengeID, code, verifier, now.Add(2*time.Minute)); err != nil {
+		t.Fatalf("retry completion: %v", err)
+	}
+	assertPasswordHash(t, ctx, tdb, user.ID, "new-hash")
+	storedSession, err = tdb.Store.GetSessionByID(ctx, session.ID)
+	if err != nil || storedSession.RevokedAt == nil {
+		t.Fatalf("session after successful retry = (%+v, %v), want revoked", storedSession, err)
+	}
+	challenge, err = tdb.Store.GetChallengeByID(ctx, challengeID)
+	if err != nil || challenge.ConsumedAt == nil {
+		t.Fatalf("challenge after successful retry = (%+v, %v), want consumed", challenge, err)
+	}
+	if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+		t.Fatalf("pending reset after successful retry: %v", err)
+	}
+	if got := countCommittedEmailJobs(t, tdb, address, domain.EmailTemplatePasswordChanged); got != 1 {
+		t.Fatalf("password-changed jobs after successful retry = %d, want 1", got)
+	}
+}
+
+func TestEmailChangeLateFailureRollsBackMutationAndChallenge(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 16, 11, 0, 0, 0, time.UTC)
+	suffix := uuid.NewString()
+	oldEmail := "atomic-email-old-" + suffix + "@example.com"
+	newEmail := "atomic-email-new-" + suffix + "@example.com"
+	user := createPendingActionTestUser(t, ctx, tdb, oldEmail)
+	organizationID := uuid.Nil
+	cleanupCommittedChallengeTest(t, tdb, user.ID, &organizationID, oldEmail, newEmail)
+	session := createEmailChangeTestSession(t, ctx, tdb, user, now)
+	organizationID = session.ActiveOrganizationID
+
+	completionErr := errors.New("webhook enqueue unavailable")
+	failCompletion := true
+	pub := challengePublisherFunc(func(context.Context, webhook.Envelope) error {
+		if failCompletion {
+			return completionErr
+		}
+		return nil
+	})
+	svc := New(Config{
+		Store:            tdb.Store,
+		Tx:               tdb.Tx,
+		ChallengeTTL:     30 * time.Minute,
+		MaxAttempts:      5,
+		MaxResends:       3,
+		WebhookPublisher: pub,
+	})
+	verifier := NewVerificationCodeService(tdb.Store, 10*time.Minute, []byte("01234567890123456789012345678901"))
+	challengeID, code := createEmailChangeTestChallenge(t, ctx, tdb, svc, verifier, user, session.ID, newEmail, now)
+	input := CompleteEmailChangeChallengeInput{
+		ChallengeID: challengeID,
+		UserID:      user.ID,
+		SessionID:   session.ID,
+		Code:        code,
+	}
+
+	if err := svc.CompleteEmailChangeChallenge(ctx, input, verifier, now.Add(time.Minute)); !errors.Is(err, completionErr) {
+		t.Fatalf("completion error = %v, want %v", err, completionErr)
+	}
+	current, err := tdb.Store.GetUserByID(ctx, user.ID)
+	if err != nil || current.Email != oldEmail {
+		t.Fatalf("user after failed completion = (%+v, %v), want email %q", current, err, oldEmail)
+	}
+	challenge, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+	if err != nil || challenge.ConsumedAt != nil {
+		t.Fatalf("challenge after failed completion = (%+v, %v), want unconsumed", challenge, err)
+	}
+	if _, err := tdb.Store.GetPendingEmailChangeByChallengeID(ctx, challengeID); err != nil {
+		t.Fatalf("pending email change after failed completion: %v", err)
+	}
+	if got := countCommittedEmailJobs(t, tdb, oldEmail, domain.EmailTemplateEmailChangedOldAddress); got != 0 {
+		t.Fatalf("old-address jobs after failed completion = %d, want 0", got)
+	}
+	if got := countCommittedEmailJobs(t, tdb, newEmail, domain.EmailTemplateEmailChangedNewAddress); got != 0 {
+		t.Fatalf("new-address jobs after failed completion = %d, want 0", got)
+	}
+
+	failCompletion = false
+	if err := svc.CompleteEmailChangeChallenge(ctx, input, verifier, now.Add(2*time.Minute)); err != nil {
+		t.Fatalf("retry completion: %v", err)
+	}
+	current, err = tdb.Store.GetUserByID(ctx, user.ID)
+	if err != nil || current.Email != newEmail {
+		t.Fatalf("user after successful retry = (%+v, %v), want email %q", current, err, newEmail)
+	}
+	challenge, err = tdb.Store.GetChallengeByID(ctx, challengeID)
+	if err != nil || challenge.ConsumedAt == nil {
+		t.Fatalf("challenge after successful retry = (%+v, %v), want consumed", challenge, err)
+	}
+	if _, err := tdb.Store.GetPendingEmailChangeByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
+		t.Fatalf("pending email change after successful retry: %v", err)
+	}
+	if got := countCommittedEmailJobs(t, tdb, oldEmail, domain.EmailTemplateEmailChangedOldAddress); got != 1 {
+		t.Fatalf("old-address jobs after successful retry = %d, want 1", got)
+	}
+	if got := countCommittedEmailJobs(t, tdb, newEmail, domain.EmailTemplateEmailChangedNewAddress); got != 1 {
+		t.Fatalf("new-address jobs after successful retry = %d, want 1", got)
+	}
+}
+
+func TestConcurrentPasswordResetCompletionHasSingleWinner(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+	address := "concurrent-reset-" + uuid.NewString() + "@example.com"
+	user := createPendingActionTestUser(t, ctx, tdb, address)
+	cleanupCommittedChallengeTest(t, tdb, user.ID, nil, address)
+	svc, verifier := newPendingActionTestServices(tdb)
+	challengeID, code := createPasswordResetTestChallenge(t, ctx, tdb, svc, verifier, user, "winner-hash", now)
+
+	assertSingleConcurrentWinner(t, func(callCtx context.Context) error {
+		return svc.CompletePasswordResetChallenge(callCtx, challengeID, code, verifier, now.Add(time.Minute))
+	})
+
+	assertPasswordHash(t, ctx, tdb, user.ID, "winner-hash")
+	challenge, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+	if err != nil || challenge.ConsumedAt == nil {
+		t.Fatalf("challenge after concurrent completion = (%+v, %v), want consumed", challenge, err)
+	}
+	if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+		t.Fatalf("pending reset after concurrent completion: %v", err)
+	}
+	if got := countCommittedEmailJobs(t, tdb, address, domain.EmailTemplatePasswordChanged); got != 1 {
+		t.Fatalf("password-changed jobs after concurrent completion = %d, want 1", got)
+	}
+}
+
+func TestConcurrentEmailChangeCompletionHasSingleWinner(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 16, 13, 0, 0, 0, time.UTC)
+	suffix := uuid.NewString()
+	oldEmail := "concurrent-email-old-" + suffix + "@example.com"
+	newEmail := "concurrent-email-new-" + suffix + "@example.com"
+	user := createPendingActionTestUser(t, ctx, tdb, oldEmail)
+	organizationID := uuid.Nil
+	cleanupCommittedChallengeTest(t, tdb, user.ID, &organizationID, oldEmail, newEmail)
+	session := createEmailChangeTestSession(t, ctx, tdb, user, now)
+	organizationID = session.ActiveOrganizationID
+	svc, verifier := newPendingActionTestServices(tdb)
+	challengeID, code := createEmailChangeTestChallenge(t, ctx, tdb, svc, verifier, user, session.ID, newEmail, now)
+	input := CompleteEmailChangeChallengeInput{
+		ChallengeID: challengeID,
+		UserID:      user.ID,
+		SessionID:   session.ID,
+		Code:        code,
+	}
+
+	assertSingleConcurrentWinner(t, func(callCtx context.Context) error {
+		return svc.CompleteEmailChangeChallenge(callCtx, input, verifier, now.Add(time.Minute))
+	})
+
+	current, err := tdb.Store.GetUserByID(ctx, user.ID)
+	if err != nil || current.Email != newEmail {
+		t.Fatalf("user after concurrent completion = (%+v, %v), want email %q", current, err, newEmail)
+	}
+	challenge, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+	if err != nil || challenge.ConsumedAt == nil {
+		t.Fatalf("challenge after concurrent completion = (%+v, %v), want consumed", challenge, err)
+	}
+	if _, err := tdb.Store.GetPendingEmailChangeByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
+		t.Fatalf("pending email change after concurrent completion: %v", err)
+	}
+	if got := countCommittedEmailJobs(t, tdb, oldEmail, domain.EmailTemplateEmailChangedOldAddress); got != 1 {
+		t.Fatalf("old-address jobs after concurrent completion = %d, want 1", got)
+	}
+	if got := countCommittedEmailJobs(t, tdb, newEmail, domain.EmailTemplateEmailChangedNewAddress); got != 1 {
+		t.Fatalf("new-address jobs after concurrent completion = %d, want 1", got)
+	}
+}
+
+func assertSingleConcurrentWinner(t *testing.T, complete func(context.Context) error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var ready sync.WaitGroup
+	ready.Add(2)
+	for range 2 {
+		go func() {
+			ready.Done()
+			<-start
+			results <- complete(ctx)
+		}()
+	}
+	ready.Wait()
+	close(start)
+
+	successes := 0
+	consumed := 0
+	for range 2 {
+		select {
+		case err := <-results:
+			switch {
+			case err == nil:
+				successes++
+			case errors.Is(err, ErrChallengeConsumed):
+				consumed++
+			default:
+				t.Fatalf("concurrent completion error = %v", err)
+			}
+		case <-ctx.Done():
+			t.Fatalf("concurrent completion timed out: %v", ctx.Err())
+		}
+	}
+	if successes != 1 || consumed != 1 {
+		t.Fatalf("concurrent results: successes=%d consumed=%d, want 1 each", successes, consumed)
+	}
+}
+
+func cleanupCommittedChallengeTest(
+	t *testing.T,
+	tdb *testutil.TestDB,
+	userID uuid.UUID,
+	organizationID *uuid.UUID,
+	emails ...string,
+) {
+	t.Helper()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		for _, address := range emails {
+			_ = tdb.Store.DeleteUserEmailReferences(ctx, userID, address)
+		}
+		_ = tdb.Store.DeleteUser(ctx, userID)
+		if organizationID != nil && *organizationID != uuid.Nil {
+			_ = tdb.Store.DeleteOrganization(ctx, *organizationID)
+		}
+	})
+}
+
+func countCommittedEmailJobs(t *testing.T, tdb *testutil.TestDB, address string, template domain.EmailTemplate) int {
+	t.Helper()
+	var count int
+	if err := tdb.Store.DB().QueryRowContext(context.Background(), `
+		SELECT count(*)
+		FROM authara.email_jobs
+		WHERE lower(to_email) = lower($1) AND template = $2
+	`, address, string(template)).Scan(&count); err != nil {
+		t.Fatalf("count committed email jobs: %v", err)
+	}
+	return count
 }
 
 func newPendingActionTestServices(tdb *testutil.TestDB) (*Service, *VerificationCodeService) {
