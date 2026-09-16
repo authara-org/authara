@@ -53,6 +53,26 @@ func newDBSessionServiceWithCache(
 	cacheStore cache.Cache,
 	refreshTokenRotation time.Duration,
 ) *Service {
+	return newDBSessionServiceWithPolicy(
+		t,
+		tdb,
+		ttl,
+		cacheStore,
+		time.Hour,
+		time.Hour,
+		refreshTokenRotation,
+	)
+}
+
+func newDBSessionServiceWithPolicy(
+	t *testing.T,
+	tdb *testutil.TestDB,
+	accessTokenTTL time.Duration,
+	cacheStore cache.Cache,
+	sessionTTL time.Duration,
+	refreshTokenTTL time.Duration,
+	refreshTokenRotation time.Duration,
+) *Service {
 	t.Helper()
 
 	keySet, err := token.NewKeySet("test-key", map[string][]byte{
@@ -64,7 +84,7 @@ func newDBSessionServiceWithCache(
 
 	var revocations *token.AccessTokenRevocations
 	if cacheStore != nil {
-		revocations = token.NewAccessTokenRevocations(cacheStore, ttl)
+		revocations = token.NewAccessTokenRevocations(cacheStore, accessTokenTTL)
 	}
 
 	return New(SessionConfig{
@@ -73,11 +93,11 @@ func newDBSessionServiceWithCache(
 		AccessTokens: token.NewAccessTokenService(
 			keySet,
 			"authara-test",
-			ttl,
+			accessTokenTTL,
 		),
 		AccessTokenRevocations: revocations,
-		SessionTTL:             time.Hour,
-		RefreshTokenTTL:        time.Hour,
+		SessionTTL:             sessionTTL,
+		RefreshTokenTTL:        refreshTokenTTL,
 		RefreshTokenRotation:   refreshTokenRotation,
 		Organizations:          organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}),
 	})
@@ -214,6 +234,172 @@ func TestCleanupExpiredDataDeletesWebAuthnChallenges(t *testing.T) {
 		}
 		if _, err = tdb.Store.GetWebAuthnChallengeByIDForUpdate(ctx, active.ID); err != nil {
 			t.Fatalf("expected active challenge to remain, got %v", err)
+		}
+	})
+}
+
+func TestCleanupExpiredDataRetainsConsumedRefreshTokensUntilFamilyEnds(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "refresh-retention@example.com",
+			Username: "refresh-retention",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatal(err)
+		}
+
+		svc := newDBSessionServiceWithPolicy(
+			t,
+			tdb,
+			10*time.Minute,
+			cache.NewNoop(),
+			2*time.Hour,
+			30*time.Minute,
+			-time.Nanosecond,
+		)
+		_, originalRefreshToken, err := svc.CreateSession(
+			ctx,
+			user.ID,
+			token.AudienceApp,
+			"retention-test",
+			now,
+			"",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		rotatedAt := now.Add(20 * time.Minute)
+		_, descendantRefreshToken, err := svc.RefreshSession(
+			ctx,
+			originalRefreshToken,
+			token.AudienceApp,
+			rotatedAt,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		original, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(originalRefreshToken))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if original.ConsumedAt == nil {
+			t.Fatal("expected original refresh token to be consumed")
+		}
+
+		expiredUnconsumedHash := hashRefreshToken("expired-unconsumed-" + uuid.NewString())
+		if err := tdb.Store.CreateRefreshToken(ctx, domain.RefreshToken{
+			SessionID:      original.SessionID,
+			OrganizationID: original.OrganizationID,
+			TokenHash:      expiredUnconsumedHash,
+			CreatedAt:      now,
+			ExpiresAt:      now.Add(30 * time.Minute),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		cleanupAt := now.Add(40 * time.Minute)
+		if err := svc.CleanupExpiredData(ctx, cleanupAt); err != nil {
+			t.Fatal(err)
+		}
+		retained, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(originalRefreshToken))
+		if err != nil {
+			t.Fatalf("consumed refresh-token tombstone was removed before family expiry: %v", err)
+		}
+		if retained.ConsumedAt == nil {
+			t.Fatal("retained refresh token is not marked consumed")
+		}
+		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, expiredUnconsumedHash); !errors.Is(err, store.ErrRefreshTokenNotFound) {
+			t.Fatalf("expired unconsumed refresh token survived cleanup: %v", err)
+		}
+		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(descendantRefreshToken)); err != nil {
+			t.Fatalf("active descendant refresh token was removed: %v", err)
+		}
+
+		reusedAt := cleanupAt.Add(time.Minute)
+		_, _, err = svc.RefreshSession(ctx, originalRefreshToken, token.AudienceApp, reusedAt)
+		if !errors.Is(err, ErrRefreshTokenReuse) {
+			t.Fatalf("expected retained tombstone replay to return ErrRefreshTokenReuse, got %v", err)
+		}
+		persistedSession, err := tdb.Store.GetSessionByID(ctx, original.SessionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if persistedSession.RevokedAt == nil || !persistedSession.RevokedAt.Equal(reusedAt) {
+			t.Fatalf("session revoked_at = %v, want %v", persistedSession.RevokedAt, reusedAt)
+		}
+		if _, _, err := svc.RefreshSession(
+			ctx,
+			descendantRefreshToken,
+			token.AudienceApp,
+			reusedAt.Add(time.Minute),
+		); !errors.Is(err, ErrInvalidRefreshToken) {
+			t.Fatalf("expected descendant refresh token to be rejected, got %v", err)
+		}
+
+		if err := svc.CleanupExpiredData(ctx, reusedAt.Add(2*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(originalRefreshToken)); !errors.Is(err, store.ErrRefreshTokenNotFound) {
+			t.Fatalf("consumed tombstone survived terminal family cleanup: %v", err)
+		}
+	})
+}
+
+func TestCleanupExpiredDataRemovesConsumedRefreshTokensAfterSessionExpiry(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "expired-refresh-family@example.com",
+			Username: "expired-refresh-family",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		session, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID:               user.ID,
+			ActiveOrganizationID: organization.ID,
+			ExpiresAt:            now.Add(-time.Minute),
+			UserAgent:            "retention-expiry-test",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		consumedAt := now.Add(-time.Hour)
+		refreshTokenHash := hashRefreshToken("expired-family-" + uuid.NewString())
+		if err := tdb.Store.CreateRefreshToken(ctx, domain.RefreshToken{
+			SessionID:      session.ID,
+			OrganizationID: organization.ID,
+			TokenHash:      refreshTokenHash,
+			CreatedAt:      now.Add(-2 * time.Hour),
+			ExpiresAt:      now.Add(-90 * time.Minute),
+			ConsumedAt:     &consumedAt,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		svc := New(SessionConfig{Store: tdb.Store})
+		if err := svc.CleanupExpiredData(ctx, now); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tdb.Store.GetSessionByID(ctx, session.ID); !errors.Is(err, store.ErrSessionNotFound) {
+			t.Fatalf("expired refresh-token family session survived cleanup: %v", err)
+		}
+		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, refreshTokenHash); !errors.Is(err, store.ErrRefreshTokenNotFound) {
+			t.Fatalf("consumed tombstone survived session-family expiry: %v", err)
 		}
 	})
 }

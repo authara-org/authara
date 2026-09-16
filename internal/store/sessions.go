@@ -255,12 +255,13 @@ func (s *Store) DeleteSessionsByOrganization(ctx context.Context, organizationID
 }
 
 func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time) error {
-	_, err := s.exec(ctx, `DELETE FROM refresh_tokens WHERE expires_at < $1`, now)
-	if err != nil {
-		return err
-	}
-
-	_, err = s.exec(ctx, `DELETE FROM refresh_tokens WHERE consumed_at IS NOT NULL`)
+	// Consumed rows are replay-detection tombstones. Keep them until the
+	// parent session family expires or is revoked; deleting that session
+	// removes the family through the refresh_tokens ON DELETE CASCADE.
+	_, err := s.exec(ctx, `
+		DELETE FROM refresh_tokens
+		WHERE expires_at < $1 AND consumed_at IS NULL
+	`, now)
 	return err
 }
 
