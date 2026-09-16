@@ -63,6 +63,19 @@ PUBLIC_URL=https://example.com
 
 ---
 
+# HTTP caching
+
+Authara Core marks dynamic responses with `Cache-Control: no-store`. Reverse
+proxies, gateways, CDNs and load balancers must preserve this header and must
+not force-cache `/auth/*` responses.
+
+The exception is `/auth/static/*`: production asset filenames contain a content
+fingerprint and Authara serves them with
+`Cache-Control: public, max-age=31536000, immutable`. Proxies may retain that
+long-lived policy for those assets.
+
+---
+
 # HTTPS
 
 Production deployments should always use **HTTPS**.

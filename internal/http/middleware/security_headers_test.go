@@ -21,6 +21,9 @@ func TestSecurityHeadersSetsSafeDefaults(t *testing.T) {
 
 	headers := rr.Result().Header
 
+	if got := headers.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("expected Cache-Control no-store, got %q", got)
+	}
 	if got := headers.Get("X-Frame-Options"); got != "DENY" {
 		t.Fatalf("expected X-Frame-Options DENY, got %q", got)
 	}

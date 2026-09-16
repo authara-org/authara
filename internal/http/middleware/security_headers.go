@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	headerCacheControl          = "Cache-Control"
 	headerContentSecurityPolicy = "Content-Security-Policy"
 	headerFrameOptions          = "X-Frame-Options"
 	headerContentTypeOptions    = "X-Content-Type-Options"
@@ -21,6 +22,7 @@ func SecurityHeaders(cfg SecurityHeadersConfig) func(http.Handler) http.Handler 
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set(headerCacheControl, "no-store")
 			w.Header().Set(headerContentSecurityPolicy, csp)
 			w.Header().Set(headerFrameOptions, "DENY")
 			w.Header().Set(headerContentTypeOptions, "nosniff")
