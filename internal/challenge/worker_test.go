@@ -1,10 +1,13 @@
 package challenge
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -28,6 +31,64 @@ func TestEmailWorkerReadsCurrentPolicy(t *testing.T) {
 	policy.JobMaxAttempts = 8
 	if got := worker.policy.CurrentEmail().JobMaxAttempts; got != 8 {
 		t.Fatalf("updated max attempts = %d", got)
+	}
+}
+
+func TestWorkerDeliveryLogsExcludeRecipientPII(t *testing.T) {
+	tests := []struct {
+		name        string
+		send        senderFunc
+		wantMessage string
+		wantAttrs   []string
+	}{
+		{
+			name:        "success",
+			send:        func(context.Context, string, email.Message) error { return nil },
+			wantMessage: "email job sent",
+			wantAttrs:   []string{"template=new_sign_in", "attempt=1"},
+		},
+		{
+			name: "retry",
+			send: func(_ context.Context, recipient string, _ email.Message) error {
+				return email.TransientError("smtp_unavailable", fmt.Errorf("delivery to %s failed", recipient))
+			},
+			wantMessage: "email job retry scheduled",
+			wantAttrs:   []string{"failure_class=transient", "failure_reason=smtp_unavailable"},
+		},
+		{
+			name: "permanent failure",
+			send: func(_ context.Context, recipient string, _ email.Message) error {
+				return email.PermanentError("smtp_recipient_rejected", fmt.Errorf("recipient %s rejected", recipient))
+			},
+			wantMessage: "email job permanently failed",
+			wantAttrs:   []string{"terminal_reason=smtp_recipient_rejected"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tdb := testutil.OpenTestDB(t)
+			now := time.Now().UTC().Add(-time.Minute)
+			job := createWorkerTestEmailJob(t, tdb, now, now.Add(72*time.Hour))
+			var logs bytes.Buffer
+			worker := newQueueTestWorker(tdb, test.send, job.ID)
+			worker.logger = slog.New(slog.NewTextHandler(&logs, nil))
+
+			processed, err := worker.RunOnce(context.Background(), now)
+			if err != nil || !processed {
+				t.Fatalf("RunOnce = (%t, %v), want (true, nil)", processed, err)
+			}
+
+			logged := logs.String()
+			if strings.Contains(logged, job.ToEmail) {
+				t.Fatalf("email worker logged recipient PII: %s", logged)
+			}
+			for _, want := range append([]string{test.wantMessage, "job_id=" + job.ID.String()}, test.wantAttrs...) {
+				if !strings.Contains(logged, want) {
+					t.Fatalf("email worker log missing %q: %s", want, logged)
+				}
+			}
+		})
 	}
 }
 

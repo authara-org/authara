@@ -296,6 +296,8 @@ func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool
 			w.observeJob("error", started, queueAge)
 			return true, fmt.Errorf("requeue email job: %w", requeueErr)
 		}
+		// Provider errors can echo the SMTP recipient. The classified fields are
+		// safe for broadly retained logs; job_id provides retry correlation.
 		w.logger.WarnContext(transitionCtx, "email job retry scheduled",
 			"job_id", job.ID,
 			"template", job.Template,
@@ -304,7 +306,6 @@ func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool
 			"failure_reason", failureReason,
 			"next_attempt_at", nextAttemptAt,
 			"queue_age", queueAge,
-			"error", deliveryErr,
 		)
 		w.observeJob("retried", started, queueAge)
 		return true, nil
@@ -348,13 +349,13 @@ func (w *Worker) failJob(
 		w.observeJob("error", started, queueAge)
 		return fmt.Errorf("mark email job failed: %w", err)
 	}
+	// Do not attach deliveryErr: SMTP responses may contain the recipient.
 	w.logger.ErrorContext(ctx, "email job permanently failed",
 		"job_id", job.ID,
 		"template", job.Template,
 		"attempt", job.AttemptCount,
 		"terminal_reason", terminalReason,
 		"queue_age", queueAge,
-		"error", deliveryErr,
 	)
 	w.observeJob("failed", started, queueAge)
 	return nil
