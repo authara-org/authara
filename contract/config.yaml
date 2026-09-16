@@ -360,7 +360,7 @@ variables:
     stability: stable
     required: false
     type: string
-    notes: Required for calls to /auth/internal/v1 routes. If empty, internal routes reject requests.
+    notes: Must be at least 24 characters in production. If empty in development, internal routes reject requests.
 
   # ------------------------------------------------------------
   # OAuth

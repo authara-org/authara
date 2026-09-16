@@ -3,6 +3,8 @@ package config
 import (
 	"context"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/sethvargo/go-envconfig"
 )
@@ -143,6 +145,16 @@ func (c *Config) validate() error {
 	if c.Values.AppEnv == "prod" && c.Webhook.Enabled() {
 		if len(c.Webhook.Secret) < 32 {
 			return fmt.Errorf("AUTHARA_WEBHOOK_SECRET must be at least 32 characters when APP_ENV=prod")
+		}
+	}
+
+	if c.Values.AppEnv == "prod" {
+		internalAPIToken := strings.TrimSpace(c.InternalAPI.Token)
+		if utf8.RuneCountInString(internalAPIToken) < 24 {
+			return fmt.Errorf("AUTHARA_INTERNAL_API_TOKEN must be at least 24 characters when APP_ENV=prod")
+		}
+		if internalAPIToken != c.InternalAPI.Token {
+			return fmt.Errorf("AUTHARA_INTERNAL_API_TOKEN must not contain leading or trailing whitespace")
 		}
 	}
 

@@ -134,7 +134,8 @@ AUTHARA_ORGANIZATION_INVITATION_TTL
 AUTHARA_INTERNAL_API_TOKEN
 ```
 
-`AUTHARA_INTERNAL_API_TOKEN` is required for calls to `/auth/internal/v1`.
+`AUTHARA_INTERNAL_API_TOKEN` is required for calls to `/auth/internal/v1` and
+must be at least 24 characters when `APP_ENV=prod`.
 `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED` allows authenticated clients
 to manage non-capacity organization data through matching `/auth/api/v1`
 routes. Organization creation, invitation creation, and invitation resend remain
