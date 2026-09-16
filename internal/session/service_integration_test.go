@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/accesspolicy"
+	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/organization"
@@ -42,6 +43,16 @@ func newTestSessionService(t *testing.T, ttl time.Duration) *Service {
 }
 
 func newDBSessionService(t *testing.T, tdb *testutil.TestDB, ttl time.Duration) *Service {
+	return newDBSessionServiceWithCache(t, tdb, ttl, nil, 0)
+}
+
+func newDBSessionServiceWithCache(
+	t *testing.T,
+	tdb *testutil.TestDB,
+	ttl time.Duration,
+	cacheStore cache.Cache,
+	refreshTokenRotation time.Duration,
+) *Service {
 	t.Helper()
 
 	keySet, err := token.NewKeySet("test-key", map[string][]byte{
@@ -49,6 +60,11 @@ func newDBSessionService(t *testing.T, tdb *testutil.TestDB, ttl time.Duration) 
 	})
 	if err != nil {
 		t.Fatalf("NewKeySet failed: %v", err)
+	}
+
+	var revocations *token.AccessTokenRevocations
+	if cacheStore != nil {
+		revocations = token.NewAccessTokenRevocations(cacheStore, ttl)
 	}
 
 	return New(SessionConfig{
@@ -59,11 +75,60 @@ func newDBSessionService(t *testing.T, tdb *testutil.TestDB, ttl time.Duration) 
 			"authara-test",
 			ttl,
 		),
-		SessionTTL:      time.Hour,
-		RefreshTokenTTL: time.Hour,
-		Organizations:   organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}),
+		AccessTokenRevocations: revocations,
+		SessionTTL:             time.Hour,
+		RefreshTokenTTL:        time.Hour,
+		RefreshTokenRotation:   refreshTokenRotation,
+		Organizations:          organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}),
 	})
 }
+
+var errSessionTestCache = errors.New("session test cache unavailable")
+
+type sessionTestCache struct {
+	values map[string][]byte
+	err    error
+}
+
+func (c *sessionTestCache) Get(_ context.Context, key string) ([]byte, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+	value, ok := c.values[key]
+	if !ok {
+		return nil, cache.ErrMiss
+	}
+	return value, nil
+}
+
+func (c *sessionTestCache) GetMany(_ context.Context, keys ...string) ([][]byte, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+	values := make([][]byte, len(keys))
+	for i, key := range keys {
+		values[i] = c.values[key]
+	}
+	return values, nil
+}
+
+func (c *sessionTestCache) Set(_ context.Context, key string, value []byte, _ time.Duration) error {
+	if c.err != nil {
+		return c.err
+	}
+	c.values[key] = append([]byte(nil), value...)
+	return nil
+}
+
+func (c *sessionTestCache) Delete(_ context.Context, key string) error {
+	if c.err != nil {
+		return c.err
+	}
+	delete(c.values, key)
+	return nil
+}
+
+func (c *sessionTestCache) Close() error { return nil }
 
 func TestNew_DefaultsToNoopAccessPolicy(t *testing.T) {
 	svc := New(SessionConfig{})
@@ -330,6 +395,136 @@ func TestSwitchSessionOrganizationRotatesTokens(t *testing.T) {
 			t.Fatalf("expected new refresh org %q, got %q", team.ID, newRT.OrganizationID)
 		}
 	})
+}
+
+func TestRefreshSessionReuseCommitsSessionRevocation(t *testing.T) {
+	tests := []struct {
+		name               string
+		newCache           func() cache.Cache
+		wantAccessTokenErr error
+		wantReuseCacheErr  bool
+	}{
+		{
+			name:               "noop cache",
+			newCache:           func() cache.Cache { return cache.NewNoop() },
+			wantAccessTokenErr: nil,
+		},
+		{
+			name: "redis-like cache",
+			newCache: func() cache.Cache {
+				return &sessionTestCache{values: map[string][]byte{}}
+			},
+			wantAccessTokenErr: token.ErrRevokedToken,
+		},
+		{
+			name: "unavailable cache",
+			newCache: func() cache.Cache {
+				return &sessionTestCache{err: errSessionTestCache}
+			},
+			wantAccessTokenErr: errSessionTestCache,
+			wantReuseCacheErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tdb := testutil.OpenTestDB(t)
+			ctx := context.Background()
+			now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+			suffix := uuid.NewString()
+
+			user, err := tdb.Store.CreateUser(ctx, domain.User{
+				Email:    "refresh-reuse-" + suffix + "@example.com",
+				Username: "refresh-reuse-" + suffix,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				_ = tdb.Store.DeleteUser(context.Background(), user.ID)
+				_ = tdb.Store.DeleteOrganization(context.Background(), org.ID)
+			})
+
+			svc := newDBSessionServiceWithCache(t, tdb, 10*time.Minute, tt.newCache(), -time.Nanosecond)
+			_, originalRefreshToken, err := svc.CreateSession(
+				ctx,
+				user.ID,
+				token.AudienceApp,
+				"reuse-test",
+				now,
+				"",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			rotatedAt := now.Add(time.Minute)
+			accessToken, descendantRefreshToken, err := svc.RefreshSession(
+				ctx,
+				originalRefreshToken,
+				token.AudienceApp,
+				rotatedAt,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if descendantRefreshToken == originalRefreshToken {
+				t.Fatal("expected refresh token rotation")
+			}
+
+			original, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(originalRefreshToken))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if original.ConsumedAt == nil {
+				t.Fatal("expected original refresh token to be consumed")
+			}
+
+			reusedAt := now.Add(2 * time.Minute)
+			gotAccessToken, gotRefreshToken, err := svc.RefreshSession(
+				ctx,
+				originalRefreshToken,
+				token.AudienceApp,
+				reusedAt,
+			)
+			if !errors.Is(err, ErrRefreshTokenReuse) {
+				t.Fatalf("expected ErrRefreshTokenReuse, got %v", err)
+			}
+			if tt.wantReuseCacheErr && !errors.Is(err, errSessionTestCache) {
+				t.Fatalf("expected cache error to be preserved, got %v", err)
+			}
+			if gotAccessToken != "" || gotRefreshToken != "" {
+				t.Fatal("expected reuse response to omit tokens")
+			}
+
+			persistedSession, err := tdb.Store.GetSessionByID(context.Background(), original.SessionID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if persistedSession.RevokedAt == nil || !persistedSession.RevokedAt.Equal(reusedAt) {
+				t.Fatalf("session revoked_at = %v, want %v", persistedSession.RevokedAt, reusedAt)
+			}
+
+			_, accessErr := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, reusedAt)
+			if !errors.Is(accessErr, tt.wantAccessTokenErr) {
+				t.Fatalf("access token error = %v, want %v", accessErr, tt.wantAccessTokenErr)
+			}
+
+			_, _, err = svc.RefreshSession(
+				ctx,
+				descendantRefreshToken,
+				token.AudienceApp,
+				now.Add(3*time.Minute),
+			)
+			if !errors.Is(err, ErrInvalidRefreshToken) {
+				t.Fatalf("expected descendant refresh token to be rejected, got %v", err)
+			}
+		})
+	}
 }
 
 func TestRefreshSessionWaitsForOrganizationLifecycleLock(t *testing.T) {

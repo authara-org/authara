@@ -295,6 +295,17 @@ func (s *Service) SwitchSessionOrganization(
 
 func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audience token.Audience, now time.Time) (newAccessToken string, newRefreshToken string, err error) {
 	policy := s.policy.CurrentSession()
+	var resultErr error
+
+	revokeReusedRefreshToken := func(ctx context.Context, rt domain.RefreshToken) error {
+		cacheErr := s.accessTokenRevocations.RevokeSession(ctx, rt.SessionID, now)
+		if err := s.store.RevokeSession(ctx, rt.SessionID, now); err != nil {
+			return errors.Join(cacheErr, err)
+		}
+		resultErr = errors.Join(ErrRefreshTokenReuse, cacheErr)
+		return nil
+	}
+
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		hashed := hashRefreshToken(refreshToken)
 
@@ -303,9 +314,7 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrInvalidRefreshToken
 		}
 		if rt.ConsumedAt != nil {
-			cacheErr := s.accessTokenRevocations.RevokeSession(ctx, rt.SessionID, now)
-			storeErr := s.store.RevokeSession(ctx, rt.SessionID, now)
-			return errors.Join(ErrRefreshTokenReuse, cacheErr, storeErr)
+			return revokeReusedRefreshToken(ctx, rt)
 		}
 		if rt.ExpiresAt.Before(now) {
 			return ErrInvalidRefreshToken
@@ -327,9 +336,7 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrInvalidRefreshToken
 		}
 		if rt.ConsumedAt != nil {
-			cacheErr := s.accessTokenRevocations.RevokeSession(ctx, rt.SessionID, now)
-			storeErr := s.store.RevokeSession(ctx, rt.SessionID, now)
-			return errors.Join(ErrRefreshTokenReuse, cacheErr, storeErr)
+			return revokeReusedRefreshToken(ctx, rt)
 		}
 		if rt.ExpiresAt.Before(now) {
 			return ErrInvalidRefreshToken
@@ -428,6 +435,9 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 
 	if err != nil {
 		return "", "", err
+	}
+	if resultErr != nil {
+		return "", "", resultErr
 	}
 
 	return newAccessToken, newRefreshToken, nil
