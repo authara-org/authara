@@ -210,9 +210,22 @@ func (s *Store) CreateRefreshToken(ctx context.Context, token domain.RefreshToke
 }
 
 func (s *Store) GetRefreshTokenByHash(ctx context.Context, hash string) (domain.RefreshToken, error) {
+	return s.getRefreshTokenByHash(ctx, hash, false)
+}
+
+func (s *Store) GetRefreshTokenByHashForUpdate(ctx context.Context, hash string) (domain.RefreshToken, error) {
+	return s.getRefreshTokenByHash(ctx, hash, true)
+}
+
+func (s *Store) getRefreshTokenByHash(ctx context.Context, hash string, forUpdate bool) (domain.RefreshToken, error) {
 	var m model.RefreshToken
 
-	err := scanRefreshToken(s.queryRow(ctx, `SELECT `+refreshTokenColumns+` FROM refresh_tokens WHERE token_hash = $1`, hash), &m)
+	query := `SELECT ` + refreshTokenColumns + ` FROM refresh_tokens WHERE token_hash = $1`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+
+	err := scanRefreshToken(s.queryRow(ctx, query, hash), &m)
 	if err != nil {
 		return domain.RefreshToken{}, mapNoRows(err, ErrRefreshTokenNotFound)
 	}

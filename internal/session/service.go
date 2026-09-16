@@ -331,7 +331,7 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrInvalidRefreshToken
 		}
 
-		rt, err = s.store.GetRefreshTokenByHash(ctx, hashed)
+		rt, err = s.store.GetRefreshTokenByHashForUpdate(ctx, hashed)
 		if err != nil {
 			return ErrInvalidRefreshToken
 		}
@@ -387,6 +387,9 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		if needToRotate {
 			err = s.store.ConsumeRefreshToken(ctx, rt.ID, now)
 			if err != nil {
+				if errors.Is(err, store.ErrRefreshTokenNotFound) {
+					return ErrInvalidRefreshToken
+				}
 				return err
 			}
 

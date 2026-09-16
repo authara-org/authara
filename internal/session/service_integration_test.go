@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -710,6 +711,152 @@ func TestRefreshSessionReuseCommitsSessionRevocation(t *testing.T) {
 				t.Fatalf("expected descendant refresh token to be rejected, got %v", err)
 			}
 		})
+	}
+}
+
+func TestRefreshSessionConcurrentRotationHasSingleWinner(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	now := time.Date(2026, 9, 16, 14, 0, 0, 0, time.UTC)
+	suffix := uuid.NewString()
+	user, err := tdb.Store.CreateUser(ctx, domain.User{
+		Email:    "concurrent-refresh-" + suffix + "@example.com",
+		Username: "concurrent-refresh-" + suffix,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = tdb.Store.DeleteUser(context.Background(), user.ID)
+		_ = tdb.Store.DeleteOrganization(context.Background(), org.ID)
+	})
+
+	svc := newDBSessionServiceWithCache(t, tdb, 10*time.Minute, cache.NewNoop(), -time.Nanosecond)
+	type refreshResult struct {
+		accessToken  string
+		refreshToken string
+		err          error
+	}
+
+	const attempts = 10
+	for attempt := range attempts {
+		attemptNow := now.Add(time.Duration(attempt) * time.Minute)
+		_, originalRefreshToken, err := svc.CreateSession(
+			ctx,
+			user.ID,
+			token.AudienceApp,
+			"concurrent-refresh-test",
+			attemptNow,
+			"",
+		)
+		if err != nil {
+			t.Fatalf("attempt %d: create session: %v", attempt, err)
+		}
+		original, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(originalRefreshToken))
+		if err != nil {
+			t.Fatalf("attempt %d: get original refresh token: %v", attempt, err)
+		}
+
+		lockCtx, releaseLock, err := tdb.Tx.Begin(ctx)
+		if err != nil {
+			t.Fatalf("attempt %d: begin lock transaction: %v", attempt, err)
+		}
+		if _, err := tdb.Store.GetRefreshTokenByHashForUpdate(lockCtx, hashRefreshToken(originalRefreshToken)); err != nil {
+			releaseLock()
+			t.Fatalf("attempt %d: lock refresh token: %v", attempt, err)
+		}
+
+		start := make(chan struct{})
+		results := make(chan refreshResult, 2)
+		var ready sync.WaitGroup
+		ready.Add(2)
+		for range 2 {
+			go func() {
+				ready.Done()
+				<-start
+				accessToken, refreshToken, err := svc.RefreshSession(
+					ctx,
+					originalRefreshToken,
+					token.AudienceApp,
+					attemptNow.Add(time.Second),
+				)
+				results <- refreshResult{accessToken: accessToken, refreshToken: refreshToken, err: err}
+			}()
+		}
+		ready.Wait()
+		close(start)
+
+		select {
+		case result := <-results:
+			_ = tdb.Tx.Rollback(lockCtx)
+			releaseLock()
+			t.Fatalf("attempt %d: refresh completed while token row was locked: %v", attempt, result.err)
+		case <-time.After(50 * time.Millisecond):
+		}
+		if err := tdb.Tx.Commit(lockCtx); err != nil {
+			releaseLock()
+			t.Fatalf("attempt %d: release refresh-token lock: %v", attempt, err)
+		}
+		releaseLock()
+
+		successes := 0
+		reuses := 0
+		for range 2 {
+			select {
+			case result := <-results:
+				switch {
+				case result.err == nil:
+					successes++
+					if result.accessToken == "" || result.refreshToken == "" || result.refreshToken == originalRefreshToken {
+						t.Fatalf("attempt %d: successful rotation returned invalid tokens", attempt)
+					}
+				case errors.Is(result.err, ErrRefreshTokenReuse):
+					reuses++
+					if result.accessToken != "" || result.refreshToken != "" {
+						t.Fatalf("attempt %d: losing rotation returned tokens", attempt)
+					}
+				default:
+					t.Fatalf("attempt %d: concurrent rotation returned %v", attempt, result.err)
+				}
+			case <-ctx.Done():
+				t.Fatalf("attempt %d: concurrent rotation timed out: %v", attempt, ctx.Err())
+			}
+		}
+		if successes != 1 || reuses != 1 {
+			t.Fatalf("attempt %d: successes=%d reuses=%d, want 1 each", attempt, successes, reuses)
+		}
+
+		var tokenCount int
+		var unconsumedCount int
+		if err := tdb.Store.DB().QueryRowContext(ctx, `
+			SELECT count(*), count(*) FILTER (WHERE consumed_at IS NULL)
+			FROM refresh_tokens
+			WHERE session_id = $1
+		`, original.SessionID).Scan(&tokenCount, &unconsumedCount); err != nil {
+			t.Fatalf("attempt %d: count refresh-token family: %v", attempt, err)
+		}
+		if tokenCount != 2 || unconsumedCount != 1 {
+			t.Fatalf(
+				"attempt %d: refresh-token family has total=%d unconsumed=%d, want total=2 unconsumed=1",
+				attempt,
+				tokenCount,
+				unconsumedCount,
+			)
+		}
+
+		persistedSession, err := tdb.Store.GetSessionByID(ctx, original.SessionID)
+		if err != nil {
+			t.Fatalf("attempt %d: get session: %v", attempt, err)
+		}
+		if persistedSession.RevokedAt == nil {
+			t.Fatalf("attempt %d: refresh-token reuse did not revoke the session", attempt)
+		}
 	}
 }
 
