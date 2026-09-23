@@ -66,7 +66,7 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 		}
 		return loginWithPasswordError(code, message), nil
 	}
-	sessionBody, header, code, message, ok := h.contractSession(ctx, r, user, audience)
+	sessionBody, header, code, message, ok := h.contractSession(ctx, r, user, audience, domain.AuthenticationMethodPassword)
 	if !ok {
 		return loginWithPasswordError(code, message), nil
 	}
@@ -103,7 +103,7 @@ func (h *APIHandler) SignupDirect(ctx context.Context, request contract.SignupDi
 		code := authSignupErrorCode(err)
 		return signupDirectError(code, authSignupErrorMessage(err, code)), nil
 	}
-	body, header, code, message, ok := h.contractSession(ctx, r, user, audience)
+	body, header, code, message, ok := h.contractSession(ctx, r, user, audience, domain.AuthenticationMethodPassword)
 	if !ok {
 		return signupDirectError(code, message), nil
 	}
@@ -161,8 +161,9 @@ func (h *APIHandler) contractSession(
 	r *http.Request,
 	user domain.User,
 	audience token.Audience,
+	authenticationMethod domain.AuthenticationMethod,
 ) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, authenticationMethod, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
 		return contract.AuthSession{}, nil, response.CodeForbidden, "Account cannot access requested audience.", false

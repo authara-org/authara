@@ -38,6 +38,7 @@ type WebAuthnChallenge struct {
 	CreatedAt time.Time
 
 	UserID      *uuid.UUID
+	SessionID   *uuid.UUID
 	Purpose     string
 	Challenge   string
 	SessionData []byte

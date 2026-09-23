@@ -123,6 +123,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireCSRF)
+					r.Use(mw.RequireRecentAuthenticationUI)
 
 					r.Post("/verify-challenge/email-change", uih.VerifyEmailChangeChallengePost)
 				})
@@ -133,6 +134,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Use(mw.RequireChallengeEnabled)
 				r.Use(mw.RequireAppAccessAuthWithRefresh)
 				r.Use(mw.RequireCSRF)
+				r.Use(mw.RequireRecentAuthenticationUI)
 
 				r.Post("/email-change", uih.EmailChangeRequestPost)
 			})
@@ -154,24 +156,33 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				// password pages
 				r.Get("/providers/password/add", uih.AddPasswordPage)
 				r.Get("/providers/password/change", uih.ChangePasswordPage)
+				r.Get("/reauthenticate", uih.ReauthenticatePage)
+				r.Get("/reauthenticate/complete", uih.ReauthenticationCompletePage)
 
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireCSRF)
 
 					r.Post("/user/username", uih.ChangeUsernamePost)
-					r.Post("/user/delete", uih.DeleteUser)
 					r.Post("/invitations/accept", uih.InvitationAcceptPost)
 
 					r.Post("/sessions/{sessionID}/revoke", uih.RevokeSessionPost)
 					r.Post("/sessions/revoke-other", uih.RevokeOtherSessionsPost)
 
-					r.Post("/providers/{provider}/unlink", uih.UnlinkProviderPost)
-					r.Post("/providers/password/link", uih.PasswordLinkPost)
 					r.Post("/providers/password/change", uih.PasswordChangePost)
-					r.Post("/providers/{provider}/link/start", uih.ProviderLinkStartPost)
-					r.Post("/passkeys/register/options", uih.PasskeyRegisterOptionsPost)
-					r.Post("/passkeys/register/finish", uih.PasskeyRegisterFinishPost)
-					r.Post("/passkeys/{id}/delete", uih.PasskeyDeletePost)
+					r.Post("/reauthenticate/password", uih.ReauthenticatePasswordPost)
+					r.Post("/reauthenticate/passkeys/options", uih.ReauthenticatePasskeyOptionsPost)
+					r.Post("/reauthenticate/passkeys/finish", uih.ReauthenticatePasskeyFinishPost)
+
+					r.Group(func(r chi.Router) {
+						r.Use(mw.RequireRecentAuthenticationUI)
+						r.Post("/user/delete", uih.DeleteUser)
+						r.Post("/providers/{provider}/unlink", uih.UnlinkProviderPost)
+						r.Post("/providers/password/link", uih.PasswordLinkPost)
+						r.Post("/providers/{provider}/link/start", uih.ProviderLinkStartPost)
+						r.Post("/passkeys/register/options", uih.PasskeyRegisterOptionsPost)
+						r.Post("/passkeys/register/finish", uih.PasskeyRegisterFinishPost)
+						r.Post("/passkeys/{id}/delete", uih.PasskeyDeletePost)
+					})
 				})
 			})
 
@@ -199,6 +210,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 						r.Group(func(r chi.Router) {
 							r.Use(mw.RequireCSRF)
+							r.Use(mw.RequireRecentAuthenticationUI)
 
 							r.Post("/allowlist", uih.AdminAllowlistCreatePost)
 							r.Post("/allowlist/{emailID}/delete", uih.AdminAllowlistDeletePost)
@@ -208,6 +220,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 					// API
 					r.Group(func(r chi.Router) {
 						r.Use(mw.RequireCSRF)
+						r.Use(mw.RequireRecentAuthenticationUI)
 
 						r.Post("/users/{userID}/disable", uih.DisableUserPost)
 						r.Post("/users/{userID}/enable", uih.EnableUserPost)
@@ -236,8 +249,14 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 					r.Group(func(r chi.Router) {
 						r.Use(httpmiddleware.LimitRequestBody(2 << 20))
 						r.Use(mw.RequireCSRF)
-						r.Post("/emails/{templateKey}", uih.OperatorEmailTemplateSavePost)
 						r.Post("/emails/{templateKey}/preview", uih.OperatorEmailTemplatePreviewPost)
+					})
+
+					r.Group(func(r chi.Router) {
+						r.Use(httpmiddleware.LimitRequestBody(2 << 20))
+						r.Use(mw.RequireCSRF)
+						r.Use(mw.RequireRecentAuthenticationUI)
+						r.Post("/emails/{templateKey}", uih.OperatorEmailTemplateSavePost)
 						r.Post("/emails/{templateKey}/reset", uih.OperatorEmailTemplateResetPost)
 						r.Post("/emails/{templateKey}/delivery", uih.OperatorEmailTemplateDeliveryPost)
 					})
@@ -245,6 +264,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 					r.Group(func(r chi.Router) {
 						r.Use(httpmiddleware.LimitRequestBody(16 << 10))
 						r.Use(mw.RequireCSRF)
+						r.Use(mw.RequireRecentAuthenticationUI)
 						r.Post("/settings/{settingKey}", uih.OperatorSettingSetPost)
 						r.Post("/settings/{settingKey}/clear", uih.OperatorSettingClearPost)
 					})
@@ -293,21 +313,29 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/organizations/current/members", contracth.ListCurrentOrganizationMembers)
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireAPICSRF)
+					r.Post("/reauthenticate/password", contracth.ReauthenticateWithPassword)
+					r.Post("/reauthenticate/google", contracth.ReauthenticateWithGoogle)
+					r.Post("/reauthenticate/passkeys/options", contracth.BeginPasskeyReauthentication)
+					r.Post("/reauthenticate/passkeys/finish", contracth.FinishPasskeyReauthentication)
 					r.Post("/invitations/accept", contracth.AcceptInvitation)
 					r.Patch("/account/username", contracth.ChangeCurrentUsername)
-					r.Post("/account/email-change/challenges", contracth.StartCurrentUserEmailChange)
-					r.Post("/account/email-change/challenges/verify", contracth.VerifyCurrentUserEmailChange)
-					r.Post("/account/password", contracth.AddCurrentUserPassword)
 					r.Put("/account/password", contracth.ChangeCurrentUserPassword)
-					r.Post("/account/auth-methods/google", contracth.LinkCurrentUserGoogle)
-					r.Delete("/account/auth-methods/{provider}", contracth.UnlinkCurrentUserAuthMethod)
-					r.Delete("/account/passkeys/{passkeyID}", contracth.DeleteCurrentUserPasskey)
 					r.Delete("/account/sessions/others", contracth.RevokeCurrentUserOtherSessions)
 					r.Delete("/account/sessions/{sessionID}", contracth.RevokeCurrentUserSession)
-					r.Put("/users/password", contracth.SetCurrentUserPassword)
-					r.Post("/passkeys/register/options", contracth.BeginPasskeyRegistration)
-					r.Post("/passkeys/register/finish", contracth.FinishPasskeyRegistration)
 					r.Post("/organizations/{organizationID}/switch", contracth.SwitchOrganization)
+
+					r.Group(func(r chi.Router) {
+						r.Use(mw.RequireRecentAuthenticationAPI)
+						r.Post("/account/email-change/challenges", contracth.StartCurrentUserEmailChange)
+						r.Post("/account/email-change/challenges/verify", contracth.VerifyCurrentUserEmailChange)
+						r.Post("/account/password", contracth.AddCurrentUserPassword)
+						r.Post("/account/auth-methods/google", contracth.LinkCurrentUserGoogle)
+						r.Delete("/account/auth-methods/{provider}", contracth.UnlinkCurrentUserAuthMethod)
+						r.Delete("/account/passkeys/{passkeyID}", contracth.DeleteCurrentUserPasskey)
+						r.Put("/users/password", contracth.SetCurrentUserPassword)
+						r.Post("/passkeys/register/options", contracth.BeginPasskeyRegistration)
+						r.Post("/passkeys/register/finish", contracth.FinishPasskeyRegistration)
+					})
 				})
 
 				// Optional direct organization management for authenticated apps.
@@ -323,6 +351,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 					r.Group(func(r chi.Router) {
 						r.Use(mw.RequireAPICSRF)
+						r.Use(mw.RequireRecentAuthenticationAPI)
 
 						r.Patch("/organizations/{organizationID}", contracth.UpdatePublicOrganization)
 						r.Post("/organizations/{organizationID}/invitations/{invitationID}/revoke", contracth.RevokePublicOrganizationInvitation)

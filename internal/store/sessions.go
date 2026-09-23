@@ -10,7 +10,7 @@ import (
 )
 
 func toDomainSession(m model.Session) domain.Session {
-	return domain.Session{
+	out := domain.Session{
 		ID:                   m.ID,
 		UserID:               m.UserID,
 		ActiveOrganizationID: m.ActiveOrganizationID,
@@ -18,26 +18,37 @@ func toDomainSession(m model.Session) domain.Session {
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,
 
-		ExpiresAt: m.ExpiresAt,
-		RevokedAt: m.RevokedAt,
+		ExpiresAt:       m.ExpiresAt,
+		RevokedAt:       m.RevokedAt,
+		AuthenticatedAt: m.AuthenticatedAt,
 
 		UserAgent: m.UserAgent,
 	}
+	if m.AuthenticationMethod != nil {
+		out.AuthenticationMethod = domain.AuthenticationMethod(*m.AuthenticationMethod)
+	}
+	return out
 }
 
 func toModelSession(d domain.Session) model.Session {
-	return model.Session{
+	m := model.Session{
 		UserID:               d.UserID,
 		ActiveOrganizationID: d.ActiveOrganizationID,
 
 		CreatedAt: d.CreatedAt,
 		UpdatedAt: d.UpdatedAt,
 
-		ExpiresAt: d.ExpiresAt,
-		RevokedAt: d.RevokedAt,
+		ExpiresAt:       d.ExpiresAt,
+		RevokedAt:       d.RevokedAt,
+		AuthenticatedAt: d.AuthenticatedAt,
 
 		UserAgent: d.UserAgent,
 	}
+	if d.AuthenticationMethod != "" {
+		method := string(d.AuthenticationMethod)
+		m.AuthenticationMethod = &method
+	}
+	return m
 }
 
 func toDomainRefreshToken(m model.RefreshToken) domain.RefreshToken {
@@ -75,6 +86,8 @@ const sessionColumns = `
 	active_organization_id,
 	expires_at,
 	revoked_at,
+	authenticated_at,
+	authentication_method,
 	user_agent
 `
 
@@ -87,6 +100,8 @@ func scanSession(row rowScanner, m *model.Session) error {
 		&m.ActiveOrganizationID,
 		&m.ExpiresAt,
 		&m.RevokedAt,
+		&m.AuthenticatedAt,
+		&m.AuthenticationMethod,
 		&m.UserAgent,
 	)
 }
@@ -117,18 +132,45 @@ func (s *Store) CreateSession(ctx context.Context, session domain.Session) (doma
 	m := toModelSession(session)
 
 	if err := scanSession(s.queryRow(ctx, `
-		INSERT INTO sessions (user_id, active_organization_id, expires_at, revoked_at, user_agent)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO sessions (user_id, active_organization_id, expires_at, revoked_at, authenticated_at, authentication_method, user_agent)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+sessionColumns,
 		m.UserID,
 		m.ActiveOrganizationID,
 		m.ExpiresAt,
 		m.RevokedAt,
+		m.AuthenticatedAt,
+		m.AuthenticationMethod,
 		m.UserAgent,
 	), &m); err != nil {
 		return domain.Session{}, err
 	}
 	return toDomainSession(m), nil
+}
+
+func (s *Store) UpdateSessionAuthentication(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	method domain.AuthenticationMethod,
+	authenticatedAt time.Time,
+) error {
+	res, err := s.exec(ctx, `
+		UPDATE sessions
+		SET authenticated_at = $1, authentication_method = $2
+		WHERE id = $3 AND user_id = $4 AND revoked_at IS NULL AND expires_at > $1
+	`, authenticatedAt, string(method), sessionID, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
 }
 
 func (s *Store) GetSessionByID(ctx context.Context, sessionID uuid.UUID) (domain.Session, error) {

@@ -1,3 +1,7 @@
+import { lockModalScroll, unlockModalScroll } from "./modalScrollLock";
+
+const scrollLockOwner = "global-confirm-dialog";
+
 export type ConfirmTheme = "neutral" | "danger";
 
 export type ConfirmDialogState = {
@@ -73,6 +77,7 @@ document.addEventListener("alpine:init", () => {
         requiredPhrase = "",
       }: OpenConfirmOptions) {
         window.clearTimeout(resetTimer);
+        lockModalScroll(scrollLockOwner);
         this.confirm.open = true;
         this.confirm.headline = headline;
         this.confirm.body = body;
@@ -88,6 +93,7 @@ document.addEventListener("alpine:init", () => {
         if (this.confirm.submitting) return;
 
         this.confirm.open = false;
+        unlockModalScroll(scrollLockOwner);
         window.clearTimeout(resetTimer);
         resetTimer = window.setTimeout(() => {
           resetConfirm(this.confirm);
@@ -129,11 +135,12 @@ document.addEventListener("alpine:init", () => {
           );
         }
 
-        if (typeof form.requestSubmit === "function") {
-          form.requestSubmit();
-        } else {
-          form.submit();
+        if (isHTMXForm(form) && window.htmx) {
+          window.htmx.trigger(form, "submit");
+          return;
         }
+
+        form.requestSubmit();
       },
     };
   };

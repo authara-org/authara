@@ -204,6 +204,10 @@ func (h *APIHandler) ChangeCurrentUserPassword(ctx context.Context, request cont
 	if !ok {
 		return changeCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		return changeCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized."), nil
+	}
 	if request.Body == nil || !validation.IsValidPassword(request.Body.NewPassword) {
 		return changeCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid password."), nil
 	}
@@ -220,6 +224,9 @@ func (h *APIHandler) ChangeCurrentUserPassword(ctx context.Context, request cont
 		default:
 			return changeCurrentUserPasswordError(responseCodeInternalError(), "Password error."), nil
 		}
+	}
+	if err := h.Session.MarkRecentlyAuthenticated(ctx, userID, sessionID, domain.AuthenticationMethodPassword, time.Now().UTC()); err != nil {
+		return changeCurrentUserPasswordError(responseCodeInternalError(), "Session error."), nil
 	}
 	return contract.ChangeCurrentUserPassword204Response{}, nil
 }

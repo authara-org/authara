@@ -46,6 +46,7 @@ Common status codes include:
 | `404` | Resource not found |
 | `409` | Request conflicts with existing state |
 | `422` | Well-formed input could not be verified |
+| `428` | A fresh authentication proof is required before the mutation can proceed |
 | `429` | Rate limit exceeded |
 | `500` | Internal server error |
 
@@ -65,6 +66,8 @@ The following error codes may be returned by Authara.
 | `passkey_already_exists` | 409 | The passkey is already linked to an account |
 | `passkey_registration_invalid` | 422 | The passkey registration ceremony could not be verified |
 | `rate_limited` | 429 | Too many requests were made in a given time window |
+| `recent_authentication_required` | 428 | The session is valid but its last password, passkey, or federated proof is too old for a sensitive mutation |
+| `invalid_authentication_challenge` | 409 | The authentication challenge is expired, consumed, or does not belong to the current session |
 | `internal_error` | 500 | An unexpected internal error occurred |
 | `actor_not_member` | 403 | The internal lifecycle actor is not a member of the organization |
 | `actor_not_allowed` | 403 | The actor's organization role cannot perform the operation |

@@ -26,11 +26,12 @@ import (
 )
 
 type passkeyFinishRequest struct {
-	ChallengeID  string          `json:"challenge_id"`
-	Credential   json.RawMessage `json:"credential"`
-	Name         string          `json:"name"`
-	PlatformHint string          `json:"platform_hint"`
-	ReturnTo     string          `json:"return_to"`
+	AuthenticationChallengeID string          `json:"authentication_challenge_id"`
+	ChallengeID               string          `json:"challenge_id"`
+	Credential                json.RawMessage `json:"credential"`
+	Name                      string          `json:"name"`
+	PlatformHint              string          `json:"platform_hint"`
+	ReturnTo                  string          `json:"return_to"`
 }
 
 const passkeyResponseLinkedProvidersSection = "linked-providers-section"
@@ -204,7 +205,7 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 
 	returnTo := normalizedReturnTo(in.ReturnTo, httpctx.ReturnToOrDefault(ctx))
 	audience := redirect.AudienceForPath(returnTo)
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodPasskey, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not create session.")
 		return
@@ -218,6 +219,91 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 		"ok":        true,
 		"return_to": returnTo,
 	})
+}
+
+func (h *UIHandler) ReauthenticatePasskeyOptionsPost(w http.ResponseWriter, r *http.Request) {
+	userID, userOK := httpctx.UserID(r.Context())
+	sessionID, sessionOK := httpctx.SessionID(r.Context())
+	if !userOK || !sessionOK {
+		response.ErrorJSON(w, http.StatusUnauthorized, response.CodeUnauthorized, "Unauthorized.")
+		return
+	}
+	if h.Passkeys == nil {
+		response.ErrorJSON(w, http.StatusServiceUnavailable, response.CodeInternalError, "Passkeys are not available.")
+		return
+	}
+	authenticationChallengeID, err := decodeAuthenticationChallengeReference(r)
+	if err != nil {
+		response.ErrorJSON(w, http.StatusBadRequest, response.CodeInvalidRequest, "Authentication challenge required.")
+		return
+	}
+	if err := h.Session.ValidateAuthenticationChallenge(r.Context(), userID, sessionID, authenticationChallengeID, time.Now().UTC()); err != nil {
+		writeAuthenticationChallengeJSONError(w, err)
+		return
+	}
+	if h.Limiter != nil {
+		allowed, err := h.Limiter.AllowPasskeyLoginAttempt(r.Context(), httputil.ClientIP(r))
+		if err != nil || !allowed {
+			response.ErrorJSON(w, http.StatusTooManyRequests, response.CodeRateLimited, "Too many attempts. Please try again later.")
+			return
+		}
+	}
+	optionsJSON, _, err := h.Passkeys.BeginReauthentication(r.Context(), userID, sessionID)
+	if err != nil {
+		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not start passkey authentication.")
+		return
+	}
+	response.RawJSON(w, http.StatusOK, optionsJSON)
+}
+
+func (h *UIHandler) ReauthenticatePasskeyFinishPost(w http.ResponseWriter, r *http.Request) {
+	userID, userOK := httpctx.UserID(r.Context())
+	sessionID, sessionOK := httpctx.SessionID(r.Context())
+	if !userOK || !sessionOK {
+		response.ErrorJSON(w, http.StatusUnauthorized, response.CodeUnauthorized, "Unauthorized.")
+		return
+	}
+	if h.Passkeys == nil {
+		response.ErrorJSON(w, http.StatusServiceUnavailable, response.CodeInternalError, "Passkeys are not available.")
+		return
+	}
+	if h.Limiter != nil {
+		allowed, err := h.Limiter.AllowPasskeyLoginFinishAttempt(r.Context(), httputil.ClientIP(r))
+		if err != nil || !allowed {
+			response.ErrorJSON(w, http.StatusTooManyRequests, response.CodeRateLimited, "Too many attempts. Please try again later.")
+			return
+		}
+	}
+	in, err := decodePasskeyFinishRequest(r)
+	if err != nil {
+		response.ErrorJSON(w, http.StatusBadRequest, response.CodeInvalidRequest, "Invalid passkey response.")
+		return
+	}
+	challengeID, err := uuid.Parse(in.ChallengeID)
+	if err != nil {
+		response.ErrorJSON(w, http.StatusBadRequest, response.CodeInvalidRequest, "Invalid passkey challenge.")
+		return
+	}
+	authenticationChallengeID, err := uuid.Parse(in.AuthenticationChallengeID)
+	if err != nil {
+		response.ErrorJSON(w, http.StatusBadRequest, response.CodeInvalidRequest, "Authentication challenge required.")
+		return
+	}
+	now := time.Now().UTC()
+	if err := h.Session.ValidateAuthenticationChallenge(r.Context(), userID, sessionID, authenticationChallengeID, now); err != nil {
+		writeAuthenticationChallengeJSONError(w, err)
+		return
+	}
+	if err := h.Passkeys.FinishReauthentication(r.Context(), userID, sessionID, challengeID, in.Credential, now); err != nil {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Passkey authentication failed.")
+		return
+	}
+	if err := h.Session.CompleteAuthenticationChallenge(r.Context(), userID, sessionID, authenticationChallengeID, domain.AuthenticationMethodPasskey, now); err != nil {
+		writeAuthenticationChallengeJSONError(w, err)
+		return
+	}
+	returnTo := normalizedReturnTo(in.ReturnTo, httpctx.ReturnToOrManualDefault(r.Context(), "/auth/account"))
+	response.JSON(w, http.StatusOK, map[string]any{"ok": true, "return_to": returnTo})
 }
 
 func (h *UIHandler) PasskeyDeletePost(w http.ResponseWriter, r *http.Request) {
@@ -323,6 +409,25 @@ func decodePasskeyFinishRequest(r *http.Request) (passkeyFinishRequest, error) {
 	}
 
 	return in, nil
+}
+
+func decodeAuthenticationChallengeReference(r *http.Request) (uuid.UUID, error) {
+	defer r.Body.Close()
+	var in struct {
+		AuthenticationChallengeID string `json:"authentication_challenge_id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 16*1024)).Decode(&in); err != nil {
+		return uuid.Nil, err
+	}
+	return uuid.Parse(in.AuthenticationChallengeID)
+}
+
+func writeAuthenticationChallengeJSONError(w http.ResponseWriter, err error) {
+	if errors.Is(err, session.ErrAuthenticationChallengeInvalid) {
+		response.ErrorJSON(w, http.StatusConflict, response.CodeInvalidAuthenticationChallenge, "Authentication challenge is invalid or expired.")
+		return
+	}
+	response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not update session.")
 }
 
 func normalizedReturnTo(raw string, fallback string) string {

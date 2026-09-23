@@ -70,7 +70,7 @@ an operator can change them without restarting Core:
 | --- | --- | --- |
 | Redirects | `AUTHARA_DEFAULT_RETURN_TO` | Subsequent requests without an explicit `return_to` use the new safe relative path. |
 | Authentication | `AUTHARA_USERNAME_LOGIN_ENABLED` | Subsequent hosted and API password-login requests accept or reject usernames. Email login remains available. |
-| Tokens and sessions | `AUTHARA_ACCESS_TOKEN_TTL_MINUTES`, `AUTHARA_SESSION_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL` | New tokens and sessions use the new lifetimes. Existing artifacts keep their stored expiry; rotation policy applies on the next refresh. |
+| Tokens and sessions | `AUTHARA_ACCESS_TOKEN_TTL_MINUTES`, `AUTHARA_SESSION_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL`, `AUTHARA_RECENT_AUTHENTICATION_WINDOW` | New tokens and sessions use the new lifetimes. Existing artifacts keep their stored expiry; rotation policy applies on the next refresh. The recent-authentication window applies immediately to sensitive requests. |
 | Organizations | `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED`, `AUTHARA_ORGANIZATION_INVITATION_TTL` | Public organization routes change immediately. Newly created or resent invitations use the new lifetime. |
 | Access policy | `AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED` | Subsequent signup, login, session, and admin allowlist requests use the new enforcement state. |
 | Admin retention | `AUTHARA_ADMIN_AUDIT_RETENTION_DAYS` | The next cleanup run uses the new cutoff. Lowering retention can delete older audit events. |

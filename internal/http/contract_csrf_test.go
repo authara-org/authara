@@ -90,6 +90,8 @@ func newCSRFContractRouter(apiCSRF func(http.Handler) http.Handler, validateOpen
 		RedirectIfAuthenticated:              pass,
 		RequireAppAccessAuthWithRefresh:      pass,
 		RequireAppAccessAuthAPI:              pass,
+		RequireRecentAuthenticationUI:        pass,
+		RequireRecentAuthenticationAPI:       pass,
 		RequireAdminAccessAuthWithRefresh:    pass,
 		RequireAdminAccessAuthAPI:            pass,
 		RequireOperatorAccessAuthWithRefresh: pass,

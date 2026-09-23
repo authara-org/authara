@@ -822,9 +822,11 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-error-codes:
         "401": [unauthorized]
         "403": [forbidden]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       responses:
         "200":
@@ -836,6 +838,166 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "428":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/reauthenticate/password:
+    post:
+      operationId: reauthenticateWithPassword
+      tags: [Sessions]
+      summary: Reauthenticate the current session with a password
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "409": [invalid_authentication_challenge]
+        "429": [rate_limited]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordReauthenticationRequest"
+      responses:
+        "204":
+          description: Session reauthenticated
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/reauthenticate/google:
+    post:
+      operationId: reauthenticateWithGoogle
+      tags: [Sessions]
+      summary: Reauthenticate the current session with a linked Google identity
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+          oauthNonceCookie: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-availability: google-enabled
+      x-authara-clear-cookies: [authara_oauth_nonce]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [not_found]
+        "409": [invalid_authentication_challenge]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleReauthenticationRequest"
+      responses:
+        "204":
+          description: Session reauthenticated
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/reauthenticate/passkeys/options:
+    post:
+      operationId: beginPasskeyReauthentication
+      tags: [Passkeys]
+      summary: Start passkey reauthentication for the current session
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [not_found]
+        "409": [invalid_authentication_challenge]
+        "429": [rate_limited]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthenticationChallengeReference"
+      responses:
+        "200":
+          description: Passkey reauthentication options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyOptions"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/reauthenticate/passkeys/finish:
+    post:
+      operationId: finishPasskeyReauthentication
+      tags: [Passkeys]
+      summary: Finish passkey reauthentication for the current session
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "409": [invalid_authentication_challenge]
+        "429": [rate_limited]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasskeyReauthenticationFinishRequest"
+      responses:
+        "204":
+          description: Session reauthenticated
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -851,12 +1013,14 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-error-codes:
         "400": [invalid_request]
         "401": [unauthorized]
         "403": [forbidden]
         "409": [passkey_already_exists]
         "422": [passkey_registration_invalid]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       requestBody:
         required: true
@@ -876,6 +1040,8 @@ paths:
         "409":
           $ref: "#/components/responses/Error"
         "422":
+          $ref: "#/components/responses/Error"
+        "428":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -1056,12 +1222,14 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-availability: challenges-enabled
       x-authara-error-codes:
         "400": [invalid_request]
         "401": [unauthorized]
         "403": [forbidden]
         "404": [not_found]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       requestBody:
         required: true
@@ -1084,6 +1252,8 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+        "428":
+          $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
 
@@ -1098,12 +1268,14 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-availability: challenges-enabled
       x-authara-error-codes:
         "400": [invalid_request]
         "401": [unauthorized]
         "403": [forbidden]
         "404": [not_found]
+        "428": [recent_authentication_required]
         "429": [rate_limited]
         "500": [internal_error]
       requestBody:
@@ -1123,6 +1295,8 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+        "428":
+          $ref: "#/components/responses/Error"
         "429":
           $ref: "#/components/responses/Error"
         "500":
@@ -1139,10 +1313,12 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-error-codes:
         "400": [invalid_request]
         "401": [unauthorized]
         "409": [password_already_exists]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       requestBody:
         required: true
@@ -1158,6 +1334,8 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "428":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -1208,6 +1386,7 @@ paths:
           oauthNonceCookie: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-availability: google-enabled
       x-authara-clear-cookies: [authara_oauth_nonce]
       x-authara-error-codes:
@@ -1216,6 +1395,7 @@ paths:
         "403": [forbidden]
         "404": [not_found]
         "409": [auth_method_already_linked]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       requestBody:
         required: true
@@ -1236,6 +1416,8 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+        "428":
+          $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
 
@@ -1252,11 +1434,13 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-error-codes:
         "400": [invalid_request]
         "401": [unauthorized]
         "404": [not_found]
         "409": [cannot_remove_last_auth_method]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       responses:
         "204":
@@ -1268,6 +1452,8 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "428":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -1285,11 +1471,13 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-error-codes:
         "400": [invalid_request]
         "401": [unauthorized]
         "404": [not_found]
         "409": [cannot_remove_last_auth_method]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       responses:
         "204":
@@ -1301,6 +1489,8 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "428":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -1375,10 +1565,12 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-error-codes:
         "400": [invalid_request]
         "401": [unauthorized]
         "403": [forbidden]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       requestBody:
         required: true
@@ -1394,6 +1586,8 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "428":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -1572,12 +1766,14 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-availability: public-organization-management-enabled
       x-authara-error-codes:
         "400": [invalid_request]
         "401": [unauthorized]
         "403": [forbidden]
         "404": [not_found, organization_not_found]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       requestBody:
         required: true
@@ -1599,6 +1795,8 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
         "404":
+          $ref: "#/components/responses/Error"
+        "428":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -1758,6 +1956,7 @@ paths:
           csrfHeader: []
       x-authara-access: user
       x-authara-csrf: required
+      x-authara-recent-auth: required
       x-authara-availability: public-organization-management-enabled
       x-authara-error-codes:
         "400": [invalid_request]
@@ -1765,6 +1964,7 @@ paths:
         "403": [forbidden]
         "404": [not_found, organization_not_found, invitation_not_found, user_not_found]
         "409": [invitation_already_accepted, invitation_revoked, invitation_expired]
+        "428": [recent_authentication_required]
         "500": [internal_error]
       responses:
         "200":
@@ -1782,6 +1982,8 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "428":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -2205,6 +2407,10 @@ components:
       properties:
         error:
           $ref: "#/components/schemas/APIError"
+        authentication_challenge:
+          $ref: "#/components/schemas/AuthenticationChallenge"
+        reauthenticate_url:
+          type: string
     APIError:
       type: object
       additionalProperties: false
@@ -2365,6 +2571,48 @@ components:
         password:
           type: string
           format: password
+    PasswordReauthenticationRequest:
+      type: object
+      additionalProperties: false
+      required: [authentication_challenge_id, password]
+      properties:
+        authentication_challenge_id:
+          type: string
+          format: uuid
+        password:
+          type: string
+          format: password
+    GoogleReauthenticationRequest:
+      type: object
+      additionalProperties: false
+      required: [authentication_challenge_id, credential, nonce]
+      properties:
+        authentication_challenge_id:
+          type: string
+          format: uuid
+        credential:
+          type: string
+        nonce:
+          type: string
+    AuthenticationChallengeReference:
+      type: object
+      additionalProperties: false
+      required: [authentication_challenge_id]
+      properties:
+        authentication_challenge_id:
+          type: string
+          format: uuid
+    AuthenticationChallenge:
+      type: object
+      additionalProperties: false
+      required: [id, expires_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        expires_at:
+          type: string
+          format: date-time
     ChangePasswordRequest:
       type: object
       additionalProperties: false
@@ -2493,6 +2741,20 @@ components:
       additionalProperties: false
       required: [challenge_id, credential]
       properties:
+        challenge_id:
+          type: string
+          format: uuid
+        credential:
+          type: object
+          additionalProperties: true
+    PasskeyReauthenticationFinishRequest:
+      type: object
+      additionalProperties: false
+      required: [authentication_challenge_id, challenge_id, credential]
+      properties:
+        authentication_challenge_id:
+          type: string
+          format: uuid
         challenge_id:
           type: string
           format: uuid

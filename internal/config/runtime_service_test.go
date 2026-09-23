@@ -300,6 +300,7 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	set(KeySessionTTL, "90")
 	set(KeySessionRefreshTokenTTL, "30")
 	set(KeySessionRotation, "always")
+	set(KeySessionRecentAuthenticationWindow, "15m")
 	set(KeyOrganizationPublicManagementEnabled, "true")
 	set(KeyOrganizationInvitationTTL, "48h")
 	set(KeyAccessPolicyAllowlistEnabled, "true")
@@ -325,7 +326,7 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 		t.Fatalf("access-token lifetime = %s", got)
 	}
 	session := service.CurrentSession()
-	if session.SessionTTL != 90*24*time.Hour || session.RefreshTokenTTL != 30*24*time.Hour || session.RefreshTokenRotation != -1 {
+	if session.SessionTTL != 90*24*time.Hour || session.RefreshTokenTTL != 30*24*time.Hour || session.RefreshTokenRotation != -1 || session.RecentAuthenticationWindow != 15*time.Minute {
 		t.Fatalf("session policy = %+v", session)
 	}
 	organization := service.CurrentOrganization()
@@ -386,7 +387,7 @@ func TestGeneralRuntimePoliciesRejectUnsafeCombinations(t *testing.T) {
 func TestRuntimePolicySelectionKeepsInfrastructureAndSchedulingAtStartup(t *testing.T) {
 	dynamic := []Key{
 		KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
-		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation,
+		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationWindow,
 		KeyOrganizationPublicManagementEnabled, KeyOrganizationInvitationTTL,
 		KeyAccessPolicyAllowlistEnabled, KeyAdminAuditRetention,
 		KeyEmailJobMaxAttempts, KeyEmailCleanupSentAfter, KeyEmailCleanupFailedAfter,

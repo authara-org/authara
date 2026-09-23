@@ -64,13 +64,155 @@ cat > "$STATIC_DIR/editor-test.html" <<EOF
     <script src="$APP_ASSET" defer></script>
   </head>
   <body>
+    <script>
+      const pageLoadCount = Number(sessionStorage.getItem("authara-test-page-loads") || "0") + 1;
+      sessionStorage.setItem("authara-test-page-loads", String(pageLoadCount));
+      document.body.dataset.pageLoadCount = String(pageLoadCount);
+    </script>
     <label for="email-template-text">Plain-text body</label>
     <textarea data-email-template-editor="text" id="email-template-text">Hello</textarea>
+    <form id="sensitive-action" hx-post="/sensitive-action" hx-target="#sensitive-result" hx-swap="outerHTML"></form>
+    <div id="sensitive-result"></div>
+    <button id="open-password-dialog" type="button" hx-get="/password-dialog" hx-target="#account-password-dialog-content" hx-swap="innerHTML">Change password</button>
+    <div id="linked-providers-section"></div>
+    <dialog id="account-password-dialog">
+      <button type="button" data-account-password-dialog-close>Close</button>
+      <div id="account-password-dialog-content"></div>
+    </dialog>
+    <dialog id="recent-authentication-dialog">
+      <button type="button" data-recent-authentication-cancel>Cancel</button>
+      <div hidden data-recent-authentication-loading>Loading authentication…</div>
+      <div id="recent-authentication-content"></div>
+    </dialog>
+    <script>
+      const modalLockPoll = setInterval(function () {
+        if (document.documentElement.classList.contains("modal-scroll-locked")) {
+          document.body.dataset.modalScrollLockSeen = "true";
+          clearInterval(modalLockPoll);
+        }
+      }, 10);
+      const authenticationSkeletonPoll = setInterval(function () {
+        const dialog = document.getElementById("recent-authentication-dialog");
+        const loading = document.querySelector("[data-recent-authentication-loading]");
+        const content = document.getElementById("recent-authentication-content");
+        if (
+          dialog.open &&
+          !loading.hidden &&
+          content.style.visibility === "hidden"
+        ) {
+          document.body.dataset.authenticationSkeletonSeen = "true";
+          clearInterval(authenticationSkeletonPoll);
+        }
+      }, 1);
+      document.body.addEventListener("htmx:afterSwap", function (event) {
+        if (event.target.id === "sensitive-result") {
+          document.getElementById("open-password-dialog").click();
+        }
+      });
+      window.addEventListener("load", function () {
+        document.getElementById("sensitive-action").requestSubmit();
+      });
+    </script>
   </body>
 </html>
 EOF
 
-python3 -m http.server 18765 --bind 127.0.0.1 --directory "$STATIC_DIR" \
+cat > "$TEST_ROOT/server.py" <<'PY'
+import json
+import sys
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
+
+static_dir = sys.argv[1]
+
+
+class Handler(SimpleHTTPRequestHandler):
+    sensitive_requests = 0
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=static_dir, **kwargs)
+
+    def send_body(self, status, content_type, body, headers=None):
+        payload = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        if path == "/password-dialog-submit":
+            self.send_body(
+                200,
+                "text/html",
+                '<div id="linked-providers-section" data-password-dialog-updated="true"></div>',
+                {
+                    "HX-Retarget": "#linked-providers-section",
+                    "HX-Reswap": "outerHTML",
+                    "X-Authara-Close-Password-Dialog": "true",
+                },
+            )
+            return
+        if path != "/sensitive-action":
+            self.send_error(404)
+            return
+        Handler.sensitive_requests += 1
+        if Handler.sensitive_requests == 1:
+            self.send_body(
+                428,
+                "application/json",
+                json.dumps(
+                    {
+                        "reauthenticate_url": "/auth/reauthenticate?authentication_challenge_id=00000000-0000-0000-0000-000000000001"
+                    }
+                ),
+            )
+            return
+        self.send_body(
+            200,
+            "text/html",
+            '<div id="sensitive-result" data-sensitive-action-retried="true"></div>',
+        )
+
+    def do_GET(self):
+        path = urlparse(self.path).path
+        if path == "/password-dialog":
+            self.send_body(
+                200,
+                "text/html",
+                """<form id="password-dialog-form" hx-post="/password-dialog-submit" hx-target="#account-password-dialog-content">
+  <input type="password" name="password" value="secret">
+</form>
+<script>setTimeout(function () {
+  document.getElementById("password-dialog-form").requestSubmit();
+}, 0);</script>""",
+            )
+            return
+        if path == "/auth/reauthenticate":
+            if self.headers.get("HX-Request") != "true":
+                self.send_error(400, "authentication modal must request a fragment")
+                return
+            self.send_body(
+                200,
+                "text/html",
+                """<div data-authentication-fragment>Authenticate</div><script>
+setTimeout(function () {
+  document.body.dispatchEvent(new CustomEvent("autharaRecentAuthenticationComplete"));
+}, 100);
+</script>""",
+            )
+            return
+        super().do_GET()
+
+
+ThreadingHTTPServer(("127.0.0.1", 18765), Handler).serve_forever()
+PY
+
+python3 "$TEST_ROOT/server.py" "$STATIC_DIR" \
   > "$TEST_ROOT/server.log" 2>&1 &
 SERVER_PID=$!
 
@@ -125,6 +267,20 @@ wait "$WATCHDOG_PID" 2>/dev/null || true
 
 grep -q 'data-editor-initialized="true"' "$TEST_ROOT/editor.html"
 grep -q 'class="cm-editor' "$TEST_ROOT/editor.html"
+grep -q 'data-sensitive-action-retried="true"' "$TEST_ROOT/editor.html"
+grep -q 'data-password-dialog-updated="true"' "$TEST_ROOT/editor.html"
+grep -q 'data-modal-scroll-lock-seen="true"' "$TEST_ROOT/editor.html"
+grep -q 'data-authentication-skeleton-seen="true"' "$TEST_ROOT/editor.html"
+grep -q 'data-page-load-count="1"' "$TEST_ROOT/editor.html"
+if grep -Eq '<(html|body)[^>]*class="[^"]*modal-scroll-locked' "$TEST_ROOT/editor.html"; then
+  echo "Page remained scroll-locked after dialogs closed." >&2
+  grep -Eo '<(html|body|dialog)[^>]*>' "$TEST_ROOT/editor.html" >&2 || true
+  exit 1
+fi
+if grep -q 'name="password"' "$TEST_ROOT/editor.html"; then
+  echo "Password dialog retained sensitive form fields after success." >&2
+  exit 1
+fi
 if grep -Eq '\.js HTTP/[^ ]+" 404 ' "$TEST_ROOT/server.log"; then
   cat "$TEST_ROOT/server.log" >&2
   exit 1

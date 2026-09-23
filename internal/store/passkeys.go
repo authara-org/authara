@@ -286,6 +286,7 @@ func (s *Store) CountAuthMethods(ctx context.Context, userID uuid.UUID) (int, er
 func (s *Store) CreateWebAuthnChallenge(ctx context.Context, in domain.WebAuthnChallenge) (domain.WebAuthnChallenge, error) {
 	m := model.WebAuthnChallenge{
 		UserID:      in.UserID,
+		SessionID:   in.SessionID,
 		Purpose:     string(in.Purpose),
 		Challenge:   in.Challenge,
 		SessionData: in.SessionData,
@@ -296,15 +297,17 @@ func (s *Store) CreateWebAuthnChallenge(ctx context.Context, in domain.WebAuthnC
 	if err := scanWebAuthnChallenge(s.queryRow(ctx, `
 		INSERT INTO webauthn_challenges (
 			user_id,
+			session_id,
 			purpose,
 			challenge,
 			session_data,
 			expires_at,
 			consumed_at
 		)
-		VALUES ($1, $2, $3, $4::jsonb, $5, $6)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
 		RETURNING `+webAuthnChallengeColumns,
 		m.UserID,
+		m.SessionID,
 		m.Purpose,
 		m.Challenge,
 		string(m.SessionData),
@@ -364,6 +367,7 @@ const webAuthnChallengeColumns = `
 	id,
 	created_at,
 	user_id,
+	session_id,
 	purpose,
 	challenge,
 	session_data,
@@ -376,6 +380,7 @@ func scanWebAuthnChallenge(row rowScanner, m *model.WebAuthnChallenge) error {
 		&m.ID,
 		&m.CreatedAt,
 		&m.UserID,
+		&m.SessionID,
 		&m.Purpose,
 		&m.Challenge,
 		&m.SessionData,
@@ -390,6 +395,7 @@ func toDomainWebAuthnChallenge(m model.WebAuthnChallenge) domain.WebAuthnChallen
 		ID:          m.ID,
 		CreatedAt:   m.CreatedAt,
 		UserID:      m.UserID,
+		SessionID:   m.SessionID,
 		Purpose:     domain.WebAuthnChallengePurpose(m.Purpose),
 		Challenge:   m.Challenge,
 		SessionData: m.SessionData,

@@ -57,6 +57,7 @@ func TestSecurityHeadersRouterCSPFollowsGoogleOAuthConfig(t *testing.T) {
 	if !strings.Contains(csp, "https://accounts.google.com") {
 		t.Fatalf("expected Google CSP sources when Google OAuth is configured, got %q", csp)
 	}
+	assertHeader(t, rr.Result().Header, "Referrer-Policy", "strict-origin-when-cross-origin")
 }
 
 func TestDynamicRouterResponsesAreNotCacheable(t *testing.T) {
@@ -143,6 +144,8 @@ func newSecurityHeadersTestRouter(providers oauth.OAuthProviders) http.Handler {
 		RedirectIfAuthenticated:              pass,
 		RequireAppAccessAuthWithRefresh:      pass,
 		RequireAppAccessAuthAPI:              pass,
+		RequireRecentAuthenticationUI:        pass,
+		RequireRecentAuthenticationAPI:       pass,
 		RequireAdminAccessAuthWithRefresh:    pass,
 		RequireAdminAccessAuthAPI:            pass,
 		RequireOperatorAccessAuthWithRefresh: pass,

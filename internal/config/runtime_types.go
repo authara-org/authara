@@ -19,9 +19,10 @@ const (
 
 	KeyTokenAccessTTL Key = "token.access_ttl"
 
-	KeySessionTTL             Key = "session.ttl"
-	KeySessionRefreshTokenTTL Key = "session.refresh_token_ttl"
-	KeySessionRotation        Key = "session.refresh_token_rotation"
+	KeySessionTTL                        Key = "session.ttl"
+	KeySessionRefreshTokenTTL            Key = "session.refresh_token_ttl"
+	KeySessionRotation                   Key = "session.refresh_token_rotation"
+	KeySessionRecentAuthenticationWindow Key = "session.recent_authentication_window"
 
 	KeyOrganizationPublicManagementEnabled Key = "organization.public_management_enabled"
 	KeyOrganizationInvitationTTL           Key = "organization.invitation_ttl"
@@ -174,9 +175,10 @@ type TokenPolicyReaderFunc func() TokenPolicy
 func (f TokenPolicyReaderFunc) CurrentToken() TokenPolicy { return f() }
 
 type SessionPolicy struct {
-	SessionTTL           time.Duration
-	RefreshTokenTTL      time.Duration
-	RefreshTokenRotation time.Duration
+	SessionTTL                 time.Duration
+	RefreshTokenTTL            time.Duration
+	RefreshTokenRotation       time.Duration
+	RecentAuthenticationWindow time.Duration
 }
 
 type SessionPolicyReader interface {

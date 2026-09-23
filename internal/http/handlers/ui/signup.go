@@ -256,7 +256,7 @@ func (h *UIHandler) finishSignupSession(
 	ua := r.UserAgent()
 	now := time.Now()
 
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, ua, now, httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, ua, now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderFormError(
 			w,

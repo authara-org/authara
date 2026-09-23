@@ -36,6 +36,7 @@ settings_metadata:
   AUTHARA_SESSION_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_REFRESH_TOKEN_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
+  AUTHARA_RECENT_AUTHENTICATION_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_ORG_MODE: {control: env, reload: startup, sensitive: false, group: organizations}
   AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
   AUTHARA_ORGANIZATION_INVITATION_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
@@ -331,6 +332,13 @@ variables:
       - off
       - always
       - duration
+
+  - name: AUTHARA_RECENT_AUTHENTICATION_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 10m
+    description: Maximum age of password, passkey, or linked-provider proof accepted for sensitive account and administrative mutations; must be between 1m and 1h.
 
   - name: AUTHARA_ORG_MODE
     stability: stable

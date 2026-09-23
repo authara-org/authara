@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/response"
@@ -71,7 +72,7 @@ func (h *APIHandler) FinishPasskeyAuthentication(ctx context.Context, request co
 	if err != nil {
 		return finishPasskeyAuthenticationError(responseCodeInternalError(), "Passkey error."), nil
 	}
-	body, header, code, message, ok := h.contractSession(ctx, r, user, audience)
+	body, header, code, message, ok := h.contractSession(ctx, r, user, audience, domain.AuthenticationMethodPasskey)
 	if !ok {
 		return finishPasskeyAuthenticationError(code, message), nil
 	}

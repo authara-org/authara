@@ -111,7 +111,7 @@ func (h *APIHandler) LoginAndAcceptInvitation(ctx context.Context, request contr
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	body, header, code, message, ok := h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience)
+	body, header, code, message, ok := h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience, domain.AuthenticationMethodPassword)
 	if !ok {
 		return loginAndAcceptInvitationError(code, message), nil
 	}
@@ -180,7 +180,7 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	body, sessionHeaders, code, message, ok := h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience)
+	body, sessionHeaders, code, message, ok := h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience, domain.AuthenticationMethodGoogle)
 	if !ok {
 		return authenticateAndAcceptInvitationWithGoogleError(code, message), nil
 	}
@@ -248,7 +248,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithPassword(ctx context.Context
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience)
+	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience, domain.AuthenticationMethodPassword)
 	if !ok {
 		return completeAccountRecoveryLinkWithPasswordError(code, message), nil
 	}
@@ -286,7 +286,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithGoogle(ctx context.Context, 
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience)
+	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience, domain.AuthenticationMethodGoogle)
 	if !ok {
 		return completeAccountRecoveryLinkWithGoogleError(code, message), nil
 	}
@@ -368,9 +368,9 @@ func (h *APIHandler) validateRecoveryInvitation(ctx context.Context, rawToken st
 	return "", "", true
 }
 
-func (h *APIHandler) finishRecoverySession(ctx context.Context, r *http.Request, user domain.User, rawToken string, audience token.Audience) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
+func (h *APIHandler) finishRecoverySession(ctx context.Context, r *http.Request, user domain.User, rawToken string, audience token.Audience, method domain.AuthenticationMethod) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
 	if rawToken == "" {
-		return h.contractSession(ctx, r, user, audience)
+		return h.contractSession(ctx, r, user, audience, method)
 	}
 	result, err := h.Organizations.AcceptInvitation(ctx, organization.AcceptInvitationInput{
 		RawToken: rawToken,
@@ -381,12 +381,12 @@ func (h *APIHandler) finishRecoverySession(ctx context.Context, r *http.Request,
 		code, message := invitationError(err)
 		return contract.AuthSession{}, nil, code, message, false
 	}
-	return h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience)
+	return h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience, method)
 }
 
-func (h *APIHandler) contractInvitationSession(ctx context.Context, r *http.Request, user domain.User, organizationID contract.OrganizationID, audience token.Audience) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
+func (h *APIHandler) contractInvitationSession(ctx context.Context, r *http.Request, user domain.User, organizationID contract.OrganizationID, audience token.Audience, method domain.AuthenticationMethod) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
 	now := time.Now().UTC()
-	accessToken, _, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
+	accessToken, _, err := h.Session.CreateSession(ctx, user.ID, audience, method, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		code, message := invitationSessionError(err)
 		return contract.AuthSession{}, nil, code, message, false

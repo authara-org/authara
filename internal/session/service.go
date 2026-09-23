@@ -22,16 +22,17 @@ import (
 )
 
 type SessionConfig struct {
-	Store                  *store.Store
-	Tx                     *tx.Manager
-	AccessTokens           *token.AccessTokenService
-	AccessTokenRevocations *token.AccessTokenRevocations
-	SessionTTL             time.Duration
-	RefreshTokenTTL        time.Duration
-	RefreshTokenRotation   time.Duration
-	Policy                 config.SessionPolicyReader
-	AccessPolicy           accesspolicy.EmailAccessPolicy
-	Organizations          *organization.Service
+	Store                      *store.Store
+	Tx                         *tx.Manager
+	AccessTokens               *token.AccessTokenService
+	AccessTokenRevocations     *token.AccessTokenRevocations
+	SessionTTL                 time.Duration
+	RefreshTokenTTL            time.Duration
+	RefreshTokenRotation       time.Duration
+	RecentAuthenticationWindow time.Duration
+	Policy                     config.SessionPolicyReader
+	AccessPolicy               accesspolicy.EmailAccessPolicy
+	Organizations              *organization.Service
 }
 
 type Service struct {
@@ -44,6 +45,8 @@ type Service struct {
 	organizations          *organization.Service
 }
 
+const authenticationChallengeTTL = 5 * time.Minute
+
 func New(cfg SessionConfig) *Service {
 	access := cfg.AccessPolicy
 	if access == nil {
@@ -51,10 +54,15 @@ func New(cfg SessionConfig) *Service {
 	}
 	policy := cfg.Policy
 	if policy == nil {
+		recentAuthenticationWindow := cfg.RecentAuthenticationWindow
+		if recentAuthenticationWindow <= 0 {
+			recentAuthenticationWindow = 10 * time.Minute
+		}
 		policy = config.SessionPolicyReaderFunc(func() config.SessionPolicy {
 			return config.SessionPolicy{
 				SessionTTL: cfg.SessionTTL, RefreshTokenTTL: cfg.RefreshTokenTTL,
-				RefreshTokenRotation: cfg.RefreshTokenRotation,
+				RefreshTokenRotation:       cfg.RefreshTokenRotation,
+				RecentAuthenticationWindow: recentAuthenticationWindow,
 			}
 		})
 	}
@@ -74,6 +82,7 @@ func (s *Service) CreateSession(
 	ctx context.Context,
 	userID uuid.UUID,
 	audience token.Audience,
+	authenticationMethod domain.AuthenticationMethod,
 	userAgent string,
 	now time.Time,
 	clientIP string,
@@ -131,6 +140,8 @@ func (s *Service) CreateSession(
 			ActiveOrganizationID: org.ID,
 			UserAgent:            userAgent,
 			ExpiresAt:            now.Add(policy.SessionTTL),
+			AuthenticatedAt:      &now,
+			AuthenticationMethod: authenticationMethod,
 		}
 
 		createdSession, err := s.store.CreateSession(ctx, session)
@@ -185,6 +196,182 @@ func (s *Service) CreateSession(
 	}
 
 	return accessToken, refreshToken, nil
+}
+
+func (s *Service) RequireRecentAuthentication(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	now time.Time,
+) error {
+	current, err := s.store.GetActiveSessionByID(ctx, sessionID, now)
+	if err != nil {
+		if errors.Is(err, store.ErrSessionNotFound) {
+			return ErrInvalidSession
+		}
+		return err
+	}
+	if current.UserID != userID {
+		return ErrInvalidSession
+	}
+	window := s.policy.CurrentSession().RecentAuthenticationWindow
+	if window <= 0 || current.AuthenticatedAt == nil || current.AuthenticationMethod == "" {
+		return ErrRecentAuthenticationRequired
+	}
+	if current.AuthenticatedAt.After(now) || now.Sub(*current.AuthenticatedAt) > window {
+		return ErrRecentAuthenticationRequired
+	}
+	return nil
+}
+
+func (s *Service) MarkRecentlyAuthenticated(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	method domain.AuthenticationMethod,
+	now time.Time,
+) error {
+	switch method {
+	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle:
+	default:
+		return ErrRecentAuthenticationRequired
+	}
+	return s.store.UpdateSessionAuthentication(ctx, userID, sessionID, method, now)
+}
+
+func (s *Service) StartAuthenticationChallenge(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	now time.Time,
+) (domain.AuthenticationChallenge, error) {
+	var challenge domain.AuthenticationChallenge
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		current, err := s.store.GetActiveSessionByIDForUpdate(txCtx, sessionID, now)
+		if err != nil {
+			if errors.Is(err, store.ErrSessionNotFound) {
+				return ErrInvalidSession
+			}
+			return err
+		}
+		if current.UserID != userID {
+			return ErrInvalidSession
+		}
+		existing, err := s.store.GetAuthenticationChallengeBySessionIDForUpdate(txCtx, sessionID)
+		if err == nil && !existing.IsConsumed() && !existing.IsExpired(now) {
+			challenge = existing
+			return nil
+		}
+		if err != nil && !errors.Is(err, store.ErrAuthenticationChallengeNotFound) {
+			return err
+		}
+		expiresAt := now.Add(authenticationChallengeTTL)
+		if expiresAt.After(current.ExpiresAt) {
+			expiresAt = current.ExpiresAt
+		}
+		challenge, err = s.store.ReplaceAuthenticationChallenge(txCtx, domain.AuthenticationChallenge{
+			ID:        uuid.New(),
+			UserID:    userID,
+			SessionID: sessionID,
+			CreatedAt: now,
+			ExpiresAt: expiresAt,
+		})
+		return err
+	})
+	return challenge, err
+}
+
+func (s *Service) ValidateAuthenticationChallenge(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	challengeID uuid.UUID,
+	now time.Time,
+) error {
+	challenge, err := s.store.GetAuthenticationChallengeByID(ctx, challengeID)
+	if err != nil {
+		if errors.Is(err, store.ErrAuthenticationChallengeNotFound) {
+			return ErrAuthenticationChallengeInvalid
+		}
+		return err
+	}
+	if challenge.UserID != userID || challenge.SessionID != sessionID || challenge.IsConsumed() || challenge.IsExpired(now) {
+		return ErrAuthenticationChallengeInvalid
+	}
+	return nil
+}
+
+func (s *Service) ValidateCompletedAuthenticationChallenge(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	challengeID uuid.UUID,
+) error {
+	challenge, err := s.store.GetAuthenticationChallengeByID(ctx, challengeID)
+	if err != nil {
+		if errors.Is(err, store.ErrAuthenticationChallengeNotFound) {
+			return ErrAuthenticationChallengeInvalid
+		}
+		return err
+	}
+	if challenge.UserID != userID || challenge.SessionID != sessionID || !challenge.IsConsumed() || challenge.AuthenticationMethod == "" {
+		return ErrAuthenticationChallengeInvalid
+	}
+	return nil
+}
+
+func (s *Service) CompleteAuthenticationChallenge(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	challengeID uuid.UUID,
+	method domain.AuthenticationMethod,
+	now time.Time,
+) error {
+	switch method {
+	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle:
+	default:
+		return ErrAuthenticationChallengeInvalid
+	}
+
+	var resultErr error
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		current, err := s.store.GetActiveSessionByIDForUpdate(txCtx, sessionID, now)
+		if err != nil {
+			if errors.Is(err, store.ErrSessionNotFound) {
+				resultErr = ErrAuthenticationChallengeInvalid
+				return nil
+			}
+			return err
+		}
+		if current.UserID != userID {
+			resultErr = ErrAuthenticationChallengeInvalid
+			return nil
+		}
+		challenge, err := s.store.GetAuthenticationChallengeByIDForUpdate(txCtx, challengeID)
+		if errors.Is(err, store.ErrAuthenticationChallengeNotFound) {
+			resultErr = ErrAuthenticationChallengeInvalid
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if challenge.UserID != userID || challenge.SessionID != sessionID || challenge.IsConsumed() || challenge.IsExpired(now) {
+			resultErr = ErrAuthenticationChallengeInvalid
+			return nil
+		}
+		if err := s.store.UpdateSessionAuthentication(txCtx, userID, sessionID, method, now); err != nil {
+			return err
+		}
+		if err := s.store.ConsumeAuthenticationChallenge(txCtx, challengeID, method, now); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return resultErr
 }
 
 func (s *Service) SwitchSessionOrganization(

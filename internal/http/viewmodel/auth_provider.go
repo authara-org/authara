@@ -15,9 +15,10 @@ const (
 type AuthProviderFlow string
 
 const (
-	AuthProviderFlowLogin AuthProviderFlow = "login"
-	AuthProviderFlowLink  AuthProviderFlow = "link"
-	AuthProviderFlowProof AuthProviderFlow = "proof"
+	AuthProviderFlowLogin          AuthProviderFlow = "login"
+	AuthProviderFlowLink           AuthProviderFlow = "link"
+	AuthProviderFlowProof          AuthProviderFlow = "proof"
+	AuthProviderFlowReauthenticate AuthProviderFlow = "reauthenticate"
 )
 
 type AuthProvider struct {

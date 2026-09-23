@@ -1,4 +1,8 @@
 import { showRedirecting } from "./ui";
+import {
+  notifyRecentAuthenticationComplete,
+  requestRecentAuthentication,
+} from "./recentAuthentication";
 
 type GoogleCredentialResponse = { credential?: string };
 type GoogleCredentialHandler = (
@@ -45,7 +49,35 @@ function getReturnTo(btn: HTMLElement | null): string {
   return fromButton || "/";
 }
 
-const handleGoogleCredential: GoogleCredentialHandler = async (response) => {
+function getAuthenticationChallengeID(btn: HTMLElement | null): string {
+  return (
+    btn?.dataset.authenticationChallengeId ||
+    btn?.closest<HTMLElement>("[data-authentication-challenge-id]")?.dataset
+      .authenticationChallengeId ||
+    ""
+  );
+}
+
+function authenticationFailureURL(
+  flow: string,
+  returnTo: string,
+  authenticationChallengeID = "",
+): string {
+  if (flow === "link") return "/auth/account";
+  if (flow === "reauthenticate") {
+    const params = new URLSearchParams({ return_to: returnTo });
+    if (authenticationChallengeID) {
+      params.set("authentication_challenge_id", authenticationChallengeID);
+    }
+    return `/auth/reauthenticate?${params.toString()}`;
+  }
+  return `/auth/login?return_to=${encodeURIComponent(returnTo)}`;
+}
+
+async function handleGoogleCredentialAttempt(
+  response: GoogleCredentialResponse,
+  allowRecentAuthenticationRetry: boolean,
+): Promise<void> {
   const credential = response?.credential;
   if (!credential) return;
 
@@ -54,11 +86,15 @@ const handleGoogleCredential: GoogleCredentialHandler = async (response) => {
   const returnTo = getReturnTo(btn);
   const provider = btn?.dataset.provider || "google";
   const linkID = btn?.dataset.linkId || "";
+  const authenticationChallengeID = getAuthenticationChallengeID(btn);
 
   const form = new URLSearchParams();
   form.set("credential", credential);
   form.set("flow", flow);
   form.set("nonce", getGoogleNonce());
+  if (flow === "reauthenticate") {
+    form.set("authentication_challenge_id", authenticationChallengeID);
+  }
 
   try {
     if (flow === "proof") {
@@ -84,6 +120,15 @@ const handleGoogleCredential: GoogleCredentialHandler = async (response) => {
       );
 
       if (!startRes.ok) {
+        if (startRes.status === 428) {
+          const data = (await startRes.json()) as {
+            reauthenticate_url?: string;
+          };
+          if (allowRecentAuthenticationRetry && data.reauthenticate_url) {
+            await requestRecentAuthentication(data.reauthenticate_url);
+            return handleGoogleCredentialAttempt(response, false);
+          }
+        }
         window.location.href = "/auth/account";
         return;
       }
@@ -120,24 +165,46 @@ const handleGoogleCredential: GoogleCredentialHandler = async (response) => {
       }
     }
 
+    if (res.status === 428) {
+      const data = (await res.json()) as { reauthenticate_url?: string };
+      if (allowRecentAuthenticationRetry && data.reauthenticate_url) {
+        await requestRecentAuthentication(data.reauthenticate_url);
+        return handleGoogleCredentialAttempt(response, false);
+      }
+      window.location.href = authenticationFailureURL(
+        flow,
+        returnTo,
+        authenticationChallengeID,
+      );
+      return;
+    }
+
     if (res.ok) {
+      if (flow === "reauthenticate" && notifyRecentAuthenticationComplete()) {
+        return;
+      }
       const autharaRedirect = res.headers.get("X-Authara-Redirect");
       window.location.href =
         autharaRedirect || (flow === "link" ? "/auth/account" : returnTo);
       return;
     }
 
-    window.location.href =
-      flow === "link"
-        ? "/auth/account"
-        : `/auth/login?return_to=${encodeURIComponent(returnTo)}`;
+    window.location.href = authenticationFailureURL(
+      flow,
+      returnTo,
+      authenticationChallengeID,
+    );
   } catch {
-    window.location.href =
-      flow === "link"
-        ? "/auth/account"
-        : `/auth/login?return_to=${encodeURIComponent(returnTo)}`;
+    window.location.href = authenticationFailureURL(
+      flow,
+      returnTo,
+      authenticationChallengeID,
+    );
   }
-};
+}
+
+const handleGoogleCredential: GoogleCredentialHandler = (response) =>
+  handleGoogleCredentialAttempt(response, true);
 
 window.autharaGoogleCredentialHandler = handleGoogleCredential;
 

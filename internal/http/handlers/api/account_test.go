@@ -89,5 +89,58 @@ func TestCurrentAccountReadAndPasswordMutations(t *testing.T) {
 		if err != nil || !valid {
 			t.Fatalf("expected changed password to verify, valid=%t err=%v", valid, err)
 		}
+		reauthenticationRequest := httptest.NewRequest(http.MethodPost, "/auth/api/v1/reauthenticate/password", nil)
+		reauthenticationCtx := contractCtx(requestCtx, reauthenticationRequest)
+		authenticationChallenge, err := h.Session.StartAuthenticationChallenge(ctx, user.ID, current.ID, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		rr = httptest.NewRecorder()
+		wrongResp, err := h.ReauthenticateWithPassword(reauthenticationCtx, contract.ReauthenticateWithPasswordRequestObject{
+			Body: &contract.PasswordReauthenticationRequest{
+				AuthenticationChallengeId: authenticationChallenge.ID,
+				Password:                  "wrong-password",
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeContractResponse(t, rr, wrongResp)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("expected wrong proof status %d, got %d", http.StatusUnauthorized, rr.Code)
+		}
+
+		rr = httptest.NewRecorder()
+		reauthResp, err := h.ReauthenticateWithPassword(reauthenticationCtx, contract.ReauthenticateWithPasswordRequestObject{
+			Body: &contract.PasswordReauthenticationRequest{
+				AuthenticationChallengeId: authenticationChallenge.ID,
+				Password:                  "changed-password123",
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeContractResponse(t, rr, reauthResp)
+		if rr.Code != http.StatusNoContent {
+			t.Fatalf("expected reauthentication status %d, got %d body=%s", http.StatusNoContent, rr.Code, rr.Body.String())
+		}
+		if err := h.Session.RequireRecentAuthentication(ctx, user.ID, current.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("session was not marked recently authenticated: %v", err)
+		}
+		rr = httptest.NewRecorder()
+		reusedResp, err := h.ReauthenticateWithPassword(reauthenticationCtx, contract.ReauthenticateWithPasswordRequestObject{
+			Body: &contract.PasswordReauthenticationRequest{
+				AuthenticationChallengeId: authenticationChallenge.ID,
+				Password:                  "changed-password123",
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeContractResponse(t, rr, reusedResp)
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("expected consumed challenge status %d, got %d body=%s", http.StatusConflict, rr.Code, rr.Body.String())
+		}
 	})
 }

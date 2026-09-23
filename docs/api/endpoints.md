@@ -365,6 +365,8 @@ The finish endpoint may return `400 invalid_request`, `401 unauthorized`,
 ## Register a passkey
 
 Both registration endpoints require an authenticated app session.
+They also require recent authentication and return
+`428 recent_authentication_required` when the session proof is stale.
 
 ```text
 POST /auth/api/v1/passkeys/register/options
@@ -391,10 +393,66 @@ POST /auth/api/v1/passkeys/register/finish
 `name` and `platform_hint` are optional. Success returns `204 No Content`.
 
 Both endpoints require the access and CSRF cookies. The options endpoint may
-return `401 unauthorized`, `403 forbidden`, or `500 internal_error`.
+return `401 unauthorized`, `403 forbidden`,
+`428 recent_authentication_required`, or `500 internal_error`.
 The finish endpoint may return `400 invalid_request`, `401 unauthorized`,
 `403 forbidden`, `409 passkey_already_exists`,
-`422 passkey_registration_invalid`, or `500 internal_error`.
+`422 passkey_registration_invalid`, `428 recent_authentication_required`, or
+`500 internal_error`.
+
+## Reauthenticate a session
+
+Sensitive account and organization mutations require a fresh proof. An
+authenticated client first receives `428 recent_authentication_required` from
+the attempted mutation. The response contains a five-minute, single-use
+challenge bound to the current user and session:
+
+```json
+{
+  "error": {
+    "code": "recent_authentication_required",
+    "message": "Recent authentication is required."
+  },
+  "authentication_challenge": {
+    "id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+    "expires_at": "2026-09-22T12:05:00Z"
+  },
+  "reauthenticate_url": "/auth/reauthenticate?authentication_challenge_id=49f7a8b7-5f13-4ab0-9991-e924566a08ba"
+}
+```
+
+Complete that challenge through one of these CSRF-protected flows:
+
+```text
+POST /auth/api/v1/reauthenticate/password
+POST /auth/api/v1/reauthenticate/google
+POST /auth/api/v1/reauthenticate/passkeys/options
+POST /auth/api/v1/reauthenticate/passkeys/finish
+```
+
+Password reauthentication accepts:
+
+```json
+{
+  "authentication_challenge_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+  "password": "..."
+}
+```
+
+Google accepts the same nonce-bound credential fields as Google login plus
+`authentication_challenge_id`, and the identity must already be linked to the
+current user. Passkey options accepts `{ "authentication_challenge_id": "..." }`;
+passkey finish accepts both that ID and the WebAuthn `challenge_id` returned by
+the options endpoint.
+
+Successful completion returns `204 No Content`. The client must then retry the
+original sensitive mutation once. Hosted Authara UI flows do this
+automatically while keeping the original request only in browser memory. API
+clients remain responsible for the retry. Refresh-token use does not extend
+the freshness window. Expired, consumed, or session-mismatched challenges
+return `409 invalid_authentication_challenge`.
+Password and passkey proof attempts are rate limited and may return
+`429 rate_limited`.
 
 ---
 

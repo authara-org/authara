@@ -64,6 +64,8 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Config,
 			time.Now,
 		),
+		RequireRecentAuthenticationUI:       httpmiddleware.RequireRecentAuthenticationUI(app.Services.Session, time.Now),
+		RequireRecentAuthenticationAPI:      httpmiddleware.RequireRecentAuthenticationAPI(app.Services.Session, time.Now),
 		RequireInternalAPIAuth:              httpmiddleware.RequireInternalAPIAuth(app.Config.InternalAPI.Token),
 		RequirePublicOrganizationManagement: httpmiddleware.RequirePublicOrganizationManagementWithPolicy(app.Config),
 		RequireAdminRole:                    httpmiddleware.RequireAdmin,

@@ -27,6 +27,7 @@ var (
 	ErrPasskeyAlreadyExists             = errors.New("passkey already exists")
 	ErrWebAuthnChallengeNotFound        = errors.New("webauthn challenge not found")
 	ErrWebAuthnChallengeAlreadyConsumed = errors.New("webauthn challenge already consumed")
+	ErrAuthenticationChallengeNotFound  = errors.New("authentication challenge not found")
 	ErrAllowedEmailNotFound             = errors.New("allowed email not found")
 	ErrAllowedEmailAlreadyExists        = errors.New("allowed email already exists")
 	ErrOrganizationNotFound             = errors.New("organization not found")

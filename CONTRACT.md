@@ -187,6 +187,8 @@ Field names must not change or be removed.
 - `forbidden`
 - `invalid_request`
 - `not_found`
+- `recent_authentication_required`
+- `invalid_authentication_challenge`
 - `internal_error`
 
 ---
@@ -202,13 +204,26 @@ Stable behaviors include:
 
 Security-relevant guarantees must not be weakened.
 
-## 8.1 Access-token revocation contract
+## 8.1 Recent-authentication contract
+
+Sensitive authenticated mutations may return HTTP `428` with
+`recent_authentication_required` when the current session's last password,
+passkey, or federated proof is older than the configured window. Token refresh
+and organization switching do not update that proof time.
+
+The `428` response includes a short-lived `authentication_challenge` bound to
+the current user and session. Clients complete that challenge through one of
+the reauthentication endpoints and then retry the original mutation. A
+challenge is single-use; expired, consumed, or session-mismatched challenges
+return HTTP `409` with `invalid_authentication_challenge`.
+
+## 8.2 Access-token revocation contract
 
 Core and server-side SDK middleware share the Redis key templates in
 `contract/access-token-revocations.json`. An incompatible change is breaking
 unless a compatible rollout supports both formats.
 
-## 8.2 Password recovery contract
+## 8.3 Password recovery contract
 
 Password reset rotates an existing password provider. It does not add password
 authentication to an OAuth-only or passkey-only account. Unknown and

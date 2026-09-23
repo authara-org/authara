@@ -110,6 +110,8 @@ func newOpenAPIContractTestRouter(mode organization.OrgMode) http.Handler {
 		RedirectIfAuthenticated:              pass,
 		RequireAppAccessAuthWithRefresh:      pass,
 		RequireAppAccessAuthAPI:              pass,
+		RequireRecentAuthenticationUI:        pass,
+		RequireRecentAuthenticationAPI:       pass,
 		RequireAdminAccessAuthWithRefresh:    pass,
 		RequireAdminAccessAuthAPI:            pass,
 		RequireOperatorAccessAuthWithRefresh: pass,

@@ -91,7 +91,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()
 	now := time.Now()
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now, httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodPassword, ua, now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderFormError(w, r, http.StatusUnprocessableEntity, "This account is disabled.", authview.LoginForm(usernameLoginEnabled))
 		return

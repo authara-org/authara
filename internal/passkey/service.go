@@ -277,6 +277,122 @@ func (s *Service) FinishLogin(
 	return out, nil
 }
 
+func (s *Service) BeginReauthentication(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+) ([]byte, uuid.UUID, error) {
+	now := time.Now().UTC()
+	currentSession, err := s.store.GetActiveSessionByID(ctx, sessionID, now)
+	if err != nil {
+		if errors.Is(err, store.ErrSessionNotFound) {
+			return nil, uuid.Nil, ErrPasskeyAuthenticationInvalid
+		}
+		return nil, uuid.Nil, err
+	}
+	if currentSession.UserID != userID {
+		return nil, uuid.Nil, ErrPasskeyAuthenticationInvalid
+	}
+	u, err := s.store.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	passkeys, err := s.store.ListPasskeysByUserID(ctx, userID)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	if len(passkeys) == 0 {
+		return nil, uuid.Nil, ErrPasskeyNotFound
+	}
+	assertion, sessionData, err := s.webAuthn.BeginLogin(
+		newUser(u, passkeys),
+		webauthn.WithUserVerification(protocol.VerificationRequired),
+	)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	sessionJSON, err := json.Marshal(sessionData)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	challenge, err := s.store.CreateWebAuthnChallenge(ctx, domain.WebAuthnChallenge{
+		UserID:      &userID,
+		SessionID:   &sessionID,
+		Purpose:     domain.WebAuthnChallengePurposeReauthentication,
+		Challenge:   sessionData.Challenge,
+		SessionData: sessionJSON,
+		ExpiresAt:   now.Add(s.challengeTTL),
+	})
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	optionsJSON, err := marshalOptions(challenge.ID, assertion)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	return optionsJSON, challenge.ID, nil
+}
+
+func (s *Service) FinishReauthentication(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	challengeID uuid.UUID,
+	assertionResponseJSON []byte,
+	now time.Time,
+) error {
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		currentSession, err := s.store.GetActiveSessionByID(txCtx, sessionID, now)
+		if err != nil {
+			if errors.Is(err, store.ErrSessionNotFound) {
+				return ErrPasskeyAuthenticationInvalid
+			}
+			return err
+		}
+		if currentSession.UserID != userID {
+			return ErrPasskeyAuthenticationInvalid
+		}
+		challenge, sessionData, err := s.loadChallengeSession(txCtx, challengeID, now)
+		if err != nil {
+			return err
+		}
+		if challenge.Purpose != domain.WebAuthnChallengePurposeReauthentication ||
+			challenge.UserID == nil || *challenge.UserID != userID ||
+			challenge.SessionID == nil || *challenge.SessionID != sessionID {
+			return ErrPasskeyAuthenticationInvalid
+		}
+		u, err := s.store.GetUserByID(txCtx, userID)
+		if err != nil {
+			return err
+		}
+		passkeys, err := s.store.ListPasskeysByUserID(txCtx, userID)
+		if err != nil {
+			return err
+		}
+		credential, err := s.webAuthn.FinishLogin(
+			newUser(u, passkeys),
+			sessionData,
+			webAuthnRequest(assertionResponseJSON),
+		)
+		if err != nil || !credential.Flags.UserVerified {
+			if err != nil {
+				s.logPasskeyFailure(ctx, "finish passkey reauthentication failed", err)
+			}
+			return ErrPasskeyAuthenticationInvalid
+		}
+		if err := s.store.UpdatePasskeyAfterLogin(
+			txCtx,
+			credential.ID,
+			credential.Authenticator.SignCount,
+			credential.Authenticator.CloneWarning,
+			now,
+		); err != nil {
+			return err
+		}
+		return s.store.ConsumeWebAuthnChallenge(txCtx, challenge.ID, now)
+	})
+}
+
 func (s *Service) ListUserPasskeys(ctx context.Context, userID uuid.UUID) ([]domain.Passkey, error) {
 	return s.store.ListPasskeysByUserID(ctx, userID)
 }

@@ -89,6 +89,47 @@ func TestDeletePasskey_AllowsPasskeyWhenPasswordExists(t *testing.T) {
 	})
 }
 
+func TestBeginReauthenticationBindsChallengeToUserAndSession(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		svc := newTestPasskeyService(t, tdb)
+		user := createPasskeyTestUser(t, ctx, tdb, "reauth-passkey@example.com", "reauth-passkey")
+		createPasskeyTestPasskey(t, ctx, tdb, user.ID, "reauth-credential")
+		org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sessionRow, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID:               user.ID,
+			ActiveOrganizationID: org.ID,
+			ExpiresAt:            time.Now().UTC().Add(time.Hour),
+			UserAgent:            "passkey-reauth-test",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		options, challengeID, err := svc.BeginReauthentication(ctx, user.ID, sessionRow.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(options) == 0 || challengeID == uuid.Nil {
+			t.Fatal("expected reauthentication options and challenge id")
+		}
+		challenge, err := tdb.Store.GetWebAuthnChallengeByIDForUpdate(ctx, challengeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if challenge.Purpose != domain.WebAuthnChallengePurposeReauthentication ||
+			challenge.UserID == nil || *challenge.UserID != user.ID ||
+			challenge.SessionID == nil || *challenge.SessionID != sessionRow.ID {
+			t.Fatalf("challenge is not bound to the current user and session: %#v", challenge)
+		}
+		if _, _, err := svc.BeginReauthentication(ctx, uuid.New(), sessionRow.ID); !errors.Is(err, passkey.ErrPasskeyAuthenticationInvalid) {
+			t.Fatalf("another user must not bind a challenge to this session: %v", err)
+		}
+	})
+}
+
 func TestDeletePasskeySerializesConcurrentAuthMethodRemoval(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 	ctx := context.Background()

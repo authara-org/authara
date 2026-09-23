@@ -71,8 +71,35 @@ func TestSecurityHeadersAllowsGoogleOAuthSourcesWhenEnabled(t *testing.T) {
 		"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com",
 		"connect-src 'self' https://accounts.google.com",
 		"frame-src 'self' https://accounts.google.com",
+		"style-src 'self' 'unsafe-inline' https://accounts.google.com",
 		"img-src 'self' data: https://www.gstatic.com https://ssl.gstatic.com",
 	)
+	if got := rr.Result().Header.Get(headerReferrerPolicy); got != "strict-origin-when-cross-origin" {
+		t.Fatalf("Google OAuth Referrer-Policy = %q", got)
+	}
+}
+
+func TestSecurityHeadersAllowOnlySameOriginReauthenticationFrames(t *testing.T) {
+	handler := SecurityHeaders(SecurityHeadersConfig{})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for _, path := range []string{"/auth/reauthenticate", "/auth/reauthenticate/complete"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := recorder.Header().Get(headerFrameOptions); got != "SAMEORIGIN" {
+			t.Fatalf("GET %s: X-Frame-Options = %q", path, got)
+		}
+		if csp := recorder.Header().Get(headerContentSecurityPolicy); !strings.Contains(csp, "frame-ancestors 'self'") {
+			t.Fatalf("GET %s: CSP does not allow same-origin frame: %q", path, csp)
+		}
+	}
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/auth/reauthenticate", nil))
+	if got := recorder.Header().Get(headerFrameOptions); got != "DENY" {
+		t.Fatalf("POST reauthentication X-Frame-Options = %q", got)
+	}
 }
 
 func requireCSPContains(t *testing.T, csp string, expected ...string) {

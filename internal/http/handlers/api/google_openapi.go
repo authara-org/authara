@@ -78,7 +78,7 @@ func (h *APIHandler) contractGoogleLogin(
 		}
 		return loginWithGoogleError(code, message)
 	}
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodGoogle, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
 		return loginWithGoogleError(response.CodeForbidden, "Account cannot access requested audience.")

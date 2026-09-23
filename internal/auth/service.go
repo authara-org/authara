@@ -990,6 +990,46 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 	})
 }
 
+func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, password string) error {
+	provider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, userID)
+	if err != nil || provider.PasswordHash == nil {
+		if errors.Is(err, store.ErrorAuthProviderNotFound) || provider.PasswordHash == nil {
+			return ErrInvalidCredentials
+		}
+		return err
+	}
+	ok, err := Verify(password, *provider.PasswordHash)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrInvalidCredentials
+	}
+	return nil
+}
+
+func (s *Service) VerifyExternalIdentity(
+	ctx context.Context,
+	userID uuid.UUID,
+	provider domain.Provider,
+	providerUserID string,
+) error {
+	if providerUserID == "" {
+		return ErrInvalidCredentials
+	}
+	linked, err := s.store.GetAuthProviderByProviderAndProviderUserID(ctx, provider, providerUserID)
+	if err != nil {
+		if errors.Is(err, store.ErrorAuthProviderNotFound) {
+			return ErrInvalidCredentials
+		}
+		return err
+	}
+	if linked.UserID != userID {
+		return ErrInvalidCredentials
+	}
+	return nil
+}
+
 func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHash string, now time.Time) error {
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {

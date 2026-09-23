@@ -36,7 +36,7 @@ templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFl
 		Attrs: templ.Attributes{
 			"id":               "google-signin-btn",
 			"data-provider":    "google",
-			"data-google-flow": flow,
+			"data-google-flow": string(flow),
 			"data-link-id":     linkID,
 			"data-return-to":   httpctx.ReturnToOrDefault(ctx),
 		},
@@ -54,7 +54,7 @@ templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFl
 			alt="Google logo"
 		/>
 		<span>{ action } with Google</span>
-		<div class="opacity-[0.00001%] absolute left-0">
+		<div class="absolute inset-0 overflow-hidden opacity-[0.00001%]">
 			<div
 				class="g_id_signin"
 				data-type="standard"
@@ -63,17 +63,7 @@ templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFl
 				data-text="sign_in_with"
 				data-shape="rectangular"
 				data-logo_alignment="left"
-			></div>
-		</div>
-		<div class="opacity-[0.00001%] absolute right-0">
-			<div
-				class="g_id_signin"
-				data-type="standard"
-				data-size="large"
-				data-theme="outline"
-				data-text="sign_in_with"
-				data-shape="rectangular"
-				data-logo_alignment="left"
+				data-width="400"
 			></div>
 		</div>
 	}

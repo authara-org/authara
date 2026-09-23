@@ -141,6 +141,16 @@ type LinkCurrentUserGoogle204HeadersResponse struct {
 	Header http.Header
 }
 
+type ReauthenticateWithGoogle204HeadersResponse struct {
+	Header http.Header
+}
+
+func (r ReauthenticateWithGoogle204HeadersResponse) VisitReauthenticateWithGoogleResponse(w http.ResponseWriter) error {
+	writeHeaders(w.Header(), r.Header)
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (r LinkCurrentUserGoogle204HeadersResponse) VisitLinkCurrentUserGoogleResponse(w http.ResponseWriter) error {
 	writeHeaders(w.Header(), r.Header)
 	w.WriteHeader(http.StatusNoContent)

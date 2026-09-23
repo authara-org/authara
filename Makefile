@@ -35,12 +35,17 @@ check-generated: generate
 
 dev:
 	@if command -v tmux >/dev/null 2>&1; then \
-		echo "Starting dev environment with tmux..."; \
-		tmux new-session -d -s authara -c '$(CURDIR)' \
-			'$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE_DEV) up' \; \
-			split-window -h -c '$(CURDIR)/frontend' \
-			'npm run dev:tailwind' \; \
-		attach; \
+		if tmux has-session -t authara 2>/dev/null; then \
+			echo "Attaching to existing authara dev session..."; \
+			tmux attach -t authara; \
+		else \
+			echo "Starting dev environment with tmux..."; \
+			tmux new-session -d -s authara -c '$(CURDIR)' \
+				'$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE_DEV) up' \; \
+				split-window -h -c '$(CURDIR)/frontend' \
+				'npm run dev:tailwind' \; \
+				attach; \
+		fi; \
 	else \
 		echo ""; \
 		echo "tmux not found."; \

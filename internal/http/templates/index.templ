@@ -14,13 +14,47 @@ import (
 templ Layout() {
 	<!DOCTYPE html>
 	<html lang="en">
-		<head>
-			<title>Go Starter</title>
-			<meta charset="UTF-8"/>
-			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-			<meta name="description" content="This helps you to quickly get going."/>
-			<meta property="og:site_name" content="Go Starter"/>
-			<script>
+		@DocumentHead()
+		<body
+			x-data="confirmDialog()"
+			class="m-0 bg-background-light dark:bg-background-dark"
+		>
+			<main id="body">
+				{ children... }
+			</main>
+			<div class="hidden sm:block absolute top-4 right-4">
+				@theme.ThemeToggle()
+			</div>
+			@toast.ToastWrapper()
+			@modal.GlobalConfirmDialog()
+			@modal.RecentAuthenticationDialog()
+			@redirect.RedirectOverlay()
+		</body>
+	</html>
+}
+
+templ EmbeddedLayout() {
+	<!DOCTYPE html>
+	<html lang="en">
+		@DocumentHead()
+		<body class="m-0 bg-white dark:bg-grey-900">
+			<main id="body">
+				{ children... }
+			</main>
+			@toast.ToastWrapper()
+			@redirect.RedirectOverlay()
+		</body>
+	</html>
+}
+
+templ DocumentHead() {
+	<head>
+		<title>Go Starter</title>
+		<meta charset="UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<meta name="description" content="This helps you to quickly get going."/>
+		<meta property="og:site_name" content="Go Starter"/>
+		<script>
 			(function () {
 			 const key = "app_theme";
 			 const stored = localStorage.getItem(key);
@@ -36,7 +70,7 @@ templ Layout() {
 			 document.documentElement.classList.toggle("dark", isDark);
 			 })();
 			</script>
-			<script>
+		<script>
 			(function () {
 			 window.autharaGoogleCredentialQueue = window.autharaGoogleCredentialQueue || [];
 			 window.autharaGoogleCallback = function (response) {
@@ -48,10 +82,10 @@ templ Layout() {
 			 };
 			 })();
 			</script>
-			<link rel="preload" href={ ui.Static(ctx, "FunnelSans-VariableFont_wght.ttf") } as="font" type="font/ttf" crossorigin="anonymous"/>
-			<link rel="stylesheet" href={ ui.Static(ctx, "app.css") }/>
-			@CriticalStyles()
-			<script type="application/ld+json">
+		<link rel="preload" href={ ui.Static(ctx, "FunnelSans-VariableFont_wght.ttf") } as="font" type="font/ttf" crossorigin="anonymous"/>
+		<link rel="stylesheet" href={ ui.Static(ctx, "app.css") }/>
+		@CriticalStyles()
+		<script type="application/ld+json">
 			{
 				"@context": "https://schema.org",
 				"@type": "WebSite",
@@ -59,25 +93,10 @@ templ Layout() {
 				"url": "https://example.com"
 			}
 			</script>
-			<script src={ ui.Static(ctx, "htmx.min.js") } defer></script>
-			<script src={ ui.Static(ctx, "app.js") } defer></script>
-			<script src={ ui.Static(ctx, "alpine.min.js") } defer></script>
-		</head>
-		<body
-			x-data="confirmDialog()"
-			class="m-0 bg-background-light dark:bg-background-dark"
-		>
-			<main id="body">
-				{ children... }
-			</main>
-			<div class="hidden sm:block absolute top-4 right-4">
-				@theme.ThemeToggle()
-			</div>
-			@toast.ToastWrapper()
-			@modal.GlobalConfirmDialog()
-			@redirect.RedirectOverlay()
-		</body>
-	</html>
+		<script src={ ui.Static(ctx, "htmx.min.js") } defer></script>
+		<script src={ ui.Static(ctx, "app.js") } defer></script>
+		<script src={ ui.Static(ctx, "alpine.min.js") } defer></script>
+	</head>
 }
 
 templ CriticalStyles() {

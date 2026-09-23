@@ -269,6 +269,10 @@ func (h *UIHandler) PasswordLinkPost(w http.ResponseWriter, r *http.Request) {
 		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load account.")
 		return
 	}
+	if isAccountPasswordDialogSubmission(r) {
+		renderAccountPasswordDialogSuccess(h.Render, w, r, cfg, "Password added.")
+		return
+	}
 
 	_ = render.IntoBody(
 		h.Render,

@@ -16,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
@@ -38,19 +39,39 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	expectedNonce, ok := oauthstate.ReadNonce(r)
 	if idToken == "" || nonce == "" || !ok ||
 		subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
-		h.renderError(w, r, ctx)
+		h.renderGoogleFlowError(w, r, ctx, flow)
 		return
 
 	}
 
 	identity, err := h.Google.VerifyIDToken(ctx, idToken, expectedNonce)
 	if err != nil {
-		h.renderError(w, r, ctx)
+		h.renderGoogleFlowError(w, r, ctx, flow)
 		return
 	}
-	oauthstate.ClearNonce(w)
+
+	if flow == string(viewmodel.AuthProviderFlowReauthenticate) {
+		oauthstate.ClearNonce(w)
+		userID, userOK := httpctx.UserID(ctx)
+		sessionID, sessionOK := httpctx.SessionID(ctx)
+		authenticationChallengeID, challengeOK := authenticationChallengeID(r)
+		now := time.Now().UTC()
+		if !userOK || !sessionOK || !challengeOK ||
+			h.Session.ValidateAuthenticationChallenge(ctx, userID, sessionID, authenticationChallengeID, now) != nil ||
+			h.Auth.VerifyExternalIdentity(ctx, userID, domain.ProviderGoogle, identity.OAuthID) != nil ||
+			h.Session.CompleteAuthenticationChallenge(ctx, userID, sessionID, authenticationChallengeID, domain.AuthenticationMethodGoogle, now) != nil {
+			h.renderGoogleFlowError(w, r, ctx, flow)
+			return
+		}
+		writeOAuthRedirect(w, httpctx.ReturnToOrManualDefault(ctx, "/auth/account"))
+		return
+	}
 
 	if flow == string(viewmodel.AuthProviderFlowLink) {
+		if !h.requireRecentProviderLinkAuthentication(w, r) {
+			return
+		}
+		oauthstate.ClearNonce(w)
 		if err := h.CompleteProviderLink(ctx, linkID, domain.ProviderGoogle, identity.OAuthID, identity.Email, identity.EmailVerified); err != nil {
 			_ = flash.Set(w, flash.Message{
 				Kind:    "error",
@@ -70,6 +91,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if flow == string(viewmodel.AuthProviderFlowProof) {
+		oauthstate.ClearNonce(w)
 		parsedLinkID, err := uuid.Parse(strings.TrimSpace(linkID))
 		if err != nil {
 			h.renderError(w, r, ctx)
@@ -109,7 +131,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 		audience := redirect.AudienceForPath(returnTo)
 		now := time.Now()
-		accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
+		accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodGoogle, r.UserAgent(), now, httputil.ClientIPString(r))
 		if err != nil {
 			h.renderError(w, r, ctx)
 			return
@@ -131,6 +153,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	oauthstate.ClearNonce(w)
 	returnTo := httpctx.ReturnToOrDefault(ctx)
 	if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
 		h.finishInvitationOAuth(w, r, path, rawToken, returnTo, identity.Email, identity.EmailVerified, identity.OAuthID)
@@ -175,7 +198,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()
 	now := time.Now()
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now, httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodGoogle, ua, now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderError(w, r, ctx)
 		return
@@ -187,6 +210,44 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	writeOAuthRedirect(w, returnTo)
+}
+
+func (h *UIHandler) requireRecentProviderLinkAuthentication(w http.ResponseWriter, r *http.Request) bool {
+	ctx := r.Context()
+	userID, userOK := httpctx.UserID(ctx)
+	sessionID, sessionOK := httpctx.SessionID(ctx)
+	if !userOK || !sessionOK {
+		response.ErrorJSON(w, http.StatusUnauthorized, response.CodeUnauthorized, "Unauthorized.")
+		return false
+	}
+	if err := h.Session.RequireRecentAuthentication(ctx, userID, sessionID, time.Now().UTC()); err != nil {
+		if errors.Is(err, session.ErrRecentAuthenticationRequired) {
+			returnTo := httpctx.ReturnToOrManualDefault(ctx, "/auth/account")
+			challenge, challengeErr := h.Session.StartAuthenticationChallenge(ctx, userID, sessionID, time.Now().UTC())
+			if challengeErr != nil {
+				response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Session error.")
+				return false
+			}
+			response.JSON(w, http.StatusPreconditionRequired, map[string]any{
+				"error": map[string]string{
+					"code":    string(response.CodeRecentAuthenticationRequired),
+					"message": "Recent authentication is required.",
+				},
+				"authentication_challenge": map[string]any{
+					"id":         challenge.ID,
+					"expires_at": challenge.ExpiresAt,
+				},
+				"reauthenticate_url": redirect.WithReturnTo(
+					"/auth/reauthenticate?authentication_challenge_id="+challenge.ID.String(),
+					returnTo,
+				),
+			})
+			return false
+		}
+		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Session error.")
+		return false
+	}
+	return true
 }
 
 func writeOAuthRedirect(w http.ResponseWriter, location string) {
@@ -204,4 +265,20 @@ func (h *UIHandler) renderError(w http.ResponseWriter, r *http.Request, ctx cont
 		Message: "Google login failed. Please try again.",
 	})
 	redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx)), http.StatusSeeOther)
+}
+
+func (h *UIHandler) renderGoogleFlowError(w http.ResponseWriter, r *http.Request, ctx context.Context, flow string) {
+	if flow != string(viewmodel.AuthProviderFlowReauthenticate) {
+		h.renderError(w, r, ctx)
+		return
+	}
+	_ = flash.Set(w, flash.Message{
+		Kind:    "error",
+		Message: "Google authentication failed. Please try again.",
+	})
+	path := "/auth/reauthenticate"
+	if challengeID, ok := authenticationChallengeID(r); ok {
+		path += "?authentication_challenge_id=" + challengeID.String()
+	}
+	redirect.Redirect(w, r, redirect.WithReturnTo(path, httpctx.ReturnToOrDefault(ctx)), http.StatusSeeOther)
 }

@@ -106,6 +106,162 @@ func newDBSessionServiceWithPolicy(
 
 var errSessionTestCache = errors.New("session test cache unavailable")
 
+func TestRecentAuthenticationPolicy(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 22, 10, 0, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "recent-auth-" + uuid.NewString() + "@example.com",
+			Username: "recent-auth-" + uuid.NewString(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatal(err)
+		}
+		svc := newDBSessionService(t, tdb, 10*time.Minute)
+		accessToken, refreshToken, err := svc.CreateSession(
+			ctx,
+			user.ID,
+			token.AudienceApp,
+			domain.AuthenticationMethodPassword,
+			"recent-auth-test",
+			now,
+			"",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		identity, err := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := svc.RequireRecentAuthentication(ctx, user.ID, identity.SessionID, now.Add(10*time.Minute)); err != nil {
+			t.Fatalf("boundary should be fresh: %v", err)
+		}
+		if err := svc.RequireRecentAuthentication(ctx, user.ID, identity.SessionID, now.Add(10*time.Minute+time.Nanosecond)); !errors.Is(err, ErrRecentAuthenticationRequired) {
+			t.Fatalf("expected stale session, got %v", err)
+		}
+
+		markedAt := now.Add(11 * time.Minute)
+		if err := svc.MarkRecentlyAuthenticated(ctx, user.ID, identity.SessionID, domain.AuthenticationMethodPasskey, markedAt); err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.RequireRecentAuthentication(ctx, user.ID, identity.SessionID, markedAt); err != nil {
+			t.Fatalf("fresh proof rejected: %v", err)
+		}
+		stored, err := tdb.Store.GetSessionByID(ctx, identity.SessionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored.AuthenticatedAt == nil || !stored.AuthenticatedAt.Equal(markedAt) || stored.AuthenticationMethod != domain.AuthenticationMethodPasskey {
+			t.Fatalf("unexpected authentication provenance: %#v", stored)
+		}
+
+		if _, _, err := svc.RefreshSession(ctx, refreshToken, token.AudienceApp, markedAt.Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		afterRefresh, err := tdb.Store.GetSessionByID(ctx, identity.SessionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if afterRefresh.AuthenticatedAt == nil || !afterRefresh.AuthenticatedAt.Equal(markedAt) {
+			t.Fatal("refresh changed authentication freshness")
+		}
+
+		legacy, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID:               user.ID,
+			ActiveOrganizationID: identity.OrganizationID,
+			ExpiresAt:            now.Add(time.Hour),
+			UserAgent:            "legacy",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.RequireRecentAuthentication(ctx, user.ID, legacy.ID, now); !errors.Is(err, ErrRecentAuthenticationRequired) {
+			t.Fatalf("legacy session should fail stale, got %v", err)
+		}
+		if err := svc.MarkRecentlyAuthenticated(ctx, uuid.New(), legacy.ID, domain.AuthenticationMethodPassword, now); !errors.Is(err, store.ErrSessionNotFound) {
+			t.Fatalf("proof must not update another user's session, got %v", err)
+		}
+		unchanged, err := tdb.Store.GetSessionByID(ctx, legacy.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if unchanged.AuthenticatedAt != nil || unchanged.AuthenticationMethod != "" {
+			t.Fatalf("wrong-user proof changed session provenance: %#v", unchanged)
+		}
+	})
+}
+
+func TestAuthenticationChallengeIsSessionBoundSingleUseAndExpires(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "authentication-challenge-" + uuid.NewString() + "@example.com",
+			Username: "authentication-challenge-" + uuid.NewString(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		row, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID: user.ID, ActiveOrganizationID: org.ID, ExpiresAt: now.Add(time.Hour), UserAgent: "challenge-test",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		svc := newDBSessionService(t, tdb, 10*time.Minute)
+
+		challenge, err := svc.StartAuthenticationChallenge(ctx, user.ID, row.ID, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !challenge.ExpiresAt.Equal(now.Add(authenticationChallengeTTL)) {
+			t.Fatalf("challenge expiry = %s", challenge.ExpiresAt)
+		}
+		reused, err := svc.StartAuthenticationChallenge(ctx, user.ID, row.ID, now.Add(time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reused.ID != challenge.ID || !reused.ExpiresAt.Equal(challenge.ExpiresAt) {
+			t.Fatalf("active challenge was replaced: first=%+v reused=%+v", challenge, reused)
+		}
+		if err := svc.ValidateAuthenticationChallenge(ctx, uuid.New(), row.ID, challenge.ID, now); !errors.Is(err, ErrAuthenticationChallengeInvalid) {
+			t.Fatalf("challenge accepted another user: %v", err)
+		}
+		if err := svc.ValidateCompletedAuthenticationChallenge(ctx, user.ID, row.ID, challenge.ID); !errors.Is(err, ErrAuthenticationChallengeInvalid) {
+			t.Fatalf("incomplete challenge accepted as complete: %v", err)
+		}
+		if err := svc.CompleteAuthenticationChallenge(ctx, user.ID, row.ID, challenge.ID, domain.AuthenticationMethodPasskey, now.Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.ValidateAuthenticationChallenge(ctx, user.ID, row.ID, challenge.ID, now.Add(time.Minute)); !errors.Is(err, ErrAuthenticationChallengeInvalid) {
+			t.Fatalf("consumed challenge remained valid: %v", err)
+		}
+		if err := svc.ValidateCompletedAuthenticationChallenge(ctx, user.ID, row.ID, challenge.ID); err != nil {
+			t.Fatalf("completed challenge was not recognized: %v", err)
+		}
+		if err := svc.RequireRecentAuthentication(ctx, user.ID, row.ID, now.Add(time.Minute)); err != nil {
+			t.Fatalf("completed challenge did not refresh session: %v", err)
+		}
+
+		expiring, err := svc.StartAuthenticationChallenge(ctx, user.ID, row.ID, now.Add(2*time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.CompleteAuthenticationChallenge(ctx, user.ID, row.ID, expiring.ID, domain.AuthenticationMethodPassword, expiring.ExpiresAt); !errors.Is(err, ErrAuthenticationChallengeInvalid) {
+			t.Fatalf("expired challenge completion = %v", err)
+		}
+	})
+}
+
 type sessionTestCache struct {
 	values map[string][]byte
 	err    error
@@ -268,6 +424,7 @@ func TestCleanupExpiredDataRetainsConsumedRefreshTokensUntilFamilyEnds(t *testin
 			ctx,
 			user.ID,
 			token.AudienceApp,
+			domain.AuthenticationMethodPassword,
 			"retention-test",
 			now,
 			"",
@@ -422,7 +579,7 @@ func TestCreateSessionAddsOrganizationContext(t *testing.T) {
 		}
 
 		svc := newDBSessionService(t, tdb, 10*time.Minute)
-		accessToken, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "203.0.113.42")
+		accessToken, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "203.0.113.42")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -482,7 +639,7 @@ func TestLogoutCancelsPendingEmailChange(t *testing.T) {
 		}
 
 		svc := newDBSessionService(t, tdb, 10*time.Minute)
-		accessToken, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "logout-test", now, "")
+		accessToken, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "logout-test", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -549,7 +706,7 @@ func TestSwitchSessionOrganizationRotatesTokens(t *testing.T) {
 		}
 
 		svc := newDBSessionService(t, tdb, 10*time.Minute)
-		_, oldRefreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
+		_, oldRefreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -641,6 +798,7 @@ func TestRefreshSessionReuseCommitsSessionRevocation(t *testing.T) {
 				ctx,
 				user.ID,
 				token.AudienceApp,
+				domain.AuthenticationMethodPassword,
 				"reuse-test",
 				now,
 				"",
@@ -751,6 +909,7 @@ func TestRefreshSessionConcurrentRotationHasSingleWinner(t *testing.T) {
 			ctx,
 			user.ID,
 			token.AudienceApp,
+			domain.AuthenticationMethodPassword,
 			"concurrent-refresh-test",
 			attemptNow,
 			"",
@@ -882,7 +1041,7 @@ func TestRefreshSessionWaitsForOrganizationLifecycleLock(t *testing.T) {
 	})
 
 	svc := newDBSessionService(t, tdb, 10*time.Minute)
-	_, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
+	_, refreshToken, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -936,7 +1095,7 @@ func TestActiveSessionPreventsOrganizationMembershipRemoval(t *testing.T) {
 		}
 
 		svc := newDBSessionService(t, tdb, 10*time.Minute)
-		accessToken, _, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
+		accessToken, _, err := svc.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}

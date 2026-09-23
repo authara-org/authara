@@ -68,11 +68,15 @@ func (h *UIHandler) AddPasswordPage(w http.ResponseWriter, r *http.Request) {
 
 	ctx = httpctx.WithEmail(ctx, user.Email)
 
+	component := templ.Component(authview.AddPassword())
+	if r.URL.Query().Get("modal") == "1" && httpctx.IsHTMX(ctx) {
+		component = authview.AddPasswordDialog()
+	}
 	_ = h.Render(
 		w,
 		r.WithContext(ctx),
 		http.StatusOK,
-		authview.AddPassword(),
+		component,
 	)
 }
 
@@ -93,11 +97,15 @@ func (h *UIHandler) ChangePasswordPage(w http.ResponseWriter, r *http.Request) {
 
 	ctx = httpctx.WithEmail(ctx, user.Email)
 
+	component := templ.Component(authview.ChangePassword())
+	if r.URL.Query().Get("modal") == "1" && httpctx.IsHTMX(ctx) {
+		component = authview.ChangePasswordDialog()
+	}
 	_ = h.Render(
 		w,
 		r.WithContext(ctx),
 		http.StatusOK,
-		authview.ChangePassword(),
+		component,
 	)
 }
 
@@ -501,10 +509,19 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, msg))
 		return
 	}
+	if sessionID, ok := httpctx.SessionID(ctx); ok {
+		if err := h.Session.MarkRecentlyAuthenticated(ctx, userID, sessionID, domain.AuthenticationMethodPassword, time.Now().UTC()); err != nil && h.Logger != nil {
+			h.Logger.Warn("mark password change as recent authentication failed", "err", err)
+		}
+	}
 
 	cfg, err := h.accountConfig(ctx)
 	if err != nil {
 		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load account.")
+		return
+	}
+	if isAccountPasswordDialogSubmission(r) {
+		renderAccountPasswordDialogSuccess(h.Render, w, r, cfg, "Password updated.")
 		return
 	}
 
@@ -518,6 +535,34 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 			userview.Account(cfg),
 			toast.ToastMessage(toast.Success, "Password updated."),
 		),
+	)
+}
+
+func isAccountPasswordDialogSubmission(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true" && r.FormValue("modal") == "1"
+}
+
+func renderAccountPasswordDialogSuccess(
+	renderer render.Renderer,
+	w http.ResponseWriter,
+	r *http.Request,
+	cfg userview.AccountConfig,
+	message string,
+) {
+	w.Header().Set("X-Authara-Close-Password-Dialog", "true")
+	_ = render.WithHTMX(
+		renderer,
+		w,
+		r,
+		http.StatusOK,
+		templ.Join(
+			userview.LinkedProvidersSection(cfg.AuthProviders, cfg.Passkeys, cfg.GoogleClientID),
+			toast.ToastMessage(toast.Success, message),
+		),
+		render.HTMXRenderConfig{
+			Target: "#linked-providers-section",
+			Swap:   "outerHTML",
+		},
 	)
 }
 

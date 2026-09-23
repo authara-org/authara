@@ -6,9 +6,11 @@ const (
 	CodeUnauthorized ErrorCode = "unauthorized"
 	CodeForbidden    ErrorCode = "forbidden"
 
-	CodeInvalidRequest ErrorCode = "invalid_request"
-	CodeNotFound       ErrorCode = "not_found"
-	CodeRateLimited    ErrorCode = "rate_limited"
+	CodeInvalidRequest                 ErrorCode = "invalid_request"
+	CodeNotFound                       ErrorCode = "not_found"
+	CodeRateLimited                    ErrorCode = "rate_limited"
+	CodeRecentAuthenticationRequired   ErrorCode = "recent_authentication_required"
+	CodeInvalidAuthenticationChallenge ErrorCode = "invalid_authentication_challenge"
 
 	CodeInternalError ErrorCode = "internal_error"
 )

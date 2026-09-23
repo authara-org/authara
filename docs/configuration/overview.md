@@ -110,6 +110,8 @@ Examples:
 AUTHARA_ACCESS_TOKEN_TTL_MINUTES
 AUTHARA_SESSION_TTL_DAYS
 AUTHARA_REFRESH_TOKEN_TTL_DAYS
+AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL
+AUTHARA_RECENT_AUTHENTICATION_WINDOW
 ```
 
 ---
@@ -175,7 +177,8 @@ AUTHARA_OAUTH_GOOGLE_CLIENT_ID
 
 ### Challenge & verification
 
-Controls email verification and challenge flows.
+Controls email-code verification flows. Authentication challenges for
+sensitive mutations are governed by the recent-authentication window instead.
 
 See: [Challenge](challenge.md)
 

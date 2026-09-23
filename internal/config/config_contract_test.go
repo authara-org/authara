@@ -46,6 +46,7 @@ var dynamicHybridSettings = map[string]struct{}{
 	"AUTHARA_SESSION_TTL_DAYS":                       {},
 	"AUTHARA_REFRESH_TOKEN_TTL_DAYS":                 {},
 	"AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL":        {},
+	"AUTHARA_RECENT_AUTHENTICATION_WINDOW":           {},
 	"AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED": {},
 	"AUTHARA_ORGANIZATION_INVITATION_TTL":            {},
 	"AUTHARA_WEBHOOK_ENABLED_EVENTS":                 {},

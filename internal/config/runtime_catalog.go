@@ -112,6 +112,14 @@ func generalPolicyDefinitions() []Definition {
 			Impact: "Applies the next time a refresh token is used.",
 		},
 		{
+			Key: KeySessionRecentAuthenticationWindow, Name: "Recent authentication window",
+			Description: "Maximum age of password, passkey, or federated proof for sensitive account mutations.",
+			Environment: "AUTHARA_RECENT_AUTHENTICATION_WINDOW", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Sessions", Type: TypeDuration, DefaultValue: "10m", HasDefault: true, Minimum: "1m", Maximum: "1h",
+			defaultValue: defaultRecentAuthenticationWindow, minDuration: durationPointer(minimumRecentAuthenticationWindow), maxDuration: durationPointer(maximumRecentAuthenticationWindow),
+			Impact: "Applies immediately to subsequent sensitive requests; shortening it can make existing sessions stale.",
+		},
+		{
 			Key: KeyOrganizationPublicManagementEnabled, Name: "Public organization management",
 			Description: "Allows authenticated app clients to use public organization-management endpoints.",
 			Environment: "AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED", Control: ControlHybrid, Reload: ReloadDynamic,

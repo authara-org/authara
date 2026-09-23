@@ -190,6 +190,8 @@ func newOperatorRouteTestRouter(m operatorRouteMiddlewareConfig) chi.Router {
 		RedirectIfAuthenticated:              passMiddleware,
 		RequireAppAccessAuthWithRefresh:      passMiddleware,
 		RequireAppAccessAuthAPI:              passMiddleware,
+		RequireRecentAuthenticationUI:        passMiddleware,
+		RequireRecentAuthenticationAPI:       passMiddleware,
 		RequireAdminAccessAuthWithRefresh:    passMiddleware,
 		RequireAdminAccessAuthAPI:            passMiddleware,
 		RequireOperatorAccessAuthWithRefresh: m.operatorAuth,
