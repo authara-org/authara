@@ -112,8 +112,14 @@ AUTHARA_ACCESS_TOKEN_TTL_MINUTES
 AUTHARA_SESSION_TTL_DAYS
 AUTHARA_REFRESH_TOKEN_TTL_DAYS
 AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL
+AUTHARA_RECENT_AUTHENTICATION_ENABLED
 AUTHARA_RECENT_AUTHENTICATION_WINDOW
 ```
+
+`AUTHARA_RECENT_AUTHENTICATION_ENABLED` defaults to `true`. Set it to `false`
+to let any active session perform sensitive account and administrative
+mutations without step-up authentication. This weakens protection against
+stolen or unattended sessions and takes effect immediately.
 
 `AUTHARA_RECENT_AUTHENTICATION_WINDOW` defaults to `10m` and controls how long
 a password, passkey, or linked-provider proof authorizes sensitive mutations.

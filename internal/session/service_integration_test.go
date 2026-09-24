@@ -10,6 +10,7 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/cache"
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/organization"
@@ -143,6 +144,21 @@ func TestRecentAuthenticationPolicy(t *testing.T) {
 		}
 		if err := svc.RequireRecentAuthentication(ctx, user.ID, identity.SessionID, now.Add(10*time.Minute+time.Nanosecond)); !errors.Is(err, ErrRecentAuthenticationRequired) {
 			t.Fatalf("expected stale session, got %v", err)
+		}
+		disabled := New(SessionConfig{
+			Store: tdb.Store,
+			Policy: config.SessionPolicyReaderFunc(func() config.SessionPolicy {
+				return config.SessionPolicy{
+					RecentAuthenticationEnabled: false,
+					RecentAuthenticationWindow:  10 * time.Minute,
+				}
+			}),
+		})
+		if err := disabled.RequireRecentAuthentication(ctx, user.ID, identity.SessionID, now.Add(11*time.Minute)); err != nil {
+			t.Fatalf("disabled policy rejected an active stale session: %v", err)
+		}
+		if err := disabled.RequireRecentAuthentication(ctx, uuid.New(), identity.SessionID, now.Add(11*time.Minute)); !errors.Is(err, ErrInvalidSession) {
+			t.Fatalf("disabled policy accepted another user's session: %v", err)
 		}
 
 		markedAt := now.Add(11 * time.Minute)

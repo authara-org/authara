@@ -112,6 +112,13 @@ func generalPolicyDefinitions() []Definition {
 			Impact: "Applies the next time a refresh token is used.",
 		},
 		{
+			Key: KeySessionRecentAuthenticationEnabled, Name: "Recent authentication required",
+			Description: "Requires a fresh password, passkey, or federated proof before sensitive account and administrative mutations.",
+			Environment: "AUTHARA_RECENT_AUTHENTICATION_ENABLED", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Sessions", Type: TypeBool, DefaultValue: "true", HasDefault: true, defaultValue: true,
+			Impact: "Applies immediately. Disabling it allows any active session to perform sensitive mutations without step-up authentication.",
+		},
+		{
 			Key: KeySessionRecentAuthenticationWindow, Name: "Recent authentication window",
 			Description: "Maximum age of password, passkey, or federated proof for sensitive account mutations.",
 			Environment: "AUTHARA_RECENT_AUTHENTICATION_WINDOW", Control: ControlHybrid, Reload: ReloadDynamic,

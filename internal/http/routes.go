@@ -313,6 +313,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/organizations/current/members", contracth.ListCurrentOrganizationMembers)
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireAPICSRF)
+					r.With(mw.RequireRecentAuthenticationAPI).Post("/reauthenticate/check", contracth.CheckRecentAuthentication)
 					r.Post("/reauthenticate/password", contracth.ReauthenticateWithPassword)
 					r.Post("/reauthenticate/google", contracth.ReauthenticateWithGoogle)
 					r.Post("/reauthenticate/passkeys/options", contracth.BeginPasskeyReauthentication)

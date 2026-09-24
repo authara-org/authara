@@ -844,6 +844,36 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
 
+  /auth/api/v1/reauthenticate/check:
+    post:
+      operationId: checkRecentAuthentication
+      tags: [Sessions]
+      summary: Require recent authentication for an application action
+      description: Lets an application backend apply Authara's recent-authentication policy before performing a sensitive server-side operation. A stale session receives an authentication challenge; a fresh session receives no content.
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-recent-auth: required
+      x-authara-error-codes:
+        "401": [unauthorized]
+        "403": [forbidden]
+        "428": [recent_authentication_required]
+        "500": [internal_error]
+      responses:
+        "204":
+          description: The current session satisfies the recent-authentication policy
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "428":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /auth/api/v1/reauthenticate/password:
     post:
       operationId: reauthenticateWithPassword

@@ -132,6 +132,8 @@ func TestRecentAuthenticationRouteContract(t *testing.T) {
 		"/auth/operator/emails/account-created",
 		"/auth/operator/emails/account-created/reset",
 		"/auth/operator/emails/account-created/delivery",
+		"/auth/operator/settings/session.recent_authentication_enabled",
+		"/auth/operator/settings/session.recent_authentication_enabled/clear",
 		"/auth/operator/settings/session.recent_authentication_window",
 		"/auth/operator/settings/session.recent_authentication_window/clear",
 	}

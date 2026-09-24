@@ -61,8 +61,9 @@ func New(cfg SessionConfig) *Service {
 		policy = config.SessionPolicyReaderFunc(func() config.SessionPolicy {
 			return config.SessionPolicy{
 				SessionTTL: cfg.SessionTTL, RefreshTokenTTL: cfg.RefreshTokenTTL,
-				RefreshTokenRotation:       cfg.RefreshTokenRotation,
-				RecentAuthenticationWindow: recentAuthenticationWindow,
+				RefreshTokenRotation:        cfg.RefreshTokenRotation,
+				RecentAuthenticationEnabled: true,
+				RecentAuthenticationWindow:  recentAuthenticationWindow,
 			}
 		})
 	}
@@ -204,6 +205,7 @@ func (s *Service) RequireRecentAuthentication(
 	sessionID uuid.UUID,
 	now time.Time,
 ) error {
+	policy := s.policy.CurrentSession()
 	current, err := s.store.GetActiveSessionByID(ctx, sessionID, now)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
@@ -214,7 +216,10 @@ func (s *Service) RequireRecentAuthentication(
 	if current.UserID != userID {
 		return ErrInvalidSession
 	}
-	window := s.policy.CurrentSession().RecentAuthenticationWindow
+	if !policy.RecentAuthenticationEnabled {
+		return nil
+	}
+	window := policy.RecentAuthenticationWindow
 	if window <= 0 || current.AuthenticatedAt == nil || current.AuthenticationMethod == "" {
 		return ErrRecentAuthenticationRequired
 	}

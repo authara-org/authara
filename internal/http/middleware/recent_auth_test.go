@@ -8,9 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/response"
+	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
@@ -37,6 +39,26 @@ func TestRequireRecentAuthenticationAPIDistinguishesStaleSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		requestCtx := httpctx.WithSessionID(httpctx.WithUserID(ctx, user.ID), identity.SessionID)
+		disabledService := session.New(session.SessionConfig{
+			Store: tdb.Store,
+			Policy: config.SessionPolicyReaderFunc(func() config.SessionPolicy {
+				return config.SessionPolicy{
+					RecentAuthenticationEnabled: false,
+					RecentAuthenticationWindow:  10 * time.Minute,
+				}
+			}),
+		})
+		disabledHandler := RequireRecentAuthenticationAPI(disabledService, func() time.Time {
+			return now.Add(11 * time.Minute)
+		})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		disabledResponse := httptest.NewRecorder()
+		disabledHandler.ServeHTTP(disabledResponse, httptest.NewRequest(http.MethodPost, "/auth/api/v1/account/password", nil).WithContext(requestCtx))
+		if disabledResponse.Code != http.StatusNoContent {
+			t.Fatalf("disabled recent-auth response status = %d, want %d", disabledResponse.Code, http.StatusNoContent)
+		}
+
 		handler := RequireRecentAuthenticationAPI(sessionService, func() time.Time {
 			return now.Add(11 * time.Minute)
 		})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

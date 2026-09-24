@@ -36,6 +36,7 @@ settings_metadata:
   AUTHARA_SESSION_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_REFRESH_TOKEN_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
+  AUTHARA_RECENT_AUTHENTICATION_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_RECENT_AUTHENTICATION_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_ORG_MODE: {control: env, reload: startup, sensitive: false, group: organizations}
   AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
@@ -332,6 +333,13 @@ variables:
       - off
       - always
       - duration
+
+  - name: AUTHARA_RECENT_AUTHENTICATION_ENABLED
+    stability: stable
+    required: false
+    type: bool
+    default: true
+    description: Requires a fresh password, passkey, or linked-provider proof before sensitive account and administrative mutations. Disable only when possession of an active session is sufficient for the deployment's security model.
 
   - name: AUTHARA_RECENT_AUTHENTICATION_WINDOW
     stability: stable

@@ -39,6 +39,7 @@ var (
 	FinishPasskeyAuthenticationErrors               = contract.MustOperationErrors("finishPasskeyAuthentication")
 	BeginPasskeyRegistrationErrors                  = contract.MustOperationErrors("beginPasskeyRegistration")
 	FinishPasskeyRegistrationErrors                 = contract.MustOperationErrors("finishPasskeyRegistration")
+	CheckRecentAuthenticationErrors                 = contract.MustOperationErrors("checkRecentAuthentication")
 	ReauthenticateWithPasswordErrors                = contract.MustOperationErrors("reauthenticateWithPassword")
 	ReauthenticateWithGoogleErrors                  = contract.MustOperationErrors("reauthenticateWithGoogle")
 	BeginPasskeyReauthenticationErrors              = contract.MustOperationErrors("beginPasskeyReauthentication")

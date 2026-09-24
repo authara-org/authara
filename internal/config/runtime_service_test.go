@@ -127,6 +127,66 @@ func TestExplicitEmptyHybridEnvironmentValueOverridesAndLocksDormantOverride(t *
 	}
 }
 
+func TestRecentAuthenticationPolicySupportsLiveDisableResetAndEnvironmentLock(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	service, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: store, LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !service.CurrentSession().RecentAuthenticationEnabled {
+		t.Fatal("recent authentication must be enabled by default")
+	}
+
+	actor := uuid.New()
+	updated, err := service.Set(ctx, KeySessionRecentAuthenticationEnabled, "false", actor, 0)
+	if err != nil {
+		t.Fatalf("disable recent authentication: %v", err)
+	}
+	if service.CurrentSession().RecentAuthenticationEnabled || updated.EffectiveValue != "false" || updated.EffectiveSource != SourceOperator {
+		t.Fatalf("disabled policy/description = %+v / %+v", service.CurrentSession(), updated)
+	}
+
+	restarted, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: store, LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restarted.CurrentSession().RecentAuthenticationEnabled {
+		t.Fatal("persisted operator override was not restored")
+	}
+	reset, err := restarted.Clear(ctx, KeySessionRecentAuthenticationEnabled, actor, updated.Revision)
+	if err != nil {
+		t.Fatalf("reset recent authentication: %v", err)
+	}
+	if !restarted.CurrentSession().RecentAuthenticationEnabled || reset.EffectiveSource != SourceDefault {
+		t.Fatalf("reset policy/description = %+v / %+v", restarted.CurrentSession(), reset)
+	}
+
+	locked, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: newMemoryStore(),
+		LookupEnvironment: environment(map[string]string{
+			"AUTHARA_RECENT_AUTHENTICATION_ENABLED": "false",
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	description, err := locked.Describe(KeySessionRecentAuthenticationEnabled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if locked.CurrentSession().RecentAuthenticationEnabled || !description.Locked || description.EffectiveSource != SourceEnvironment {
+		t.Fatalf("environment policy/description = %+v / %+v", locked.CurrentSession(), description)
+	}
+	if _, err := locked.Set(ctx, KeySessionRecentAuthenticationEnabled, "true", actor, 0); !errors.Is(err, ErrSettingLocked) {
+		t.Fatalf("environment-locked mutation error = %v", err)
+	}
+}
+
 func TestEnvironmentCatalogReportsSetDefaultUnsetAndSensitiveStates(t *testing.T) {
 	variables := []EnvironmentVariable{
 		{Name: "APP_ENV", DisplayName: "Application environment", Group: "Runtime", Type: "enum", Default: "dev", HasDefault: true},
@@ -300,6 +360,7 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	set(KeySessionTTL, "90")
 	set(KeySessionRefreshTokenTTL, "30")
 	set(KeySessionRotation, "always")
+	set(KeySessionRecentAuthenticationEnabled, "false")
 	set(KeySessionRecentAuthenticationWindow, "15m")
 	set(KeyOrganizationPublicManagementEnabled, "true")
 	set(KeyOrganizationInvitationTTL, "48h")
@@ -326,7 +387,7 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 		t.Fatalf("access-token lifetime = %s", got)
 	}
 	session := service.CurrentSession()
-	if session.SessionTTL != 90*24*time.Hour || session.RefreshTokenTTL != 30*24*time.Hour || session.RefreshTokenRotation != -1 || session.RecentAuthenticationWindow != 15*time.Minute {
+	if session.SessionTTL != 90*24*time.Hour || session.RefreshTokenTTL != 30*24*time.Hour || session.RefreshTokenRotation != -1 || session.RecentAuthenticationEnabled || session.RecentAuthenticationWindow != 15*time.Minute {
 		t.Fatalf("session policy = %+v", session)
 	}
 	organization := service.CurrentOrganization()
@@ -387,7 +448,7 @@ func TestGeneralRuntimePoliciesRejectUnsafeCombinations(t *testing.T) {
 func TestRuntimePolicySelectionKeepsInfrastructureAndSchedulingAtStartup(t *testing.T) {
 	dynamic := []Key{
 		KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
-		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationWindow,
+		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationEnabled, KeySessionRecentAuthenticationWindow,
 		KeyOrganizationPublicManagementEnabled, KeyOrganizationInvitationTTL,
 		KeyAccessPolicyAllowlistEnabled, KeyAdminAuditRetention,
 		KeyEmailJobMaxAttempts, KeyEmailCleanupSentAfter, KeyEmailCleanupFailedAfter,

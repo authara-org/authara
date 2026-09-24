@@ -211,11 +211,21 @@ Sensitive authenticated mutations may return HTTP `428` with
 passkey, or federated proof is older than the configured window. Token refresh
 and organization switching do not update that proof time.
 
+Recent-authentication enforcement is enabled by default. It can be disabled
+dynamically with `AUTHARA_RECENT_AUTHENTICATION_ENABLED` or its operator
+override. When disabled, protected routes still require the otherwise valid
+session, authorization, and CSRF checks, but do not issue a step-up challenge.
+
 The `428` response includes a short-lived `authentication_challenge` bound to
 the current user and session. Clients complete that challenge through one of
 the reauthentication endpoints and then retry the original mutation. A
 challenge is single-use; expired, consumed, or session-mismatched challenges
 return HTTP `409` with `invalid_authentication_challenge`.
+
+Application backends can apply the same policy before a sensitive server-side
+operation by calling `POST /auth/api/v1/reauthenticate/check` with the user's
+session and CSRF proof. It returns `204` when the policy is satisfied or the
+same `428` challenge envelope when step-up is required.
 
 ## 8.2 Access-token revocation contract
 

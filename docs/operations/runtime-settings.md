@@ -70,7 +70,7 @@ an operator can change them without restarting Core:
 | --- | --- | --- |
 | Redirects | `AUTHARA_DEFAULT_RETURN_TO` | Subsequent requests without an explicit `return_to` use the new safe relative path. |
 | Authentication | `AUTHARA_USERNAME_LOGIN_ENABLED` | Subsequent hosted and API password-login requests accept or reject usernames. Email login remains available. |
-| Tokens and sessions | `AUTHARA_ACCESS_TOKEN_TTL_MINUTES`, `AUTHARA_SESSION_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL`, `AUTHARA_RECENT_AUTHENTICATION_WINDOW` | New tokens and sessions use the new lifetimes. Existing artifacts keep their stored expiry; rotation policy applies on the next refresh. The recent-authentication window applies immediately to sensitive requests. |
+| Tokens and sessions | `AUTHARA_ACCESS_TOKEN_TTL_MINUTES`, `AUTHARA_SESSION_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL`, `AUTHARA_RECENT_AUTHENTICATION_ENABLED`, `AUTHARA_RECENT_AUTHENTICATION_WINDOW` | New tokens and sessions use the new lifetimes. Existing artifacts keep their stored expiry; rotation policy applies on the next refresh. Recent-authentication enforcement and its freshness window apply immediately to sensitive requests. |
 | Organizations | `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED`, `AUTHARA_ORGANIZATION_INVITATION_TTL` | Public organization routes change immediately. Newly created or resent invitations use the new lifetime. |
 | Access policy | `AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED` | Subsequent signup, login, session, and admin allowlist requests use the new enforcement state. |
 | Admin retention | `AUTHARA_ADMIN_AUDIT_RETENTION_DAYS` | The next cleanup run uses the new cutoff. Lowering retention can delete older audit events. |
@@ -87,6 +87,11 @@ violate these rules after environment overrides are removed. Clearing a dormant
 override cannot introduce a newly invalid mix, while legacy unsafe dormant rows
 remain clearable for recovery. Runtime consumers read typed snapshots rather
 than parsing strings or inspecting the effective source.
+
+`AUTHARA_RECENT_AUTHENTICATION_ENABLED` defaults to `true`. Setting it to
+`false` makes possession of an active session sufficient for sensitive account
+and administrative mutations. This removes protection against a stolen or
+unattended long-lived session and should be an explicit deployment decision.
 
 ## Dynamic challenge policy
 

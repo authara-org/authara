@@ -11,6 +11,12 @@ session with `authara-go`, reads public Authara APIs on the user's behalf, and
 uses the internal API only for server-side organization operations. The
 internal API token is never sent to the browser.
 
+The same Go process is the example SPA's backend-for-frontend at
+`/spa/api/v1`. Those narrow JSON routes validate the Authara CSRF cookie,
+resolve the current user instead of accepting a browser-supplied actor, require
+recent authentication, and then call the internal API for organization and
+current-user lifecycle operations that have no public browser route.
+
 From the repository root, start the development stack with:
 
 ```sh

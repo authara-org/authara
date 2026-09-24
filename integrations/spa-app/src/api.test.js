@@ -2,19 +2,44 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 
 import {
+  APIError,
+  addPassword,
+  beginPasskeyAuthentication,
+  beginPasskeyReauthentication,
+  beginPasskeyRegistration,
+  changePassword,
+  changeUsername,
   createOrganization,
+  deleteCurrentAccount,
+  deleteOrganization,
+  deletePasskey,
+  finishPasskeyReauthentication,
+  finishPasskeyRegistration,
+  finishPasskeyAuthentication,
+  getAccount,
   getGoogleOptions,
   getUserWithRefresh,
   inviteMember,
+  isRecentAuthenticationRequired,
+  linkGoogle,
   login,
   loginWithGoogle,
   loadDashboard,
+  reauthenticateWithGoogle,
+  reauthenticateWithPassword,
+  removeOrganizationMember,
   resendSignupChallenge,
   resendInvitation,
+  revokeOtherSessions,
+  revokeSession,
   revokeInvitation,
   signupDirect,
+  startEmailChange,
   startSignupChallenge,
+  transferOrganizationOwnership,
+  unlinkAuthMethod,
   updateOrganization,
+  verifyEmailChange,
   verifySignupChallenge,
 } from "./api.js";
 
@@ -169,7 +194,7 @@ test("concurrent authentication checks share one rotating refresh", async () => 
   assert.equal(refreshCalls, 1);
 });
 
-test("organization mutations use every public route with CSRF", async () => {
+test("organization mutations use public routes or the SPA backend with CSRF", async () => {
   const calls = [];
 
   globalThis.fetch = async (url, options = {}) => {
@@ -180,19 +205,27 @@ test("organization mutations use every public route with CSRF", async () => {
 
   await createOrganization("New team");
   await updateOrganization("org/1", "Renamed team");
-  await inviteMember("org/1", "teammate@example.com");
+  await inviteMember("org/1", "teammate@example.com", "admin");
   await revokeInvitation("org/1", "invitation/1");
   await resendInvitation("org/1", "invitation/1");
+  await deleteOrganization("org/1");
+  await removeOrganizationMember("org/1", "user/2");
+  await transferOrganizationOwnership("org/1", "user/2");
+  await deleteCurrentAccount();
 
   const mutations = calls.filter(({ url }) => !url.endsWith("/csrf"));
   assert.deepEqual(
     mutations.map(({ url, options }) => `${options.method} ${url}`),
     [
-      "POST /auth/api/v1/organizations",
+      "POST /spa/api/v1/organizations",
       "PATCH /auth/api/v1/organizations/org%2F1",
-      "POST /auth/api/v1/organizations/org%2F1/invitations",
+      "POST /spa/api/v1/organizations/org%2F1/invitations",
       "POST /auth/api/v1/organizations/org%2F1/invitations/invitation%2F1/revoke",
-      "POST /auth/api/v1/organizations/org%2F1/invitations/invitation%2F1/resend",
+      "POST /spa/api/v1/organizations/org%2F1/invitations/invitation%2F1/resend",
+      "DELETE /spa/api/v1/organizations/org%2F1",
+      "DELETE /spa/api/v1/organizations/org%2F1/members/user%2F2",
+      "POST /spa/api/v1/organizations/org%2F1/ownership-transfer",
+      "DELETE /spa/api/v1/account",
     ],
   );
   assert.ok(
@@ -208,9 +241,45 @@ test("organization mutations use every public route with CSRF", async () => {
   });
   assert.deepEqual(JSON.parse(mutations[2].options.body), {
     email: "teammate@example.com",
+    role: "admin",
   });
   assert.equal(mutations[3].options.body, undefined);
   assert.equal(mutations[4].options.body, undefined);
+  assert.equal(mutations[5].options.body, undefined);
+  assert.equal(mutations[6].options.body, undefined);
+  assert.deepEqual(JSON.parse(mutations[7].options.body), {
+    new_owner_user_id: "user/2",
+  });
+  assert.equal(mutations[8].options.body, undefined);
+});
+
+test("SPA backend mutations refresh an expired browser session once", async () => {
+  let backendCalls = 0;
+  let refreshCalls = 0;
+
+  globalThis.fetch = async (url) => {
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    if (url.includes("/sessions/refresh")) {
+      refreshCalls += 1;
+      return new Response(null, { status: 200 });
+    }
+    if (url === "/spa/api/v1/organizations") {
+      backendCalls += 1;
+      return backendCalls === 1
+        ? json(
+            { error: { code: "unauthorized", message: "Unauthorized." } },
+            401,
+          )
+        : json({ organization: { id: "org-1" } }, 201);
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  const result = await createOrganization("Example");
+
+  assert.equal(result.organization.id, "org-1");
+  assert.equal(backendCalls, 2);
+  assert.equal(refreshCalls, 1);
 });
 
 test("custom authentication uses CSRF and the signup challenge API", async () => {
@@ -304,4 +373,199 @@ test("Google authentication initializes a nonce and exchanges the credential", a
     credential: "google-id-token",
     nonce: "google-nonce",
   });
+});
+
+test("recent-auth errors retain the challenge needed by an API-only client", async () => {
+  const calls = [];
+  let unlinkAttempts = 0;
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    if (url.endsWith("/account/auth-methods/password")) {
+      unlinkAttempts += 1;
+      if (unlinkAttempts === 1) {
+        return json(
+          {
+            error: {
+              code: "recent_authentication_required",
+              message: "Authenticate again to continue.",
+            },
+            authentication_challenge: {
+              id: "11111111-1111-1111-1111-111111111111",
+              expires_at: "2026-09-23T12:05:00Z",
+            },
+            reauthenticate_url: "/auth/reauthenticate?challenge=opaque",
+          },
+          428,
+        );
+      }
+      return new Response(null, { status: 204 });
+    }
+    if (url.endsWith("/reauthenticate/password")) {
+      return new Response(null, { status: 204 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  let challengeError;
+  try {
+    await unlinkAuthMethod("password");
+  } catch (error) {
+    challengeError = error;
+  }
+
+  assert.ok(challengeError instanceof APIError);
+  assert.equal(isRecentAuthenticationRequired(challengeError), true);
+  assert.equal(
+    challengeError.authenticationChallenge.id,
+    "11111111-1111-1111-1111-111111111111",
+  );
+  assert.equal(
+    challengeError.reauthenticateURL,
+    "/auth/reauthenticate?challenge=opaque",
+  );
+
+  await reauthenticateWithPassword(
+    challengeError.authenticationChallenge.id,
+    "password123",
+  );
+  await unlinkAuthMethod("password");
+
+  const mutations = calls.filter(({ url }) => !url.endsWith("/csrf"));
+  assert.deepEqual(
+    mutations.map(({ url, options }) => `${options.method} ${url}`),
+    [
+      "DELETE /auth/api/v1/account/auth-methods/password",
+      "POST /auth/api/v1/reauthenticate/password",
+      "DELETE /auth/api/v1/account/auth-methods/password",
+    ],
+  );
+  assert.deepEqual(JSON.parse(mutations[1].options.body), {
+    authentication_challenge_id:
+      "11111111-1111-1111-1111-111111111111",
+    password: "password123",
+  });
+});
+
+test("account management uses only browser API routes", async () => {
+  const calls = [];
+  const account = {
+    user: { id: "user-1", email: "user@example.com", username: "user" },
+    sessions: [],
+    auth_methods: [{ provider: "password" }],
+    passkeys: [],
+  };
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    if (url.endsWith("/account") && !options.method) return json(account);
+    if (url.endsWith("/email-change/challenges")) {
+      return json({ challenge_id: "email-challenge" }, 202);
+    }
+    return new Response(null, { status: 204 });
+  };
+
+  assert.deepEqual(await getAccount(), account);
+  await changeUsername("new-name");
+  await startEmailChange("new@example.com");
+  await verifyEmailChange("email-challenge", "123456");
+  await addPassword("password123");
+  await changePassword("password123", "password456");
+  await linkGoogle("google-token", "google-nonce");
+  await unlinkAuthMethod("google");
+  await deletePasskey("passkey/1");
+  await revokeOtherSessions();
+  await revokeSession("session/1");
+
+  const requests = calls.filter(({ url }) => !url.endsWith("/csrf"));
+  assert.deepEqual(
+    requests.map(({ url, options }) => `${options.method || "GET"} ${url}`),
+    [
+      "GET /auth/api/v1/account",
+      "PATCH /auth/api/v1/account/username",
+      "POST /auth/api/v1/account/email-change/challenges",
+      "POST /auth/api/v1/account/email-change/challenges/verify",
+      "POST /auth/api/v1/account/password",
+      "PUT /auth/api/v1/account/password",
+      "POST /auth/api/v1/account/auth-methods/google",
+      "DELETE /auth/api/v1/account/auth-methods/google",
+      "DELETE /auth/api/v1/account/passkeys/passkey%2F1",
+      "DELETE /auth/api/v1/account/sessions/others",
+      "DELETE /auth/api/v1/account/sessions/session%2F1",
+    ],
+  );
+  assert.ok(
+    requests
+      .slice(1)
+      .every(({ options }) => options.headers["X-CSRF-Token"] === "csrf-token"),
+  );
+});
+
+test("Google and passkey reauthentication use the challenge in every request", async () => {
+  const calls = [];
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    if (url.endsWith("/reauthenticate/passkeys/options")) {
+      return json({ challenge_id: "webauthn-challenge", options: {} });
+    }
+    if (url.endsWith("/passkeys/authenticate/options")) {
+      return json({ challenge_id: "login-challenge", options: {} });
+    }
+    if (url.endsWith("/passkeys/register/options")) {
+      return json({ challenge_id: "registration-challenge", options: {} });
+    }
+    return new Response(null, { status: 204 });
+  };
+
+  await reauthenticateWithGoogle("auth-challenge", "google-token", "nonce");
+  await beginPasskeyAuthentication();
+  await finishPasskeyAuthentication("login-challenge", {
+    id: "login-credential",
+  });
+  await beginPasskeyReauthentication("auth-challenge");
+  await finishPasskeyReauthentication(
+    "auth-challenge",
+    "webauthn-challenge",
+    { id: "credential" },
+  );
+  await beginPasskeyRegistration();
+  await finishPasskeyRegistration(
+    "registration-challenge",
+    { id: "credential" },
+    "Laptop",
+    "macOS",
+  );
+
+  const bodies = calls
+    .filter(({ url }) => !url.endsWith("/csrf"))
+    .map(({ options }) => (options.body ? JSON.parse(options.body) : null));
+  assert.deepEqual(bodies, [
+    {
+      authentication_challenge_id: "auth-challenge",
+      credential: "google-token",
+      nonce: "nonce",
+    },
+    null,
+    {
+      challenge_id: "login-challenge",
+      credential: { id: "login-credential" },
+    },
+    { authentication_challenge_id: "auth-challenge" },
+    {
+      authentication_challenge_id: "auth-challenge",
+      challenge_id: "webauthn-challenge",
+      credential: { id: "credential" },
+    },
+    null,
+    {
+      challenge_id: "registration-challenge",
+      credential: { id: "credential" },
+      name: "Laptop",
+      platform_hint: "macOS",
+    },
+  ]);
 });

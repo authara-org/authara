@@ -15,6 +15,7 @@ type Session struct {
 	SessionTTLDays                int    `env:"AUTHARA_SESSION_TTL_DAYS,default=60"`
 	RefreshTokenTTLDays           int    `env:"AUTHARA_REFRESH_TOKEN_TTL_DAYS,default=14"`
 	RefreshTokenRotationRaw       string `env:"AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL,default=24h"`
+	RecentAuthenticationEnabled   bool   `env:"AUTHARA_RECENT_AUTHENTICATION_ENABLED,default=true"`
 	RecentAuthenticationWindowRaw string `env:"AUTHARA_RECENT_AUTHENTICATION_WINDOW,default=10m"`
 
 	SessionTTL                 time.Duration

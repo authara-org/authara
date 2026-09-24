@@ -490,10 +490,11 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidValue, err)
 	}
 	sessionPolicy := SessionPolicy{
-		SessionTTL:                 time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
-		RefreshTokenTTL:            time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
-		RefreshTokenRotation:       rotation,
-		RecentAuthenticationWindow: values[KeySessionRecentAuthenticationWindow].(time.Duration),
+		SessionTTL:                  time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
+		RefreshTokenTTL:             time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
+		RefreshTokenRotation:        rotation,
+		RecentAuthenticationEnabled: values[KeySessionRecentAuthenticationEnabled].(bool),
+		RecentAuthenticationWindow:  values[KeySessionRecentAuthenticationWindow].(time.Duration),
 	}
 	if err := validateSessionPolicies(tokenPolicy, sessionPolicy); err != nil {
 		return nil, err
@@ -616,8 +617,8 @@ func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) er
 			}
 			return nil
 		}
-	case KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationWindow:
-		return []Key{KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationWindow}, func(values map[Key]any) error {
+	case KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationEnabled, KeySessionRecentAuthenticationWindow:
+		return []Key{KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationEnabled, KeySessionRecentAuthenticationWindow}, func(values map[Key]any) error {
 			rotation, err := parseRotationInterval(strings.ToLower(strings.TrimSpace(values[KeySessionRotation].(string))))
 			if err != nil {
 				return fmt.Errorf("%w: %v", ErrInvalidValue, err)
@@ -625,10 +626,11 @@ func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) er
 			return validateSessionPolicies(
 				TokenPolicy{AccessTokenTTL: time.Duration(values[KeyTokenAccessTTL].(int)) * time.Minute},
 				SessionPolicy{
-					SessionTTL:                 time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
-					RefreshTokenTTL:            time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
-					RefreshTokenRotation:       rotation,
-					RecentAuthenticationWindow: values[KeySessionRecentAuthenticationWindow].(time.Duration),
+					SessionTTL:                  time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
+					RefreshTokenTTL:             time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
+					RefreshTokenRotation:        rotation,
+					RecentAuthenticationEnabled: values[KeySessionRecentAuthenticationEnabled].(bool),
+					RecentAuthenticationWindow:  values[KeySessionRecentAuthenticationWindow].(time.Duration),
 				},
 			)
 		}

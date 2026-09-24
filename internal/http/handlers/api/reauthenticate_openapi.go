@@ -18,6 +18,10 @@ import (
 	"github.com/authara-org/authara/internal/store"
 )
 
+func (h *APIHandler) CheckRecentAuthentication(context.Context, contract.CheckRecentAuthenticationRequestObject) (contract.CheckRecentAuthenticationResponseObject, error) {
+	return contract.CheckRecentAuthentication204Response{}, nil
+}
+
 func (h *APIHandler) ReauthenticateWithPassword(ctx context.Context, request contract.ReauthenticateWithPasswordRequestObject) (contract.ReauthenticateWithPasswordResponseObject, error) {
 	r, requestOK := contractRequest(ctx)
 	if !requestOK {

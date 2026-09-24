@@ -1,12 +1,25 @@
 const API = "/auth/api/v1";
+const BACKEND = "/spa/api/v1";
 
 export class APIError extends Error {
-  constructor(message, status, code = "") {
+  constructor(message, status, code = "", response = null) {
     super(message);
     this.name = "APIError";
     this.status = status;
     this.code = code;
+    this.response = response;
+    this.authenticationChallenge = response?.authentication_challenge ?? null;
+    this.reauthenticateURL = response?.reauthenticate_url ?? "";
   }
+}
+
+export function isRecentAuthenticationRequired(error) {
+  return (
+    error instanceof APIError &&
+    error.status === 428 &&
+    error.code === "recent_authentication_required" &&
+    Boolean(error.authenticationChallenge?.id)
+  );
 }
 
 async function request(path, options = {}) {
@@ -26,6 +39,7 @@ async function request(path, options = {}) {
       body?.error?.message || `Request failed (${response.status})`,
       response.status,
       body?.error?.code,
+      body,
     );
   }
 
@@ -50,6 +64,17 @@ async function mutate(path, body, method = "POST") {
   });
 }
 
+async function mutateBackend(path, body, method = "POST") {
+  try {
+    return await mutate(path, body, method);
+  } catch (error) {
+    if (!(error instanceof APIError) || error.status !== 401) throw error;
+  }
+
+  await refreshSession();
+  return mutate(path, body, method);
+}
+
 let refreshPromise;
 
 export function refreshSession() {
@@ -64,8 +89,12 @@ export function refreshSession() {
 }
 
 export async function getUserWithRefresh() {
+  return requestWithRefresh(`${API}/user`);
+}
+
+async function requestWithRefresh(path) {
   try {
-    return await request(`${API}/user`);
+    return await request(path);
   } catch (error) {
     if (!(error instanceof APIError) || error.status !== 401) {
       throw error;
@@ -73,7 +102,7 @@ export async function getUserWithRefresh() {
   }
 
   await refreshSession();
-  return request(`${API}/user`);
+  return request(path);
 }
 
 export function login(identifier, password) {
@@ -86,6 +115,17 @@ export function getGoogleOptions() {
 
 export function loginWithGoogle(credential, nonce) {
   return mutate(`${API}/oauth/google?audience=app`, { credential, nonce });
+}
+
+export function beginPasskeyAuthentication() {
+  return mutate(`${API}/passkeys/authenticate/options`);
+}
+
+export function finishPasskeyAuthentication(challengeID, credential) {
+  return mutate(`${API}/passkeys/authenticate/finish?audience=app`, {
+    challenge_id: challengeID,
+    credential,
+  });
 }
 
 function signupBody(email, password, invitationCode) {
@@ -198,7 +238,7 @@ export async function loadDashboard() {
 }
 
 export function createOrganization(name) {
-  return mutate(`${API}/organizations`, { name });
+  return mutateBackend(`${BACKEND}/organizations`, { name });
 }
 
 export function updateOrganization(organizationID, name) {
@@ -209,10 +249,10 @@ export function updateOrganization(organizationID, name) {
   );
 }
 
-export function inviteMember(organizationID, email) {
-  return mutate(
-    `${API}/organizations/${encodeURIComponent(organizationID)}/invitations`,
-    { email },
+export function inviteMember(organizationID, email, role = "member") {
+  return mutateBackend(
+    `${BACKEND}/organizations/${encodeURIComponent(organizationID)}/invitations`,
+    { email, role },
   );
 }
 
@@ -223,9 +263,36 @@ export function revokeInvitation(organizationID, invitationID) {
 }
 
 export function resendInvitation(organizationID, invitationID) {
-  return mutate(
-    `${API}/organizations/${encodeURIComponent(organizationID)}/invitations/${encodeURIComponent(invitationID)}/resend`,
+  return mutateBackend(
+    `${BACKEND}/organizations/${encodeURIComponent(organizationID)}/invitations/${encodeURIComponent(invitationID)}/resend`,
   );
+}
+
+export function deleteOrganization(organizationID) {
+  return mutateBackend(
+    `${BACKEND}/organizations/${encodeURIComponent(organizationID)}`,
+    undefined,
+    "DELETE",
+  );
+}
+
+export function removeOrganizationMember(organizationID, userID) {
+  return mutateBackend(
+    `${BACKEND}/organizations/${encodeURIComponent(organizationID)}/members/${encodeURIComponent(userID)}`,
+    undefined,
+    "DELETE",
+  );
+}
+
+export function transferOrganizationOwnership(organizationID, newOwnerUserID) {
+  return mutateBackend(
+    `${BACKEND}/organizations/${encodeURIComponent(organizationID)}/ownership-transfer`,
+    { new_owner_user_id: newOwnerUserID },
+  );
+}
+
+export function deleteCurrentAccount() {
+  return mutateBackend(`${BACKEND}/account`, undefined, "DELETE");
 }
 
 export async function switchOrganization(organizationID) {
@@ -236,4 +303,119 @@ export async function switchOrganization(organizationID) {
 
 export async function logout() {
   await mutate(`${API}/sessions/logout`);
+}
+
+export function getAccount() {
+  return requestWithRefresh(`${API}/account`);
+}
+
+export function changeUsername(username) {
+  return mutate(`${API}/account/username`, { username }, "PATCH");
+}
+
+export function startEmailChange(newEmail) {
+  return mutate(`${API}/account/email-change/challenges`, {
+    new_email: newEmail,
+  });
+}
+
+export function verifyEmailChange(challengeID, code) {
+  return mutate(`${API}/account/email-change/challenges/verify`, {
+    challenge_id: challengeID,
+    code,
+  });
+}
+
+export function addPassword(password) {
+  return mutate(`${API}/account/password`, { password });
+}
+
+export function changePassword(currentPassword, newPassword) {
+  return mutate(
+    `${API}/account/password`,
+    { current_password: currentPassword, new_password: newPassword },
+    "PUT",
+  );
+}
+
+export function linkGoogle(credential, nonce) {
+  return mutate(`${API}/account/auth-methods/google`, { credential, nonce });
+}
+
+export function unlinkAuthMethod(provider) {
+  return mutate(
+    `${API}/account/auth-methods/${encodeURIComponent(provider)}`,
+    undefined,
+    "DELETE",
+  );
+}
+
+export function deletePasskey(passkeyID) {
+  return mutate(
+    `${API}/account/passkeys/${encodeURIComponent(passkeyID)}`,
+    undefined,
+    "DELETE",
+  );
+}
+
+export function revokeOtherSessions() {
+  return mutate(`${API}/account/sessions/others`, undefined, "DELETE");
+}
+
+export function revokeSession(sessionID) {
+  return mutate(
+    `${API}/account/sessions/${encodeURIComponent(sessionID)}`,
+    undefined,
+    "DELETE",
+  );
+}
+
+export function beginPasskeyRegistration() {
+  return mutate(`${API}/passkeys/register/options`);
+}
+
+export function finishPasskeyRegistration(challengeID, credential, name, hint) {
+  return mutate(`${API}/passkeys/register/finish`, {
+    challenge_id: challengeID,
+    credential,
+    name,
+    platform_hint: hint,
+  });
+}
+
+export function reauthenticateWithPassword(authenticationChallengeID, password) {
+  return mutate(`${API}/reauthenticate/password`, {
+    authentication_challenge_id: authenticationChallengeID,
+    password,
+  });
+}
+
+export function reauthenticateWithGoogle(
+  authenticationChallengeID,
+  credential,
+  nonce,
+) {
+  return mutate(`${API}/reauthenticate/google`, {
+    authentication_challenge_id: authenticationChallengeID,
+    credential,
+    nonce,
+  });
+}
+
+export function beginPasskeyReauthentication(authenticationChallengeID) {
+  return mutate(`${API}/reauthenticate/passkeys/options`, {
+    authentication_challenge_id: authenticationChallengeID,
+  });
+}
+
+export function finishPasskeyReauthentication(
+  authenticationChallengeID,
+  challengeID,
+  credential,
+) {
+  return mutate(`${API}/reauthenticate/passkeys/finish`, {
+    authentication_challenge_id: authenticationChallengeID,
+    challenge_id: challengeID,
+    credential,
+  });
 }
