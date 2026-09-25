@@ -1745,11 +1745,79 @@ func TestAddAndChangePasswordQueueSecurityNotifications(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Hash new password failed: %v", err)
 		}
-		if err := svc.ChangePassword(ctx, user.ID, "current-password", newHash); err != nil {
+		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+		session, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID:               user.ID,
+			ActiveOrganizationID: organization.ID,
+			ExpiresAt:            time.Now().UTC().Add(time.Hour),
+			UserAgent:            "password-change-test",
+		})
+		if err != nil {
+			t.Fatalf("CreateSession failed: %v", err)
+		}
+		if err := svc.ChangePassword(ctx, user.ID, session.ID, "current-password", newHash); err != nil {
 			t.Fatalf("ChangePassword failed: %v", err)
+		}
+		updatedSession, err := tdb.Store.GetSessionByID(ctx, session.ID)
+		if err != nil {
+			t.Fatalf("GetSessionByID failed: %v", err)
+		}
+		if updatedSession.AuthenticatedAt == nil || updatedSession.AuthenticationMethod != domain.AuthenticationMethodPassword {
+			t.Fatalf("password change did not update session authentication: %+v", updatedSession)
 		}
 		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 1 {
 			t.Fatalf("password-changed email jobs = %d, want 1", got)
+		}
+	})
+}
+
+func TestChangePasswordRollsBackWhenSessionAuthenticationCannotBeUpdated(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		currentHash, err := Hash("current-password")
+		if err != nil {
+			t.Fatalf("Hash current password failed: %v", err)
+		}
+		user := createPasswordUser(
+			t,
+			ctx,
+			tdb,
+			"password-change-rollback@example.com",
+			"password-change-rollback",
+			currentHash,
+		)
+		newHash, err := Hash("new-password")
+		if err != nil {
+			t.Fatalf("Hash new password failed: %v", err)
+		}
+
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx})
+		err = svc.ChangePassword(ctx, user.ID, uuid.New(), "current-password", newHash)
+		if !errors.Is(err, store.ErrSessionNotFound) {
+			t.Fatalf("ChangePassword error = %v, want %v", err, store.ErrSessionNotFound)
+		}
+
+		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+		if err != nil {
+			t.Fatalf("GetAuthProviderByMethodAndUserID failed: %v", err)
+		}
+		valid, err := Verify("current-password", *provider.PasswordHash)
+		if err != nil || !valid {
+			t.Fatalf("original password was not preserved, valid=%t err=%v", valid, err)
+		}
+		valid, err = Verify("new-password", *provider.PasswordHash)
+		if err != nil {
+			t.Fatalf("Verify new password failed: %v", err)
+		}
+		if valid {
+			t.Fatal("new password persisted despite failed session authentication update")
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 0 {
+			t.Fatalf("password-changed email jobs = %d, want 0", got)
 		}
 	})
 }

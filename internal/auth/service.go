@@ -958,7 +958,7 @@ func (s *Service) AddPassword(ctx context.Context, userID uuid.UUID, passwordHas
 	})
 }
 
-func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword string, newPasswordHash string) error {
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, currentPassword string, newPasswordHash string) error {
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {
 			return err
@@ -984,6 +984,9 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 			return err
 		}
 		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
+			return err
+		}
+		if err := s.store.UpdateSessionAuthentication(txCtx, userID, sessionID, domain.AuthenticationMethodPassword, now); err != nil {
 			return err
 		}
 		return s.enqueuePasswordChanged(txCtx, user, now)

@@ -458,6 +458,12 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		_ = h.Render(w, r, http.StatusUnauthorized, toast.ToastMessage(toast.Error, "Unauthorized."))
 		return
 	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		htmx.ReSwap(w, "none")
+		_ = h.Render(w, r, http.StatusUnauthorized, toast.ToastMessage(toast.Error, "Unauthorized."))
+		return
+	}
 
 	if err := r.ParseForm(); err != nil {
 		htmx.ReSwap(w, "none")
@@ -489,7 +495,7 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Auth.ChangePassword(ctx, userID, currentPassword, newPasswordHash); err != nil {
+	if err := h.Auth.ChangePassword(ctx, userID, sessionID, currentPassword, newPasswordHash); err != nil {
 		htmx.ReSwap(w, "none")
 
 		msg := "Could not change password."
@@ -509,12 +515,6 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, msg))
 		return
 	}
-	if sessionID, ok := httpctx.SessionID(ctx); ok {
-		if err := h.Session.MarkRecentlyAuthenticated(ctx, userID, sessionID, domain.AuthenticationMethodPassword, time.Now().UTC()); err != nil && h.Logger != nil {
-			h.Logger.Warn("mark password change as recent authentication failed", "err", err)
-		}
-	}
-
 	cfg, err := h.accountConfig(ctx)
 	if err != nil {
 		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load account.")

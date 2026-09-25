@@ -215,7 +215,7 @@ func (h *APIHandler) ChangeCurrentUserPassword(ctx context.Context, request cont
 	if err != nil {
 		return changeCurrentUserPasswordError(responseCodeInternalError(), "Password error."), nil
 	}
-	if err := h.Auth.ChangePassword(ctx, userID, request.Body.CurrentPassword, passwordHash); err != nil {
+	if err := h.Auth.ChangePassword(ctx, userID, sessionID, request.Body.CurrentPassword, passwordHash); err != nil {
 		switch {
 		case errors.Is(err, auth.ErrInvalidCredentials):
 			return changeCurrentUserPasswordError(responseCodeInvalidRequest(), "Current password is incorrect."), nil
@@ -224,9 +224,6 @@ func (h *APIHandler) ChangeCurrentUserPassword(ctx context.Context, request cont
 		default:
 			return changeCurrentUserPasswordError(responseCodeInternalError(), "Password error."), nil
 		}
-	}
-	if err := h.Session.MarkRecentlyAuthenticated(ctx, userID, sessionID, domain.AuthenticationMethodPassword, time.Now().UTC()); err != nil {
-		return changeCurrentUserPasswordError(responseCodeInternalError(), "Session error."), nil
 	}
 	return contract.ChangeCurrentUserPassword204Response{}, nil
 }
