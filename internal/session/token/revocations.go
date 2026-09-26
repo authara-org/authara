@@ -30,7 +30,10 @@ func (r *AccessTokenRevocations) RevokeToken(ctx context.Context, accessToken st
 		return nil
 	}
 	sum := sha256.Sum256([]byte(accessToken))
-	return r.cache.Set(ctx, cache.RevokedAccessTokenKey(hex.EncodeToString(sum[:])), []byte("1"), ttl)
+	if err := r.cache.Set(ctx, cache.RevokedAccessTokenKey(hex.EncodeToString(sum[:])), []byte("1"), ttl); err != nil {
+		return fmt.Errorf("%w: revoke access token: %w", ErrRevocationStoreUnavailable, err)
+	}
+	return nil
 }
 
 func (r *AccessTokenRevocations) RevokeSession(ctx context.Context, sessionID uuid.UUID, revokedAt time.Time) error {
@@ -74,10 +77,14 @@ func (r *AccessTokenRevocations) Check(
 		cache.RevokedAccessTokenMembershipKey(claims.Subject, claims.OrgID.String()),
 	)
 	if err != nil {
-		return fmt.Errorf("check access token revocation: %w", err)
+		return fmt.Errorf("%w: check access token revocation: %w", ErrRevocationStoreUnavailable, err)
 	}
 	if len(values) != 4 {
-		return fmt.Errorf("check access token revocation: expected 4 values, got %d", len(values))
+		return fmt.Errorf(
+			"%w: check access token revocation: expected 4 values, got %d",
+			ErrRevocationStoreUnavailable,
+			len(values),
+		)
 	}
 	if values[0] != nil {
 		return ErrRevokedToken
@@ -90,7 +97,11 @@ func (r *AccessTokenRevocations) Check(
 		}
 		revokedAt, err := strconv.ParseInt(string(value), 10, 64)
 		if err != nil {
-			return fmt.Errorf("check access token revocation: invalid cutoff: %w", err)
+			return fmt.Errorf(
+				"%w: check access token revocation: invalid cutoff: %w",
+				ErrRevocationStoreUnavailable,
+				err,
+			)
 		}
 		if issuedAt <= revokedAt {
 			return ErrRevokedToken
@@ -103,6 +114,8 @@ func (r *AccessTokenRevocations) revokeScope(ctx context.Context, key string, re
 	if r == nil || r.cache == nil {
 		return nil
 	}
-	value := []byte(strconv.FormatInt(revokedAt.UnixNano(), 10))
-	return r.cache.Set(ctx, key, value, r.ttlProvider())
+	if err := r.cache.SetMaxInt64(ctx, key, revokedAt.UnixNano(), r.ttlProvider()); err != nil {
+		return fmt.Errorf("%w: write access-token revocation: %w", ErrRevocationStoreUnavailable, err)
+	}
+	return nil
 }

@@ -84,8 +84,8 @@ func generalPolicyDefinitions() []Definition {
 			Key: KeyTokenAccessTTL, Name: "Access-token lifetime",
 			Description: "Lifetime assigned to newly issued access tokens.",
 			Environment: "AUTHARA_ACCESS_TOKEN_TTL_MINUTES", Control: ControlHybrid, Reload: ReloadDynamic,
-			Group: "Tokens", Type: TypeInt, DefaultValue: "10", HasDefault: true, Minimum: "1", Maximum: "1440",
-			defaultValue: 10, minInt: intPointer(1), maxInt: intPointer(1440),
+			Group: "Tokens", Type: TypeInt, DefaultValue: "10", HasDefault: true, Minimum: "1", Maximum: strconv.Itoa(int(MaxAccessTokenTTL / time.Minute)),
+			defaultValue: 10, minInt: intPointer(1), maxInt: intPointer(int(MaxAccessTokenTTL / time.Minute)),
 			Impact: "Applies to newly issued access tokens; existing tokens keep their expiry.",
 		},
 		{

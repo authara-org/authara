@@ -229,9 +229,19 @@ same `428` challenge envelope when step-up is required.
 
 ## 8.2 Access-token revocation contract
 
-Core and server-side SDK middleware share the Redis key templates in
-`contract/access-token-revocations.json`. An incompatible change is breaking
-unless a compatible rollout supports both formats.
+Core exposes two startup-selected revocation guarantees. `immediate` requires
+Redis, checks revocation state on every protected request, and fails closed
+when that state cannot be read. Access-token lifetime is capped at 24 hours so
+revocation markers can cover tokens issued before a runtime policy reduction.
+`expiry` requires the noop provider and further caps the access-token lifetime
+at 10 minutes; logout and authorization changes stop
+refresh immediately, but an already-issued access token can remain usable
+until its expiry. Production/noop deployments must select `expiry` explicitly.
+Every replica must use the same mode.
+
+Core and server-side SDK middleware in immediate mode share the Redis key
+templates in `contract/access-token-revocations.json`. An incompatible change
+is breaking unless a compatible rollout supports both formats.
 
 ## 8.3 Password recovery contract
 
@@ -254,9 +264,9 @@ authority over a newly created or changed credential.
 An authenticated password change preserves the initiating session and
 atomically revokes every other session family, deletes its refresh tokens, and
 invalidates outstanding password-reset requests. When a shared revocation
-cache is configured, already-issued access tokens for those sessions are also
-rejected immediately. With the noop cache, they remain usable only until their
-normal access-token expiry.
+mode is `immediate`, already-issued access tokens for those sessions are also
+rejected immediately. In `expiry` mode, they remain usable only until the
+capped access-token expiry.
 
 ---
 

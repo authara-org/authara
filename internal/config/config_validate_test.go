@@ -14,6 +14,10 @@ func validProdConfigForValidate() Config {
 		Token: Token{
 			AccessTokenTTL: time.Minute,
 		},
+		Cache: Cache{
+			Provider:                  "noop",
+			AccessTokenRevocationMode: AccessTokenRevocationModeExpiry,
+		},
 		Session: Session{
 			RefreshTokenTTL: time.Hour,
 		},
@@ -27,6 +31,88 @@ func validProdConfigForValidate() Config {
 			Provider: "smtp",
 			SMTPTLS:  true,
 		},
+	}
+}
+
+func TestConfigValidate_AccessTokenRevocationProfiles(t *testing.T) {
+	tests := []struct {
+		name        string
+		environment string
+		provider    string
+		mode        string
+		accessTTL   time.Duration
+		wantMode    string
+		wantError   string
+	}{
+		{
+			name: "redis infers immediate", environment: "prod", provider: "redis",
+			accessTTL: 30 * time.Minute, wantMode: AccessTokenRevocationModeImmediate,
+		},
+		{
+			name: "immediate accepts maximum token lifetime", environment: "prod", provider: "redis",
+			mode: AccessTokenRevocationModeImmediate, accessTTL: MaxAccessTokenTTL,
+			wantMode: AccessTokenRevocationModeImmediate,
+		},
+		{
+			name: "immediate rejects token lifetime above maximum", environment: "prod", provider: "redis",
+			mode: AccessTokenRevocationModeImmediate, accessTTL: MaxAccessTokenTTL + time.Minute,
+			wantError: "must be at most 1440",
+		},
+		{
+			name: "development noop infers expiry", environment: "dev", provider: "noop",
+			accessTTL: ExpiryOnlyMaxAccessTokenTTL, wantMode: AccessTokenRevocationModeExpiry,
+		},
+		{
+			name: "production noop requires explicit acknowledgement", environment: "prod", provider: "noop",
+			accessTTL: time.Minute, wantError: "must be set to expiry",
+		},
+		{
+			name: "explicit production expiry", environment: "prod", provider: "noop",
+			mode: AccessTokenRevocationModeExpiry, accessTTL: ExpiryOnlyMaxAccessTokenTTL,
+			wantMode: AccessTokenRevocationModeExpiry,
+		},
+		{
+			name: "expiry rejects long token", environment: "prod", provider: "noop",
+			mode: AccessTokenRevocationModeExpiry, accessTTL: ExpiryOnlyMaxAccessTokenTTL + time.Minute,
+			wantError: "must be at most 10",
+		},
+		{
+			name: "immediate requires redis", environment: "prod", provider: "noop",
+			mode: AccessTokenRevocationModeImmediate, accessTTL: time.Minute,
+			wantError: "requires AUTHARA_CACHE_PROVIDER=redis",
+		},
+		{
+			name: "expiry requires noop", environment: "prod", provider: "redis",
+			mode: AccessTokenRevocationModeExpiry, accessTTL: time.Minute,
+			wantError: "requires AUTHARA_CACHE_PROVIDER=noop",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validProdConfigForValidate()
+			cfg.Values.AppEnv = tt.environment
+			cfg.Cache.Provider = tt.provider
+			cfg.Cache.AccessTokenRevocationMode = tt.mode
+			cfg.Token.AccessTokenTTL = tt.accessTTL
+			if cfg.Session.RefreshTokenTTL <= tt.accessTTL {
+				cfg.Session.RefreshTokenTTL = tt.accessTTL + time.Hour
+			}
+
+			err := cfg.validate()
+			if tt.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+					t.Fatalf("validate error = %v, want substring %q", err, tt.wantError)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validate failed: %v", err)
+			}
+			if cfg.Cache.AccessTokenRevocationMode != tt.wantMode {
+				t.Fatalf("mode = %q, want %q", cfg.Cache.AccessTokenRevocationMode, tt.wantMode)
+			}
+		})
 	}
 }
 

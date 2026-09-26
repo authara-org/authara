@@ -113,7 +113,7 @@ func (s *Store) LockUserForKeyShare(ctx context.Context, userID uuid.UUID) error
 	return mapNoRows(err, ErrUserNotFound)
 }
 
-func (s *Store) LockUserForAuthMethodMutation(ctx context.Context, userID uuid.UUID) error {
+func (s *Store) LockUserForUpdate(ctx context.Context, userID uuid.UUID) error {
 	var lockedID uuid.UUID
 	err := s.queryRow(ctx, `
 		SELECT id
@@ -122,6 +122,10 @@ func (s *Store) LockUserForAuthMethodMutation(ctx context.Context, userID uuid.U
 		FOR UPDATE
 	`, userID).Scan(&lockedID)
 	return mapNoRows(err, ErrUserNotFound)
+}
+
+func (s *Store) LockUserForAuthMethodMutation(ctx context.Context, userID uuid.UUID) error {
+	return s.LockUserForUpdate(ctx, userID)
 }
 
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, error) {

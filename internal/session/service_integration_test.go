@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -283,6 +284,23 @@ type sessionTestCache struct {
 	err    error
 }
 
+type blockingSetMaxCache struct {
+	cache.Cache
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (c *blockingSetMaxCache) SetMaxInt64(ctx context.Context, key string, value int64, ttl time.Duration) error {
+	c.once.Do(func() { close(c.started) })
+	select {
+	case <-c.release:
+		return c.Cache.SetMaxInt64(ctx, key, value, ttl)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (c *sessionTestCache) Get(_ context.Context, key string) ([]byte, error) {
 	if c.err != nil {
 		return nil, c.err
@@ -310,6 +328,23 @@ func (c *sessionTestCache) Set(_ context.Context, key string, value []byte, _ ti
 		return c.err
 	}
 	c.values[key] = append([]byte(nil), value...)
+	return nil
+}
+
+func (c *sessionTestCache) SetMaxInt64(_ context.Context, key string, value int64, _ time.Duration) error {
+	if c.err != nil {
+		return c.err
+	}
+	if current, ok := c.values[key]; ok {
+		currentValue, err := strconv.ParseInt(string(current), 10, 64)
+		if err != nil {
+			return err
+		}
+		if currentValue >= value {
+			return nil
+		}
+	}
+	c.values[key] = []byte(strconv.FormatInt(value, 10))
 	return nil
 }
 
@@ -687,6 +722,188 @@ func TestLogoutCancelsPendingEmailChange(t *testing.T) {
 		}
 		if _, err := tdb.Store.GetPendingEmailChangeByChallengeID(ctx, challengeRow.ID); !errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
 			t.Fatalf("pending email change survived logout: %v", err)
+		}
+	})
+}
+
+func TestLogoutRevocationStoreFailureDoesNotCommitDatabaseOnlyRevocation(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Now().UTC()
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "logout-revocation-failure-" + uuid.NewString() + "@example.com",
+			Username: "logout-revocation-failure-" + uuid.NewString(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatal(err)
+		}
+
+		cacheStore := &sessionTestCache{values: map[string][]byte{}}
+		svc := newDBSessionServiceWithCache(t, tdb, 10*time.Minute, cacheStore, 0)
+		accessToken, refreshToken, err := svc.CreateSession(
+			ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "logout-test", now, "",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		identity, err := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		cacheStore.err = errSessionTestCache
+		err = svc.Logout(ctx, refreshToken, accessToken)
+		if !errors.Is(err, token.ErrRevocationStoreUnavailable) || !errors.Is(err, errSessionTestCache) {
+			t.Fatalf("Logout error = %v", err)
+		}
+		persisted, err := tdb.Store.GetSessionByID(ctx, identity.SessionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if persisted.RevokedAt != nil {
+			t.Fatalf("session was revoked despite failed marker write: %v", persisted.RevokedAt)
+		}
+		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(refreshToken)); err != nil {
+			t.Fatalf("refresh token was removed despite failed marker write: %v", err)
+		}
+
+		cacheStore.err = nil
+		if err := svc.Logout(ctx, refreshToken, accessToken); err != nil {
+			t.Fatalf("retry Logout failed: %v", err)
+		}
+		if _, err := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, now); !errors.Is(err, token.ErrRevokedToken) {
+			t.Fatalf("access token after successful retry = %v, want ErrRevokedToken", err)
+		}
+	})
+}
+
+func TestLogoutSerializesConcurrentRefreshBeforePublishingRevocation(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	suffix := uuid.NewString()
+	user, err := tdb.Store.CreateUser(ctx, domain.User{
+		Email:    "logout-refresh-race-" + suffix + "@example.com",
+		Username: "logout-refresh-race-" + suffix,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = tdb.Store.DeleteUser(context.Background(), user.ID)
+		_ = tdb.Store.DeleteOrganization(context.Background(), org.ID)
+	})
+
+	cacheStore := &blockingSetMaxCache{
+		Cache:   &sessionTestCache{values: map[string][]byte{}},
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	released := false
+	defer func() {
+		if !released {
+			close(cacheStore.release)
+		}
+	}()
+	svc := newDBSessionServiceWithCache(t, tdb, 10*time.Minute, cacheStore, 0)
+	issuedAt := time.Now().UTC().Add(-time.Minute)
+	_, refreshToken, err := svc.CreateSession(
+		ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "logout-refresh-race", issuedAt, "",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logoutResult := make(chan error, 1)
+	go func() { logoutResult <- svc.Logout(ctx, refreshToken, "") }()
+	select {
+	case <-cacheStore.started:
+	case <-ctx.Done():
+		t.Fatalf("logout did not reach revocation publication: %v", ctx.Err())
+	}
+
+	type refreshResult struct {
+		accessToken  string
+		refreshToken string
+		err          error
+	}
+	refreshStarted := make(chan struct{})
+	refreshed := make(chan refreshResult, 1)
+	go func() {
+		close(refreshStarted)
+		accessToken, nextRefreshToken, err := svc.RefreshSession(
+			ctx, refreshToken, token.AudienceApp, time.Now().UTC(),
+		)
+		refreshed <- refreshResult{accessToken: accessToken, refreshToken: nextRefreshToken, err: err}
+	}()
+	<-refreshStarted
+	select {
+	case result := <-refreshed:
+		t.Fatalf("refresh escaped while logout held the user lock: %v", result.err)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	close(cacheStore.release)
+	released = true
+	select {
+	case err := <-logoutResult:
+		if err != nil {
+			t.Fatalf("Logout failed: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatalf("logout timed out: %v", ctx.Err())
+	}
+	select {
+	case result := <-refreshed:
+		if !errors.Is(result.err, ErrInvalidRefreshToken) {
+			t.Fatalf("refresh after logout = %v, want ErrInvalidRefreshToken", result.err)
+		}
+		if result.accessToken != "" || result.refreshToken != "" {
+			t.Fatal("refresh returned tokens after concurrent logout")
+		}
+	case <-ctx.Done():
+		t.Fatalf("refresh timed out: %v", ctx.Err())
+	}
+}
+
+func TestLogoutWithOnlyAccessTokenRevokesThatToken(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Now().UTC()
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "access-only-logout-" + uuid.NewString() + "@example.com",
+			Username: "access-only-logout-" + uuid.NewString(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatal(err)
+		}
+
+		cacheStore := &sessionTestCache{values: map[string][]byte{}}
+		svc := newDBSessionServiceWithCache(t, tdb, 10*time.Minute, cacheStore, 0)
+		accessToken, _, err := svc.CreateSession(
+			ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "logout-test", now, "",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.Logout(ctx, "", accessToken); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, now); !errors.Is(err, token.ErrRevokedToken) {
+			t.Fatalf("access-only logout validation = %v, want ErrRevokedToken", err)
 		}
 	})
 }

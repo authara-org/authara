@@ -156,6 +156,12 @@ func (s *Service) TransferOrganizationOwnership(ctx context.Context, in Transfer
 		if err != nil {
 			return err
 		}
+		now := time.Now().UTC()
+		for _, userID := range []uuid.UUID{in.NewOwnerUserID, in.ActorUserID} {
+			if err := s.accessTokenRevocations.RevokeMembership(txCtx, userID, in.OrganizationID, now); err != nil {
+				return err
+			}
+		}
 
 		newOwner, err := s.store.UpdateOrganizationMembershipRole(
 			txCtx,
@@ -176,11 +182,7 @@ func (s *Service) TransferOrganizationOwnership(ctx context.Context, in Transfer
 			return err
 		}
 
-		now := time.Now().UTC()
 		for _, membership := range []domain.OrganizationMembership{newOwner, oldOwner} {
-			if err := s.accessTokenRevocations.RevokeMembership(txCtx, membership.UserID, in.OrganizationID, now); err != nil {
-				return err
-			}
 			if err := s.publish(txCtx, webhook.NewOrganizationMembershipUpdated(membership, now)); err != nil {
 				return err
 			}
@@ -290,10 +292,10 @@ func (s *Service) removeOrganizationMembership(
 			return err
 		}
 	}
-	if err := s.store.DeleteSessionsByOrganizationMembership(ctx, membership.OrganizationID, membership.UserID); err != nil {
+	if err := s.accessTokenRevocations.RevokeMembership(ctx, membership.UserID, membership.OrganizationID, now); err != nil {
 		return err
 	}
-	if err := s.accessTokenRevocations.RevokeMembership(ctx, membership.UserID, membership.OrganizationID, now); err != nil {
+	if err := s.store.DeleteSessionsByOrganizationMembership(ctx, membership.OrganizationID, membership.UserID); err != nil {
 		return err
 	}
 	if err := s.store.DeleteOrganizationMembership(ctx, membership.OrganizationID, membership.UserID); err != nil {
@@ -328,13 +330,13 @@ func (s *Service) deleteOrganization(
 			recipients = append(recipients, user.Email)
 		}
 	}
-	if err := s.store.DeleteSessionsByOrganization(ctx, org.ID); err != nil {
-		return err
-	}
 	for _, membership := range memberships {
 		if err := s.accessTokenRevocations.RevokeMembership(ctx, membership.UserID, org.ID, now); err != nil {
 			return err
 		}
+	}
+	if err := s.store.DeleteSessionsByOrganization(ctx, org.ID); err != nil {
+		return err
 	}
 	if err := s.store.DeleteOrganization(ctx, org.ID); err != nil {
 		return err

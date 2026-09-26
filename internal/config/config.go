@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/sethvargo/go-envconfig"
@@ -133,6 +134,10 @@ func (c *Config) validate() error {
 		)
 	}
 
+	if err := c.validateAccessTokenRevocation(); err != nil {
+		return err
+	}
+
 	if c.Values.AppEnv == "prod" && !c.Email.IsDeliverable() {
 		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must be smtp in production because password recovery routes are enabled")
 	}
@@ -158,6 +163,53 @@ func (c *Config) validate() error {
 		}
 		if internalAPIToken != c.InternalAPI.Token {
 			return fmt.Errorf("AUTHARA_INTERNAL_API_TOKEN must not contain leading or trailing whitespace")
+		}
+	}
+
+	return nil
+}
+
+func (c *Config) validateAccessTokenRevocation() error {
+	if c.Token.AccessTokenTTL > MaxAccessTokenTTL {
+		return fmt.Errorf(
+			"AUTHARA_ACCESS_TOKEN_TTL_MINUTES must be at most %d",
+			int(MaxAccessTokenTTL/time.Minute),
+		)
+	}
+
+	mode := c.Cache.AccessTokenRevocationMode
+	if mode == "" {
+		switch {
+		case c.Cache.Provider == "redis":
+			mode = AccessTokenRevocationModeImmediate
+		case c.Values.AppEnv == "dev" && c.Cache.Provider == "noop":
+			mode = AccessTokenRevocationModeExpiry
+		default:
+			return fmt.Errorf(
+				"AUTHARA_ACCESS_TOKEN_REVOCATION_MODE must be set to expiry when APP_ENV=prod and AUTHARA_CACHE_PROVIDER=noop",
+			)
+		}
+		c.Cache.AccessTokenRevocationMode = mode
+	}
+
+	switch mode {
+	case AccessTokenRevocationModeImmediate:
+		if c.Cache.Provider != "redis" {
+			return fmt.Errorf(
+				"AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=immediate requires AUTHARA_CACHE_PROVIDER=redis",
+			)
+		}
+	case AccessTokenRevocationModeExpiry:
+		if c.Cache.Provider != "noop" {
+			return fmt.Errorf(
+				"AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=expiry requires AUTHARA_CACHE_PROVIDER=noop",
+			)
+		}
+		if c.Token.AccessTokenTTL > ExpiryOnlyMaxAccessTokenTTL {
+			return fmt.Errorf(
+				"AUTHARA_ACCESS_TOKEN_TTL_MINUTES must be at most %d when AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=expiry",
+				int(ExpiryOnlyMaxAccessTokenTTL/time.Minute),
+			)
 		}
 	}
 

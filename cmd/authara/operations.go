@@ -14,7 +14,6 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	"github.com/authara-org/authara/internal/session/roles"
-	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/schema"
 	storetx "github.com/authara-org/authara/internal/store/tx"
@@ -35,6 +34,7 @@ type operationalCommandExecutor func(context.Context, operationalCommand) (strin
 
 type operationalStore interface {
 	GetUserByEmail(context.Context, string) (domain.User, error)
+	GetUserByIDForUpdate(context.Context, uuid.UUID) (domain.User, error)
 	AddUserPlatformRoleByName(context.Context, uuid.UUID, string) error
 	RemoveUserPlatformRoleByName(context.Context, uuid.UUID, string) error
 	UserHasPlatformRole(context.Context, uuid.UUID, string) (bool, error)
@@ -161,7 +161,11 @@ func executeOperationalCommandFromEnvironment(ctx context.Context, command opera
 		defer func() {
 			_ = ca.Close()
 		}()
-		deps.revocations = token.NewAccessTokenRevocations(ca, cfg.Token.AccessTokenTTL)
+		deps.revocations = bootstrap.NewAccessTokenRevocations(
+			cfg,
+			ca,
+			func() time.Duration { return bootstrap.AccessTokenRevocationMarkerTTL(cfg.Token.AccessTokenTTL) },
+		)
 	}
 
 	return executeOperationalCommand(ctx, deps, command)
@@ -205,7 +209,6 @@ func executeRoleCommand(
 	if now == nil {
 		now = time.Now
 	}
-	revokedAt := now()
 	var user domain.User
 	err := deps.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if roleName == roles.DBAdminRoleName {
@@ -216,6 +219,10 @@ func executeRoleCommand(
 
 		var err error
 		user, err = findOperationalUser(txCtx, deps.store, command.email)
+		if err != nil {
+			return err
+		}
+		user, err = deps.store.GetUserByIDForUpdate(txCtx, user.ID)
 		if err != nil {
 			return err
 		}
@@ -237,13 +244,14 @@ func executeRoleCommand(
 			}
 		}
 
+		revokedAt := now()
+		if err := deps.revocations.RevokeUser(txCtx, user.ID, revokedAt); err != nil {
+			return err
+		}
 		if err := deps.store.RemoveUserPlatformRoleByName(txCtx, user.ID, roleName); err != nil {
 			return err
 		}
-		if err := deps.store.RevokeAllSessionsForUser(txCtx, user.ID, revokedAt); err != nil {
-			return err
-		}
-		return deps.revocations.RevokeUser(txCtx, user.ID, revokedAt)
+		return deps.store.RevokeAllSessionsForUser(txCtx, user.ID, revokedAt)
 	})
 	if err != nil {
 		return "", fmt.Errorf("revoke %s role: %w", command.target, err)

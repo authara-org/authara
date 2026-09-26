@@ -496,7 +496,7 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		RecentAuthenticationEnabled: values[KeySessionRecentAuthenticationEnabled].(bool),
 		RecentAuthenticationWindow:  values[KeySessionRecentAuthenticationWindow].(time.Duration),
 	}
-	if err := validateSessionPolicies(tokenPolicy, sessionPolicy); err != nil {
+	if err := validateSessionPolicies(tokenPolicy, sessionPolicy, s.Cache.AccessTokenRevocationMode); err != nil {
 		return nil, err
 	}
 	organization := OrganizationPolicy{
@@ -587,7 +587,7 @@ func environmentRemovalProjectionError(err error) error {
 }
 
 func (s *Service) environmentRemovalProjectionErrors(key Key, fallbackValues map[Key]any) []error {
-	keys, validate := environmentRemovalProjectionValidator(key)
+	keys, validate := environmentRemovalProjectionValidator(key, s.Cache.AccessTokenRevocationMode)
 	if len(keys) == 0 {
 		return nil
 	}
@@ -608,7 +608,7 @@ func (s *Service) environmentRemovalProjectionErrors(key Key, fallbackValues map
 	return errorsByMask
 }
 
-func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) error) {
+func environmentRemovalProjectionValidator(key Key, revocationMode string) ([]Key, func(map[Key]any) error) {
 	switch key {
 	case KeyUIDefaultReturnTo:
 		return []Key{KeyUIDefaultReturnTo}, func(values map[Key]any) error {
@@ -632,6 +632,7 @@ func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) er
 					RecentAuthenticationEnabled: values[KeySessionRecentAuthenticationEnabled].(bool),
 					RecentAuthenticationWindow:  values[KeySessionRecentAuthenticationWindow].(time.Duration),
 				},
+				revocationMode,
 			)
 		}
 	case KeyWebhookEnabledEvents:
@@ -662,7 +663,7 @@ func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) er
 	return nil, nil
 }
 
-func validateSessionPolicies(token TokenPolicy, session SessionPolicy) error {
+func validateSessionPolicies(token TokenPolicy, session SessionPolicy, revocationMode string) error {
 	if token.AccessTokenTTL <= 0 || session.SessionTTL <= 0 || session.RefreshTokenTTL <= 0 || session.RecentAuthenticationWindow <= 0 {
 		return fmt.Errorf("%w: token and session lifetimes must be greater than zero", ErrInvalidValue)
 	}
@@ -671,6 +672,20 @@ func validateSessionPolicies(token TokenPolicy, session SessionPolicy) error {
 	}
 	if token.AccessTokenTTL >= session.RefreshTokenTTL {
 		return fmt.Errorf("%w: access-token lifetime must be shorter than refresh-token lifetime", ErrInvalidValue)
+	}
+	if token.AccessTokenTTL > MaxAccessTokenTTL {
+		return fmt.Errorf(
+			"%w: access-token lifetime must not exceed %s",
+			ErrInvalidValue,
+			MaxAccessTokenTTL,
+		)
+	}
+	if revocationMode == AccessTokenRevocationModeExpiry && token.AccessTokenTTL > ExpiryOnlyMaxAccessTokenTTL {
+		return fmt.Errorf(
+			"%w: access-token lifetime must not exceed %s in expiry-only revocation mode",
+			ErrInvalidValue,
+			ExpiryOnlyMaxAccessTokenTTL,
+		)
 	}
 	if session.RefreshTokenRotation > 0 && session.RefreshTokenRotation >= session.RefreshTokenTTL {
 		return fmt.Errorf("%w: refresh-token rotation interval must be shorter than refresh-token lifetime", ErrInvalidValue)

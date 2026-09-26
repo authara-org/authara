@@ -66,6 +66,7 @@ Examples:
 
 ```
 AUTHARA_CACHE_PROVIDER
+AUTHARA_ACCESS_TOKEN_REVOCATION_MODE
 AUTHARA_REDIS_HOST
 ```
 
@@ -131,6 +132,9 @@ AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL
 AUTHARA_RECENT_AUTHENTICATION_ENABLED
 AUTHARA_RECENT_AUTHENTICATION_WINDOW
 ```
+
+Access-token lifetime accepts 1 through 1440 minutes. Expiry-only revocation
+mode further limits it to 10 minutes.
 
 `AUTHARA_RECENT_AUTHENTICATION_ENABLED` defaults to `true`. Set it to `false`
 to let any active session perform sensitive account and administrative

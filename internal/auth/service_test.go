@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -72,6 +73,10 @@ func (c *authServiceTestCache) Set(_ context.Context, key string, value []byte, 
 	}
 	c.values[key] = append([]byte(nil), value...)
 	return nil
+}
+
+func (c *authServiceTestCache) SetMaxInt64(ctx context.Context, key string, value int64, ttl time.Duration) error {
+	return c.Set(ctx, key, []byte(strconv.FormatInt(value, 10)), ttl)
 }
 
 func (c *authServiceTestCache) Delete(_ context.Context, key string) error {

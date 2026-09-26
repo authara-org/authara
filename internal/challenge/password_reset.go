@@ -97,7 +97,11 @@ func (s *Service) CompletePasswordResetChallenge(
 			if err != nil {
 				return err
 			}
-			return s.executePasswordReset(txCtx, user, action, now)
+			markerAt := time.Now().UTC()
+			if now.After(markerAt) {
+				markerAt = now
+			}
+			return s.executePasswordReset(txCtx, user, action, now, markerAt)
 		},
 	)
 	return err
@@ -137,6 +141,7 @@ func (s *Service) executePasswordReset(
 	user domain.User,
 	action domain.PendingPasswordReset,
 	now time.Time,
+	markerAt time.Time,
 ) error {
 	if err := s.store.UpdatePasswordHash(ctx, action.UserID, action.PasswordHash); err != nil {
 		if errors.Is(err, store.ErrorAuthProviderNotFound) {
@@ -144,10 +149,10 @@ func (s *Service) executePasswordReset(
 		}
 		return err
 	}
-	if err := s.store.RevokeAllSessionsForUser(ctx, action.UserID, now); err != nil {
+	if err := s.accessTokenRevocations.RevokeUser(ctx, action.UserID, markerAt); err != nil {
 		return err
 	}
-	if err := s.accessTokenRevocations.RevokeUser(ctx, action.UserID, now); err != nil {
+	if err := s.store.RevokeAllSessionsForUser(ctx, action.UserID, now); err != nil {
 		return err
 	}
 	if err := s.store.DeletePendingPasswordResetsByUserID(ctx, action.UserID); err != nil {

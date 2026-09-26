@@ -445,6 +445,85 @@ func TestGeneralRuntimePoliciesRejectUnsafeCombinations(t *testing.T) {
 	}
 }
 
+func TestExpiryRevocationModeCapsDynamicAccessTokenTTL(t *testing.T) {
+	startup := &Config{Cache: Cache{AccessTokenRevocationMode: AccessTokenRevocationModeExpiry}}
+	store := newMemoryStore()
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: startup, Store: store, LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Set(context.Background(), KeyTokenAccessTTL, "10", uuid.New(), 0); err != nil {
+		t.Fatalf("set capped lifetime: %v", err)
+	}
+	if _, err := service.Set(context.Background(), KeyTokenAccessTTL, "11", uuid.New(), 1); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("set lifetime above cap error = %v, want ErrInvalidValue", err)
+	}
+	if got := service.CurrentToken().AccessTokenTTL; got != ExpiryOnlyMaxAccessTokenTTL {
+		t.Fatalf("access-token lifetime after rejected update = %s", got)
+	}
+
+	store.seed(KeyTokenAccessTTL, `11`, 2)
+	if err := service.Reconcile(context.Background()); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("reconcile lifetime above cap error = %v, want ErrInvalidValue", err)
+	}
+	if got := service.CurrentToken().AccessTokenTTL; got != ExpiryOnlyMaxAccessTokenTTL {
+		t.Fatalf("published lifetime after rejected reconcile = %s", got)
+	}
+}
+
+func TestImmediateRevocationModeKeepsLongDynamicAccessTokenTTL(t *testing.T) {
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{Cache: Cache{AccessTokenRevocationMode: AccessTokenRevocationModeImmediate}},
+		Store:   newMemoryStore(), LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Set(context.Background(), KeyTokenAccessTTL, "1440", uuid.New(), 0); err != nil {
+		t.Fatalf("set immediate-mode lifetime: %v", err)
+	}
+	if _, err := service.Set(context.Background(), KeyTokenAccessTTL, "1441", uuid.New(), 1); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("set lifetime above maximum error = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestImmediateRevocationModeRejectsEnvironmentAccessTokenTTLAboveMaximum(t *testing.T) {
+	_, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{Cache: Cache{AccessTokenRevocationMode: AccessTokenRevocationModeImmediate}},
+		Store:   newMemoryStore(),
+		LookupEnvironment: environment(map[string]string{
+			"AUTHARA_ACCESS_TOKEN_TTL_MINUTES": "1441",
+		}),
+	})
+	if !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("NewService error = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestExpiryRevocationModeRejectsUnsafeEnvironmentRemovalProjection(t *testing.T) {
+	store := newMemoryStore()
+	store.seed(KeyTokenAccessTTL, `11`, 1)
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{Cache: Cache{AccessTokenRevocationMode: AccessTokenRevocationModeExpiry}},
+		Store:   store,
+		LookupEnvironment: environment(map[string]string{
+			"AUTHARA_ACCESS_TOKEN_TTL_MINUTES": "10",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewService with safe effective environment value: %v", err)
+	}
+
+	_, err = service.Set(context.Background(), KeySessionTTL, "61", uuid.New(), 0)
+	if !errors.Is(err, ErrInvalidValue) || !strings.Contains(err.Error(), "after removing an environment override") {
+		t.Fatalf("Set error = %v, want unsafe environment-removal projection", err)
+	}
+}
+
 func TestRuntimePolicySelectionKeepsInfrastructureAndSchedulingAtStartup(t *testing.T) {
 	dynamic := []Key{
 		KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,

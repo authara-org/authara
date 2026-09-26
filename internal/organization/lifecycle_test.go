@@ -6,8 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/authara-org/authara/internal/webhook"
@@ -107,6 +109,56 @@ func TestRemoveOrganizationMemberRevokesOrganizationSession(t *testing.T) {
 		}
 		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, "lifecycle-refresh-token"); !errors.Is(err, store.ErrRefreshTokenNotFound) {
 			t.Fatalf("expected refresh-token deletion, got %v", err)
+		}
+	})
+}
+
+func TestRemoveOrganizationMemberRollsBackWhenAccessTokenRevocationStoreIsUnavailable(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "cache-owner@example.com", Username: "cache-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "Cache Failure Org", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		member, err := tdb.Store.CreateUser(ctx, domain.User{Email: "cache-member@example.com", Username: "cache-member"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+			OrganizationID: org.ID, UserID: member.ID, Role: domain.OrganizationRoleMember,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		session, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID: member.ID, ActiveOrganizationID: org.ID,
+			ExpiresAt: time.Now().Add(time.Hour), UserAgent: "test",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		storeFailure := errors.New("redis unavailable")
+		svc := New(Config{
+			Store: tdb.Store, Tx: tdb.Tx, Mode: OrgModeMulti,
+			AccessTokenRevocations: token.NewAccessTokenRevocations(
+				organizationUnavailableCache{err: storeFailure}, time.Hour,
+			),
+		})
+
+		err = svc.RemoveOrganizationMember(ctx, RemoveOrganizationMemberInput{
+			OrganizationID: org.ID, UserID: member.ID, ActorUserID: owner.ID,
+		})
+		if !errors.Is(err, token.ErrRevocationStoreUnavailable) || !errors.Is(err, storeFailure) {
+			t.Fatalf("RemoveOrganizationMember error = %v", err)
+		}
+		if _, err := tdb.Store.GetOrganizationMembership(ctx, org.ID, member.ID); err != nil {
+			t.Fatalf("membership was removed despite failed revocation: %v", err)
+		}
+		if _, err := tdb.Store.GetSessionByID(ctx, session.ID); err != nil {
+			t.Fatalf("session was removed despite failed revocation: %v", err)
 		}
 	})
 }
@@ -277,6 +329,27 @@ func TestDeleteOrganizationDoesNotDeadlockInvitationAcceptance(t *testing.T) {
 		t.Fatal("invitation acceptance did not finish after organization deletion")
 	}
 }
+
+type organizationUnavailableCache struct {
+	err error
+}
+
+func (c organizationUnavailableCache) Get(context.Context, string) ([]byte, error) {
+	return nil, c.err
+}
+func (c organizationUnavailableCache) GetMany(context.Context, ...string) ([][]byte, error) {
+	return nil, c.err
+}
+func (c organizationUnavailableCache) Set(context.Context, string, []byte, time.Duration) error {
+	return c.err
+}
+func (c organizationUnavailableCache) SetMaxInt64(context.Context, string, int64, time.Duration) error {
+	return c.err
+}
+func (c organizationUnavailableCache) Delete(context.Context, string) error { return c.err }
+func (organizationUnavailableCache) Close() error                           { return nil }
+
+var _ cache.Cache = organizationUnavailableCache{}
 
 func TestPersonalOrganizationMembershipRemovalRules(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)

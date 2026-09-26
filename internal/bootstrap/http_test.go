@@ -88,6 +88,10 @@ func (fakeBootstrapCounterCache) Set(ctx context.Context, key string, value []by
 	return nil
 }
 
+func (fakeBootstrapCounterCache) SetMaxInt64(ctx context.Context, key string, value int64, ttl time.Duration) error {
+	return nil
+}
+
 func (fakeBootstrapCounterCache) Delete(ctx context.Context, key string) error {
 	return nil
 }

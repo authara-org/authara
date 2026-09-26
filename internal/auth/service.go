@@ -138,6 +138,10 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 				return ErrCannotDeleteLastAdmin
 			}
 		}
+		now := time.Now()
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
+			return err
+		}
 		organizations := s.organizations
 		if organizations == nil {
 			organizations = organization.New(organization.Config{
@@ -156,10 +160,6 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 			return err
 		}
 		if err := s.store.DeleteUser(txCtx, userID); err != nil {
-			return err
-		}
-		now := time.Now()
-		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		return s.publish(txCtx, webhook.NewUserDeleted(userID, now))
@@ -1149,6 +1149,16 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		}
 
 		_, err = s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
+		if err != nil && !errors.Is(err, store.ErrorAuthProviderNotFound) {
+			return err
+		}
+		markerAt := time.Now().UTC()
+		if now.After(markerAt) {
+			markerAt = now
+		}
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, markerAt); err != nil {
+			return err
+		}
 		switch {
 		case err == nil:
 			err = s.store.UpdatePasswordHash(txCtx, userID, passwordHash)
@@ -1168,9 +1178,6 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
 			return err
 		}
-		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
-			return err
-		}
 		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
 			return err
 		}
@@ -1182,11 +1189,13 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 }
 
 func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
-	now := time.Now()
-
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		user, err := s.store.GetUserByID(txCtx, userID)
+		user, err := s.store.GetUserByIDForUpdate(txCtx, userID)
 		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		if err := s.store.DisableUser(txCtx, userID, now); err != nil {
@@ -1196,9 +1205,6 @@ func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 			return err
 		}
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
-			return err
-		}
-		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		if err := email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAccountDisabled, email.TemplateData{

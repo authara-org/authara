@@ -531,9 +531,13 @@ func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if currentRefresh, ok := authsession.ReadRefreshToken(r); ok {
-		currentAccess, _ := authsession.ReadAccessToken(r)
-		_ = h.Session.Logout(r.Context(), currentRefresh, currentAccess)
+	currentRefresh, hasCurrentRefresh := authsession.ReadRefreshToken(r)
+	currentAccess, hasCurrentAccess := authsession.ReadAccessToken(r)
+	if hasCurrentRefresh || hasCurrentAccess {
+		if err := h.Session.Logout(r.Context(), currentRefresh, currentAccess); err != nil {
+			h.renderInternalError(w, r)
+			return
+		}
 	}
 	authsession.ClearSessionCookies(w)
 	cookiePolicy := h.sessionCookiePolicy()

@@ -47,6 +47,8 @@ type Service struct {
 
 const authenticationChallengeTTL = 5 * time.Minute
 
+var errRefreshTokenReuseDetected = errors.New("refresh token reuse detected")
+
 func New(cfg SessionConfig) *Service {
 	access := cfg.AccessPolicy
 	if access == nil {
@@ -487,16 +489,7 @@ func (s *Service) SwitchSessionOrganization(
 
 func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audience token.Audience, now time.Time) (newAccessToken string, newRefreshToken string, err error) {
 	policy := s.policy.CurrentSession()
-	var resultErr error
-
-	revokeReusedRefreshToken := func(ctx context.Context, rt domain.RefreshToken) error {
-		cacheErr := s.accessTokenRevocations.RevokeSession(ctx, rt.SessionID, now)
-		if err := s.store.RevokeSession(ctx, rt.SessionID, now); err != nil {
-			return errors.Join(cacheErr, err)
-		}
-		resultErr = errors.Join(ErrRefreshTokenReuse, cacheErr)
-		return nil
-	}
+	var reusedRefreshToken domain.RefreshToken
 
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		hashed := hashRefreshToken(refreshToken)
@@ -506,7 +499,8 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrInvalidRefreshToken
 		}
 		if rt.ConsumedAt != nil {
-			return revokeReusedRefreshToken(ctx, rt)
+			reusedRefreshToken = rt
+			return errRefreshTokenReuseDetected
 		}
 		if rt.ExpiresAt.Before(now) {
 			return ErrInvalidRefreshToken
@@ -528,7 +522,8 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrInvalidRefreshToken
 		}
 		if rt.ConsumedAt != nil {
-			return revokeReusedRefreshToken(ctx, rt)
+			reusedRefreshToken = rt
+			return errRefreshTokenReuseDetected
 		}
 		if rt.ExpiresAt.Before(now) {
 			return ErrInvalidRefreshToken
@@ -628,14 +623,48 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		return nil
 	})
 
+	if errors.Is(err, errRefreshTokenReuseDetected) {
+		return "", "", s.revokeReusedRefreshToken(ctx, reusedRefreshToken, now)
+	}
 	if err != nil {
 		return "", "", err
 	}
-	if resultErr != nil {
-		return "", "", resultErr
-	}
 
 	return newAccessToken, newRefreshToken, nil
+}
+
+func (s *Service) revokeReusedRefreshToken(
+	ctx context.Context,
+	rt domain.RefreshToken,
+	observedAt time.Time,
+) error {
+	var cacheErr error
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		session, err := s.store.GetSessionByID(txCtx, rt.SessionID)
+		if err != nil {
+			return err
+		}
+		if err := s.store.LockUserForUpdate(txCtx, session.UserID); err != nil {
+			return err
+		}
+		if _, err := s.store.GetSessionByID(txCtx, rt.SessionID); err != nil {
+			return err
+		}
+
+		markerAt := time.Now().UTC()
+		if observedAt.After(markerAt) {
+			markerAt = observedAt
+		}
+		cacheErr = s.accessTokenRevocations.RevokeSession(txCtx, rt.SessionID, markerAt)
+		if err := s.store.RevokeSession(txCtx, rt.SessionID, observedAt); err != nil {
+			return errors.Join(cacheErr, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return errors.Join(ErrRefreshTokenReuse, cacheErr)
 }
 
 func (s *Service) CleanupExpiredData(ctx context.Context, now time.Time) error {
@@ -656,35 +685,65 @@ func (s *Service) CleanupExpiredData(ctx context.Context, now time.Time) error {
 }
 
 func (s *Service) Logout(ctx context.Context, refreshToken, accessToken string) error {
-	var cacheErr error
-	if accessToken != "" {
-		cacheErr = s.RevokeAccessToken(ctx, accessToken, time.Now())
+	refreshTokenFound := false
+	if refreshToken != "" {
+		hashed := hashRefreshToken(refreshToken)
+		err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+			rt, err := s.store.GetRefreshTokenByHash(txCtx, hashed)
+			if errors.Is(err, store.ErrRefreshTokenNotFound) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			refreshTokenFound = true
+			session, err := s.store.GetSessionByID(txCtx, rt.SessionID)
+			if err != nil {
+				return err
+			}
+			if err := s.store.LockUserForUpdate(txCtx, session.UserID); err != nil {
+				return err
+			}
+			rt, err = s.store.GetRefreshTokenByHash(txCtx, hashed)
+			if err != nil {
+				return err
+			}
+			if _, err := s.store.GetSessionByID(txCtx, rt.SessionID); err != nil {
+				return err
+			}
+			revokedAt := time.Now().UTC()
+			if err := s.accessTokenRevocations.RevokeSession(txCtx, rt.SessionID, revokedAt); err != nil {
+				return err
+			}
+			return s.store.RevokeSession(txCtx, rt.SessionID, revokedAt)
+		})
+		if err != nil {
+			return err
+		}
 	}
 
-	hashed := hashRefreshToken(refreshToken)
-
-	rt, err := s.store.GetRefreshTokenByHash(ctx, hashed)
-	if err != nil {
-		// Token missing, expired, already cleaned up
-		// Logout must still succeed
-		return cacheErr
+	if refreshTokenFound || accessToken == "" {
+		return nil
 	}
-
-	now := time.Now()
-	cacheErr = errors.Join(cacheErr, s.accessTokenRevocations.RevokeSession(ctx, rt.SessionID, now))
-	storeErr := s.store.RevokeSession(ctx, rt.SessionID, now)
-	return errors.Join(cacheErr, storeErr)
+	err := s.RevokeAccessToken(ctx, accessToken, time.Now().UTC())
+	if errors.Is(err, token.ErrInvalidToken) || errors.Is(err, token.ErrExpiredToken) || errors.Is(err, token.ErrInvalidClaims) {
+		// An invalid or expired access token carries no remaining authority.
+		return nil
+	}
+	return err
 }
 
 func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error {
-	now := time.Now()
-	cacheErr := s.accessTokenRevocations.RevokeUser(ctx, userID, now)
-	storeErr := s.store.RevokeAllSessionsForUser(
-		ctx,
-		userID,
-		now,
-	)
-	return errors.Join(cacheErr, storeErr)
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.LockUserForUpdate(txCtx, userID); err != nil {
+			return err
+		}
+		revokedAt := time.Now().UTC()
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, revokedAt); err != nil {
+			return err
+		}
+		return s.store.RevokeAllSessionsForUser(txCtx, userID, revokedAt)
+	})
 }
 
 func (s *Service) ValidateAccessToken(
@@ -849,18 +908,33 @@ func (s *Service) RevokeUserSession(
 	sessionID uuid.UUID,
 	now time.Time,
 ) error {
-	session, err := s.store.GetSessionByID(ctx, sessionID)
-	if err != nil {
-		return err
-	}
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		session, err := s.store.GetSessionByID(txCtx, sessionID)
+		if err != nil {
+			return err
+		}
 
-	// Ownership check is the important security boundary
-	if session.UserID != userID {
-		return ErrForbidden
-	}
-
-	cacheErr := s.accessTokenRevocations.RevokeSession(ctx, sessionID, now)
-	storeErr := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		// Ownership check is the important security boundary.
+		if session.UserID != userID {
+			return ErrForbidden
+		}
+		if err := s.store.LockUserForUpdate(txCtx, userID); err != nil {
+			return err
+		}
+		session, err = s.store.GetSessionByID(txCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		if session.UserID != userID {
+			return ErrForbidden
+		}
+		markerAt := time.Now().UTC()
+		if now.After(markerAt) {
+			markerAt = now
+		}
+		if err := s.accessTokenRevocations.RevokeSession(txCtx, sessionID, markerAt); err != nil {
+			return err
+		}
 		if err := s.store.RevokeSession(txCtx, sessionID, now); err != nil {
 			return err
 		}
@@ -869,7 +943,6 @@ func (s *Service) RevokeUserSession(
 		}
 		return nil
 	})
-	return errors.Join(cacheErr, storeErr)
 }
 
 func (s *Service) RevokeOtherUserSessions(
@@ -878,18 +951,25 @@ func (s *Service) RevokeOtherUserSessions(
 	currentSessionID uuid.UUID,
 	now time.Time,
 ) error {
-	sessions, err := s.store.ListActiveSessionsByUserID(ctx, userID, now)
-	if err != nil {
-		return err
-	}
-	var cacheErr error
-	for _, session := range sessions {
-		if session.ID != currentSessionID {
-			cacheErr = errors.Join(cacheErr, s.accessTokenRevocations.RevokeSession(ctx, session.ID, now))
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.LockUserForUpdate(txCtx, userID); err != nil {
+			return err
 		}
-	}
-
-	storeErr := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		sessions, err := s.store.ListActiveSessionsByUserID(txCtx, userID, now)
+		if err != nil {
+			return err
+		}
+		markerAt := time.Now().UTC()
+		if now.After(markerAt) {
+			markerAt = now
+		}
+		for _, session := range sessions {
+			if session.ID != currentSessionID {
+				if err := s.accessTokenRevocations.RevokeSession(txCtx, session.ID, markerAt); err != nil {
+					return err
+				}
+			}
+		}
 		if err := s.store.RevokeOtherSessionsByUserID(txCtx, userID, currentSessionID, now); err != nil {
 			return err
 		}
@@ -898,5 +978,4 @@ func (s *Service) RevokeOtherUserSessions(
 		}
 		return nil
 	})
-	return errors.Join(cacheErr, storeErr)
 }

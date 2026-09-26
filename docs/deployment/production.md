@@ -168,8 +168,14 @@ In multi-instance deployments, operators should consider:
 
 Some features, such as the default in-memory rate limiter, are instance-local.
 
-Set `AUTHARA_CACHE_PROVIDER=redis` to share rate limits and access-token
-revocations across instances.
+Use the same access-token revocation mode on every replica. The recommended
+production profile is `AUTHARA_CACHE_PROVIDER=redis` with
+`AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=immediate`; it shares rate limits and
+rejects revoked access tokens across instances. A deliberately minimal
+deployment may use `AUTHARA_CACHE_PROVIDER=noop` with the explicitly required
+`AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=expiry`, which permits issued access
+tokens to remain usable for at most 10 minutes after logout or an authorization
+change. Do not mix these profiles during a rolling deployment.
 
 Runtime-setting writes take effect immediately on the accepting Core replica.
 Other replicas reconcile the PostgreSQL revision every two seconds. Plan for

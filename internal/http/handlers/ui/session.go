@@ -23,10 +23,13 @@ import (
 func (h *UIHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	refreshToken, exists := session.ReadRefreshToken(r)
-	if exists {
-		accessToken, _ := session.ReadAccessToken(r)
-		_ = h.Session.Logout(ctx, refreshToken, accessToken)
+	refreshToken, hasRefreshToken := session.ReadRefreshToken(r)
+	accessToken, hasAccessToken := session.ReadAccessToken(r)
+	if hasRefreshToken || hasAccessToken {
+		if err := h.Session.Logout(ctx, refreshToken, accessToken); err != nil {
+			h.renderInternalError(w, r)
+			return
+		}
 	}
 
 	session.ClearSessionCookies(w)

@@ -21,6 +21,7 @@ settings_metadata:
   AUTHARA_DB_CONN_MAX_LIFETIME: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_DB_CONN_MAX_IDLE_TIME: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_CACHE_PROVIDER: {control: env, reload: startup, sensitive: false, group: cache}
+  AUTHARA_ACCESS_TOKEN_REVOCATION_MODE: {control: env, reload: startup, sensitive: false, group: cache}
   AUTHARA_REDIS_HOST: {control: env, reload: startup, sensitive: false, group: cache}
   AUTHARA_REDIS_PORT: {control: env, reload: startup, sensitive: false, group: cache}
   AUTHARA_REDIS_PASSWORD: {control: env, reload: startup, sensitive: true, group: cache}
@@ -224,6 +225,16 @@ variables:
       - noop
       - redis
 
+  - name: AUTHARA_ACCESS_TOKEN_REVOCATION_MODE
+    stability: stable
+    required: false
+    type: enum
+    description: Immediate mode checks Redis and fails closed. Expiry mode accepts the documented residual risk and caps access-token TTL at 10 minutes.
+    allowed_values:
+      - immediate
+      - expiry
+    notes: Inferred as immediate with Redis and as expiry for dev/noop. Production/noop must set expiry explicitly.
+
   - name: AUTHARA_REDIS_HOST
     stability: stable
     required: false
@@ -320,6 +331,8 @@ variables:
     required: false
     type: int
     default: 10
+    minimum: 1
+    maximum: 1440
 
   - name: AUTHARA_SESSION_TTL_DAYS
     stability: stable

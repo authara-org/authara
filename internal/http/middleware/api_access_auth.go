@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -28,6 +29,15 @@ func RequireAPIAccessAuth(sessionSvc *session.Service, audience token.Audience, 
 
 			identity, err := sessionSvc.ValidateAccessToken(ctx, accessToken, audience, now())
 			if err != nil {
+				if errors.Is(err, token.ErrRevocationStoreUnavailable) {
+					response.ErrorJSON(
+						w,
+						http.StatusServiceUnavailable,
+						response.CodeInternalError,
+						"Authentication service unavailable",
+					)
+					return
+				}
 				response.ErrorJSON(
 					w,
 					http.StatusUnauthorized,

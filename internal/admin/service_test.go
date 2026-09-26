@@ -6,9 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/session/roles"
+	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
@@ -92,6 +94,51 @@ func TestDisableUserRevokesSessionsAndAudits(t *testing.T) {
 		}
 		if got := testutil.CountEmailJobs(t, ctx, target.Email, domain.EmailTemplateAccountDisabled); got != 1 {
 			t.Fatalf("account-disabled email jobs = %d, want 1", got)
+		}
+	})
+}
+
+func TestDisableUserRollsBackWhenAccessTokenRevocationStoreIsUnavailable(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		actor := createAdminTestUser(t, ctx, tdb, "disable-cache-actor@example.com", "disable-cache-actor", true)
+		target := createAdminTestUser(t, ctx, tdb, "disable-cache-target@example.com", "disable-cache-target", false)
+		session := createAdminTestSession(t, ctx, tdb, target.ID)
+		if err := tdb.Store.CreateRefreshToken(ctx, domain.RefreshToken{
+			SessionID: session.ID, OrganizationID: session.ActiveOrganizationID,
+			TokenHash: "disable-cache-refresh", ExpiresAt: fixedAdminTestNow().Add(time.Hour),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		storeFailure := errors.New("redis unavailable")
+		svc := New(Config{
+			Store: tdb.Store, Tx: tdb.Tx, Now: fixedAdminTestNow,
+			AccessTokenRevocations: token.NewAccessTokenRevocations(
+				adminUnavailableCache{err: storeFailure}, time.Hour,
+			),
+		})
+
+		err := svc.DisableUser(ctx, Actor{UserID: actor.ID}, target.ID, RequestMeta{})
+		if !errors.Is(err, token.ErrRevocationStoreUnavailable) || !errors.Is(err, storeFailure) {
+			t.Fatalf("DisableUser error = %v", err)
+		}
+		disabled, err := tdb.Store.IsUserDisabled(ctx, target.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if disabled {
+			t.Fatal("user was disabled despite failed access-token revocation")
+		}
+		persistedSession, err := tdb.Store.GetSessionByID(ctx, session.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if persistedSession.RevokedAt != nil {
+			t.Fatal("session was revoked despite failed access-token revocation")
+		}
+		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, "disable-cache-refresh"); err != nil {
+			t.Fatalf("refresh token was removed despite rollback: %v", err)
 		}
 	})
 }
@@ -545,3 +592,22 @@ func createAdminTestSession(t *testing.T, ctx context.Context, tdb *testutil.Tes
 func fixedAdminTestNow() time.Time {
 	return time.Date(2026, 5, 18, 12, 0, 0, 0, time.UTC)
 }
+
+type adminUnavailableCache struct {
+	err error
+}
+
+func (c adminUnavailableCache) Get(context.Context, string) ([]byte, error) { return nil, c.err }
+func (c adminUnavailableCache) GetMany(context.Context, ...string) ([][]byte, error) {
+	return nil, c.err
+}
+func (c adminUnavailableCache) Set(context.Context, string, []byte, time.Duration) error {
+	return c.err
+}
+func (c adminUnavailableCache) SetMaxInt64(context.Context, string, int64, time.Duration) error {
+	return c.err
+}
+func (c adminUnavailableCache) Delete(context.Context, string) error { return c.err }
+func (adminUnavailableCache) Close() error                           { return nil }
+
+var _ cache.Cache = adminUnavailableCache{}

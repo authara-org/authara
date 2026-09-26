@@ -279,12 +279,12 @@ func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID u
 				return ErrLastOrganizationOwner
 			}
 		}
-		membership, err = s.store.UpdateOrganizationMembershipRole(txCtx, organizationID, userID, role)
-		if err != nil {
-			return err
-		}
 		now := time.Now().UTC()
 		if err := s.accessTokenRevocations.RevokeMembership(txCtx, userID, organizationID, now); err != nil {
+			return err
+		}
+		membership, err = s.store.UpdateOrganizationMembershipRole(txCtx, organizationID, userID, role)
+		if err != nil {
 			return err
 		}
 		if current.Role != membership.Role {

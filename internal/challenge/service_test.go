@@ -38,6 +38,13 @@ func (c *toggleFailureCache) Set(context.Context, string, []byte, time.Duration)
 	return nil
 }
 
+func (c *toggleFailureCache) SetMaxInt64(context.Context, string, int64, time.Duration) error {
+	if c.fail.Load() {
+		return c.err
+	}
+	return nil
+}
+
 func TestRunningChallengeServicesObservePolicyChangesWithoutReconstruction(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {

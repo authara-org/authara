@@ -50,13 +50,14 @@ func NewServices(app *App) (Services, error) {
 		app.Config.Token.Issuer,
 		func() time.Duration { return app.Config.CurrentToken().AccessTokenTTL },
 	)
-	accessTokenRevocations := token.NewAccessTokenRevocationsWithTTL(
+	accessTokenRevocations := NewAccessTokenRevocations(
+		app.Config.Startup(),
 		app.Cache,
 		func() time.Duration {
 			// Operator-managed access-token lifetimes are capped at 24 hours.
 			// Keep scope revocations for at least that long so lowering the
 			// policy cannot let an older, longer-lived token outlast its marker.
-			return max(app.Config.CurrentToken().AccessTokenTTL, 24*time.Hour)
+			return AccessTokenRevocationMarkerTTL(app.Config.CurrentToken().AccessTokenTTL)
 		},
 	)
 
