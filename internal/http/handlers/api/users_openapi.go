@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/store"
@@ -62,7 +63,10 @@ func (h *APIHandler) SetCurrentUserPassword(ctx context.Context, request contrac
 		return setCurrentUserPasswordError(code, message), nil
 	}
 	if err := h.Auth.SetPassword(ctx, userID, passwordHash, time.Now().UTC()); err != nil {
-		if errors.Is(err, store.ErrUserNotFound) {
+		switch {
+		case errors.Is(err, auth.ErrPasswordAlreadyExists):
+			return setCurrentUserPasswordError(codePasswordAlreadyExists, "A password is already set for this account."), nil
+		case errors.Is(err, store.ErrUserNotFound):
 			return setCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized"), nil
 		}
 		return setCurrentUserPasswordError(responseCodeInternalError(), "Password error"), nil

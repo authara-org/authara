@@ -504,8 +504,10 @@ See [Errors](errors.md) for error definitions.
 
 ## Set current user password
 
-Creates or replaces the authenticated user's password. The user ID is taken
-from the access token; clients cannot supply one.
+Creates the authenticated user's password only when the account does not
+already have one. The user ID is taken from the access token; clients cannot
+supply one. Use `PUT /auth/api/v1/account/password` to change an existing
+password.
 
 ```text
 PUT /auth/api/v1/users/password
@@ -520,7 +522,8 @@ Content-Type: application/json
 
 Requires the access and CSRF cookies. Returns `204 No Content` and revokes all
 existing sessions and refresh tokens. Errors: `400 invalid_request`,
-`401 unauthorized`, `403 forbidden`, or `500 internal_error`.
+`401 unauthorized`, `403 forbidden`, `409 password_already_exists`, or
+`500 internal_error`.
 
 ---
 

@@ -288,6 +288,8 @@ func setCurrentUserPasswordError(code response.ErrorCode, message string) contra
 		return contract.SetCurrentUserPassword401JSONResponse(body)
 	case http.StatusForbidden:
 		return contract.SetCurrentUserPassword403JSONResponse(body)
+	case http.StatusConflict:
+		return contract.SetCurrentUserPassword409JSONResponse(body)
 	default:
 		return contract.SetCurrentUserPassword500JSONResponse(body)
 	}

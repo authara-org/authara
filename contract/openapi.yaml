@@ -1593,7 +1593,7 @@ paths:
       operationId: setCurrentUserPassword
       tags: [Users]
       summary: Set the authenticated user's password
-      description: Creates or replaces the password authentication method for the user identified by the access token and revokes all existing sessions.
+      description: Creates the password authentication method for a passwordless user identified by the access token and revokes all existing sessions. Returns a conflict when the user already has a password; use the account password endpoint to change it.
       security:
         - accessCookie: []
           csrfCookie: []
@@ -1605,6 +1605,7 @@ paths:
         "400": [invalid_request]
         "401": [unauthorized]
         "403": [forbidden]
+        "409": [password_already_exists]
         "428": [recent_authentication_required]
         "500": [internal_error]
       requestBody:
@@ -1621,6 +1622,8 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "428":
           $ref: "#/components/responses/Error"

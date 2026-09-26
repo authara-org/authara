@@ -1149,7 +1149,10 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		}
 
 		_, err = s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
-		if err != nil && !errors.Is(err, store.ErrorAuthProviderNotFound) {
+		if err == nil {
+			return ErrPasswordAlreadyExists
+		}
+		if !errors.Is(err, store.ErrorAuthProviderNotFound) {
 			return err
 		}
 		markerAt := time.Now().UTC()
@@ -1159,16 +1162,11 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, markerAt); err != nil {
 			return err
 		}
-		switch {
-		case err == nil:
-			err = s.store.UpdatePasswordHash(txCtx, userID, passwordHash)
-		case errors.Is(err, store.ErrorAuthProviderNotFound):
-			_, err = s.store.CreateAuthProvider(txCtx, domain.AuthProvider{
-				UserID:       userID,
-				Provider:     domain.ProviderPassword,
-				PasswordHash: &passwordHash,
-			})
-		}
+		_, err = s.store.CreateAuthProvider(txCtx, domain.AuthProvider{
+			UserID:       userID,
+			Provider:     domain.ProviderPassword,
+			PasswordHash: &passwordHash,
+		})
 		if err != nil {
 			return err
 		}
