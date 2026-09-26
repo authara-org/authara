@@ -89,13 +89,17 @@ PUBLIC_URL
 
 ### Authentication
 
-Controls optional authentication behavior. Username login is disabled by
-default; email login remains available in either mode.
+Controls optional authentication behavior and the policy applied when a
+password is created or replaced. Username login is disabled by default; email
+login remains available in either mode. Passwords are measured in Unicode
+characters and allow passphrases without composition rules. A minimum of 15 is
+recommended for production.
 
 Example:
 
 ```
 AUTHARA_USERNAME_LOGIN_ENABLED
+AUTHARA_PASSWORD_MIN_LENGTH
 ```
 
 ---

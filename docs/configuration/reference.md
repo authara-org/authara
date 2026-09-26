@@ -93,10 +93,26 @@ PUBLIC_URL
 `AUTHARA_USERNAME_LOGIN_ENABLED` controls whether password login accepts a
 username in addition to an email address. It defaults to `false`.
 
+`AUTHARA_PASSWORD_MIN_LENGTH` controls the minimum Unicode-character length for
+new passwords (8–128, default 8; 15 or more is recommended in production).
+Authara does not impose uppercase, lowercase, digit, or symbol composition
+rules. This startup setting requires a restart; existing passwords continue to
+authenticate when the minimum changes.
+
+After a successful password proof, Authara compares the stored Argon2id costs,
+salt length, and derived-key length with the current parameters. An outdated
+hash is replaced before authentication completes. The write uses the exact old
+hash as a compare-and-swap condition, so a concurrent password change or reset
+cannot be overwritten. This maintenance update does not revoke sessions, send
+password-change mail, or publish a user-change event. If a required upgrade
+cannot be safely stored, the authentication request fails without changing the
+credential.
+
 Example:
 
 ```
 AUTHARA_USERNAME_LOGIN_ENABLED
+AUTHARA_PASSWORD_MIN_LENGTH
 ```
 
 ---

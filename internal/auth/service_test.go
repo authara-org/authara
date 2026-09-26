@@ -19,6 +19,7 @@ import (
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/argon2"
 )
 
 type staticAccessPolicy struct {
@@ -580,6 +581,92 @@ func TestLogin_WithPassword_Succeeds(t *testing.T) {
 		}
 		if got.ID != user.ID {
 			t.Fatalf("expected user id %q, got %q", user.ID, got.ID)
+		}
+	})
+}
+
+func TestLogin_WithPassword_UpgradesOutdatedHash(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		password := "an old but valid password"
+		salt := []byte("1234567890abcdef")
+		outdatedHash := encodeHash(2, 32*1024, 2, salt, argon2.IDKey([]byte(password), salt, 2, 32*1024, 2, 24))
+		user := createPasswordUser(t, ctx, tdb, "rehash-login@example.com", "rehash-login", outdatedHash)
+
+		svc := New(Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			AccessPolicy: staticAccessPolicy{allowed: true},
+		})
+		if _, err := svc.Login(ctx, LoginInput{
+			Provider: domain.ProviderPassword,
+			Email:    user.Email,
+			Password: password,
+		}); err != nil {
+			t.Fatalf("Login failed: %v", err)
+		}
+
+		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if provider.PasswordHash == nil || *provider.PasswordHash == outdatedHash {
+			t.Fatal("successful login did not replace the outdated hash")
+		}
+		verification, err := VerifyPasswordHash(password, *provider.PasswordHash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !verification.Valid || verification.NeedsRehash {
+			t.Fatalf("upgraded hash verification = %+v", verification)
+		}
+	})
+}
+
+func TestLogin_WithPassword_DoesNotUpgradeBeforeSuccessfulVerification(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		password := "an old but valid password"
+		salt := []byte("1234567890abcdef")
+		outdatedHash := encodeHash(2, 32*1024, 2, salt, argon2.IDKey([]byte(password), salt, 2, 32*1024, 2, 24))
+		user := createPasswordUser(t, ctx, tdb, "no-rehash@example.com", "no-rehash", outdatedHash)
+
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, AccessPolicy: staticAccessPolicy{allowed: true}})
+		_, err := svc.Login(ctx, LoginInput{Provider: domain.ProviderPassword, Email: user.Email, Password: "wrong password"})
+		if !errors.Is(err, ErrInvalidCredentials) {
+			t.Fatalf("Login error = %v, want ErrInvalidCredentials", err)
+		}
+
+		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if provider.PasswordHash == nil || *provider.PasswordHash != outdatedHash {
+			t.Fatal("failed login changed the stored password hash")
+		}
+	})
+}
+
+func TestPasswordHashCompareAndSwapDoesNotOverwriteConcurrentChange(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user := createPasswordUser(t, ctx, tdb, "cas-password@example.com", "cas-password", "newer-hash")
+		updated, err := tdb.Store.CompareAndSwapPasswordHash(ctx, user.ID, "stale-hash", "replacement-hash")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if updated {
+			t.Fatal("stale expected hash unexpectedly replaced a newer credential")
+		}
+		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if provider.PasswordHash == nil || *provider.PasswordHash != "newer-hash" {
+			t.Fatalf("stored password hash = %v, want newer-hash", provider.PasswordHash)
 		}
 	})
 }

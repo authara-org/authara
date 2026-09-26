@@ -1,6 +1,12 @@
 package auth
 
-import "testing"
+import (
+	"encoding/base64"
+	"fmt"
+	"testing"
+
+	"golang.org/x/crypto/argon2"
+)
 
 func TestHashAndVerify(t *testing.T) {
 	password := "super-secret-password"
@@ -31,6 +37,58 @@ func TestVerifyWrongPassword(t *testing.T) {
 	}
 	if ok {
 		t.Fatalf("expected password verification to fail")
+	}
+}
+
+func TestVerifyPasswordHashReportsOutdatedParameters(t *testing.T) {
+	password := "correct horse battery staple"
+	salt := []byte("1234567890abcdef")
+	hash := argon2.IDKey([]byte(password), salt, 1, 4*1024, 1, 12)
+	encoded := encodeHash(1, 4*1024, 1, salt, hash)
+
+	verification, err := VerifyPasswordHash(password, encoded)
+	if err != nil {
+		t.Fatalf("VerifyPasswordHash returned error: %v", err)
+	}
+	if !verification.Valid || !verification.NeedsRehash {
+		t.Fatalf("verification = %+v, want valid and needing rehash", verification)
+	}
+
+	verification, err = VerifyPasswordHash("wrong password", encoded)
+	if err != nil {
+		t.Fatalf("wrong-password verification returned error: %v", err)
+	}
+	if verification.Valid || verification.NeedsRehash {
+		t.Fatalf("wrong-password verification = %+v", verification)
+	}
+}
+
+func TestVerifyPasswordHashCurrentParametersDoNotNeedRehash(t *testing.T) {
+	encoded, err := Hash("correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	verification, err := VerifyPasswordHash("correct horse battery staple", encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !verification.Valid || verification.NeedsRehash {
+		t.Fatalf("verification = %+v, want valid and current", verification)
+	}
+}
+
+func TestVerifyPasswordHashRejectsUnsafeParameters(t *testing.T) {
+	salt := base64.RawStdEncoding.EncodeToString([]byte("1234567890abcdef"))
+	hash := base64.RawStdEncoding.EncodeToString(make([]byte, 32))
+	tests := []string{
+		fmt.Sprintf("$argon2id$v=1$t=0$m=65536$p=4$%s$%s", salt, hash),
+		fmt.Sprintf("$argon2id$v=1$t=3$m=4294967295$p=4$%s$%s", salt, hash),
+		fmt.Sprintf("$argon2id$v=1$t=3$m=65536$p=260$%s$%s", salt, hash),
+	}
+	for _, encoded := range tests {
+		if _, err := VerifyPasswordHash("password", encoded); err == nil {
+			t.Fatalf("expected unsafe hash parameters to be rejected: %s", encoded)
+		}
 	}
 }
 

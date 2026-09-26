@@ -471,15 +471,9 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentPassword := strings.TrimSpace(r.FormValue("current_password"))
-	newPassword := strings.TrimSpace(r.FormValue("new_password"))
-	confirmPassword := strings.TrimSpace(r.FormValue("confirm_password"))
-
-	if !validation.IsValidPassword(newPassword) {
-		htmx.ReSwap(w, "none")
-		_ = h.Render(w, r, http.StatusUnprocessableEntity, toast.ToastMessage(toast.Error, "Please provide a valid new password."))
-		return
-	}
+	currentPassword := r.FormValue("current_password")
+	newPassword := r.FormValue("new_password")
+	confirmPassword := r.FormValue("confirm_password")
 
 	if newPassword != confirmPassword {
 		htmx.ReSwap(w, "none")
@@ -487,8 +481,13 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newPasswordHash, err := auth.Hash(newPassword)
+	newPasswordHash, err := h.Auth.HashPassword(ctx, newPassword)
 	if err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			htmx.ReSwap(w, "none")
+			_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, message))
+			return
+		}
 		h.Logger.Error("hash password failed", "err", err)
 		htmx.ReSwap(w, "none")
 		_ = h.Render(w, r, http.StatusInternalServerError, toast.ToastMessage(toast.Error, "Something went wrong."))

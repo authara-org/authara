@@ -14,7 +14,6 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
-	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/organization"
 	authsession "github.com/authara-org/authara/internal/session"
@@ -336,8 +335,29 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 	}
 
 	password := r.FormValue("password")
-	if !validation.IsValidPassword(password) {
-		h.renderInvitationSignupError(w, r, http.StatusUnprocessableEntity, "Please provide a valid password.", preview, token)
+	if err := h.Auth.ValidatePassword(r.Context(), password); err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderInvitationSignupError(w, r, status, message, preview, token)
+			return
+		}
+		h.renderInternalError(w, r)
+		return
+	}
+
+	ip := httputil.ClientIP(r)
+	allowed, err := h.Limiter.AllowSignupAttempt(r.Context(), ip, preview.Invitation.Email)
+	if err != nil || !allowed {
+		h.renderInvitationSignupError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token)
+		return
+	}
+
+	passwordHash, err := h.Auth.HashPassword(r.Context(), password)
+	if err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderInvitationSignupError(w, r, status, message, preview, token)
+			return
+		}
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -359,19 +379,6 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 			preview,
 			token,
 		)
-		return
-	}
-
-	ip := httputil.ClientIP(r)
-	allowed, err := h.Limiter.AllowSignupAttempt(r.Context(), ip, preview.Invitation.Email)
-	if err != nil || !allowed {
-		h.renderInvitationSignupError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token)
-		return
-	}
-
-	passwordHash, err := auth.Hash(password)
-	if err != nil {
-		h.renderInternalError(w, r)
 		return
 	}
 

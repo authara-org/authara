@@ -81,6 +81,7 @@ func NewServices(app *App) (Services, error) {
 		AccessPolicy:           accessPolicy,
 		Organizations:          organizationService,
 		AccessTokenRevocations: accessTokenRevocations,
+		PasswordMinimumLength:  app.Config.Authentication.PasswordMinimumLength,
 	})
 
 	sessionService := session.New(session.SessionConfig{

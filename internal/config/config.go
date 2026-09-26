@@ -79,6 +79,9 @@ func Load() (*Config, error) {
 	if err := cfg.Organization.validate(); err != nil {
 		return nil, err
 	}
+	if err := cfg.Authentication.validate(); err != nil {
+		return nil, err
+	}
 	if err := cfg.Challenge.validate(); err != nil {
 		return nil, err
 	}

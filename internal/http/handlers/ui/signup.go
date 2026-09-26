@@ -50,11 +50,19 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !validation.IsValidEmail(form.Email) || !validation.IsValidPassword(form.Password) {
-		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Please provide a valid email and password.", authview.SignupForm())
+	if !validation.IsValidEmail(form.Email) {
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Please provide a valid email address.", authview.SignupForm())
 		return
 	}
 	if _, ok := h.requireSignupAppAudience(w, r, authview.SignupForm()); !ok {
+		return
+	}
+	if err := h.Auth.ValidatePassword(ctx, form.Password); err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderFormError(w, r, status, message, authview.SignupForm())
+			return
+		}
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -64,9 +72,18 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.SignupForm())
 		return
 	}
+	passwordHash, err := h.Auth.HashPassword(ctx, form.Password)
+	if err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderFormError(w, r, status, message, authview.SignupForm())
+			return
+		}
+		h.renderInternalError(w, r)
+		return
+	}
 
 	if h.Features.ChallengeEnabled {
-		h.startSignupChallenge(w, r, form.Email, form.Password)
+		h.startSignupChallenge(w, r, form.Email, passwordHash)
 		return
 	}
 
@@ -74,11 +91,6 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	passwordHash, err := auth.Hash(form.Password)
-	if err != nil {
-		h.renderInternalError(w, r)
-		return
-	}
 	h.finishSignup(
 		w,
 		r,
@@ -109,15 +121,9 @@ func (h *UIHandler) startSignupChallenge(
 	w http.ResponseWriter,
 	r *http.Request,
 	email string,
-	password string,
+	passwordHash string,
 ) {
 	ctx := r.Context()
-
-	passwordHash, err := auth.Hash(password)
-	if err != nil {
-		h.renderInternalError(w, r)
-		return
-	}
 
 	exists, err := h.Auth.UserExistsByEmail(ctx, email)
 	if err != nil {

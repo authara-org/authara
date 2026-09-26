@@ -2,6 +2,7 @@ package ui
 
 import (
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/authara-org/authara/internal/admin"
@@ -40,6 +41,14 @@ type UIHandler struct {
 	RefreshTTL time.Duration
 
 	Render render.Renderer
+}
+
+func (h *UIHandler) passwordPolicyError(err error) (int, string, bool) {
+	message, ok := auth.PasswordPolicyMessage(err, h.Auth.PasswordMinimumLength())
+	if !ok {
+		return 0, "", false
+	}
+	return http.StatusUnprocessableEntity, message, true
 }
 
 func (h *UIHandler) usernameLoginEnabled() bool {

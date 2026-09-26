@@ -29,6 +29,7 @@ type Config struct {
 	OAuthProviders         oauth.OAuthProviders
 	Organizations          *organization.Service
 	AccessTokenRevocations *token.AccessTokenRevocations
+	PasswordMinimumLength  int
 }
 
 type Service struct {
@@ -40,6 +41,7 @@ type Service struct {
 	oauthProviders         oauth.OAuthProviders
 	organizations          *organization.Service
 	accessTokenRevocations *token.AccessTokenRevocations
+	passwordMinimumLength  int
 }
 
 type emailAllowPolicy interface {
@@ -65,6 +67,7 @@ func New(cfg Config) *Service {
 		oauthProviders:         cfg.OAuthProviders,
 		organizations:          cfg.Organizations,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
+		passwordMinimumLength:  cfg.PasswordMinimumLength,
 	}
 }
 
@@ -426,12 +429,8 @@ func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (domain.
 		return domain.User{}, err
 	}
 
-	verified, err := Verify(in.Password, *authProvider.PasswordHash)
-	if err != nil {
+	if err := s.verifyAndUpgradePassword(ctx, user.ID, in.Password, authProvider.PasswordHash); err != nil {
 		return domain.User{}, err
-	}
-	if !verified {
-		return domain.User{}, ErrInvalidCredentials
 	}
 
 	return user, nil
@@ -1009,6 +1008,52 @@ func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, password
 		return ErrInvalidCredentials
 	}
 	return nil
+}
+
+func (s *Service) verifyAndUpgradePassword(ctx context.Context, userID uuid.UUID, password string, passwordHash *string) error {
+	if passwordHash == nil {
+		return ErrInvalidCredentials
+	}
+
+	storedHash := *passwordHash
+	for attempt := 0; attempt < 2; attempt++ {
+		verification, err := VerifyPasswordHash(password, storedHash)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("invalid stored password hash", "user_id", userID, "error", err)
+			}
+			return ErrInvalidCredentials
+		}
+		if !verification.Valid {
+			return ErrInvalidCredentials
+		}
+		if !verification.NeedsRehash {
+			return nil
+		}
+
+		upgradedHash, err := hashPassword(password)
+		if err != nil {
+			return err
+		}
+		updated, err := s.store.CompareAndSwapPasswordHash(ctx, userID, storedHash, upgradedHash)
+		if err != nil {
+			return err
+		}
+		if updated {
+			return nil
+		}
+
+		provider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, userID)
+		if err != nil || provider.PasswordHash == nil {
+			if errors.Is(err, store.ErrorAuthProviderNotFound) || provider.PasswordHash == nil {
+				return ErrInvalidCredentials
+			}
+			return err
+		}
+		storedHash = *provider.PasswordHash
+	}
+
+	return ErrInvalidCredentials
 }
 
 func (s *Service) VerifyExternalIdentity(

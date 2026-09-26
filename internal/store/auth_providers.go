@@ -168,6 +168,22 @@ func (s *Store) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, passwo
 	return nil
 }
 
+func (s *Store) CompareAndSwapPasswordHash(ctx context.Context, userID uuid.UUID, oldPasswordHash, newPasswordHash string) (bool, error) {
+	res, err := s.exec(ctx, `
+		UPDATE auth_providers
+		SET password_hash = $1
+		WHERE user_id = $2 AND provider = $3 AND password_hash = $4
+	`, newPasswordHash, userID, string(domain.ProviderPassword), oldPasswordHash)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected == 1, nil
+}
+
 func (s *Store) UpdateAuthProviderIdentity(ctx context.Context, userID uuid.UUID, provider domain.Provider, providerUserID string) error {
 	res, err := s.exec(ctx, `
 		UPDATE auth_providers

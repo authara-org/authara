@@ -20,7 +20,3 @@ func IsValidEmail(email string) bool {
 	}
 	return addr.Name == "" && strings.EqualFold(addr.Address, email)
 }
-
-func IsValidPassword(pw string) bool {
-	return len(pw) >= 8 && len(pw) <= 128
-}

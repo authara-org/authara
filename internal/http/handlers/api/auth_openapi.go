@@ -138,22 +138,23 @@ func (h *APIHandler) prepareContractSignup(
 	r *http.Request,
 	in contractSignupInput,
 ) (string, response.ErrorCode, string, bool) {
-	if !validationEmailPassword(in.Email, in.Password) {
-		return "", responseCodeInvalidRequest(), "Please provide a valid email and password.", false
+	if !validation.IsValidEmail(in.Email) {
+		return "", responseCodeInvalidRequest(), "Please provide a valid email address.", false
+	}
+	if err := h.Auth.ValidatePassword(ctx, in.Password); err != nil {
+		code, message := h.passwordPolicyError(err)
+		return "", code, message, false
 	}
 	allowed, err := h.Limiter.AllowSignupAttempt(ctx, httputil.ClientIP(r), in.Email)
 	if err != nil || !allowed {
 		return "", responseCodeRateLimited(), "Too many attempts. Please try again later.", false
 	}
-	passwordHash, err := auth.Hash(in.Password)
+	passwordHash, err := h.Auth.HashPassword(ctx, in.Password)
 	if err != nil {
-		return "", responseCodeInternalError(), "Password error", false
+		code, message := h.passwordPolicyError(err)
+		return "", code, message, false
 	}
 	return passwordHash, "", "", true
-}
-
-func validationEmailPassword(email, password string) bool {
-	return validation.IsValidEmail(email) && validation.IsValidPassword(password)
 }
 
 func (h *APIHandler) contractSession(

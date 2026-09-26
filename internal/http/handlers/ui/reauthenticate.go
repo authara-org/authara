@@ -118,7 +118,7 @@ func (h *UIHandler) ReauthenticatePasswordPost(w http.ResponseWriter, r *http.Re
 			return
 		}
 	}
-	if err := h.Auth.VerifyPassword(r.Context(), userID, strings.TrimSpace(r.FormValue("password"))); err != nil {
+	if err := h.Auth.VerifyPassword(r.Context(), userID, r.FormValue("password")); err != nil {
 		if !errors.Is(err, auth.ErrInvalidCredentials) && h.Logger != nil {
 			h.Logger.Error("password reauthentication failed", "err", err)
 		}

@@ -8,6 +8,7 @@ import (
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
@@ -18,6 +19,14 @@ import (
 
 type GoogleVerifier interface {
 	VerifyIDToken(context.Context, string, string) (*google.Identity, error)
+}
+
+func (h *APIHandler) passwordPolicyError(err error) (response.ErrorCode, string) {
+	message, ok := auth.PasswordPolicyMessage(err, h.Auth.PasswordMinimumLength())
+	if !ok {
+		return responseCodeInternalError(), "Password error."
+	}
+	return responseCodeInvalidRequest(), message
 }
 
 type APIHandler struct {

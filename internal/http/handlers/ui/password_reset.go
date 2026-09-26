@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
@@ -45,14 +44,22 @@ func (h *UIHandler) PasswordResetRequestPost(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if !validation.IsValidEmail(form.Email) || !validation.IsValidPassword(form.NewPassword) {
+	if !validation.IsValidEmail(form.Email) {
 		h.renderFormError(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
-			"Please provide a valid email and password.",
+			"Please provide a valid email address.",
 			authview.PasswordResetForm(),
 		)
+		return
+	}
+	if err := h.Auth.ValidatePassword(ctx, form.NewPassword); err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderFormError(w, r, status, message, authview.PasswordResetForm())
+			return
+		}
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -68,8 +75,12 @@ func (h *UIHandler) PasswordResetRequestPost(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	passwordHash, err := auth.Hash(form.NewPassword)
+	passwordHash, err := h.Auth.HashPassword(ctx, form.NewPassword)
 	if err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderFormError(w, r, status, message, authview.PasswordResetForm())
+			return
+		}
 		h.renderInternalError(w, r)
 		return
 	}

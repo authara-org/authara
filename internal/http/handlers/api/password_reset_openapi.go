@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
+	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/store"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -29,8 +29,12 @@ func (h *APIHandler) StartPasswordResetChallenge(ctx context.Context, request co
 
 	email := strings.ToLower(strings.TrimSpace(string(request.Body.Email)))
 	password := request.Body.NewPassword
-	if !validationEmailPassword(email, password) {
-		return startPasswordResetChallengeError(responseCodeInvalidRequest(), "Please provide a valid email and password."), nil
+	if !validation.IsValidEmail(email) {
+		return startPasswordResetChallengeError(responseCodeInvalidRequest(), "Please provide a valid email address."), nil
+	}
+	if err := h.Auth.ValidatePassword(ctx, password); err != nil {
+		code, message := h.passwordPolicyError(err)
+		return startPasswordResetChallengeError(code, message), nil
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasswordResetAttempt(ctx, httputil.ClientIP(r), email)
@@ -39,9 +43,10 @@ func (h *APIHandler) StartPasswordResetChallenge(ctx context.Context, request co
 		}
 	}
 
-	passwordHash, err := auth.Hash(password)
+	passwordHash, err := h.Auth.HashPassword(ctx, password)
 	if err != nil {
-		return startPasswordResetChallengeError(responseCodeInternalError(), "Password error."), nil
+		code, message := h.passwordPolicyError(err)
+		return startPasswordResetChallengeError(code, message), nil
 	}
 
 	now := time.Now().UTC()

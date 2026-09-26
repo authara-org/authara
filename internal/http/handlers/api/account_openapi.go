@@ -208,12 +208,13 @@ func (h *APIHandler) ChangeCurrentUserPassword(ctx context.Context, request cont
 	if !ok {
 		return changeCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
-	if request.Body == nil || !validation.IsValidPassword(request.Body.NewPassword) {
-		return changeCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid password."), nil
+	if request.Body == nil {
+		return changeCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
-	passwordHash, err := auth.Hash(request.Body.NewPassword)
+	passwordHash, err := h.Auth.HashPassword(ctx, request.Body.NewPassword)
 	if err != nil {
-		return changeCurrentUserPasswordError(responseCodeInternalError(), "Password error."), nil
+		code, message := h.passwordPolicyError(err)
+		return changeCurrentUserPasswordError(code, message), nil
 	}
 	if err := h.Auth.ChangePassword(ctx, userID, sessionID, request.Body.CurrentPassword, passwordHash); err != nil {
 		switch {
@@ -233,12 +234,13 @@ func (h *APIHandler) AddCurrentUserPassword(ctx context.Context, request contrac
 	if !ok {
 		return addCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
-	if request.Body == nil || !validation.IsValidPassword(request.Body.Password) {
-		return addCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid password."), nil
+	if request.Body == nil {
+		return addCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
-	passwordHash, err := auth.Hash(request.Body.Password)
+	passwordHash, err := h.Auth.HashPassword(ctx, request.Body.Password)
 	if err != nil {
-		return addCurrentUserPasswordError(responseCodeInternalError(), "Password error."), nil
+		code, message := h.passwordPolicyError(err)
+		return addCurrentUserPasswordError(code, message), nil
 	}
 	if err := h.Auth.AddPassword(ctx, userID, passwordHash); err != nil {
 		if errors.Is(err, auth.ErrPasswordAlreadyExists) {

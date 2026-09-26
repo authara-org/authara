@@ -29,6 +29,7 @@ settings_metadata:
   AUTHARA_DEFAULT_RETURN_TO: {control: hybrid, reload: dynamic, sensitive: false, group: public_url}
   AUTHARA_TRUST_PROXY_HEADERS: {control: env, reload: startup, sensitive: false, group: public_url}
   AUTHARA_USERNAME_LOGIN_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
+  AUTHARA_PASSWORD_MIN_LENGTH: {control: env, reload: startup, sensitive: false, group: authentication}
   AUTHARA_JWT_ISSUER: {control: env, reload: startup, sensitive: false, group: tokens}
   AUTHARA_JWT_ACTIVE_KEY_ID: {control: env, reload: startup, sensitive: false, group: tokens}
   AUTHARA_JWT_KEYS: {control: env, reload: startup, sensitive: true, group: tokens}
@@ -284,6 +285,15 @@ variables:
     type: bool
     default: false
     description: Allows password login with a username in addition to an email address.
+
+  - name: AUTHARA_PASSWORD_MIN_LENGTH
+    stability: stable
+    required: false
+    type: int
+    default: 8
+    minimum: 8
+    maximum: 128
+    description: Minimum Unicode-character length for newly created passwords; no composition rules are imposed.
 
   # ------------------------------------------------------------
   # JWT / Tokens

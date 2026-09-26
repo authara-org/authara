@@ -144,18 +144,12 @@ templ InvitationSignupForm(invitedEmail string, token string) {
 				Attrs: templ.Attributes{
 					":type":     "show ? 'text' : 'password'",
 					"x-model":   "password",
-					"minlength": "8",
-					":class": `{
-						'border-grey-100 dark:border-grey-800': password.length === 0,
-						'border-red-500': password.length > 0 && password.length < 8,
-						'border-green-500': password.length >= 8
-					}`,
 				},
 			})
 			@passwordToggleButton()
 		</div>
-		<p class="text-xs text-grey-600 dark:text-grey-400 mt-1.5" x-show="password.length<8">
-			Password must be at least 8 characters long.
+		<p class="text-xs text-grey-600 dark:text-grey-400 mt-1.5">
+			Use a long passphrase that is unique to this account.
 		</p>
 		<div x-data="{ show: false }" class="relative mt-4">
 			@form.Input(form.InputConfig{
