@@ -417,19 +417,50 @@ func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (domain.
 	} else {
 		user, err = s.store.GetUserByEmail(ctx, in.Email)
 	}
-	if err != nil {
-		return domain.User{}, err
-	}
-	if err := s.ensureEmailAllowed(ctx, user.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
+	passwordHash := dummyPasswordHash
+	identityValid := false
+	var accessErr error
+
+	switch {
+	case err == nil:
+		// Admission can have an intentional side effect for invitation-based
+		// login, so evaluate it before verification but delay its result until
+		// after the password work.
+		accessErr = s.ensureEmailAllowed(ctx, user.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)})
+
+		authProvider, providerErr := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+		switch {
+		case providerErr == nil && authProvider.PasswordHash != nil && *authProvider.PasswordHash != "":
+			if _, _, _, decodeErr := decodeHash(*authProvider.PasswordHash); decodeErr == nil {
+				passwordHash = *authProvider.PasswordHash
+				identityValid = true
+			} else if s.logger != nil {
+				s.logger.Warn("invalid stored password hash", "user_id", user.ID, "error", decodeErr)
+			}
+		case errors.Is(providerErr, store.ErrorAuthProviderNotFound):
+			// Keep the dummy hash.
+		case providerErr != nil:
+			return domain.User{}, providerErr
+		}
+
+	case errors.Is(err, store.ErrUserNotFound):
+		// Keep the dummy hash.
+
+	default:
 		return domain.User{}, err
 	}
 
-	authProvider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+	verification, err := VerifyPasswordHash(in.Password, passwordHash)
 	if err != nil {
 		return domain.User{}, err
 	}
-
-	if err := s.verifyAndUpgradePassword(ctx, user.ID, in.Password, authProvider.PasswordHash); err != nil {
+	if !identityValid || !verification.Valid {
+		return domain.User{}, ErrInvalidCredentials
+	}
+	if accessErr != nil {
+		return domain.User{}, accessErr
+	}
+	if err := s.upgradePasswordHashIfNeeded(ctx, user.ID, in.Password, passwordHash, verification); err != nil {
 		return domain.User{}, err
 	}
 
@@ -1010,20 +1041,14 @@ func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, password
 	return nil
 }
 
-func (s *Service) verifyAndUpgradePassword(ctx context.Context, userID uuid.UUID, password string, passwordHash *string) error {
-	if passwordHash == nil {
-		return ErrInvalidCredentials
-	}
-
-	storedHash := *passwordHash
+func (s *Service) upgradePasswordHashIfNeeded(
+	ctx context.Context,
+	userID uuid.UUID,
+	password string,
+	storedHash string,
+	verification PasswordHashVerification,
+) error {
 	for attempt := 0; attempt < 2; attempt++ {
-		verification, err := VerifyPasswordHash(password, storedHash)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn("invalid stored password hash", "user_id", userID, "error", err)
-			}
-			return ErrInvalidCredentials
-		}
 		if !verification.Valid {
 			return ErrInvalidCredentials
 		}
@@ -1051,6 +1076,13 @@ func (s *Service) verifyAndUpgradePassword(ctx context.Context, userID uuid.UUID
 			return err
 		}
 		storedHash = *provider.PasswordHash
+		verification, err = VerifyPasswordHash(password, storedHash)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("invalid stored password hash", "user_id", userID, "error", err)
+			}
+			return ErrInvalidCredentials
+		}
 	}
 
 	return ErrInvalidCredentials

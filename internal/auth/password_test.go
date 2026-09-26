@@ -138,6 +138,29 @@ func TestDecodeHashFromHashOutput(t *testing.T) {
 	}
 }
 
+func TestDummyPasswordHashUsesCurrentParameters(t *testing.T) {
+	params, salt, hash, err := decodeHash(dummyPasswordHash)
+	if err != nil {
+		t.Fatalf("decodeHash returned error: %v", err)
+	}
+
+	if params.time != argonTime {
+		t.Fatalf("unexpected time: got %d want %d", params.time, argonTime)
+	}
+	if params.memory != argonMemory {
+		t.Fatalf("unexpected memory: got %d want %d", params.memory, argonMemory)
+	}
+	if params.threads != argonThreads {
+		t.Fatalf("unexpected threads: got %d want %d", params.threads, argonThreads)
+	}
+	if len(salt) != saltLen {
+		t.Fatalf("unexpected salt length: got %d want %d", len(salt), saltLen)
+	}
+	if len(hash) != argonKeyLen {
+		t.Fatalf("unexpected hash length: got %d want %d", len(hash), argonKeyLen)
+	}
+}
+
 func TestVerifyInvalidHashFormat(t *testing.T) {
 	_, err := Verify("password", "not-a-valid-hash")
 	if err == nil {

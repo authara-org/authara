@@ -40,6 +40,14 @@ const (
 	maximumHashLen      = 64
 )
 
+var dummyPasswordHash = encodeHash(
+	argonTime,
+	argonMemory,
+	argonThreads,
+	make([]byte, saltLen),
+	make([]byte, argonKeyLen),
+)
+
 func Hash(password string) (string, error) {
 	if err := validatePassword(password, DefaultPasswordMinimumLength); err != nil {
 		return "", err

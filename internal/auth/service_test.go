@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -737,13 +738,11 @@ func TestLogin_BlockedByAccessPolicy(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		_, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "blocked@example.com",
-			Username: "blocked-user",
-		})
+		passwordHash, err := Hash("correct-password")
 		if err != nil {
-			t.Fatalf("CreateUser failed: %v", err)
+			t.Fatalf("Hash failed: %v", err)
 		}
+		createPasswordUser(t, ctx, tdb, "blocked@example.com", "blocked-user", passwordHash)
 
 		svc := New(Config{
 			Store:        tdb.Store,
@@ -754,7 +753,7 @@ func TestLogin_BlockedByAccessPolicy(t *testing.T) {
 		_, err = svc.Login(ctx, LoginInput{
 			Provider: domain.ProviderPassword,
 			Email:    "blocked@example.com",
-			Password: "irrelevant",
+			Password: "correct-password",
 		})
 		if !errors.Is(err, ErrEmailNotAllowed) {
 			t.Fatalf("expected ErrEmailNotAllowed, got %v", err)
@@ -2038,13 +2037,11 @@ func TestLogin_AccessPolicyError(t *testing.T) {
 	policyErr := errors.New("policy failure")
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		_, err := tdb.Store.CreateUser(ctx, domain.User{
-			Email:    "login-policy-error@example.com",
-			Username: "login-policy-error",
-		})
+		passwordHash, err := Hash("correct-password")
 		if err != nil {
-			t.Fatalf("CreateUser failed: %v", err)
+			t.Fatalf("Hash failed: %v", err)
 		}
+		createPasswordUser(t, ctx, tdb, "login-policy-error@example.com", "login-policy-error", passwordHash)
 
 		svc := New(Config{
 			Store:        tdb.Store,
@@ -2055,7 +2052,7 @@ func TestLogin_AccessPolicyError(t *testing.T) {
 		_, err = svc.Login(ctx, LoginInput{
 			Provider: domain.ProviderPassword,
 			Email:    "login-policy-error@example.com",
-			Password: "irrelevant",
+			Password: "correct-password",
 		})
 		if !errors.Is(err, policyErr) {
 			t.Fatalf("expected policy error %v, got %v", policyErr, err)
@@ -2078,8 +2075,8 @@ func TestLogin_UserNotFound(t *testing.T) {
 			Email:    "missing-login@example.com",
 			Password: "irrelevant",
 		})
-		if err == nil {
-			t.Fatal("expected error for missing user")
+		if !errors.Is(err, ErrInvalidCredentials) {
+			t.Fatalf("Login error = %v, want ErrInvalidCredentials", err)
 		}
 	})
 }
@@ -2107,8 +2104,96 @@ func TestLogin_PasswordProviderMissing(t *testing.T) {
 			Email:    "oauth-only@example.com",
 			Password: "irrelevant",
 		})
-		if err == nil {
-			t.Fatal("expected error when password auth provider is missing")
+		if !errors.Is(err, ErrInvalidCredentials) {
+			t.Fatalf("Login error = %v, want ErrInvalidCredentials", err)
+		}
+	})
+}
+
+func TestLogin_NullPasswordHashUsesDummy(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "null-password-hash@example.com",
+			Username: "null-password-hash",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID:   user.ID,
+			Provider: domain.ProviderPassword,
+		}); err != nil {
+			t.Fatalf("CreateAuthProvider failed: %v", err)
+		}
+
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, AccessPolicy: staticAccessPolicy{allowed: true}})
+		_, err = svc.Login(ctx, LoginInput{
+			Provider: domain.ProviderPassword,
+			Email:    user.Email,
+			Password: "irrelevant",
+		})
+		if !errors.Is(err, ErrInvalidCredentials) {
+			t.Fatalf("Login error = %v, want ErrInvalidCredentials", err)
+		}
+	})
+}
+
+func TestLogin_InvalidCredentialPathsHaveComparableTiming(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		passwordHash, err := Hash("correct-password")
+		if err != nil {
+			t.Fatalf("Hash failed: %v", err)
+		}
+		createPasswordUser(t, ctx, tdb, "timing-password@example.com", "timing-password", passwordHash)
+		if _, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "timing-oauth-only@example.com",
+			Username: "timing-oauth-only",
+		}); err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, AccessPolicy: staticAccessPolicy{allowed: true}})
+		cases := []struct {
+			name  string
+			email string
+		}{
+			{name: "known-wrong", email: "timing-password@example.com"},
+			{name: "unknown-user", email: "timing-missing@example.com"},
+			{name: "missing-provider", email: "timing-oauth-only@example.com"},
+		}
+		durations := make([][]time.Duration, len(cases))
+
+		const samples = 5
+		for sample := 0; sample < samples; sample++ {
+			for offset := range cases {
+				index := (sample + offset) % len(cases)
+				testCase := cases[index]
+				started := time.Now()
+				_, err := svc.Login(ctx, LoginInput{
+					Provider: domain.ProviderPassword,
+					Email:    testCase.email,
+					Password: "wrong-password",
+				})
+				durations[index] = append(durations[index], time.Since(started))
+				if !errors.Is(err, ErrInvalidCredentials) {
+					t.Fatalf("%s Login error = %v, want ErrInvalidCredentials", testCase.name, err)
+				}
+			}
+		}
+
+		medians := make([]time.Duration, len(cases))
+		for index := range cases {
+			slices.Sort(durations[index])
+			medians[index] = durations[index][samples/2]
+		}
+		minimum := slices.Min(medians)
+		maximum := slices.Max(medians)
+		if maximum > 3*minimum {
+			t.Fatalf("login timing medians differ by more than 3x: known-wrong=%s unknown-user=%s missing-provider=%s", medians[0], medians[1], medians[2])
 		}
 	})
 }
