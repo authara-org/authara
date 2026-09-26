@@ -11,14 +11,18 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/accesspolicy"
+	"github.com/authara-org/authara/internal/cache"
+	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/roles"
+	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/authara-org/authara/internal/webhook"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/argon2"
 )
@@ -34,6 +38,48 @@ type recordingAccessPolicy struct {
 }
 
 type publisherFunc func(context.Context, webhook.Envelope) error
+
+type authServiceTestCache struct {
+	values    map[string][]byte
+	setErr    error
+	setCalls  int
+	failAfter int
+}
+
+func (c *authServiceTestCache) Get(_ context.Context, key string) ([]byte, error) {
+	value, ok := c.values[key]
+	if !ok {
+		return nil, cache.ErrMiss
+	}
+	return value, nil
+}
+
+func (c *authServiceTestCache) GetMany(_ context.Context, keys ...string) ([][]byte, error) {
+	values := make([][]byte, len(keys))
+	for i, key := range keys {
+		values[i] = c.values[key]
+	}
+	return values, nil
+}
+
+func (c *authServiceTestCache) Set(_ context.Context, key string, value []byte, _ time.Duration) error {
+	c.setCalls++
+	if c.setErr != nil && (c.failAfter == 0 || c.setCalls > c.failAfter) {
+		return c.setErr
+	}
+	if c.values == nil {
+		c.values = make(map[string][]byte)
+	}
+	c.values[key] = append([]byte(nil), value...)
+	return nil
+}
+
+func (c *authServiceTestCache) Delete(_ context.Context, key string) error {
+	delete(c.values, key)
+	return nil
+}
+
+func (c *authServiceTestCache) Close() error { return nil }
 
 func (f publisherFunc) Publish(ctx context.Context, evt webhook.Envelope) error {
 	return f(ctx, evt)
@@ -1860,6 +1906,167 @@ func TestAddAndChangePasswordQueueSecurityNotifications(t *testing.T) {
 	})
 }
 
+func TestChangePasswordRevokesOtherSessionFamiliesAndPendingReset(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Now().UTC()
+		currentHash, err := Hash("current-password")
+		if err != nil {
+			t.Fatalf("Hash current password failed: %v", err)
+		}
+		user := createPasswordUser(
+			t,
+			ctx,
+			tdb,
+			"password-change-revocation@example.com",
+			"password-change-revocation",
+			currentHash,
+		)
+		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+
+		sessions := make([]domain.Session, 0, 3)
+		refreshTokenHashes := make(map[uuid.UUID]string, 3)
+		for _, userAgent := range []string{"current", "other-a", "other-b"} {
+			session, err := tdb.Store.CreateSession(ctx, domain.Session{
+				UserID:               user.ID,
+				ActiveOrganizationID: organization.ID,
+				ExpiresAt:            now.Add(time.Hour),
+				UserAgent:            userAgent,
+			})
+			if err != nil {
+				t.Fatalf("CreateSession(%s) failed: %v", userAgent, err)
+			}
+			refreshTokenHash := "refresh-" + userAgent
+			if err := tdb.Store.CreateRefreshToken(ctx, domain.RefreshToken{
+				SessionID:      session.ID,
+				OrganizationID: organization.ID,
+				TokenHash:      refreshTokenHash,
+				ExpiresAt:      now.Add(time.Hour),
+			}); err != nil {
+				t.Fatalf("CreateRefreshToken(%s) failed: %v", userAgent, err)
+			}
+			sessions = append(sessions, session)
+			refreshTokenHashes[session.ID] = refreshTokenHash
+		}
+		currentSession := sessions[0]
+
+		resetChallenge, err := tdb.Store.CreateChallenge(ctx, domain.Challenge{
+			Purpose:      domain.ChallengePurposePasswordReset,
+			Email:        user.Email,
+			ExpiresAt:    now.Add(30 * time.Minute),
+			MaxAttempts:  5,
+			MaxResends:   3,
+			AttemptCount: 0,
+			ResendCount:  0,
+		})
+		if err != nil {
+			t.Fatalf("CreateChallenge failed: %v", err)
+		}
+		verification := challenge.NewVerificationCodeService(
+			tdb.Store,
+			10*time.Minute,
+			[]byte("01234567890123456789012345678901"),
+		)
+		resetCode, err := verification.GenerateCode(ctx, resetChallenge, now)
+		if err != nil {
+			t.Fatalf("GenerateCode failed: %v", err)
+		}
+		if _, err := tdb.Store.CreatePendingPasswordReset(ctx, domain.PendingPasswordReset{
+			ChallengeID:  resetChallenge.ID,
+			UserID:       user.ID,
+			PasswordHash: "reset-password-hash",
+		}); err != nil {
+			t.Fatalf("CreatePendingPasswordReset failed: %v", err)
+		}
+
+		cacheStore := &authServiceTestCache{values: make(map[string][]byte)}
+		revocations := token.NewAccessTokenRevocations(cacheStore, time.Hour)
+		svc := New(Config{
+			Store:                  tdb.Store,
+			Tx:                     tdb.Tx,
+			AccessTokenRevocations: revocations,
+		})
+		newHash, err := Hash("new-password")
+		if err != nil {
+			t.Fatalf("Hash new password failed: %v", err)
+		}
+		if err := svc.ChangePassword(ctx, user.ID, currentSession.ID, "current-password", newHash); err != nil {
+			t.Fatalf("ChangePassword failed: %v", err)
+		}
+
+		current, err := tdb.Store.GetSessionByID(ctx, currentSession.ID)
+		if err != nil {
+			t.Fatalf("GetSessionByID(current) failed: %v", err)
+		}
+		if current.RevokedAt != nil {
+			t.Fatalf("current session was revoked at %v", current.RevokedAt)
+		}
+		if current.AuthenticatedAt == nil || current.AuthenticationMethod != domain.AuthenticationMethodPassword {
+			t.Fatalf("current session authentication was not refreshed: %+v", current)
+		}
+		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, refreshTokenHashes[current.ID]); err != nil {
+			t.Fatalf("current refresh token was removed: %v", err)
+		}
+
+		claimsForSession := func(sessionID uuid.UUID) *token.AccessClaims {
+			return &token.AccessClaims{
+				SessionID: sessionID,
+				OrgID:     organization.ID,
+				RegisteredClaims: jwt.RegisteredClaims{
+					Subject:  user.ID.String(),
+					IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)),
+				},
+			}
+		}
+		if err := revocations.Check(ctx, "current-access-token", claimsForSession(current.ID)); err != nil {
+			t.Fatalf("current access token was revoked: %v", err)
+		}
+
+		for _, other := range sessions[1:] {
+			stored, err := tdb.Store.GetSessionByID(ctx, other.ID)
+			if err != nil {
+				t.Fatalf("GetSessionByID(%s) failed: %v", other.UserAgent, err)
+			}
+			if stored.RevokedAt == nil {
+				t.Fatalf("other session %s remains active", other.UserAgent)
+			}
+			if _, err := tdb.Store.GetRefreshTokenByHash(ctx, refreshTokenHashes[other.ID]); !errors.Is(err, store.ErrRefreshTokenNotFound) {
+				t.Fatalf("other refresh token %s remains usable: %v", other.UserAgent, err)
+			}
+			if err := revocations.Check(ctx, "access-token-"+other.UserAgent, claimsForSession(other.ID)); !errors.Is(err, token.ErrRevokedToken) {
+				t.Fatalf("other access token %s revocation error = %v, want %v", other.UserAgent, err, token.ErrRevokedToken)
+			}
+		}
+
+		if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, resetChallenge.ID); !errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+			t.Fatalf("pending password reset survived password change: %v", err)
+		}
+		resetService := challenge.New(challenge.Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			ChallengeTTL: 30 * time.Minute,
+			MaxAttempts:  5,
+			MaxResends:   3,
+		})
+		if err := resetService.CompletePasswordResetChallenge(ctx, resetChallenge.ID, resetCode, verification, now.Add(time.Minute)); !errors.Is(err, challenge.ErrPasswordResetUnavailable) {
+			t.Fatalf("old password-reset code completion error = %v, want %v", err, challenge.ErrPasswordResetUnavailable)
+		}
+
+		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+		if err != nil {
+			t.Fatalf("GetAuthProviderByMethodAndUserID failed: %v", err)
+		}
+		valid, err := Verify("new-password", *provider.PasswordHash)
+		if err != nil || !valid {
+			t.Fatalf("new password does not verify, valid=%t err=%v", valid, err)
+		}
+	})
+}
+
 func TestChangePasswordRollsBackWhenSessionAuthenticationCannotBeUpdated(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -1904,6 +2111,158 @@ func TestChangePasswordRollsBackWhenSessionAuthenticationCannotBeUpdated(t *test
 		}
 		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 0 {
 			t.Fatalf("password-changed email jobs = %d, want 0", got)
+		}
+	})
+}
+
+func TestChangePasswordRollsBackDatabaseWhenAccessTokenRevocationFails(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Now().UTC()
+		currentHash, err := Hash("current-password")
+		if err != nil {
+			t.Fatalf("Hash current password failed: %v", err)
+		}
+		user := createPasswordUser(
+			t,
+			ctx,
+			tdb,
+			"password-change-cache-failure@example.com",
+			"password-change-cache-failure",
+			currentHash,
+		)
+		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+		currentSession, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID:               user.ID,
+			ActiveOrganizationID: organization.ID,
+			ExpiresAt:            now.Add(time.Hour),
+			UserAgent:            "current",
+		})
+		if err != nil {
+			t.Fatalf("CreateSession(current) failed: %v", err)
+		}
+		otherSessions := make([]domain.Session, 0, 2)
+		otherRefreshTokenHashes := make(map[uuid.UUID]string, 2)
+		for _, userAgent := range []string{"other-a", "other-b"} {
+			otherSession, err := tdb.Store.CreateSession(ctx, domain.Session{
+				UserID:               user.ID,
+				ActiveOrganizationID: organization.ID,
+				ExpiresAt:            now.Add(time.Hour),
+				UserAgent:            userAgent,
+			})
+			if err != nil {
+				t.Fatalf("CreateSession(%s) failed: %v", userAgent, err)
+			}
+			refreshTokenHash := "cache-failure-refresh-" + userAgent
+			if err := tdb.Store.CreateRefreshToken(ctx, domain.RefreshToken{
+				SessionID:      otherSession.ID,
+				OrganizationID: organization.ID,
+				TokenHash:      refreshTokenHash,
+				ExpiresAt:      now.Add(time.Hour),
+			}); err != nil {
+				t.Fatalf("CreateRefreshToken(%s) failed: %v", userAgent, err)
+			}
+			otherSessions = append(otherSessions, otherSession)
+			otherRefreshTokenHashes[otherSession.ID] = refreshTokenHash
+		}
+		resetChallenge, err := tdb.Store.CreateChallenge(ctx, domain.Challenge{
+			Purpose:     domain.ChallengePurposePasswordReset,
+			Email:       user.Email,
+			ExpiresAt:   now.Add(30 * time.Minute),
+			MaxAttempts: 5,
+			MaxResends:  3,
+		})
+		if err != nil {
+			t.Fatalf("CreateChallenge failed: %v", err)
+		}
+		if _, err := tdb.Store.CreatePendingPasswordReset(ctx, domain.PendingPasswordReset{
+			ChallengeID:  resetChallenge.ID,
+			UserID:       user.ID,
+			PasswordHash: "reset-password-hash",
+		}); err != nil {
+			t.Fatalf("CreatePendingPasswordReset failed: %v", err)
+		}
+
+		cacheErr := errors.New("revocation cache unavailable")
+		cacheStore := &authServiceTestCache{
+			values:    make(map[string][]byte),
+			setErr:    cacheErr,
+			failAfter: 1,
+		}
+		revocations := token.NewAccessTokenRevocations(cacheStore, time.Hour)
+		svc := New(Config{
+			Store:                  tdb.Store,
+			Tx:                     tdb.Tx,
+			AccessTokenRevocations: revocations,
+		})
+		newHash, err := Hash("new-password")
+		if err != nil {
+			t.Fatalf("Hash new password failed: %v", err)
+		}
+		if err := svc.ChangePassword(ctx, user.ID, currentSession.ID, "current-password", newHash); !errors.Is(err, cacheErr) {
+			t.Fatalf("ChangePassword error = %v, want %v", err, cacheErr)
+		}
+
+		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+		if err != nil {
+			t.Fatalf("GetAuthProviderByMethodAndUserID failed: %v", err)
+		}
+		valid, err := Verify("current-password", *provider.PasswordHash)
+		if err != nil || !valid {
+			t.Fatalf("original password was not preserved, valid=%t err=%v", valid, err)
+		}
+		current, err := tdb.Store.GetSessionByID(ctx, currentSession.ID)
+		if err != nil {
+			t.Fatalf("GetSessionByID(current) failed: %v", err)
+		}
+		if current.AuthenticatedAt != nil || current.AuthenticationMethod != "" {
+			t.Fatalf("current session authentication changed despite failure: %+v", current)
+		}
+		for _, otherSession := range otherSessions {
+			other, err := tdb.Store.GetSessionByID(ctx, otherSession.ID)
+			if err != nil {
+				t.Fatalf("GetSessionByID(%s) failed: %v", otherSession.UserAgent, err)
+			}
+			if other.RevokedAt != nil {
+				t.Fatalf("other session %s was revoked in the database despite failure: %+v", otherSession.UserAgent, other)
+			}
+			if _, err := tdb.Store.GetRefreshTokenByHash(ctx, otherRefreshTokenHashes[otherSession.ID]); err != nil {
+				t.Fatalf("other refresh token %s was removed despite failure: %v", otherSession.UserAgent, err)
+			}
+		}
+		if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, resetChallenge.ID); err != nil {
+			t.Fatalf("pending password reset was removed despite failure: %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 0 {
+			t.Fatalf("password-changed email jobs = %d, want 0", got)
+		}
+
+		claimsForSession := func(sessionID uuid.UUID) *token.AccessClaims {
+			return &token.AccessClaims{
+				SessionID: sessionID,
+				OrgID:     organization.ID,
+				RegisteredClaims: jwt.RegisteredClaims{
+					Subject:  user.ID.String(),
+					IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)),
+				},
+			}
+		}
+		revokedCount := 0
+		for i, otherSession := range otherSessions {
+			err := revocations.Check(ctx, "other-token", claimsForSession(otherSession.ID))
+			switch {
+			case errors.Is(err, token.ErrRevokedToken):
+				revokedCount++
+			case err != nil:
+				t.Fatalf("check other access token %d failed: %v", i, err)
+			}
+		}
+		if revokedCount != 1 {
+			t.Fatalf("fail-closed access-token revocations = %d, want 1", revokedCount)
 		}
 	})
 }

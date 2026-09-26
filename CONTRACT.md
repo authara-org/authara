@@ -251,6 +251,13 @@ Authenticated password additions, changes, replacements, and removals
 invalidate outstanding password-reset requests so an older code cannot gain
 authority over a newly created or changed credential.
 
+An authenticated password change preserves the initiating session and
+atomically revokes every other session family, deletes its refresh tokens, and
+invalidates outstanding password-reset requests. When a shared revocation
+cache is configured, already-issued access tokens for those sessions are also
+rejected immediately. With the noop cache, they remain usable only until their
+normal access-token expiry.
+
 ---
 
 # 9. Webhook Contract

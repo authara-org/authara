@@ -1010,7 +1010,35 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, sessionI
 			return err
 		}
 		now := time.Now().UTC()
+		currentSession, err := s.store.GetActiveSessionByIDForUpdate(txCtx, sessionID, now)
+		if err != nil {
+			return err
+		}
+		if currentSession.UserID != userID {
+			return store.ErrSessionNotFound
+		}
+		sessions, err := s.store.ListActiveSessionsByUserID(txCtx, userID, now)
+		if err != nil {
+			return err
+		}
+		// Write access-token cutoffs before mutating the database. If a later
+		// cutoff or database operation fails, PostgreSQL rolls back while any
+		// successful cutoff remains as a conservative, fail-closed revocation.
+		for _, session := range sessions {
+			if session.ID == sessionID {
+				continue
+			}
+			if err := s.accessTokenRevocations.RevokeSession(txCtx, session.ID, now); err != nil {
+				return err
+			}
+		}
 		if err := s.store.UpdatePasswordHash(txCtx, userID, newPasswordHash); err != nil {
+			return err
+		}
+		if err := s.store.RevokeOtherSessionsByUserID(txCtx, userID, sessionID, now); err != nil {
+			return err
+		}
+		if err := s.store.DeleteRefreshTokensForOtherSessions(txCtx, userID, sessionID); err != nil {
 			return err
 		}
 		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {

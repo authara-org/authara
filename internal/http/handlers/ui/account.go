@@ -520,7 +520,7 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isAccountPasswordDialogSubmission(r) {
-		renderAccountPasswordDialogSuccess(h.Render, w, r, cfg, "Password updated.")
+		renderAccountPasswordDialogSuccess(h.Render, w, r, cfg, "Password updated. Other sessions revoked.")
 		return
 	}
 
@@ -532,7 +532,7 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		"/auth/account",
 		templ.Join(
 			userview.Account(cfg),
-			toast.ToastMessage(toast.Success, "Password updated."),
+			toast.ToastMessage(toast.Success, "Password updated. Other sessions revoked."),
 		),
 	)
 }

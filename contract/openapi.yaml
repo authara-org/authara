@@ -1373,7 +1373,12 @@ paths:
       operationId: changeCurrentUserPassword
       tags: [Users]
       summary: Change the authenticated user's password
-      description: Verifies the current password before replacing it.
+      description: >-
+        Verifies the current password before replacing it. A successful change
+        preserves the initiating session, revokes every other session family,
+        and invalidates all outstanding password-reset requests. Without a
+        shared revocation cache, access tokens already issued to revoked
+        sessions remain valid until they expire.
       security:
         - accessCookie: []
           csrfCookie: []
@@ -1393,7 +1398,7 @@ paths:
               $ref: "#/components/schemas/ChangePasswordRequest"
       responses:
         "204":
-          description: Password changed
+          description: Password changed, other sessions revoked, and pending resets invalidated
         "400":
           $ref: "#/components/responses/Error"
         "401":
