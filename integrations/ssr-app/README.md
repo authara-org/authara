@@ -27,6 +27,11 @@ Then visit `http://localhost:3001`. The private page is available at
 `http://localhost:3001/private`, while the SPA is available at
 `http://localhost:3001/spa/` without switching environments.
 
+In development, Core also exposes the fixture-backed UI showcase at
+`http://localhost:3001/auth/showcase`. It renders the real Core page templates
+that end users encounter with deterministic dummy data and is not registered
+when `APP_ENV=prod`.
+
 To check this module independently:
 
 ```sh

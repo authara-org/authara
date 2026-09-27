@@ -102,6 +102,32 @@ func TestSecurityHeadersAllowOnlySameOriginReauthenticationFrames(t *testing.T) 
 	}
 }
 
+func TestSecurityHeadersAllowsShowcaseFramesOnlyWhenEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  SecurityHeadersConfig
+		want string
+	}{
+		{name: "development", cfg: SecurityHeadersConfig{AllowShowcase: true}, want: "SAMEORIGIN"},
+		{name: "production", cfg: SecurityHeadersConfig{}, want: "DENY"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := SecurityHeaders(tc.cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/auth/showcase/pages/login", nil))
+			if got := recorder.Header().Get(headerFrameOptions); got != tc.want {
+				t.Fatalf("X-Frame-Options = %q, want %q", got, tc.want)
+			}
+			csp := recorder.Header().Get(headerContentSecurityPolicy)
+			if tc.cfg.AllowShowcase && !strings.Contains(csp, "form-action 'none'") {
+				t.Fatalf("development showcase CSP permits form submissions: %q", csp)
+			}
+		})
+	}
+}
+
 func requireCSPContains(t *testing.T, csp string, expected ...string) {
 	t.Helper()
 

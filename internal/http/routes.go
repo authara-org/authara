@@ -8,6 +8,7 @@ import (
 	"github.com/authara-org/authara/internal/http/handlers/meta"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	openapicontract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/http/showcase"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -24,6 +25,7 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	}
 	r.Use(httpmiddleware.SecurityHeaders(httpmiddleware.SecurityHeadersConfig{
 		AllowGoogleOAuth: hasOAuthProvider(cfg, domain.ProviderGoogle),
+		AllowShowcase:    cfg.Dev,
 	}))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
@@ -62,6 +64,11 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(mw.ReturnTo)
+		if cfg.Dev {
+			showcaseHandler := showcase.New(uih.Render)
+			r.Get("/showcase", showcaseHandler.Gallery)
+			r.Get("/showcase/pages/{slug}", showcaseHandler.Page)
+		}
 
 		// Auth
 		r.Group(func(r chi.Router) {

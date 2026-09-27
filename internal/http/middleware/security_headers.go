@@ -15,11 +15,13 @@ const (
 
 type SecurityHeadersConfig struct {
 	AllowGoogleOAuth bool
+	AllowShowcase    bool
 }
 
 func SecurityHeaders(cfg SecurityHeadersConfig) func(http.Handler) http.Handler {
 	csp := buildContentSecurityPolicy(cfg)
 	reauthenticationCSP := strings.Replace(csp, "frame-ancestors 'none'", "frame-ancestors 'self'", 1)
+	showcaseCSP := strings.Replace(reauthenticationCSP, "form-action 'self'", "form-action 'none'", 1)
 	referrerPolicy := "same-origin"
 	if cfg.AllowGoogleOAuth {
 		referrerPolicy = "strict-origin-when-cross-origin"
@@ -28,7 +30,10 @@ func SecurityHeaders(cfg SecurityHeadersConfig) func(http.Handler) http.Handler 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set(headerCacheControl, "no-store")
-			if isSameOriginReauthenticationFrame(r) {
+			if isShowcaseFrame(r, cfg.AllowShowcase) {
+				w.Header().Set(headerContentSecurityPolicy, showcaseCSP)
+				w.Header().Set(headerFrameOptions, "SAMEORIGIN")
+			} else if isSameOriginReauthenticationFrame(r) {
 				w.Header().Set(headerContentSecurityPolicy, reauthenticationCSP)
 				w.Header().Set(headerFrameOptions, "SAMEORIGIN")
 			} else {
@@ -48,6 +53,10 @@ func isSameOriginReauthenticationFrame(r *http.Request) bool {
 		return false
 	}
 	return r.URL.Path == "/auth/reauthenticate" || r.URL.Path == "/auth/reauthenticate/complete"
+}
+
+func isShowcaseFrame(r *http.Request, allowShowcase bool) bool {
+	return allowShowcase && r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/auth/showcase/pages/")
 }
 
 func buildContentSecurityPolicy(cfg SecurityHeadersConfig) string {
