@@ -8,6 +8,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
@@ -168,7 +169,12 @@ func (s *Service) executeEmailChange(
 		if err := email.Enqueue(txCtx, s.store, action.NewEmail, domain.EmailTemplateEmailChangedNewAddress, data, now); err != nil {
 			return err
 		}
-		return s.webhookPublisher.Publish(txCtx, webhook.NewUserUpdated(action.UserID, now))
+		if err := s.webhookPublisher.Publish(txCtx, webhook.NewUserUpdated(action.UserID, now)); err != nil {
+			return err
+		}
+		return s.securityEvents.AccountEmailChanged(txCtx, securityevent.Credential{
+			UserID: action.UserID, SessionID: &action.InitiatingSessionID,
+		})
 	}); err != nil {
 		return err
 	}

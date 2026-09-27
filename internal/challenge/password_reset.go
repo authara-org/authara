@@ -8,6 +8,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
 )
@@ -158,7 +159,13 @@ func (s *Service) executePasswordReset(
 	if err := s.store.DeletePendingPasswordResetsByUserID(ctx, action.UserID); err != nil {
 		return err
 	}
-	return email.Enqueue(ctx, s.store, user.Email, domain.EmailTemplatePasswordChanged, email.TemplateData{
+	if err := email.Enqueue(ctx, s.store, user.Email, domain.EmailTemplatePasswordChanged, email.TemplateData{
 		email.TemplateVariableOccurredAt: email.OccurredAt(now),
-	}, now)
+	}, now); err != nil {
+		return err
+	}
+	return s.securityEvents.CredentialPasswordReset(ctx, securityevent.Credential{
+		ActorType: domain.SecurityEventActorAnonymous,
+		UserID:    action.UserID,
+	})
 }

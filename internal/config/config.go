@@ -27,6 +27,7 @@ type Config struct {
 	InternalAPI    InternalAPI
 	Organization   Organization
 	Authentication Authentication
+	SecurityEvents SecurityEvents
 	Challenge      Challenge
 	Email          Email
 }
@@ -83,6 +84,9 @@ func Load() (*Config, error) {
 	if err := cfg.Authentication.validate(); err != nil {
 		return nil, err
 	}
+	if err := cfg.SecurityEvents.validate(); err != nil {
+		return nil, err
+	}
 	if err := cfg.Challenge.validate(); err != nil {
 		return nil, err
 	}
@@ -111,6 +115,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.Organization.parse(); err != nil {
+		return nil, err
+	}
+	if err := cfg.SecurityEvents.parse(); err != nil {
 		return nil, err
 	}
 	if err := cfg.Email.parse(); err != nil {

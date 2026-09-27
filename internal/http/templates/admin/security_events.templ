@@ -2,6 +2,7 @@ package admin
 
 import (
 	adminsvc "github.com/authara-org/authara/internal/admin"
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/templates/components/datatable"
 )
 
@@ -10,15 +11,16 @@ templ SecurityEvents(page adminsvc.SecurityEventPage, features FeatureFlags) {
 		<div class="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-hidden">
 			<div class="shrink-0">
 				<h2 class="text-xl font-semibold">Security Events</h2>
-				<p class="text-sm text-grey-600 dark:text-grey-400">Suspicious authentication activity and the response applied by policy.</p>
+				<p class="text-sm text-grey-600 dark:text-grey-400">Authentication, session, and credential lifecycle events.</p>
 			</div>
 			@datatable.Table(datatable.Config{
 				Columns: []datatable.Column{
 					{Label: "Created", WidthClass: "w-40"},
 					{Label: "Event", WidthClass: "w-56"},
-					{Label: "User", WidthClass: "w-24"},
-					{Label: "Passkey", WidthClass: "w-24"},
-					{Label: "Response", WidthClass: "w-44"},
+					{Label: "Outcome", WidthClass: "w-24"},
+					{Label: "Subject", WidthClass: "w-24"},
+					{Label: "Session", WidthClass: "w-24"},
+					{Label: "Detail", WidthClass: "w-44"},
 				},
 				MinWidthClass:    "min-w-[56rem]",
 				ShowPagination:   true,
@@ -30,18 +32,29 @@ templ SecurityEvents(page adminsvc.SecurityEventPage, features FeatureFlags) {
 				PreviousHref:     pageHref("/auth/admin/security-events", "", page.Page-1),
 				NextHref:         pageHref("/auth/admin/security-events", "", page.Page+1),
 				EmptyTitle:       "No security events yet",
-				EmptyDescription: "Suspicious passkey activity will appear here.",
+				EmptyDescription: "Authentication and credential activity will appear here.",
 			}) {
 				for _, event := range page.Events {
 					<tr>
 						<td class="px-3 py-3 align-top whitespace-nowrap">{ formatTime(event.CreatedAt) }</td>
 						<td class="px-3 py-3 align-top">{ event.Type }</td>
+						<td class="px-3 py-3 align-top">{ event.Outcome }</td>
 						<td class="px-3 py-3 align-top" title={ uuidPtrString(event.UserID) }>{ uuidPtrShort(event.UserID) }</td>
-						<td class="px-3 py-3 align-top" title={ uuidPtrString(event.PasskeyID) }>{ uuidPtrShort(event.PasskeyID) }</td>
-						<td class="px-3 py-3 align-top">{ event.Response }</td>
+						<td class="px-3 py-3 align-top" title={ uuidPtrString(event.SessionID) }>{ uuidPtrShort(event.SessionID) }</td>
+						<td class="px-3 py-3 align-top">{ securityEventDetail(event) }</td>
 					</tr>
 				}
 			}
 		</div>
 	}
+}
+
+func securityEventDetail(event domain.SecurityEvent) string {
+	if event.ReasonCode != "" {
+		return event.ReasonCode
+	}
+	if event.Response != "" {
+		return event.Response
+	}
+	return string(event.AuthenticationMethod)
 }

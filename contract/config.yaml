@@ -82,6 +82,8 @@ settings_metadata:
   AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
   AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: access_policy}
   AUTHARA_ADMIN_AUDIT_RETENTION_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
+  AUTHARA_SECURITY_EVENT_ENABLED_EVENTS: {control: env, reload: startup, sensitive: false, group: security_events}
+  AUTHARA_SECURITY_EVENT_RETENTION_DAYS: {control: env, reload: startup, sensitive: false, group: retention}
   AUTHARA_CHALLENGE_ENABLED: {control: env, reload: startup, sensitive: false, group: challenges}
   AUTHARA_CHALLENGE_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
   AUTHARA_CHALLENGE_VERIFICATION_CODE_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
@@ -691,6 +693,23 @@ variables:
     type: int
     default: 180
     notes: Delete admin audit events after this many days. Must be greater than 0.
+
+  # ------------------------------------------------------------
+  # Security events
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_SECURITY_EVENT_ENABLED_EVENTS
+    stability: stable
+    required: false
+    type: csv
+    notes: Exact event names to persist. Unset uses the standard set; use none to disable all or all to include routine refresh and logout events.
+
+  - name: AUTHARA_SECURITY_EVENT_RETENTION_DAYS
+    stability: stable
+    required: false
+    type: int
+    default: 180
+    notes: Delete core security events after this many days. Must be greater than 0.
 
   # ------------------------------------------------------------
   # Challenge / Verification

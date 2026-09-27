@@ -50,6 +50,9 @@ func (h *APIHandler) ReauthenticateWithPassword(ctx context.Context, request con
 	}
 	if err := h.Auth.VerifyPassword(ctx, userID, request.Body.Password); err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) || errors.Is(err, store.ErrorAuthProviderNotFound) {
+			if recordErr := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodPassword, domain.SecurityEventReasonInvalidCredentials); recordErr != nil {
+				return reauthenticateWithPasswordError(response.CodeInternalError, "Authentication error."), nil
+			}
 			return reauthenticateWithPasswordError(response.CodeUnauthorized, "Invalid password."), nil
 		}
 		return reauthenticateWithPasswordError(response.CodeInternalError, "Authentication error."), nil
@@ -85,10 +88,18 @@ func (h *APIHandler) ReauthenticateWithGoogle(ctx context.Context, request contr
 	}
 	identity, header, code, message, ok := h.verifyGoogleCredential(ctx, r, request.Body.Credential, request.Body.Nonce)
 	if !ok {
+		if code == response.CodeUnauthorized {
+			if err := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidAssertion); err != nil {
+				return reauthenticateWithGoogleError(response.CodeInternalError, "Authentication error."), nil
+			}
+		}
 		return reauthenticateWithGoogleError(code, message), nil
 	}
 	if err := h.Auth.VerifyExternalIdentity(ctx, userID, domain.ProviderGoogle, identity.OAuthID); err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
+			if recordErr := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidCredentials); recordErr != nil {
+				return reauthenticateWithGoogleError(response.CodeInternalError, "Authentication error."), nil
+			}
 			return reauthenticateWithGoogleError(response.CodeUnauthorized, "Google identity is not linked to this account."), nil
 		}
 		return reauthenticateWithGoogleError(response.CodeInternalError, "Authentication error."), nil

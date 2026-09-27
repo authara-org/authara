@@ -316,6 +316,19 @@ AUTHARA_ADMIN_AUDIT_RETENTION_DAYS
 
 ---
 
+### Security events
+
+Controls which authentication and credential events are persisted and how long they are retained.
+
+Examples:
+
+```
+AUTHARA_SECURITY_EVENT_ENABLED_EVENTS
+AUTHARA_SECURITY_EVENT_RETENTION_DAYS
+```
+
+---
+
 ## Configuration reference
 
 For the complete list of variables:

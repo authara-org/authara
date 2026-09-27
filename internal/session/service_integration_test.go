@@ -15,6 +15,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
@@ -103,6 +104,7 @@ func newDBSessionServiceWithPolicy(
 		RefreshTokenTTL:        refreshTokenTTL,
 		RefreshTokenRotation:   refreshTokenRotation,
 		Organizations:          organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx}),
+		SecurityEvents:         securityevent.NewStandard(tdb.Store, 180*24*time.Hour),
 	})
 }
 
@@ -193,6 +195,17 @@ func TestRecentAuthenticationPolicy(t *testing.T) {
 		identity, err := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, now)
 		if err != nil {
 			t.Fatal(err)
+		}
+		events, err := tdb.Store.QuerySecurityEvents(ctx, store.SecurityEventFilter{
+			Type:      domain.SecurityEventAuthenticationLogin,
+			Outcome:   domain.SecurityEventOutcomeSuccess,
+			SessionID: &identity.SessionID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) != 1 || events[0].AuthenticationMethod != domain.AuthenticationMethodPassword || events[0].UserID == nil || *events[0].UserID != user.ID {
+			t.Fatalf("unexpected authentication event: %+v", events)
 		}
 
 		if err := svc.RequireRecentAuthentication(ctx, user.ID, identity.SessionID, now.Add(10*time.Minute)); err != nil {
@@ -323,6 +336,17 @@ func TestAuthenticationChallengeIsSessionBoundSingleUseAndExpires(t *testing.T) 
 		if err := svc.RequireRecentAuthentication(ctx, user.ID, row.ID, now.Add(time.Minute)); err != nil {
 			t.Fatalf("completed challenge did not refresh session: %v", err)
 		}
+		events, err := tdb.Store.QuerySecurityEvents(ctx, store.SecurityEventFilter{
+			Type:      domain.SecurityEventAuthenticationReauthenticated,
+			Outcome:   domain.SecurityEventOutcomeSuccess,
+			SessionID: &row.ID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) != 1 || events[0].AuthenticationMethod != domain.AuthenticationMethodPasskey {
+			t.Fatalf("unexpected reauthentication event: %+v", events)
+		}
 
 		expiring, err := svc.StartAuthenticationChallenge(ctx, user.ID, row.ID, now.Add(2*time.Minute))
 		if err != nil {
@@ -330,6 +354,16 @@ func TestAuthenticationChallengeIsSessionBoundSingleUseAndExpires(t *testing.T) 
 		}
 		if err := svc.CompleteAuthenticationChallenge(ctx, user.ID, row.ID, expiring.ID, domain.AuthenticationMethodPassword, expiring.ExpiresAt); !errors.Is(err, ErrAuthenticationChallengeInvalid) {
 			t.Fatalf("expired challenge completion = %v", err)
+		}
+		events, err = tdb.Store.QuerySecurityEvents(ctx, store.SecurityEventFilter{
+			Type:      domain.SecurityEventAuthenticationReauthenticated,
+			SessionID: &row.ID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("failed completion created a success event: %+v", events)
 		}
 	})
 }
@@ -1140,6 +1174,17 @@ func TestRefreshSessionReuseCommitsSessionRevocation(t *testing.T) {
 			}
 			if persistedSession.RevokedAt == nil || !persistedSession.RevokedAt.Equal(reusedAt) {
 				t.Fatalf("session revoked_at = %v, want %v", persistedSession.RevokedAt, reusedAt)
+			}
+			reuseEvents, err := tdb.Store.QuerySecurityEvents(ctx, store.SecurityEventFilter{
+				Type:      domain.SecurityEventSessionRefreshTokenReuse,
+				Outcome:   domain.SecurityEventOutcomeDenied,
+				SessionID: &original.SessionID,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(reuseEvents) != 1 || reuseEvents[0].ReasonCode != domain.SecurityEventReasonRefreshTokenReuse || reuseEvents[0].UserID == nil || *reuseEvents[0].UserID != user.ID {
+				t.Fatalf("unexpected refresh reuse event: %+v", reuseEvents)
 			}
 
 			_, accessErr := svc.ValidateAccessToken(ctx, accessToken, token.AudienceApp, reusedAt)

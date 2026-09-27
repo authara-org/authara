@@ -13,6 +13,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/session"
+	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -121,6 +122,12 @@ func (h *UIHandler) ReauthenticatePasswordPost(w http.ResponseWriter, r *http.Re
 	if err := h.Auth.VerifyPassword(r.Context(), userID, r.FormValue("password")); err != nil {
 		if !errors.Is(err, auth.ErrInvalidCredentials) && h.Logger != nil {
 			h.Logger.Error("password reauthentication failed", "err", err)
+		}
+		if errors.Is(err, auth.ErrInvalidCredentials) || errors.Is(err, store.ErrorAuthProviderNotFound) {
+			if recordErr := h.Session.RecordReauthenticationDenied(r.Context(), userID, sessionID, domain.AuthenticationMethodPassword, domain.SecurityEventReasonInvalidCredentials); recordErr != nil {
+				h.renderRequestError(w, r, http.StatusInternalServerError, "Could not record authentication result.")
+				return
+			}
 		}
 		h.renderRequestError(w, r, http.StatusUnprocessableEntity, "Password is incorrect.")
 		return

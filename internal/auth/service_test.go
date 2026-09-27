@@ -18,6 +18,7 @@ import (
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
@@ -39,6 +40,15 @@ type recordingAccessPolicy struct {
 }
 
 type publisherFunc func(context.Context, webhook.Envelope) error
+
+type failingPasswordChangedRecorder struct {
+	securityevent.NoopRecorder
+	err error
+}
+
+func (r failingPasswordChangedRecorder) CredentialPasswordChanged(context.Context, securityevent.Credential) error {
+	return r.err
+}
 
 type authServiceTestCache struct {
 	values    map[string][]byte
@@ -685,10 +695,34 @@ func TestLogin_WithPassword_DoesNotUpgradeBeforeSuccessfulVerification(t *testin
 		outdatedHash := encodeHash(2, 32*1024, 2, salt, argon2.IDKey([]byte(password), salt, 2, 32*1024, 2, 24))
 		user := createPasswordUser(t, ctx, tdb, "no-rehash@example.com", "no-rehash", outdatedHash)
 
-		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, AccessPolicy: staticAccessPolicy{allowed: true}})
-		_, err := svc.Login(ctx, LoginInput{Provider: domain.ProviderPassword, Email: user.Email, Password: "wrong password"})
+		svc := New(Config{
+			Store: tdb.Store, Tx: tdb.Tx, AccessPolicy: staticAccessPolicy{allowed: true},
+			SecurityEvents: securityevent.NewStandard(tdb.Store, 180*24*time.Hour),
+		})
+		before, err := tdb.Store.QuerySecurityEvents(ctx, store.SecurityEventFilter{
+			Type:    domain.SecurityEventAuthenticationLogin,
+			Outcome: domain.SecurityEventOutcomeDenied,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = svc.Login(ctx, LoginInput{Provider: domain.ProviderPassword, Email: user.Email, Password: "wrong password"})
 		if !errors.Is(err, ErrInvalidCredentials) {
 			t.Fatalf("Login error = %v, want ErrInvalidCredentials", err)
+		}
+		after, err := tdb.Store.QuerySecurityEvents(ctx, store.SecurityEventFilter{
+			Type:    domain.SecurityEventAuthenticationLogin,
+			Outcome: domain.SecurityEventOutcomeDenied,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(after) != len(before)+1 {
+			t.Fatalf("denied login events = %d, want %d", len(after), len(before)+1)
+		}
+		event := after[0]
+		if event.ReasonCode != domain.SecurityEventReasonInvalidCredentials || event.AuthenticationMethod != domain.AuthenticationMethodPassword || event.UserID != nil {
+			t.Fatalf("unexpected denied login event: %+v", event)
 		}
 
 		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
@@ -2113,6 +2147,60 @@ func TestChangePasswordRollsBackWhenSessionAuthenticationCannotBeUpdated(t *test
 		}
 		if valid {
 			t.Fatal("new password persisted despite failed session authentication update")
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 0 {
+			t.Fatalf("password-changed email jobs = %d, want 0", got)
+		}
+	})
+}
+
+func TestChangePasswordRollsBackWhenSecurityEventCannotBePersisted(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		currentHash, err := Hash("current-password")
+		if err != nil {
+			t.Fatal(err)
+		}
+		user := createPasswordUser(t, ctx, tdb, "password-event-rollback@example.com", "password-event-rollback", currentHash)
+		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		session, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID: user.ID, ActiveOrganizationID: organization.ID,
+			ExpiresAt: time.Now().UTC().Add(time.Hour), UserAgent: "password-event-rollback",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		newHash, err := Hash("new-password")
+		if err != nil {
+			t.Fatal(err)
+		}
+		eventErr := errors.New("security event unavailable")
+		svc := New(Config{
+			Store: tdb.Store, Tx: tdb.Tx,
+			SecurityEvents: failingPasswordChangedRecorder{err: eventErr},
+		})
+		if err := svc.ChangePassword(ctx, user.ID, session.ID, "current-password", newHash); !errors.Is(err, eventErr) {
+			t.Fatalf("ChangePassword error = %v, want %v", err, eventErr)
+		}
+
+		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		valid, err := Verify("current-password", *provider.PasswordHash)
+		if err != nil || !valid {
+			t.Fatalf("original password was not preserved, valid=%t err=%v", valid, err)
+		}
+		persistedSession, err := tdb.Store.GetSessionByID(ctx, session.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if persistedSession.AuthenticatedAt != nil || persistedSession.AuthenticationMethod != "" {
+			t.Fatalf("session authentication survived event failure: %+v", persistedSession)
 		}
 		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 0 {
 			t.Fatalf("password-changed email jobs = %d, want 0", got)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -26,6 +27,7 @@ type Config struct {
 	AllowlistPolicy        config.AllowlistPolicyReader
 	WebhookPublisher       webhook.Publisher
 	AccessTokenRevocations *token.AccessTokenRevocations
+	SecurityEvents         securityevent.Recorder
 }
 
 type Service struct {
@@ -35,6 +37,7 @@ type Service struct {
 	allowlistPolicy        config.AllowlistPolicyReader
 	webhookPublisher       webhook.Publisher
 	accessTokenRevocations *token.AccessTokenRevocations
+	securityEvents         securityevent.Recorder
 }
 
 func New(cfg Config) *Service {
@@ -57,6 +60,10 @@ func New(cfg Config) *Service {
 			return config.AllowlistPolicy{AllowlistEnabled: cfg.AllowlistEnabled}
 		})
 	}
+	securityEvents := cfg.SecurityEvents
+	if securityEvents == nil {
+		securityEvents = securityevent.NoopRecorder{}
+	}
 
 	return &Service{
 		store:                  cfg.Store,
@@ -65,6 +72,7 @@ func New(cfg Config) *Service {
 		allowlistPolicy:        allowlistPolicy,
 		webhookPublisher:       pub,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
+		securityEvents:         securityEvents,
 	}
 }
 

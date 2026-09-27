@@ -37,8 +37,12 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	linkID := r.FormValue("link_id")
 
 	expectedNonce, ok := oauthstate.ReadNonce(r)
-	if idToken == "" || nonce == "" || !ok ||
-		subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
+	if idToken == "" || nonce == "" {
+		h.renderGoogleFlowError(w, r, ctx, flow)
+		return
+	}
+	if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
+		h.recordGoogleAuthenticationDenial(ctx, r, flow, domain.SecurityEventReasonInvalidAssertion)
 		h.renderGoogleFlowError(w, r, ctx, flow)
 		return
 
@@ -46,6 +50,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	identity, err := h.Google.VerifyIDToken(ctx, idToken, expectedNonce)
 	if err != nil {
+		h.recordGoogleAuthenticationDenial(ctx, r, flow, domain.SecurityEventReasonInvalidAssertion)
 		h.renderGoogleFlowError(w, r, ctx, flow)
 		return
 	}
@@ -57,9 +62,20 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		authenticationChallengeID, challengeOK := authenticationChallengeID(r)
 		now := time.Now().UTC()
 		if !userOK || !sessionOK || !challengeOK ||
-			h.Session.ValidateAuthenticationChallenge(ctx, userID, sessionID, authenticationChallengeID, now) != nil ||
-			h.Auth.VerifyExternalIdentity(ctx, userID, domain.ProviderGoogle, identity.OAuthID) != nil ||
-			h.Session.CompleteAuthenticationChallenge(ctx, userID, sessionID, authenticationChallengeID, domain.AuthenticationMethodGoogle, now) != nil {
+			h.Session.ValidateAuthenticationChallenge(ctx, userID, sessionID, authenticationChallengeID, now) != nil {
+			h.renderGoogleFlowError(w, r, ctx, flow)
+			return
+		}
+		if err := h.Auth.VerifyExternalIdentity(ctx, userID, domain.ProviderGoogle, identity.OAuthID); err != nil {
+			if errors.Is(err, auth.ErrInvalidCredentials) {
+				if recordErr := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidCredentials); recordErr != nil && h.Logger != nil {
+					h.Logger.Error("record Google reauthentication denial", "err", recordErr)
+				}
+			}
+			h.renderGoogleFlowError(w, r, ctx, flow)
+			return
+		}
+		if h.Session.CompleteAuthenticationChallenge(ctx, userID, sessionID, authenticationChallengeID, domain.AuthenticationMethodGoogle, now) != nil {
 			h.renderGoogleFlowError(w, r, ctx, flow)
 			return
 		}
@@ -210,6 +226,28 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	writeOAuthRedirect(w, returnTo)
+}
+
+func (h *UIHandler) recordGoogleAuthenticationDenial(ctx context.Context, r *http.Request, flow string, reasonCode string) {
+	if flow == string(viewmodel.AuthProviderFlowLogin) {
+		if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodGoogle, reasonCode); err != nil && h.Logger != nil {
+			h.Logger.Error("record Google login denial", "err", err)
+		}
+		return
+	}
+	if flow != string(viewmodel.AuthProviderFlowReauthenticate) {
+		return
+	}
+	userID, userOK := httpctx.UserID(ctx)
+	sessionID, sessionOK := httpctx.SessionID(ctx)
+	challengeID, challengeOK := authenticationChallengeID(r)
+	if !userOK || !sessionOK || !challengeOK ||
+		h.Session.ValidateAuthenticationChallenge(ctx, userID, sessionID, challengeID, time.Now().UTC()) != nil {
+		return
+	}
+	if err := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodGoogle, reasonCode); err != nil && h.Logger != nil {
+		h.Logger.Error("record Google reauthentication denial", "err", err)
+	}
 }
 
 func (h *UIHandler) requireRecentProviderLinkAuthentication(w http.ResponseWriter, r *http.Request) bool {

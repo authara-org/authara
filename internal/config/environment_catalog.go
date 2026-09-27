@@ -121,6 +121,11 @@ func environmentGroup(configSection, variableName string) string {
 		return "Access policy"
 	case "Admin":
 		return "Retention"
+	case "SecurityEvents":
+		if strings.Contains(variableName, "RETENTION") {
+			return "Retention"
+		}
+		return "Security events"
 	case "InternalAPI":
 		return "Internal API"
 	case "Organization":

@@ -351,6 +351,19 @@ AUTHARA_ADMIN_AUDIT_RETENTION_DAYS
 
 ---
 
+### Security events
+
+Controls the persisted event allowlist and independent retention period.
+
+Examples:
+
+```
+AUTHARA_SECURITY_EVENT_ENABLED_EVENTS
+AUTHARA_SECURITY_EVENT_RETENTION_DAYS
+```
+
+---
+
 ## Configuration reference
 
 For the complete list of variables:

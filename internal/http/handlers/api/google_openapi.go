@@ -30,6 +30,11 @@ func (h *APIHandler) LoginWithGoogle(ctx context.Context, request contract.Login
 	}
 	identity, header, code, message, ok := h.verifyGoogleCredential(ctx, r, request.Body.Credential, request.Body.Nonce)
 	if !ok {
+		if code == response.CodeUnauthorized {
+			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidAssertion); err != nil {
+				return loginWithGoogleError(responseCodeInternalError(), "Google login error."), nil
+			}
+		}
 		return loginWithGoogleError(code, message), nil
 	}
 	return h.contractGoogleLogin(ctx, r, identity, audience, header), nil

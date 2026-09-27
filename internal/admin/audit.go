@@ -61,7 +61,7 @@ func (s *Service) ListAuditEvents(ctx context.Context, page Page) (AuditEventPag
 
 func (s *Service) ListSecurityEvents(ctx context.Context, page Page) (SecurityEventPage, error) {
 	page = normalizePage(page, 50)
-	events, err := s.store.ListSecurityEvents(ctx, page.Size+1, (page.Page-1)*page.Size)
+	events, err := s.securityEvents.Query(ctx, store.SecurityEventFilter{Limit: page.Size + 1, Offset: (page.Page - 1) * page.Size})
 	if err != nil {
 		return SecurityEventPage{}, err
 	}

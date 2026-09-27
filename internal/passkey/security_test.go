@@ -9,6 +9,7 @@ import (
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -267,6 +268,7 @@ func newSecurityTestService(t *testing.T, tdb *testutil.TestDB, policy config.Au
 			return policy
 		}),
 		SessionRevoker: revoker,
+		SecurityEvents: securityevent.NewStandard(tdb.Store, 180*24*time.Hour),
 	})
 	if err != nil {
 		t.Fatal(err)

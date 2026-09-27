@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
@@ -33,6 +34,7 @@ type SessionConfig struct {
 	Policy                     config.SessionPolicyReader
 	AccessPolicy               accesspolicy.EmailAccessPolicy
 	Organizations              *organization.Service
+	SecurityEvents             securityevent.Recorder
 }
 
 type Service struct {
@@ -43,6 +45,7 @@ type Service struct {
 	policy                 config.SessionPolicyReader
 	accessPolicy           accesspolicy.EmailAccessPolicy
 	organizations          *organization.Service
+	securityEvents         securityevent.Recorder
 }
 
 const authenticationChallengeTTL = 5 * time.Minute
@@ -69,6 +72,10 @@ func New(cfg SessionConfig) *Service {
 			}
 		})
 	}
+	securityEvents := cfg.SecurityEvents
+	if securityEvents == nil {
+		securityEvents = securityevent.NoopRecorder{}
+	}
 
 	return &Service{
 		store:                  cfg.Store,
@@ -78,6 +85,7 @@ func New(cfg SessionConfig) *Service {
 		policy:                 policy,
 		accessPolicy:           access,
 		organizations:          cfg.Organizations,
+		securityEvents:         securityEvents,
 	}
 }
 
@@ -124,9 +132,14 @@ func (s *Service) createSession(
 	err error,
 ) {
 	policy := s.policy.CurrentSession()
+	var resultErr error
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		user, err := s.ensureUserAllowed(ctx, userID)
 		if err != nil {
+			if errors.Is(err, ErrUserNotAllowed) {
+				resultErr = err
+				return s.recordSessionAuthenticationDenied(ctx, userID, authenticationMethod, domain.SecurityEventReasonAccessPolicy)
+			}
 			return err
 		}
 		if err := s.store.LockUserForKeyShare(ctx, userID); err != nil {
@@ -135,13 +148,15 @@ func (s *Service) createSession(
 		if passkeyID != nil {
 			passkey, err := s.store.GetPasskeyByID(ctx, *passkeyID)
 			if errors.Is(err, store.ErrPasskeyNotFound) {
-				return ErrAuthenticationMethodUnavailable
+				resultErr = ErrAuthenticationMethodUnavailable
+				return s.recordSessionAuthenticationDenied(ctx, userID, authenticationMethod, domain.SecurityEventReasonMethodUnavailable)
 			}
 			if err != nil {
 				return err
 			}
 			if passkey.UserID != userID || passkey.RestrictedAt != nil {
-				return ErrAuthenticationMethodUnavailable
+				resultErr = ErrAuthenticationMethodUnavailable
+				return s.recordSessionAuthenticationDenied(ctx, userID, authenticationMethod, domain.SecurityEventReasonMethodUnavailable)
 			}
 		}
 
@@ -168,7 +183,8 @@ func (s *Service) createSession(
 		}
 
 		if !canAccessAudience(platformRoles, audience) {
-			return ErrForbidden
+			resultErr = ErrForbidden
+			return s.recordSessionAuthenticationDenied(ctx, userID, authenticationMethod, domain.SecurityEventReasonAudienceForbidden)
 		}
 
 		disabled, err := s.store.IsUserDisabled(ctx, userID)
@@ -176,7 +192,8 @@ func (s *Service) createSession(
 			return err
 		}
 		if disabled {
-			return ErrUserDisabled
+			resultErr = ErrUserDisabled
+			return s.recordSessionAuthenticationDenied(ctx, userID, authenticationMethod, domain.SecurityEventReasonUserDisabled)
 		}
 
 		session := domain.Session{
@@ -231,6 +248,18 @@ func (s *Service) createSession(
 		}, now); err != nil {
 			return err
 		}
+		if err := s.securityEvents.AuthenticationLogin(ctx, securityevent.Authentication{
+			Outcome:              domain.SecurityEventOutcomeSuccess,
+			ActorType:            domain.SecurityEventActorUser,
+			ActorUserID:          &userID,
+			UserID:               &userID,
+			SessionID:            &createdSession.ID,
+			OrganizationID:       &org.ID,
+			PasskeyID:            passkeyID,
+			AuthenticationMethod: authenticationMethod,
+		}); err != nil {
+			return err
+		}
 
 		return nil
 	})
@@ -238,8 +267,27 @@ func (s *Service) createSession(
 	if err != nil {
 		return "", "", err
 	}
+	if resultErr != nil {
+		return "", "", resultErr
+	}
 
 	return accessToken, refreshToken, nil
+}
+
+func (s *Service) recordSessionAuthenticationDenied(
+	ctx context.Context,
+	userID uuid.UUID,
+	method domain.AuthenticationMethod,
+	reason string,
+) error {
+	return s.securityEvents.AuthenticationLogin(ctx, securityevent.Authentication{
+		Outcome:              domain.SecurityEventOutcomeDenied,
+		ReasonCode:           reason,
+		ActorType:            domain.SecurityEventActorUser,
+		ActorUserID:          &userID,
+		UserID:               &userID,
+		AuthenticationMethod: method,
+	})
 }
 
 func (s *Service) RequireRecentAuthentication(
@@ -414,12 +462,36 @@ func (s *Service) CompleteAuthenticationChallenge(
 		if err := s.store.ConsumeAuthenticationChallenge(txCtx, challengeID, method, now); err != nil {
 			return err
 		}
-		return nil
+		return s.securityEvents.AuthenticationReauthenticated(txCtx, securityevent.Authentication{
+			Outcome: domain.SecurityEventOutcomeSuccess, ActorType: domain.SecurityEventActorUser,
+			ActorUserID: &userID, UserID: &userID, SessionID: &sessionID, AuthenticationMethod: method,
+		})
 	})
 	if err != nil {
 		return err
 	}
 	return resultErr
+}
+
+// RecordReauthenticationDenied persists a rejected credential proof after the
+// challenge transaction has ended. Keeping this separate from
+// CompleteAuthenticationChallenge ensures denial evidence is not rolled back.
+func (s *Service) RecordReauthenticationDenied(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	method domain.AuthenticationMethod,
+	reasonCode string,
+) error {
+	return s.securityEvents.AuthenticationReauthenticated(ctx, securityevent.Authentication{
+		Outcome:              domain.SecurityEventOutcomeDenied,
+		ReasonCode:           reasonCode,
+		ActorType:            domain.SecurityEventActorUser,
+		ActorUserID:          &userID,
+		UserID:               &userID,
+		SessionID:            &sessionID,
+		AuthenticationMethod: method,
+	})
 }
 
 func (s *Service) SwitchSessionOrganization(
@@ -660,6 +732,17 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		if err != nil {
 			return err
 		}
+		if err := s.securityEvents.SessionRefresh(ctx, securityevent.Session{
+			Outcome:              domain.SecurityEventOutcomeSuccess,
+			ActorType:            domain.SecurityEventActorUser,
+			ActorUserID:          &session.UserID,
+			UserID:               &session.UserID,
+			SessionID:            &session.ID,
+			OrganizationID:       &rt.OrganizationID,
+			AuthenticationMethod: session.AuthenticationMethod,
+		}); err != nil {
+			return err
+		}
 
 		return nil
 	})
@@ -699,6 +782,16 @@ func (s *Service) revokeReusedRefreshToken(
 		cacheErr = s.accessTokenRevocations.RevokeSession(txCtx, rt.SessionID, markerAt)
 		if err := s.store.RevokeSession(txCtx, rt.SessionID, observedAt); err != nil {
 			return errors.Join(cacheErr, err)
+		}
+		if err := s.securityEvents.SessionRefreshTokenReuse(txCtx, securityevent.Session{
+			Outcome:        domain.SecurityEventOutcomeDenied,
+			ReasonCode:     domain.SecurityEventReasonRefreshTokenReuse,
+			ActorType:      domain.SecurityEventActorAnonymous,
+			UserID:         &session.UserID,
+			SessionID:      &session.ID,
+			OrganizationID: &rt.OrganizationID,
+		}); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -756,7 +849,16 @@ func (s *Service) Logout(ctx context.Context, refreshToken, accessToken string) 
 			if err := s.accessTokenRevocations.RevokeSession(txCtx, rt.SessionID, revokedAt); err != nil {
 				return err
 			}
-			return s.store.RevokeSession(txCtx, rt.SessionID, revokedAt)
+			if err := s.store.RevokeSession(txCtx, rt.SessionID, revokedAt); err != nil {
+				return err
+			}
+			return s.securityEvents.SessionLogout(txCtx, securityevent.Session{
+				Outcome:     domain.SecurityEventOutcomeSuccess,
+				ActorType:   domain.SecurityEventActorUser,
+				ActorUserID: &session.UserID,
+				UserID:      &session.UserID,
+				SessionID:   &session.ID,
+			})
 		})
 		if err != nil {
 			return err
@@ -766,12 +868,30 @@ func (s *Service) Logout(ctx context.Context, refreshToken, accessToken string) 
 	if refreshTokenFound || accessToken == "" {
 		return nil
 	}
-	err := s.RevokeAccessToken(ctx, accessToken, time.Now().UTC())
+	now := time.Now().UTC()
+	claims, err := s.accessTokens.ParseAny(accessToken, now)
 	if errors.Is(err, token.ErrInvalidToken) || errors.Is(err, token.ErrExpiredToken) || errors.Is(err, token.ErrInvalidClaims) {
 		// An invalid or expired access token carries no remaining authority.
 		return nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if err := s.accessTokenRevocations.RevokeToken(ctx, accessToken, claims.ExpiresAt.Time.Sub(now)); err != nil {
+		return err
+	}
+	userID, parseErr := uuid.Parse(claims.Subject)
+	if parseErr != nil || userID == uuid.Nil || claims.SessionID == uuid.Nil {
+		return nil
+	}
+	return s.securityEvents.SessionLogout(ctx, securityevent.Session{
+		Outcome:        domain.SecurityEventOutcomeSuccess,
+		ActorType:      domain.SecurityEventActorUser,
+		ActorUserID:    &userID,
+		UserID:         &userID,
+		SessionID:      &claims.SessionID,
+		OrganizationID: &claims.OrgID,
+	})
 }
 
 func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error {
@@ -783,7 +903,15 @@ func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error
 		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, revokedAt); err != nil {
 			return err
 		}
-		return s.store.RevokeAllSessionsForUser(txCtx, userID, revokedAt)
+		if err := s.store.RevokeAllSessionsForUser(txCtx, userID, revokedAt); err != nil {
+			return err
+		}
+		return s.securityEvents.SessionRevoked(txCtx, securityevent.Session{
+			Outcome:    domain.SecurityEventOutcomeSuccess,
+			ReasonCode: domain.SecurityEventReasonSecurityContainment,
+			ActorType:  domain.SecurityEventActorSystem,
+			UserID:     &userID,
+		})
 	})
 }
 
@@ -982,7 +1110,14 @@ func (s *Service) RevokeUserSession(
 		if err := s.store.DeleteRefreshTokensBySession(txCtx, sessionID); err != nil {
 			return err
 		}
-		return nil
+		return s.securityEvents.SessionRevoked(txCtx, securityevent.Session{
+			Outcome:     domain.SecurityEventOutcomeSuccess,
+			ReasonCode:  domain.SecurityEventReasonUserRequested,
+			ActorType:   domain.SecurityEventActorUser,
+			ActorUserID: &userID,
+			UserID:      &userID,
+			SessionID:   &sessionID,
+		})
 	})
 }
 
@@ -1007,6 +1142,16 @@ func (s *Service) RevokeOtherUserSessions(
 		for _, session := range sessions {
 			if session.ID != currentSessionID {
 				if err := s.accessTokenRevocations.RevokeSession(txCtx, session.ID, markerAt); err != nil {
+					return err
+				}
+				if err := s.securityEvents.SessionRevoked(txCtx, securityevent.Session{
+					Outcome:     domain.SecurityEventOutcomeSuccess,
+					ReasonCode:  domain.SecurityEventReasonUserRequested,
+					ActorType:   domain.SecurityEventActorUser,
+					ActorUserID: &userID,
+					UserID:      &userID,
+					SessionID:   &session.ID,
+				}); err != nil {
 					return err
 				}
 			}

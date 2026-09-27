@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
@@ -30,6 +31,7 @@ type Config struct {
 	Organizations          *organization.Service
 	AccessTokenRevocations *token.AccessTokenRevocations
 	PasswordMinimumLength  int
+	SecurityEvents         securityevent.Recorder
 }
 
 type Service struct {
@@ -42,6 +44,7 @@ type Service struct {
 	organizations          *organization.Service
 	accessTokenRevocations *token.AccessTokenRevocations
 	passwordMinimumLength  int
+	securityEvents         securityevent.Recorder
 }
 
 type emailAllowPolicy interface {
@@ -57,6 +60,10 @@ func New(cfg Config) *Service {
 	if access == nil {
 		access = accesspolicy.NoopEmailAccessPolicy{}
 	}
+	securityEvents := cfg.SecurityEvents
+	if securityEvents == nil {
+		securityEvents = securityevent.NoopRecorder{}
+	}
 
 	return &Service{
 		store:                  cfg.Store,
@@ -68,6 +75,7 @@ func New(cfg Config) *Service {
 		organizations:          cfg.Organizations,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
 		passwordMinimumLength:  cfg.PasswordMinimumLength,
+		securityEvents:         securityEvents,
 	}
 }
 
@@ -169,10 +177,37 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error) {
 	switch in.Provider {
 	case domain.ProviderPassword:
-		return s.loginWithPassword(ctx, in)
+		var user domain.User
+		var loginErr error
+		err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+			user, loginErr = s.loginWithPassword(txCtx, in)
+			if !errors.Is(loginErr, ErrInvalidCredentials) && !errors.Is(loginErr, ErrEmailNotAllowed) {
+				return loginErr
+			}
+			reason := domain.SecurityEventReasonInvalidCredentials
+			if errors.Is(loginErr, ErrEmailNotAllowed) {
+				reason = domain.SecurityEventReasonAccessPolicy
+			}
+			eventErr := s.securityEvents.AuthenticationLogin(txCtx, securityevent.Authentication{
+				Outcome:              domain.SecurityEventOutcomeDenied,
+				ReasonCode:           reason,
+				ActorType:            domain.SecurityEventActorAnonymous,
+				AuthenticationMethod: domain.AuthenticationMethodPassword,
+			})
+			return eventErr
+		})
+		if err != nil {
+			return domain.User{}, err
+		}
+		return user, loginErr
 
 	case domain.ProviderGoogle:
 		if err := s.ensureEmailAllowed(ctx, in.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
+			if errors.Is(err, ErrEmailNotAllowed) {
+				if eventErr := s.RecordLoginDenied(ctx, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonAccessPolicy); eventErr != nil {
+					return domain.User{}, eventErr
+				}
+			}
 			return domain.User{}, err
 		}
 		var user domain.User
@@ -181,11 +216,37 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error)
 			user, err = s.loginWithExternalIdentity(txCtx, in)
 			return err
 		})
+		if err != nil {
+			reason := ""
+			switch {
+			case errors.Is(err, ErrAccountExistsMustLink):
+				reason = domain.SecurityEventReasonAccountLinkRequired
+			case errors.Is(err, ErrProviderDisabled):
+				reason = domain.SecurityEventReasonProviderDisabled
+			}
+			if reason != "" {
+				if eventErr := s.RecordLoginDenied(ctx, domain.AuthenticationMethodGoogle, reason); eventErr != nil {
+					return domain.User{}, eventErr
+				}
+			}
+		}
 		return user, err
 
 	default:
 		return domain.User{}, ErrUnsupportedProvider
 	}
+}
+
+// RecordLoginDenied records a credential assertion rejected before a user or
+// session can safely be resolved. Callers must not attach submitted identity
+// values to the event.
+func (s *Service) RecordLoginDenied(ctx context.Context, method domain.AuthenticationMethod, reason string) error {
+	return s.securityEvents.AuthenticationLogin(ctx, securityevent.Authentication{
+		Outcome:              domain.SecurityEventOutcomeDenied,
+		ReasonCode:           reason,
+		ActorType:            domain.SecurityEventActorAnonymous,
+		AuthenticationMethod: method,
+	})
 }
 
 func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, error) {
@@ -868,6 +929,11 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
 			if err := s.store.UpdateAuthProviderIdentity(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
 				return err
 			}
+			if err := s.securityEvents.CredentialProviderChanged(txCtx, securityevent.Credential{
+				UserID: user.ID, Provider: link.Provider,
+			}); err != nil {
+				return err
+			}
 		} else if err := s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
 			return err
 		}
@@ -918,8 +984,7 @@ func (s *Service) linkExternalIdentityToUser(
 		if err != nil {
 			return err
 		}
-
-		return nil
+		return s.securityEvents.CredentialProviderLinked(txCtx, securityevent.Credential{UserID: userID, Provider: provider})
 	})
 }
 
@@ -951,7 +1016,10 @@ func (s *Service) UnlinkAuthProvider(ctx context.Context, userID uuid.UUID, prov
 			}
 		}
 
-		return s.enqueueAuthMethodChanged(txCtx, user, provider, domain.EmailTemplateAuthMethodRemoved, time.Now().UTC())
+		if err := s.enqueueAuthMethodChanged(txCtx, user, provider, domain.EmailTemplateAuthMethodRemoved, time.Now().UTC()); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialProviderRemoved(txCtx, securityevent.Credential{UserID: userID, Provider: provider})
 	})
 }
 
@@ -984,7 +1052,10 @@ func (s *Service) AddPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
 			return err
 		}
-		return s.enqueueAuthMethodChanged(txCtx, user, domain.ProviderPassword, domain.EmailTemplateAuthMethodAdded, time.Now().UTC())
+		if err := s.enqueueAuthMethodChanged(txCtx, user, domain.ProviderPassword, domain.EmailTemplateAuthMethodAdded, time.Now().UTC()); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialPasswordAdded(txCtx, securityevent.Credential{UserID: userID})
 	})
 }
 
@@ -1047,7 +1118,10 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, sessionI
 		if err := s.store.UpdateSessionAuthentication(txCtx, userID, sessionID, domain.AuthenticationMethodPassword, now); err != nil {
 			return err
 		}
-		return s.enqueuePasswordChanged(txCtx, user, now)
+		if err := s.enqueuePasswordChanged(txCtx, user, now); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialPasswordChanged(txCtx, securityevent.Credential{UserID: userID, SessionID: &sessionID})
 	})
 }
 
@@ -1182,7 +1256,10 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err := s.enqueuePasswordChanged(txCtx, user, now); err != nil {
 			return err
 		}
-		return s.publish(txCtx, webhook.NewUserUpdated(userID, now))
+		if err := s.publish(txCtx, webhook.NewUserUpdated(userID, now)); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialPasswordAdded(txCtx, securityevent.Credential{UserID: userID})
 	})
 }
 

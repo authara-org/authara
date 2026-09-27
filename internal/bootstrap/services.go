@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -30,6 +31,7 @@ type Services struct {
 	EmailWorker    *challenge.Worker
 	WebhookWorker  *webhook.Worker
 	OAuthProviders oauth.OAuthProviders
+	SecurityEvents *securityevent.Service
 }
 
 func NewServices(app *App) (Services, error) {
@@ -44,6 +46,11 @@ func NewServices(app *App) (Services, error) {
 	oauthProviders := newOAuthProviders(app.Config.Startup())
 	webhookPublisher := newWebhookPublisher(app.Config, app.Store)
 	webhookWorker := newWebhookWorker(app.Config, app.Store, app.Logger, app.Observability)
+	securityEventService := securityevent.New(securityevent.Config{
+		Store:         app.Store,
+		EnabledEvents: app.Config.Startup().SecurityEvents.EnabledEventSet,
+		Retention:     time.Duration(app.Config.Startup().SecurityEvents.RetentionDays) * 24 * time.Hour,
+	})
 
 	accessTokenService := token.NewAccessTokenServiceWithTTL(
 		app.Config.Token.KeySet,
@@ -83,6 +90,7 @@ func NewServices(app *App) (Services, error) {
 		Organizations:          organizationService,
 		AccessTokenRevocations: accessTokenRevocations,
 		PasswordMinimumLength:  app.Config.Authentication.PasswordMinimumLength,
+		SecurityEvents:         securityEventService,
 	})
 
 	sessionService := session.New(session.SessionConfig{
@@ -93,6 +101,7 @@ func NewServices(app *App) (Services, error) {
 		Policy:                 app.Config,
 		AccessPolicy:           accessPolicy,
 		Organizations:          organizationService,
+		SecurityEvents:         securityEventService,
 	})
 
 	adminService := admin.New(admin.Config{
@@ -102,9 +111,10 @@ func NewServices(app *App) (Services, error) {
 		AllowlistPolicy:        app.Config,
 		WebhookPublisher:       webhookPublisher,
 		AccessTokenRevocations: accessTokenRevocations,
+		SecurityEvents:         securityEventService,
 	})
 
-	passkeyService, err := newPasskeyService(app, txManager, sessionService)
+	passkeyService, err := newPasskeyService(app, txManager, sessionService, securityEventService)
 	if err != nil {
 		return Services{}, fmt.Errorf("create passkey service: %w", err)
 	}
@@ -118,6 +128,7 @@ func NewServices(app *App) (Services, error) {
 		AllowlistPolicy:        app.Config,
 		WebhookPublisher:       webhookPublisher,
 		AccessTokenRevocations: accessTokenRevocations,
+		SecurityEvents:         securityEventService,
 	})
 
 	emailWorker := challenge.NewWorker(
@@ -151,10 +162,11 @@ func NewServices(app *App) (Services, error) {
 		EmailWorker:    emailWorker,
 		WebhookWorker:  webhookWorker,
 		OAuthProviders: oauthProviders,
+		SecurityEvents: securityEventService,
 	}, nil
 }
 
-func newPasskeyService(app *App, txManager *tx.Manager, sessionRevoker passkey.SessionRevoker) (*passkey.Service, error) {
+func newPasskeyService(app *App, txManager *tx.Manager, sessionRevoker passkey.SessionRevoker, securityEvents securityevent.Recorder) (*passkey.Service, error) {
 	publicURL, err := url.Parse(app.Config.Values.PublicURL)
 	if err != nil {
 		return nil, err
@@ -169,5 +181,6 @@ func newPasskeyService(app *App, txManager *tx.Manager, sessionRevoker passkey.S
 		Policy:         app.Config,
 		SessionRevoker: sessionRevoker,
 		Logger:         app.Logger,
+		SecurityEvents: securityEvents,
 	})
 }

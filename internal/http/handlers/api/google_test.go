@@ -16,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
 )
@@ -47,7 +48,9 @@ func TestGoogleOptionsGetReturnsClientIDNonceAndCookie(t *testing.T) {
 }
 
 func TestGoogleLoginPostRejectsMismatchedNonce(t *testing.T) {
+	recorder := &capturingSecurityEvents{}
 	h := &APIHandler{
+		Auth:           auth.New(auth.Config{SecurityEvents: recorder}),
 		Google:         google.New("test-google-client-id"),
 		OAuthProviders: googleTestProviders(),
 	}
@@ -71,6 +74,23 @@ func TestGoogleLoginPostRejectsMismatchedNonce(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d body=%s", http.StatusUnauthorized, rr.Code, rr.Body.String())
 	}
+	if len(recorder.login) != 1 ||
+		recorder.login[0].Outcome != domain.SecurityEventOutcomeDenied ||
+		recorder.login[0].ReasonCode != domain.SecurityEventReasonInvalidAssertion ||
+		recorder.login[0].AuthenticationMethod != domain.AuthenticationMethodGoogle ||
+		recorder.login[0].UserID != nil {
+		t.Fatalf("unexpected Google login denial event: %+v", recorder.login)
+	}
+}
+
+type capturingSecurityEvents struct {
+	securityevent.NoopRecorder
+	login []securityevent.Authentication
+}
+
+func (r *capturingSecurityEvents) AuthenticationLogin(_ context.Context, event securityevent.Authentication) error {
+	r.login = append(r.login, event)
+	return nil
 }
 
 func TestCompleteGoogleLoginCreatesSession(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
 	"github.com/authara-org/authara/internal/useragent"
@@ -36,6 +37,7 @@ type Config struct {
 	Logger         *slog.Logger
 	Policy         config.AuthenticationPolicyReader
 	SessionRevoker SessionRevoker
+	SecurityEvents securityevent.Recorder
 }
 
 type SessionRevoker interface {
@@ -50,6 +52,7 @@ type Service struct {
 	logger         *slog.Logger
 	policy         config.AuthenticationPolicyReader
 	sessionRevoker SessionRevoker
+	securityEvents securityevent.Recorder
 }
 
 func New(cfg Config) (*Service, error) {
@@ -84,6 +87,10 @@ func New(cfg Config) (*Service, error) {
 			}
 		})
 	}
+	securityEvents := cfg.SecurityEvents
+	if securityEvents == nil {
+		securityEvents = securityevent.NoopRecorder{}
+	}
 
 	return &Service{
 		store:          cfg.Store,
@@ -93,6 +100,7 @@ func New(cfg Config) (*Service, error) {
 		logger:         cfg.Logger,
 		policy:         policy,
 		sessionRevoker: cfg.SessionRevoker,
+		securityEvents: securityEvents,
 	}, nil
 }
 
@@ -216,10 +224,13 @@ func (s *Service) FinishRegistration(
 		if err := s.store.ConsumeWebAuthnChallenge(txCtx, challenge.ID, now); err != nil {
 			return err
 		}
-		return email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAuthMethodAdded, email.TemplateData{
+		if err := email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAuthMethodAdded, email.TemplateData{
 			email.TemplateVariableAuthMethod: passkeyMethodLabel(created.Name),
 			email.TemplateVariableOccurredAt: email.OccurredAt(now),
-		}, now)
+		}, now); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialPasskeyAdded(txCtx, securityevent.Credential{UserID: userID, PasskeyID: &created.ID})
 	})
 }
 
@@ -261,6 +272,8 @@ func (s *Service) FinishLogin(
 	now time.Time,
 ) (LoginResult, error) {
 	var out LoginResult
+	var attemptedUserID *uuid.UUID
+	var attemptedPasskeyID *uuid.UUID
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		challenge, session, err := s.authenticationSession(txCtx, challengeID, now)
@@ -274,6 +287,12 @@ func (s *Service) FinishLogin(
 				var lookupErr error
 				var waUser webauthn.User
 				waUser, storedPasskey, lookupErr = s.lookupUserByCredential(txCtx, rawID)
+				if lookupErr == nil {
+					userID := storedPasskey.UserID
+					passkeyID := storedPasskey.ID
+					attemptedUserID = &userID
+					attemptedPasskeyID = &passkeyID
+				}
 				return waUser, lookupErr
 			},
 			session,
@@ -302,6 +321,11 @@ func (s *Service) FinishLogin(
 		return s.store.ConsumeWebAuthnChallenge(txCtx, challenge.ID, now)
 	})
 	if err != nil {
+		if errors.Is(err, ErrPasskeyAuthenticationInvalid) {
+			if eventErr := s.recordPasskeyAuthenticationDenied(ctx, attemptedUserID, attemptedPasskeyID, nil); eventErr != nil {
+				return LoginResult{}, eventErr
+			}
+		}
 		return LoginResult{}, err
 	}
 
@@ -428,9 +452,45 @@ func (s *Service) FinishReauthentication(
 		if err != nil {
 			return err
 		}
-		return s.store.ConsumeWebAuthnChallenge(txCtx, challenge.ID, now)
+		if err := s.store.ConsumeWebAuthnChallenge(txCtx, challenge.ID, now); err != nil {
+			return err
+		}
+		return nil
 	})
+	if errors.Is(err, ErrPasskeyAuthenticationInvalid) {
+		if eventErr := s.recordPasskeyAuthenticationDenied(ctx, &userID, nil, &sessionID); eventErr != nil {
+			return decision, eventErr
+		}
+	}
 	return decision, err
+}
+
+func (s *Service) recordPasskeyAuthenticationDenied(
+	ctx context.Context,
+	userID *uuid.UUID,
+	passkeyID *uuid.UUID,
+	sessionID *uuid.UUID,
+) error {
+	actorType := domain.SecurityEventActorAnonymous
+	var actorUserID *uuid.UUID
+	if sessionID != nil {
+		actorType = domain.SecurityEventActorUser
+		actorUserID = userID
+	}
+	event := securityevent.Authentication{
+		Outcome:              domain.SecurityEventOutcomeDenied,
+		ReasonCode:           domain.SecurityEventReasonInvalidAssertion,
+		ActorType:            actorType,
+		ActorUserID:          actorUserID,
+		UserID:               userID,
+		SessionID:            sessionID,
+		PasskeyID:            passkeyID,
+		AuthenticationMethod: domain.AuthenticationMethodPasskey,
+	}
+	if sessionID == nil {
+		return s.securityEvents.AuthenticationLogin(ctx, event)
+	}
+	return s.securityEvents.AuthenticationReauthenticated(ctx, event)
 }
 
 func (s *Service) ListUserPasskeys(ctx context.Context, userID uuid.UUID) ([]domain.Passkey, error) {
@@ -473,10 +533,13 @@ func (s *Service) DeletePasskey(ctx context.Context, userID uuid.UUID, passkeyID
 		}
 
 		now := time.Now().UTC()
-		return email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAuthMethodRemoved, email.TemplateData{
+		if err := email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAuthMethodRemoved, email.TemplateData{
 			email.TemplateVariableAuthMethod: passkeyMethodLabel(passkey.Name),
 			email.TemplateVariableOccurredAt: email.OccurredAt(now),
-		}, now)
+		}, now); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialPasskeyRemoved(txCtx, securityevent.Credential{UserID: userID, PasskeyID: &passkeyID})
 	})
 }
 
@@ -606,11 +669,12 @@ func (s *Service) applyAuthenticationResult(
 	if storedPasskey.CloneWarning && response == config.PasskeyCloneResponseAlert {
 		return decision, nil
 	}
-	if _, err := s.store.CreateSecurityEvent(ctx, domain.SecurityEvent{
-		Type:      domain.SecurityEventPasskeyCloneWarning,
-		UserID:    &user.ID,
-		PasskeyID: &storedPasskey.ID,
-		Response:  response,
+	outcome := domain.SecurityEventOutcomeSuccess
+	if response == config.PasskeyCloneResponseRestrict || response == config.PasskeyCloneResponseRestrictAndRevoke {
+		outcome = domain.SecurityEventOutcomeDenied
+	}
+	if err := s.securityEvents.PasskeyCloneWarning(ctx, securityevent.PasskeyClone{
+		UserID: user.ID, PasskeyID: storedPasskey.ID, Outcome: outcome, Response: response,
 	}); err != nil {
 		return decision, err
 	}
