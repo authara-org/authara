@@ -94,6 +94,35 @@ func (s *Service) CreateSession(
 	refreshToken string,
 	err error,
 ) {
+	return s.createSession(ctx, userID, nil, audience, authenticationMethod, userAgent, now, clientIP)
+}
+
+func (s *Service) CreatePasskeySession(
+	ctx context.Context,
+	userID uuid.UUID,
+	passkeyID uuid.UUID,
+	audience token.Audience,
+	userAgent string,
+	now time.Time,
+	clientIP string,
+) (accessToken string, refreshToken string, err error) {
+	return s.createSession(ctx, userID, &passkeyID, audience, domain.AuthenticationMethodPasskey, userAgent, now, clientIP)
+}
+
+func (s *Service) createSession(
+	ctx context.Context,
+	userID uuid.UUID,
+	passkeyID *uuid.UUID,
+	audience token.Audience,
+	authenticationMethod domain.AuthenticationMethod,
+	userAgent string,
+	now time.Time,
+	clientIP string,
+) (
+	accessToken string,
+	refreshToken string,
+	err error,
+) {
 	policy := s.policy.CurrentSession()
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		user, err := s.ensureUserAllowed(ctx, userID)
@@ -102,6 +131,18 @@ func (s *Service) CreateSession(
 		}
 		if err := s.store.LockUserForKeyShare(ctx, userID); err != nil {
 			return err
+		}
+		if passkeyID != nil {
+			passkey, err := s.store.GetPasskeyByID(ctx, *passkeyID)
+			if errors.Is(err, store.ErrPasskeyNotFound) {
+				return ErrAuthenticationMethodUnavailable
+			}
+			if err != nil {
+				return err
+			}
+			if passkey.UserID != userID || passkey.RestrictedAt != nil {
+				return ErrAuthenticationMethodUnavailable
+			}
 		}
 
 		org, membership, err := s.organizations.DefaultOrganizationForUser(ctx, user.ID)

@@ -36,6 +36,7 @@ The dashboard supports:
 - revoking one session or all active sessions for a user
 - allowlist list, live search, pagination, add, and remove
 - queued or failed email jobs and risky challenges
+- durable security events for suspicious passkey sign-counter behavior and the applied policy response
 - recent admin audit events
 
 Allowlist management is available only when
@@ -54,6 +55,7 @@ Technical identifiers are minimized in the UI:
 - session IDs are shortened in tables and full IDs are used only in form routes
 - user agents are summarized, with full user agent strings behind an explicit technical-details disclosure
 - passkey credential IDs, public keys, password hashes, refresh token hashes, verification code hashes, OAuth tokens, and raw provider identifiers are not rendered
+- security events show only shortened internal user/passkey row IDs and the policy response; authenticator IDs and counter values are not stored in the event
 - passkey transports are shown only under technical details
 
 The audit log is for security and accountability, not casual monitoring. The default audit table shows timestamps, actions, shortened actor/target user IDs, and masked emails. Personal data and metadata are behind a disclosure. Audit events are personal data; choose retention based on your legal and security requirements.
@@ -79,3 +81,4 @@ Authara protects against common admin lockout and stale-access mistakes:
 - password hashes, refresh token hashes, verification code hashes, raw passkey public keys, and OAuth tokens are not rendered in admin templates
 
 Run migrations before using the dashboard. The admin audit table is introduced in schema version `11`.
+Passkey security events and persistent passkey restrictions require schema version `29`.

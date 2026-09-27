@@ -108,6 +108,61 @@ func newDBSessionServiceWithPolicy(
 
 var errSessionTestCache = errors.New("session test cache unavailable")
 
+func TestCreatePasskeySessionWaitsForRestrictionAndFailsClosed(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	user, err := tdb.Store.CreateUser(ctx, domain.User{
+		Email: "passkey-session-race-" + uuid.NewString() + "@example.com", Username: "passkey-session-race-" + uuid.NewString(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tdb.Store.DeleteUser(context.Background(), user.ID) })
+	passkey, err := tdb.Store.CreatePasskey(ctx, domain.Passkey{
+		UserID: user.ID, CredentialID: []byte("passkey-session-race-" + uuid.NewString()), PublicKey: []byte("public-key"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	txCtx, cancel, err := tdb.Tx.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	if err := tdb.Store.LockUserForUpdate(txCtx, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := tdb.Store.RestrictPasskey(txCtx, passkey.ID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := newDBSessionService(t, tdb, time.Minute)
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := svc.CreatePasskeySession(
+			ctx, user.ID, passkey.ID, token.AudienceApp, "test-agent", time.Now().UTC(), "",
+		)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("passkey session completed before restriction committed: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := tdb.Tx.Commit(txCtx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrAuthenticationMethodUnavailable) {
+			t.Fatalf("expected unavailable passkey, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("passkey session did not finish after restriction commit")
+	}
+}
+
 func TestRecentAuthenticationPolicy(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {

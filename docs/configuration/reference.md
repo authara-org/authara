@@ -94,6 +94,14 @@ PUBLIC_URL
 `AUTHARA_USERNAME_LOGIN_ENABLED` controls whether password login accepts a
 username in addition to an email address. It defaults to `false`.
 
+`AUTHARA_PASSKEY_CLONE_RESPONSE` controls the response to a newly detected
+passkey sign-counter anomaly: `alert` records the event and allows the request,
+`restrict` also disables that passkey and denies the request, and
+`restrict_and_revoke` additionally revokes all sessions. It defaults to
+`alert`. `AUTHARA_PASSKEY_CLONE_NOTIFY_USER` defaults to `true` and queues a
+generic security email without credential IDs, public keys, authenticator IDs,
+or counter values.
+
 `AUTHARA_PASSWORD_MIN_LENGTH` controls the minimum Unicode-character length for
 new passwords (8–128, default 8; 15 or more is recommended in production).
 Authara does not impose uppercase, lowercase, digit, or symbol composition
@@ -113,6 +121,8 @@ Example:
 
 ```
 AUTHARA_USERNAME_LOGIN_ENABLED
+AUTHARA_PASSKEY_CLONE_RESPONSE
+AUTHARA_PASSKEY_CLONE_NOTIFY_USER
 AUTHARA_PASSWORD_MIN_LENGTH
 ```
 

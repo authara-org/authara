@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
+	"github.com/google/uuid"
 )
 
 func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.LoginWithPasswordRequestObject) (contract.LoginWithPasswordResponseObject, error) {
@@ -163,8 +165,18 @@ func (h *APIHandler) contractSession(
 	user domain.User,
 	audience token.Audience,
 	authenticationMethod domain.AuthenticationMethod,
+	passkeyIDs ...uuid.UUID,
 ) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, authenticationMethod, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	var accessToken, refreshToken string
+	var err error
+	if len(passkeyIDs) > 0 {
+		accessToken, refreshToken, err = h.Session.CreatePasskeySession(ctx, user.ID, passkeyIDs[0], audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	} else {
+		accessToken, refreshToken, err = h.Session.CreateSession(ctx, user.ID, audience, authenticationMethod, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	}
+	if errors.Is(err, session.ErrAuthenticationMethodUnavailable) {
+		return contract.AuthSession{}, nil, response.CodeUnauthorized, "Passkey sign-in failed.", false
+	}
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
 		return contract.AuthSession{}, nil, response.CodeForbidden, "Account cannot access requested audience.", false

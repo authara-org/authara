@@ -194,7 +194,7 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 	}
 
 	now := time.Now().UTC()
-	user, err := h.Passkeys.FinishLogin(ctx, challengeID, in.Credential, now)
+	result, err := h.Passkeys.FinishLogin(ctx, challengeID, in.Credential, now)
 	if err != nil {
 		if h.Logger != nil {
 			h.Logger.Warn("passkey login failed", "err", err)
@@ -202,11 +202,19 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 		response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Passkey sign-in failed.")
 		return
 	}
+	if !result.Decision.AllowSession {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Passkey sign-in failed.")
+		return
+	}
 
 	returnTo := normalizedReturnTo(in.ReturnTo, httpctx.ReturnToOrDefault(ctx))
 	audience := redirect.AudienceForPath(returnTo)
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodPasskey, r.UserAgent(), now, httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreatePasskeySession(ctx, result.User.ID, result.PasskeyID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
+		if errors.Is(err, session.ErrAuthenticationMethodUnavailable) {
+			response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Passkey sign-in failed.")
+			return
+		}
 		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not create session.")
 		return
 	}
@@ -294,7 +302,12 @@ func (h *UIHandler) ReauthenticatePasskeyFinishPost(w http.ResponseWriter, r *ht
 		writeAuthenticationChallengeJSONError(w, err)
 		return
 	}
-	if err := h.Passkeys.FinishReauthentication(r.Context(), userID, sessionID, challengeID, in.Credential, now); err != nil {
+	decision, err := h.Passkeys.FinishReauthentication(r.Context(), userID, sessionID, challengeID, in.Credential, now)
+	if err != nil {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Passkey authentication failed.")
+		return
+	}
+	if !decision.AllowSession {
 		response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Passkey authentication failed.")
 		return
 	}

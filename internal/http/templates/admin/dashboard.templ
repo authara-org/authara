@@ -25,6 +25,7 @@ templ Dashboard(stats adminsvc.DashboardStats, failures adminsvc.RecentFailures,
 							@toolLink("/auth/admin/allowlist", "Allowlist", "Add, search, paginate, and remove allowed emails.")
 						}
 						@toolLink("/auth/admin/failures", "Delivery queue and failures", "Review queued or failed email jobs and risky challenges.")
+						@toolLink("/auth/admin/security-events", "Security events", "Review suspicious authentication activity and the configured response.")
 						@toolLink("/auth/admin/audit", "Audit log", "Inspect security-sensitive admin mutations.")
 					</div>
 				</section>

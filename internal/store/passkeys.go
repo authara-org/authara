@@ -24,6 +24,7 @@ func toDomainPasskey(m model.Passkey) domain.Passkey {
 		AAGUID:            m.AAGUID,
 		SignCount:         uint32(m.SignCount),
 		CloneWarning:      m.CloneWarning,
+		RestrictedAt:      m.RestrictedAt,
 		Name:              m.Name,
 		LastUsedAt:        m.LastUsedAt,
 		UserPresent:       m.UserPresent,
@@ -44,6 +45,7 @@ func toModelPasskey(d domain.Passkey) model.Passkey {
 		AAGUID:            d.AAGUID,
 		SignCount:         int64(d.SignCount),
 		CloneWarning:      d.CloneWarning,
+		RestrictedAt:      d.RestrictedAt,
 		Name:              d.Name,
 		LastUsedAt:        d.LastUsedAt,
 		UserPresent:       d.UserPresent,
@@ -64,6 +66,7 @@ const passkeyColumns = `
 	aaguid,
 	sign_count,
 	clone_warning,
+	restricted_at,
 	name,
 	created_at,
 	updated_at,
@@ -86,6 +89,7 @@ func scanPasskey(row rowScanner, m *model.Passkey) error {
 		&m.AAGUID,
 		&m.SignCount,
 		&m.CloneWarning,
+		&m.RestrictedAt,
 		&m.Name,
 		&m.CreatedAt,
 		&m.UpdatedAt,
@@ -114,6 +118,7 @@ func (s *Store) CreatePasskey(ctx context.Context, passkey domain.Passkey) (doma
 			aaguid,
 			sign_count,
 			clone_warning,
+			restricted_at,
 			name,
 			last_used_at,
 			user_present,
@@ -136,7 +141,8 @@ func (s *Store) CreatePasskey(ctx context.Context, passkey domain.Passkey) (doma
 			$12,
 			$13,
 			$14,
-			$15
+			$15,
+			$16
 		)
 		RETURNING `+passkeyColumns,
 		m.UserID,
@@ -148,6 +154,7 @@ func (s *Store) CreatePasskey(ctx context.Context, passkey domain.Passkey) (doma
 		m.AAGUID,
 		m.SignCount,
 		m.CloneWarning,
+		m.RestrictedAt,
 		m.Name,
 		m.LastUsedAt,
 		m.UserPresent,
@@ -243,8 +250,8 @@ func (s *Store) DeletePasskeyByIDAndUserID(ctx context.Context, passkeyID, userI
 func (s *Store) UpdatePasskeyAfterLogin(ctx context.Context, credentialID []byte, signCount uint32, cloneWarning bool, now time.Time) error {
 	res, err := s.exec(ctx, `
 		UPDATE passkeys
-		SET sign_count = $1,
-		    clone_warning = $2,
+		SET sign_count = GREATEST(sign_count, $1),
+		    clone_warning = clone_warning OR $2,
 		    last_used_at = $3
 		WHERE credential_id = $4
 	`, int64(signCount), cloneWarning, now, credentialID)
@@ -262,6 +269,25 @@ func (s *Store) UpdatePasskeyAfterLogin(ctx context.Context, credentialID []byte
 	return nil
 }
 
+func (s *Store) RestrictPasskey(ctx context.Context, passkeyID uuid.UUID, now time.Time) error {
+	res, err := s.exec(ctx, `
+		UPDATE passkeys
+		SET restricted_at = COALESCE(restricted_at, $1)
+		WHERE id = $2
+	`, now, passkeyID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrPasskeyNotFound
+	}
+	return nil
+}
+
 func (s *Store) CountAuthMethods(ctx context.Context, userID uuid.UUID) (int, error) {
 	var count int
 	err := s.queryRow(ctx, `
@@ -275,7 +301,7 @@ func (s *Store) CountAuthMethods(ctx context.Context, userID uuid.UUID) (int, er
 			      (provider <> $2 AND provider_user_id IS NOT NULL AND provider_user_id <> '')
 			    )
 			) +
-			(SELECT count(*) FROM passkeys WHERE user_id = $1)
+			(SELECT count(*) FROM passkeys WHERE user_id = $1 AND restricted_at IS NULL)
 	`, userID, string(domain.ProviderPassword)).Scan(&count)
 	if err != nil {
 		return 0, err

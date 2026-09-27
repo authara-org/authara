@@ -356,6 +356,8 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 
 	set(KeyUIDefaultReturnTo, "/dashboard")
 	set(KeyAuthenticationUsernameLoginEnabled, "true")
+	set(KeyAuthenticationPasskeyCloneResponse, PasskeyCloneResponseRestrictAndRevoke)
+	set(KeyAuthenticationPasskeyCloneNotifyUser, "false")
 	set(KeyTokenAccessTTL, "20")
 	set(KeySessionTTL, "90")
 	set(KeySessionRefreshTokenTTL, "30")
@@ -380,8 +382,9 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	if got := service.CurrentUI().DefaultReturnTo; got != "/dashboard" {
 		t.Fatalf("default return path = %q", got)
 	}
-	if !service.CurrentAuthentication().UsernameLoginEnabled {
-		t.Fatal("username login policy was not updated")
+	authentication := service.CurrentAuthentication()
+	if !authentication.UsernameLoginEnabled || authentication.PasskeyCloneResponse != PasskeyCloneResponseRestrictAndRevoke || authentication.PasskeyCloneNotifyUser {
+		t.Fatalf("authentication policy = %+v", authentication)
 	}
 	if got := service.CurrentToken().AccessTokenTTL; got != 20*time.Minute {
 		t.Fatalf("access-token lifetime = %s", got)

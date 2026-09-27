@@ -59,6 +59,19 @@ func (s *Service) ListAuditEvents(ctx context.Context, page Page) (AuditEventPag
 	return AuditEventPage{Events: events, Page: page.Page, Size: page.Size, HasNext: hasNext}, nil
 }
 
+func (s *Service) ListSecurityEvents(ctx context.Context, page Page) (SecurityEventPage, error) {
+	page = normalizePage(page, 50)
+	events, err := s.store.ListSecurityEvents(ctx, page.Size+1, (page.Page-1)*page.Size)
+	if err != nil {
+		return SecurityEventPage{}, err
+	}
+	hasNext := len(events) > page.Size
+	if hasNext {
+		events = events[:page.Size]
+	}
+	return SecurityEventPage{Events: events, Page: page.Page, Size: page.Size, HasNext: hasNext}, nil
+}
+
 func (s *Service) CleanupExpiredAuditEvents(ctx context.Context, now time.Time) (int64, error) {
 	retention := s.policy.CurrentAdmin().AuditRetention
 	if retention <= 0 {

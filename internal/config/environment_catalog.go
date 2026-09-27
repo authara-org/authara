@@ -38,6 +38,7 @@ var environmentVariableTypeOverrides = map[string]string{
 	"AUTHARA_CACHE_PROVIDER":               "enum",
 	"AUTHARA_ACCESS_TOKEN_REVOCATION_MODE": "enum",
 	"AUTHARA_ORG_MODE":                     "enum",
+	"AUTHARA_PASSKEY_CLONE_RESPONSE":       "enum",
 	"AUTHARA_EMAIL_PROVIDER":               "enum",
 }
 

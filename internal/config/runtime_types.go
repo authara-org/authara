@@ -15,7 +15,9 @@ type Key = configruntime.Key
 const (
 	KeyUIDefaultReturnTo Key = "ui.default_return_to"
 
-	KeyAuthenticationUsernameLoginEnabled Key = "authentication.username_login_enabled"
+	KeyAuthenticationUsernameLoginEnabled   Key = "authentication.username_login_enabled"
+	KeyAuthenticationPasskeyCloneResponse   Key = "authentication.passkey_clone_response"
+	KeyAuthenticationPasskeyCloneNotifyUser Key = "authentication.passkey_clone_notify_user"
 
 	KeyTokenAccessTTL Key = "token.access_ttl"
 
@@ -152,7 +154,9 @@ type UIPolicyReaderFunc func() UIPolicy
 func (f UIPolicyReaderFunc) CurrentUI() UIPolicy { return f() }
 
 type AuthenticationPolicy struct {
-	UsernameLoginEnabled bool
+	UsernameLoginEnabled   bool
+	PasskeyCloneResponse   string
+	PasskeyCloneNotifyUser bool
 }
 
 type AuthenticationPolicyReader interface {

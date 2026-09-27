@@ -20,6 +20,7 @@ type Passkey struct {
 	AAGUID            *uuid.UUID
 	SignCount         int64
 	CloneWarning      bool
+	RestrictedAt      *time.Time
 	Name              string
 	LastUsedAt        *time.Time
 

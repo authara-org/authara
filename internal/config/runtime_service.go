@@ -480,7 +480,9 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		return nil, fmt.Errorf("%w: default return path must be a safe relative path", ErrInvalidValue)
 	}
 	authentication := AuthenticationPolicy{
-		UsernameLoginEnabled: values[KeyAuthenticationUsernameLoginEnabled].(bool),
+		UsernameLoginEnabled:   values[KeyAuthenticationUsernameLoginEnabled].(bool),
+		PasskeyCloneResponse:   values[KeyAuthenticationPasskeyCloneResponse].(string),
+		PasskeyCloneNotifyUser: values[KeyAuthenticationPasskeyCloneNotifyUser].(bool),
 	}
 	tokenPolicy := TokenPolicy{
 		AccessTokenTTL: time.Duration(values[KeyTokenAccessTTL].(int)) * time.Minute,

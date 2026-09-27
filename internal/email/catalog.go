@@ -224,6 +224,23 @@ var templateCatalog = []TemplateDefinition{
 		},
 	},
 	{
+		Key:                    domain.EmailTemplateSuspiciousPasskeyActivity,
+		DisplayName:            "Suspicious passkey activity",
+		Description:            "Sent when Authara detects suspicious passkey sign-counter behavior.",
+		DefaultSubjectTemplate: "Review unusual passkey activity",
+		DefaultTextTemplate:    defaultSuspiciousPasskeyActivity.Text,
+		DefaultHTMLTemplate:    defaultSuspiciousPasskeyActivity.HTML,
+		AvailableVariables: []string{
+			TemplateVariableOccurredAt,
+		},
+		RequiredBodyVariables: []string{
+			TemplateVariableOccurredAt,
+		},
+		SampleData: TemplateData{
+			TemplateVariableOccurredAt: "2026-06-24T12:00:00Z",
+		},
+	},
+	{
 		Key:                    domain.EmailTemplatePasswordChanged,
 		DisplayName:            "Password changed",
 		Description:            "Sent after an authenticated password change, password reset, or password replacement.",

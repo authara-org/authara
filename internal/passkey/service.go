@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
@@ -26,21 +27,29 @@ import (
 const defaultChallengeTTL = 5 * time.Minute
 
 type Config struct {
-	RPDisplayName string
-	RPID          string
-	RPOrigins     []string
-	Store         *store.Store
-	Tx            *tx.Manager
-	ChallengeTTL  time.Duration
-	Logger        *slog.Logger
+	RPDisplayName  string
+	RPID           string
+	RPOrigins      []string
+	Store          *store.Store
+	Tx             *tx.Manager
+	ChallengeTTL   time.Duration
+	Logger         *slog.Logger
+	Policy         config.AuthenticationPolicyReader
+	SessionRevoker SessionRevoker
+}
+
+type SessionRevoker interface {
+	RevokeAllSessions(context.Context, uuid.UUID) error
 }
 
 type Service struct {
-	store        *store.Store
-	tx           *tx.Manager
-	webAuthn     *webauthn.WebAuthn
-	challengeTTL time.Duration
-	logger       *slog.Logger
+	store          *store.Store
+	tx             *tx.Manager
+	webAuthn       *webauthn.WebAuthn
+	challengeTTL   time.Duration
+	logger         *slog.Logger
+	policy         config.AuthenticationPolicyReader
+	sessionRevoker SessionRevoker
 }
 
 func New(cfg Config) (*Service, error) {
@@ -66,13 +75,35 @@ func New(cfg Config) (*Service, error) {
 		return nil, err
 	}
 
+	policy := cfg.Policy
+	if policy == nil {
+		policy = config.AuthenticationPolicyReaderFunc(func() config.AuthenticationPolicy {
+			return config.AuthenticationPolicy{
+				PasskeyCloneResponse:   config.PasskeyCloneResponseAlert,
+				PasskeyCloneNotifyUser: true,
+			}
+		})
+	}
+
 	return &Service{
-		store:        cfg.Store,
-		tx:           cfg.Tx,
-		webAuthn:     wa,
-		challengeTTL: challengeTTL,
-		logger:       cfg.Logger,
+		store:          cfg.Store,
+		tx:             cfg.Tx,
+		webAuthn:       wa,
+		challengeTTL:   challengeTTL,
+		logger:         cfg.Logger,
+		policy:         policy,
+		sessionRevoker: cfg.SessionRevoker,
 	}, nil
+}
+
+type AuthenticationDecision struct {
+	AllowSession bool
+}
+
+type LoginResult struct {
+	User      domain.User
+	PasskeyID uuid.UUID
+	Decision  AuthenticationDecision
 }
 
 type OptionsResponse struct {
@@ -228,8 +259,8 @@ func (s *Service) FinishLogin(
 	challengeID uuid.UUID,
 	assertionResponseJSON []byte,
 	now time.Time,
-) (domain.User, error) {
-	var out domain.User
+) (LoginResult, error) {
+	var out LoginResult
 
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		challenge, session, err := s.authenticationSession(txCtx, challengeID, now)
@@ -237,9 +268,13 @@ func (s *Service) FinishLogin(
 			return err
 		}
 
+		var storedPasskey domain.Passkey
 		validatedUser, credential, err := s.webAuthn.FinishPasskeyLogin(
 			func(rawID, userHandle []byte) (webauthn.User, error) {
-				return s.lookupUserByCredential(txCtx, rawID)
+				var lookupErr error
+				var waUser webauthn.User
+				waUser, storedPasskey, lookupErr = s.lookupUserByCredential(txCtx, rawID)
+				return waUser, lookupErr
 			},
 			session,
 			webAuthnRequest(assertionResponseJSON),
@@ -256,22 +291,18 @@ func (s *Service) FinishLogin(
 		if !ok {
 			return ErrPasskeyAuthenticationInvalid
 		}
-		out = waUser.user
+		out.User = waUser.user
+		out.PasskeyID = storedPasskey.ID
 
-		if err := s.store.UpdatePasskeyAfterLogin(
-			txCtx,
-			credential.ID,
-			credential.Authenticator.SignCount,
-			credential.Authenticator.CloneWarning,
-			now,
-		); err != nil {
+		out.Decision, err = s.applyAuthenticationResult(txCtx, waUser.user, storedPasskey, credential, now)
+		if err != nil {
 			return err
 		}
 
 		return s.store.ConsumeWebAuthnChallenge(txCtx, challenge.ID, now)
 	})
 	if err != nil {
-		return domain.User{}, err
+		return LoginResult{}, err
 	}
 
 	return out, nil
@@ -301,6 +332,7 @@ func (s *Service) BeginReauthentication(
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
+	passkeys = activePasskeys(passkeys)
 	if len(passkeys) == 0 {
 		return nil, uuid.Nil, ErrPasskeyNotFound
 	}
@@ -340,8 +372,9 @@ func (s *Service) FinishReauthentication(
 	challengeID uuid.UUID,
 	assertionResponseJSON []byte,
 	now time.Time,
-) error {
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+) (AuthenticationDecision, error) {
+	decision := AuthenticationDecision{AllowSession: true}
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		currentSession, err := s.store.GetActiveSessionByID(txCtx, sessionID, now)
 		if err != nil {
 			if errors.Is(err, store.ErrSessionNotFound) {
@@ -361,6 +394,9 @@ func (s *Service) FinishReauthentication(
 			challenge.SessionID == nil || *challenge.SessionID != sessionID {
 			return ErrPasskeyAuthenticationInvalid
 		}
+		if err := s.store.LockUserForUpdate(txCtx, userID); err != nil {
+			return err
+		}
 		u, err := s.store.GetUserByID(txCtx, userID)
 		if err != nil {
 			return err
@@ -368,6 +404,10 @@ func (s *Service) FinishReauthentication(
 		passkeys, err := s.store.ListPasskeysByUserID(txCtx, userID)
 		if err != nil {
 			return err
+		}
+		passkeys = activePasskeys(passkeys)
+		if len(passkeys) == 0 {
+			return ErrPasskeyAuthenticationInvalid
 		}
 		credential, err := s.webAuthn.FinishLogin(
 			newUser(u, passkeys),
@@ -380,17 +420,17 @@ func (s *Service) FinishReauthentication(
 			}
 			return ErrPasskeyAuthenticationInvalid
 		}
-		if err := s.store.UpdatePasskeyAfterLogin(
-			txCtx,
-			credential.ID,
-			credential.Authenticator.SignCount,
-			credential.Authenticator.CloneWarning,
-			now,
-		); err != nil {
+		storedPasskey, ok := passkeyByCredentialID(passkeys, credential.ID)
+		if !ok {
+			return ErrPasskeyAuthenticationInvalid
+		}
+		decision, err = s.applyAuthenticationResult(txCtx, u, storedPasskey, credential, now)
+		if err != nil {
 			return err
 		}
 		return s.store.ConsumeWebAuthnChallenge(txCtx, challenge.ID, now)
 	})
+	return decision, err
 }
 
 func (s *Service) ListUserPasskeys(ctx context.Context, userID uuid.UUID) ([]domain.Passkey, error) {
@@ -403,13 +443,6 @@ func (s *Service) DeletePasskey(ctx context.Context, userID uuid.UUID, passkeyID
 			return err
 		}
 
-		count, err := s.store.CountAuthMethods(txCtx, userID)
-		if err != nil {
-			return err
-		}
-		if count <= 1 {
-			return ErrCannotRemoveLastAuthMethod
-		}
 		user, err := s.store.GetUserByID(txCtx, userID)
 		if err != nil {
 			return err
@@ -423,6 +456,13 @@ func (s *Service) DeletePasskey(ctx context.Context, userID uuid.UUID, passkeyID
 		}
 		if passkey.UserID != userID {
 			return ErrPasskeyNotFound
+		}
+		count, err := s.store.CountAuthMethods(txCtx, userID)
+		if err != nil {
+			return err
+		}
+		if passkey.RestrictedAt == nil && count <= 1 {
+			return ErrCannotRemoveLastAuthMethod
 		}
 
 		if err := s.store.DeletePasskeyByIDAndUserID(txCtx, passkeyID, userID); err != nil {
@@ -508,23 +548,113 @@ func (s *Service) loadChallengeSession(
 	return challenge, session, nil
 }
 
-func (s *Service) lookupUserByCredential(ctx context.Context, rawID []byte) (webauthn.User, error) {
+func (s *Service) lookupUserByCredential(ctx context.Context, rawID []byte) (webauthn.User, domain.Passkey, error) {
 	passkey, err := s.store.GetPasskeyByCredentialID(ctx, rawID)
 	if err != nil {
-		return nil, err
+		return nil, domain.Passkey{}, err
+	}
+	if err := s.store.LockUserForUpdate(ctx, passkey.UserID); err != nil {
+		return nil, domain.Passkey{}, err
+	}
+	passkey, err = s.store.GetPasskeyByCredentialID(ctx, rawID)
+	if err != nil {
+		return nil, domain.Passkey{}, err
+	}
+	if passkey.RestrictedAt != nil {
+		return nil, domain.Passkey{}, ErrPasskeyAuthenticationInvalid
 	}
 
 	u, err := s.store.GetUserByID(ctx, passkey.UserID)
 	if err != nil {
-		return nil, err
+		return nil, domain.Passkey{}, err
 	}
 
 	passkeys, err := s.store.ListPasskeysByUserID(ctx, passkey.UserID)
 	if err != nil {
-		return nil, err
+		return nil, domain.Passkey{}, err
 	}
 
-	return newUser(u, passkeys), nil
+	return newUser(u, passkeys), passkey, nil
+}
+
+func (s *Service) applyAuthenticationResult(
+	ctx context.Context,
+	user domain.User,
+	storedPasskey domain.Passkey,
+	credential *webauthn.Credential,
+	now time.Time,
+) (AuthenticationDecision, error) {
+	decision := AuthenticationDecision{AllowSession: true}
+	if err := s.store.UpdatePasskeyAfterLogin(
+		ctx,
+		credential.ID,
+		credential.Authenticator.SignCount,
+		credential.Authenticator.CloneWarning,
+		now,
+	); err != nil {
+		return decision, err
+	}
+	if !credential.Authenticator.CloneWarning {
+		return decision, nil
+	}
+
+	policy := s.policy.CurrentAuthentication()
+	response := policy.PasskeyCloneResponse
+	if response == "" {
+		response = config.PasskeyCloneResponseAlert
+	}
+	if storedPasskey.CloneWarning && response == config.PasskeyCloneResponseAlert {
+		return decision, nil
+	}
+	if _, err := s.store.CreateSecurityEvent(ctx, domain.SecurityEvent{
+		Type:      domain.SecurityEventPasskeyCloneWarning,
+		UserID:    &user.ID,
+		PasskeyID: &storedPasskey.ID,
+		Response:  response,
+	}); err != nil {
+		return decision, err
+	}
+	if policy.PasskeyCloneNotifyUser {
+		if err := email.Enqueue(ctx, s.store, user.Email, domain.EmailTemplateSuspiciousPasskeyActivity, email.TemplateData{
+			email.TemplateVariableOccurredAt: email.OccurredAt(now),
+		}, now); err != nil {
+			return decision, err
+		}
+	}
+	if response == config.PasskeyCloneResponseRestrict || response == config.PasskeyCloneResponseRestrictAndRevoke {
+		if err := s.store.RestrictPasskey(ctx, storedPasskey.ID, now); err != nil {
+			return decision, err
+		}
+		decision.AllowSession = false
+	}
+	if response == config.PasskeyCloneResponseRestrictAndRevoke {
+		if s.sessionRevoker == nil {
+			return decision, errors.New("passkey clone response requires a session revoker")
+		}
+		if err := s.sessionRevoker.RevokeAllSessions(ctx, user.ID); err != nil {
+			return decision, err
+		}
+	}
+	return decision, nil
+}
+
+func activePasskeys(passkeys []domain.Passkey) []domain.Passkey {
+	out := make([]domain.Passkey, 0, len(passkeys))
+	for _, passkey := range passkeys {
+		if passkey.RestrictedAt == nil {
+			out = append(out, passkey)
+		}
+	}
+	return out
+}
+
+func passkeyByCredentialID(passkeys []domain.Passkey, credentialID []byte) (domain.Passkey, bool) {
+	for _, passkey := range passkeys {
+		if bytes.Equal(passkey.CredentialID, credentialID) {
+			return passkey, true
+		}
+	}
+	return domain.Passkey{}, false
 }
 
 func (s *Service) logPasskeyFailure(ctx context.Context, message string, err error) {
@@ -781,6 +911,9 @@ type user struct {
 func newUser(u domain.User, passkeys []domain.Passkey) *user {
 	credentials := make([]webauthn.Credential, 0, len(passkeys))
 	for _, passkey := range passkeys {
+		if passkey.RestrictedAt != nil {
+			continue
+		}
 		credentials = append(credentials, credentialFromDomain(passkey))
 	}
 	return &user{user: u, credentials: credentials}

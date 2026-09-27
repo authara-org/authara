@@ -200,6 +200,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 					r.Get("/users/search", uih.AdminUserSearchGet)
 					r.Get("/users/{userID}", uih.AdminUserDetailPage)
 					r.Get("/failures", uih.AdminFailuresPage)
+					r.Get("/security-events", uih.AdminSecurityEventsPage)
 					r.Get("/audit", uih.AdminAuditPage)
 
 					r.Group(func(r chi.Router) {

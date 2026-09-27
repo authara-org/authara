@@ -65,14 +65,17 @@ func (h *APIHandler) FinishPasskeyAuthentication(ctx context.Context, request co
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	user, err := h.Passkeys.FinishLogin(ctx, request.Body.ChallengeId, credential, time.Now().UTC())
+	result, err := h.Passkeys.FinishLogin(ctx, request.Body.ChallengeId, credential, time.Now().UTC())
 	if errors.Is(err, passkey.ErrPasskeyAuthenticationInvalid) {
 		return finishPasskeyAuthenticationError(responseCodeUnauthorized(), "Passkey sign-in failed."), nil
 	}
 	if err != nil {
 		return finishPasskeyAuthenticationError(responseCodeInternalError(), "Passkey error."), nil
 	}
-	body, header, code, message, ok := h.contractSession(ctx, r, user, audience, domain.AuthenticationMethodPasskey)
+	if !result.Decision.AllowSession {
+		return finishPasskeyAuthenticationError(responseCodeUnauthorized(), "Passkey sign-in failed."), nil
+	}
+	body, header, code, message, ok := h.contractSession(ctx, r, result.User, audience, domain.AuthenticationMethodPasskey, result.PasskeyID)
 	if !ok {
 		return finishPasskeyAuthenticationError(code, message), nil
 	}

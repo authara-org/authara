@@ -30,6 +30,8 @@ settings_metadata:
   AUTHARA_DEFAULT_RETURN_TO: {control: hybrid, reload: dynamic, sensitive: false, group: public_url}
   AUTHARA_TRUST_PROXY_HEADERS: {control: env, reload: startup, sensitive: false, group: public_url}
   AUTHARA_USERNAME_LOGIN_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
+  AUTHARA_PASSKEY_CLONE_RESPONSE: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
+  AUTHARA_PASSKEY_CLONE_NOTIFY_USER: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
   AUTHARA_PASSWORD_MIN_LENGTH: {control: env, reload: startup, sensitive: false, group: authentication}
   AUTHARA_JWT_ISSUER: {control: env, reload: startup, sensitive: false, group: tokens}
   AUTHARA_JWT_ACTIVE_KEY_ID: {control: env, reload: startup, sensitive: false, group: tokens}
@@ -296,6 +298,21 @@ variables:
     type: bool
     default: false
     description: Allows password login with a username in addition to an email address.
+
+  - name: AUTHARA_PASSKEY_CLONE_RESPONSE
+    stability: stable
+    required: false
+    type: enum
+    default: alert
+    allowed_values: [alert, restrict, restrict_and_revoke]
+    description: Controls whether a newly detected passkey sign-counter anomaly only alerts, also restricts that passkey, or additionally revokes all sessions.
+
+  - name: AUTHARA_PASSKEY_CLONE_NOTIFY_USER
+    stability: stable
+    required: false
+    type: bool
+    default: true
+    description: Queues a generic security email when a new passkey sign-counter anomaly is detected.
 
   - name: AUTHARA_PASSWORD_MIN_LENGTH
     stability: stable

@@ -81,6 +81,22 @@ func generalPolicyDefinitions() []Definition {
 			Impact: "Applies to subsequent hosted and API password-login requests.",
 		},
 		{
+			Key: KeyAuthenticationPasskeyCloneResponse, Name: "Passkey clone response",
+			Description: "Action taken when an authenticator sign counter indicates possible credential cloning.",
+			Environment: "AUTHARA_PASSKEY_CLONE_RESPONSE", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Authentication", Type: TypeEnum, DefaultValue: PasskeyCloneResponseAlert, HasDefault: true,
+			Allowed:      []string{PasskeyCloneResponseAlert, PasskeyCloneResponseRestrict, PasskeyCloneResponseRestrictAndRevoke},
+			defaultValue: PasskeyCloneResponseAlert,
+			Impact:       "Applies to newly detected passkey clone warnings.",
+		},
+		{
+			Key: KeyAuthenticationPasskeyCloneNotifyUser, Name: "Passkey clone user notification",
+			Description: "Queues a generic security email when a new passkey clone warning is detected.",
+			Environment: "AUTHARA_PASSKEY_CLONE_NOTIFY_USER", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Authentication", Type: TypeBool, DefaultValue: "true", HasDefault: true, defaultValue: true,
+			Impact: "Applies to newly detected passkey clone warnings.",
+		},
+		{
 			Key: KeyTokenAccessTTL, Name: "Access-token lifetime",
 			Description: "Lifetime assigned to newly issued access tokens.",
 			Environment: "AUTHARA_ACCESS_TOKEN_TTL_MINUTES", Control: ControlHybrid, Reload: ReloadDynamic,

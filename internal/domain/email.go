@@ -26,6 +26,7 @@ const (
 	EmailTemplateNewSignIn                        EmailTemplate = "new_sign_in"
 	EmailTemplateAuthMethodAdded                  EmailTemplate = "auth_method_added"
 	EmailTemplateAuthMethodRemoved                EmailTemplate = "auth_method_removed"
+	EmailTemplateSuspiciousPasskeyActivity        EmailTemplate = "suspicious_passkey_activity"
 	EmailTemplatePasswordChanged                  EmailTemplate = "password_changed"
 	EmailTemplateEmailChangedOldAddress           EmailTemplate = "email_changed_old_address"
 	EmailTemplateEmailChangedNewAddress           EmailTemplate = "email_changed_new_address"
@@ -52,6 +53,7 @@ func SupportedEmailTemplates() []EmailTemplate {
 		EmailTemplateNewSignIn,
 		EmailTemplateAuthMethodAdded,
 		EmailTemplateAuthMethodRemoved,
+		EmailTemplateSuspiciousPasskeyActivity,
 		EmailTemplatePasswordChanged,
 		EmailTemplateEmailChangedOldAddress,
 		EmailTemplateEmailChangedNewAddress,

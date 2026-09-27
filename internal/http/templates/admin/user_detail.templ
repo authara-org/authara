@@ -159,6 +159,9 @@ templ passkeys(passkeys []adminsvc.PasskeySummary) {
 				<div class="text-sm text-grey-600 dark:text-grey-400">Created { formatTime(passkey.CreatedAt) }</div>
 				<div class="text-sm text-grey-600 dark:text-grey-400">Last used { formatTimePtr(passkey.LastUsedAt) }</div>
 				<div class="mt-2 flex flex-wrap gap-2">
+					if passkey.RestrictedAt != nil {
+						@badge("Restricted", "red")
+					}
 					if passkey.CloneWarning {
 						@badge("Clone warning", "red")
 					}

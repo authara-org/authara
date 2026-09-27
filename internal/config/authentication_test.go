@@ -21,8 +21,18 @@ func TestAuthenticationConfigEnablesUsernameLoginFromEnvironment(t *testing.T) {
 	if cfg.PasswordMinimumLength != 15 {
 		t.Fatalf("unexpected password configuration: %+v", cfg)
 	}
+	if cfg.PasskeyCloneResponse != PasskeyCloneResponseAlert || !cfg.PasskeyCloneNotifyUser {
+		t.Fatalf("unexpected passkey clone policy: %+v", cfg)
+	}
 	if err := cfg.validate(); err != nil {
 		t.Fatalf("validate authentication config: %v", err)
+	}
+}
+
+func TestAuthenticationConfigRejectsInvalidPasskeyCloneResponse(t *testing.T) {
+	cfg := Authentication{PasswordMinimumLength: 8, PasskeyCloneResponse: "disable_everything"}
+	if err := cfg.validate(); err == nil {
+		t.Fatal("expected invalid passkey clone response to fail")
 	}
 }
 

@@ -243,7 +243,19 @@ Core and server-side SDK middleware in immediate mode share the Redis key
 templates in `contract/access-token-revocations.json`. An incompatible change
 is breaking unless a compatible rollout supports both formats.
 
-## 8.3 Password recovery contract
+## 8.3 Passkey clone-warning contract
+
+A newly detected passkey sign-counter anomaly creates a durable security event.
+`AUTHARA_PASSKEY_CLONE_RESPONSE` selects `alert`, `restrict`, or
+`restrict_and_revoke`; the latter two deny the current authentication and
+persistently restrict the passkey, while the last option also revokes all user
+sessions using the access-token guarantees in section 8.2.
+`AUTHARA_PASSKEY_CLONE_NOTIFY_USER` controls a generic user notice
+that never includes credential IDs, public keys, authenticator IDs, or counter
+values. Authenticators that legitimately keep both counters at zero do not
+trigger this response.
+
+## 8.4 Password recovery contract
 
 Password reset rotates an existing password provider. It does not add password
 authentication to an OAuth-only or passkey-only account. Unknown and

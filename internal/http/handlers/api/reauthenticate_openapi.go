@@ -177,11 +177,15 @@ func (h *APIHandler) FinishPasskeyReauthentication(ctx context.Context, request 
 	if err != nil {
 		return finishPasskeyReauthenticationError(response.CodeInvalidRequest, "Invalid passkey response."), nil
 	}
-	if err := h.Passkeys.FinishReauthentication(ctx, userID, sessionID, request.Body.ChallengeId, credential, now); err != nil {
+	decision, err := h.Passkeys.FinishReauthentication(ctx, userID, sessionID, request.Body.ChallengeId, credential, now)
+	if err != nil {
 		if errors.Is(err, passkey.ErrPasskeyAuthenticationInvalid) {
 			return finishPasskeyReauthenticationError(response.CodeInvalidRequest, "Passkey authentication failed."), nil
 		}
 		return finishPasskeyReauthenticationError(response.CodeInternalError, "Passkey error."), nil
+	}
+	if !decision.AllowSession {
+		return finishPasskeyReauthenticationError(response.CodeInvalidRequest, "Passkey authentication failed."), nil
 	}
 	if err := h.Session.CompleteAuthenticationChallenge(ctx, userID, sessionID, request.Body.AuthenticationChallengeId, domain.AuthenticationMethodPasskey, now); err != nil {
 		if errors.Is(err, session.ErrAuthenticationChallengeInvalid) {

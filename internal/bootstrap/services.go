@@ -104,7 +104,7 @@ func NewServices(app *App) (Services, error) {
 		AccessTokenRevocations: accessTokenRevocations,
 	})
 
-	passkeyService, err := newPasskeyService(app, txManager)
+	passkeyService, err := newPasskeyService(app, txManager, sessionService)
 	if err != nil {
 		return Services{}, fmt.Errorf("create passkey service: %w", err)
 	}
@@ -154,18 +154,20 @@ func NewServices(app *App) (Services, error) {
 	}, nil
 }
 
-func newPasskeyService(app *App, txManager *tx.Manager) (*passkey.Service, error) {
+func newPasskeyService(app *App, txManager *tx.Manager, sessionRevoker passkey.SessionRevoker) (*passkey.Service, error) {
 	publicURL, err := url.Parse(app.Config.Values.PublicURL)
 	if err != nil {
 		return nil, err
 	}
 
 	return passkey.New(passkey.Config{
-		RPDisplayName: "Authara",
-		RPID:          publicURL.Hostname(),
-		RPOrigins:     []string{app.Config.Values.PublicURL},
-		Store:         app.Store,
-		Tx:            txManager,
-		Logger:        app.Logger,
+		RPDisplayName:  "Authara",
+		RPID:           publicURL.Hostname(),
+		RPOrigins:      []string{app.Config.Values.PublicURL},
+		Store:          app.Store,
+		Tx:             txManager,
+		Policy:         app.Config,
+		SessionRevoker: sessionRevoker,
+		Logger:         app.Logger,
 	})
 }

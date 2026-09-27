@@ -42,6 +42,8 @@ type codeEnvSpec struct {
 var dynamicHybridSettings = map[string]struct{}{
 	"AUTHARA_DEFAULT_RETURN_TO":                      {},
 	"AUTHARA_USERNAME_LOGIN_ENABLED":                 {},
+	"AUTHARA_PASSKEY_CLONE_RESPONSE":                 {},
+	"AUTHARA_PASSKEY_CLONE_NOTIFY_USER":              {},
 	"AUTHARA_ACCESS_TOKEN_TTL_MINUTES":               {},
 	"AUTHARA_SESSION_TTL_DAYS":                       {},
 	"AUTHARA_REFRESH_TOKEN_TTL_DAYS":                 {},

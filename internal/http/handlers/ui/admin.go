@@ -235,6 +235,16 @@ func (h *UIHandler) AdminAuditPage(w http.ResponseWriter, r *http.Request) {
 	h.Render(w, r, http.StatusOK, adminview.Audit(events, h.adminFeatures()))
 }
 
+func (h *UIHandler) AdminSecurityEventsPage(w http.ResponseWriter, r *http.Request) {
+	events, err := h.Admin.ListSecurityEvents(r.Context(), pageFromRequest(r, 50))
+	if err != nil {
+		h.renderInternalError(w, r)
+		return
+	}
+
+	h.Render(w, r, http.StatusOK, adminview.SecurityEvents(events, h.adminFeatures()))
+}
+
 func (h *UIHandler) mutateUser(
 	w http.ResponseWriter,
 	r *http.Request,
