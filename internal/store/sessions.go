@@ -331,12 +331,24 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error 
 }
 
 func (s *Store) ListActiveSessionsByUserID(ctx context.Context, userID uuid.UUID, now time.Time) ([]domain.Session, error) {
+	return s.ListActiveSessionsPageByUserID(ctx, userID, now, nil, 0)
+}
+
+func (s *Store) ListActiveSessionsPageByUserID(ctx context.Context, userID uuid.UUID, now time.Time, cursor *ListCursor, limit int) ([]domain.Session, error) {
+	var cursorCreatedAt any
+	var cursorID any
+	if cursor != nil {
+		cursorCreatedAt = cursor.CreatedAt
+		cursorID = cursor.ID
+	}
 	rows, err := s.queryRows(ctx, `
 		SELECT `+sessionColumns+`
 		FROM sessions
 		WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > $2
-		ORDER BY created_at DESC
-	`, userID, now)
+		  AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4))
+		ORDER BY created_at DESC, id DESC
+		LIMIT NULLIF($5, 0)
+	`, userID, now, cursorCreatedAt, cursorID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -382,6 +394,29 @@ func (s *Store) ListSessionsByUserID(ctx context.Context, userID uuid.UUID) ([]d
 	}
 
 	return out, nil
+}
+
+func (s *Store) ListSessionsPageByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]domain.Session, error) {
+	rows, err := s.queryRows(ctx, `
+		SELECT `+sessionColumns+`
+		FROM sessions
+		WHERE user_id = $1
+		ORDER BY created_at DESC, id DESC
+		LIMIT $2 OFFSET $3
+	`, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]domain.Session, 0)
+	for rows.Next() {
+		var row model.Session
+		if err := scanSession(rows, &row); err != nil {
+			return nil, err
+		}
+		out = append(out, toDomainSession(row))
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) GetActiveSessionByID(ctx context.Context, sessionID uuid.UUID, now time.Time) (domain.Session, error) {

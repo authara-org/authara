@@ -15,20 +15,31 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-func (h *APIHandler) ListCurrentUserOrganizations(ctx context.Context, _ contract.ListCurrentUserOrganizationsRequestObject) (contract.ListCurrentUserOrganizationsResponseObject, error) {
+func (h *APIHandler) ListCurrentUserOrganizations(ctx context.Context, request contract.ListCurrentUserOrganizationsRequestObject) (contract.ListCurrentUserOrganizationsResponseObject, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return listCurrentUserOrganizationsError(responseCodeUnauthorized(), "Unauthorized"), nil
 	}
-	orgs, err := h.Organizations.ListUserOrganizations(ctx, userID)
+	options := organization.ListOptions{Limit: request.Params.Limit}
+	if request.Params.Cursor != nil {
+		options.Cursor = *request.Params.Cursor
+	}
+	page, err := h.Organizations.ListUserOrganizationsPage(ctx, userID, options)
+	if errors.Is(err, organization.ErrInvalidListPage) {
+		return listCurrentUserOrganizationsError(responseCodeInvalidRequest(), "Invalid pagination parameters"), nil
+	}
 	if err != nil {
 		return listCurrentUserOrganizationsError(responseCodeInternalError(), "Organization error"), nil
 	}
-	out := make([]contract.OrganizationSummary, 0, len(orgs))
-	for _, org := range orgs {
+	out := make([]contract.OrganizationSummary, 0, len(page.Items))
+	for _, org := range page.Items {
 		out = append(out, toContractOrganizationSummary(org.Organization, org.Membership.Role))
 	}
-	return contract.ListCurrentUserOrganizations200JSONResponse(contract.OrganizationSummaries{Organizations: out}), nil
+	var nextCursor *string
+	if page.NextCursor != "" {
+		nextCursor = &page.NextCursor
+	}
+	return contract.ListCurrentUserOrganizations200JSONResponse(contract.OrganizationSummaries{Organizations: out, NextCursor: nextCursor}), nil
 }
 
 func (h *APIHandler) GetCurrentOrganization(ctx context.Context, _ contract.GetCurrentOrganizationRequestObject) (contract.GetCurrentOrganizationResponseObject, error) {
@@ -43,7 +54,7 @@ func (h *APIHandler) GetCurrentOrganization(ctx context.Context, _ contract.GetC
 	return contract.GetCurrentOrganization200JSONResponse(toContractOrganizationSummary(org, role)), nil
 }
 
-func (h *APIHandler) ListCurrentOrganizationMembers(ctx context.Context, _ contract.ListCurrentOrganizationMembersRequestObject) (contract.ListCurrentOrganizationMembersResponseObject, error) {
+func (h *APIHandler) ListCurrentOrganizationMembers(ctx context.Context, request contract.ListCurrentOrganizationMembersRequestObject) (contract.ListCurrentOrganizationMembersResponseObject, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return listCurrentOrganizationMembersError(responseCodeUnauthorized(), "Unauthorized"), nil
@@ -52,8 +63,14 @@ func (h *APIHandler) ListCurrentOrganizationMembers(ctx context.Context, _ contr
 	if !ok {
 		return listCurrentOrganizationMembersError(code, message), nil
 	}
-	members, err := h.Organizations.ListCurrentOrganizationMembers(ctx, userID, organizationID)
+	options := organization.ListOptions{Limit: request.Params.Limit}
+	if request.Params.Cursor != nil {
+		options.Cursor = *request.Params.Cursor
+	}
+	page, err := h.Organizations.ListCurrentOrganizationMembersPage(ctx, userID, organizationID, options)
 	switch {
+	case errors.Is(err, organization.ErrInvalidListPage):
+		return listCurrentOrganizationMembersError(responseCodeInvalidRequest(), "Invalid pagination parameters"), nil
 	case errors.Is(err, organization.ErrOrganizationOperationForbidden):
 		return listCurrentOrganizationMembersError(responseCodeForbidden(), "Organization members are not visible."), nil
 	case errors.Is(err, store.ErrOrganizationMembershipNotFound),
@@ -62,8 +79,8 @@ func (h *APIHandler) ListCurrentOrganizationMembers(ctx context.Context, _ contr
 	case err != nil:
 		return listCurrentOrganizationMembersError(responseCodeInternalError(), "Organization error"), nil
 	}
-	outMembers := make([]contract.CurrentOrganizationMember, 0, len(members))
-	for _, member := range members {
+	outMembers := make([]contract.CurrentOrganizationMember, 0, len(page.Items))
+	for _, member := range page.Items {
 		outMembers = append(outMembers, contract.CurrentOrganizationMember{
 			UserId:    member.User.ID,
 			Email:     openapi_types.Email(member.User.Email),
@@ -72,7 +89,11 @@ func (h *APIHandler) ListCurrentOrganizationMembers(ctx context.Context, _ contr
 			CreatedAt: member.Membership.CreatedAt,
 		})
 	}
-	return contract.ListCurrentOrganizationMembers200JSONResponse(contract.CurrentOrganizationMembers{Members: outMembers}), nil
+	var nextCursor *string
+	if page.NextCursor != "" {
+		nextCursor = &page.NextCursor
+	}
+	return contract.ListCurrentOrganizationMembers200JSONResponse(contract.CurrentOrganizationMembers{Members: outMembers, NextCursor: nextCursor}), nil
 }
 
 func (h *APIHandler) SwitchOrganization(ctx context.Context, request contract.SwitchOrganizationRequestObject) (contract.SwitchOrganizationResponseObject, error) {

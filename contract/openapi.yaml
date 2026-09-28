@@ -1189,10 +1189,16 @@ paths:
       tags: [Users]
       summary: Get the authenticated user's account
       description: Returns the account profile, active sessions, linked authentication methods, and passkeys.
+      parameters:
+        - $ref: "#/components/parameters/SessionsCursor"
+        - $ref: "#/components/parameters/SessionsLimit"
+        - $ref: "#/components/parameters/PasskeysCursor"
+        - $ref: "#/components/parameters/PasskeysLimit"
       security:
         - accessCookie: []
       x-authara-access: user
       x-authara-error-codes:
+        "400": [invalid_request]
         "401": [unauthorized]
         "500": [internal_error]
       responses:
@@ -1202,6 +1208,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
         "500":
@@ -1635,10 +1643,14 @@ paths:
       operationId: listCurrentUserOrganizations
       tags: [Organizations]
       summary: List organizations for the authenticated user
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       security:
         - accessCookie: []
       x-authara-access: user
       x-authara-error-codes:
+        "400": [invalid_request]
         "401": [unauthorized]
         "500": [internal_error]
       responses:
@@ -1648,6 +1660,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrganizationSummaries"
+        "400":
+          $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
         "500":
@@ -1680,10 +1694,14 @@ paths:
       operationId: listCurrentOrganizationMembers
       tags: [Organizations]
       summary: List members of the current organization
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       security:
         - accessCookie: []
       x-authara-access: user
       x-authara-error-codes:
+        "400": [invalid_request]
         "401": [unauthorized]
         "403": [forbidden]
         "500": [internal_error]
@@ -1694,6 +1712,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CurrentOrganizationMembers"
+        "400":
+          $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
         "403":
@@ -1846,6 +1866,8 @@ paths:
       summary: List organization members
       parameters:
         - $ref: "#/components/parameters/OrganizationID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       security:
         - accessCookie: []
       x-authara-access: user
@@ -1917,6 +1939,9 @@ paths:
       operationId: listPublicOrganizationInvitations
       tags: [Organizations]
       summary: List organization invitations
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       security:
         - accessCookie: []
       x-authara-access: user
@@ -2033,6 +2058,8 @@ paths:
       summary: List memberships for the authenticated user
       parameters:
         - $ref: "#/components/parameters/UserID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       security:
         - accessCookie: []
       x-authara-access: user
@@ -2363,6 +2390,55 @@ components:
       x-authara-auth-mode: internal_bearer
 
   parameters:
+    SessionsCursor:
+      name: sessions_cursor
+      in: query
+      required: false
+      description: Opaque cursor for the active-session collection.
+      schema:
+        type: string
+    SessionsLimit:
+      name: sessions_limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    PasskeysCursor:
+      name: passkeys_cursor
+      in: query
+      required: false
+      description: Opaque cursor for the passkey collection.
+      schema:
+        type: string
+    PasskeysLimit:
+      name: passkeys_limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor returned by the preceding page.
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of collection items to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
     Audience:
       name: audience
       in: query
@@ -2872,6 +2948,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AccountSession"
+        sessions_next_cursor:
+          type: string
         auth_methods:
           type: array
           items:
@@ -2880,6 +2958,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AccountPasskey"
+        passkeys_next_cursor:
+          type: string
     AccountSession:
       type: object
       additionalProperties: false
@@ -2946,6 +3026,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OrganizationSummary"
+        next_cursor:
+          type: string
     CurrentOrganizationMember:
       type: object
       additionalProperties: false
@@ -2973,6 +3055,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CurrentOrganizationMember"
+        next_cursor:
+          type: string
 
     Capabilities:
       type: object
@@ -3156,6 +3240,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OrganizationMember"
+        next_cursor:
+          type: string
     OrganizationMemberEnvelope:
       type: object
       additionalProperties: false
@@ -3208,6 +3294,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OrganizationInvitation"
+        next_cursor:
+          type: string
     MembershipWithOrganization:
       type: object
       additionalProperties: false
@@ -3226,6 +3314,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MembershipWithOrganization"
+        next_cursor:
+          type: string
     OrganizationRole:
       type: string
       enum: [owner, admin, member]

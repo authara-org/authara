@@ -391,10 +391,12 @@ func (h *UIHandler) linkedProvidersSection(ctx context.Context) (templ.Component
 
 	var passkeys []domain.Passkey
 	if h.Passkeys != nil {
-		passkeys, err = h.Passkeys.ListUserPasskeys(ctx, userID)
+		page, pageErr := h.Passkeys.ListUserPasskeysPage(ctx, userID, passkey.ListOptions{})
+		err = pageErr
 		if err != nil {
 			return nil, err
 		}
+		passkeys = page.Items
 	}
 
 	total := len(providers) + len(passkeys)

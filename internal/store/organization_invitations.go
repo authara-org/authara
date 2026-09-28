@@ -240,12 +240,24 @@ func (s *Store) MarkOrganizationInvitationRevoked(ctx context.Context, invitatio
 }
 
 func (s *Store) ListOrganizationInvitationsByOrganizationID(ctx context.Context, organizationID uuid.UUID) ([]domain.OrganizationInvitation, error) {
+	return s.ListOrganizationInvitationsPage(ctx, organizationID, nil, 0)
+}
+
+func (s *Store) ListOrganizationInvitationsPage(ctx context.Context, organizationID uuid.UUID, cursor *ListCursor, limit int) ([]domain.OrganizationInvitation, error) {
+	var cursorCreatedAt any
+	var cursorID any
+	if cursor != nil {
+		cursorCreatedAt = cursor.CreatedAt
+		cursorID = cursor.ID
+	}
 	rows, err := s.queryRows(ctx, `
 		SELECT `+organizationInvitationColumns+`
 		FROM organization_invitations
 		WHERE organization_id = $1
+		  AND ($2::timestamptz IS NULL OR (created_at, id) < ($2, $3))
 		ORDER BY created_at DESC, id DESC
-	`, organizationID)
+		LIMIT NULLIF($4, 0)
+	`, organizationID, cursorCreatedAt, cursorID, limit)
 	if err != nil {
 		return nil, err
 	}

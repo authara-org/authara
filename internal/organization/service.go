@@ -225,6 +225,24 @@ func (s *Service) ListUserOrganizations(ctx context.Context, userID uuid.UUID) (
 	return out, nil
 }
 
+func (s *Service) ListUserOrganizationsPage(ctx context.Context, userID uuid.UUID, options ListOptions) (Page[UserOrganization], error) {
+	cursor, limit, err := decodeListOptions(options, organizationsCursorKind, userID)
+	if err != nil {
+		return Page[UserOrganization]{}, err
+	}
+	rows, err := s.store.ListUserOrganizationsPage(ctx, userID, cursor, limit+1)
+	if err != nil {
+		return Page[UserOrganization]{}, err
+	}
+	items := make([]UserOrganization, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, UserOrganization{Organization: row.Organization, Membership: row.Membership})
+	}
+	return finishPage(items, limit, organizationsCursorKind, userID, func(item UserOrganization) (time.Time, uuid.UUID) {
+		return item.Membership.CreatedAt, item.Membership.OrganizationID
+	})
+}
+
 func (s *Service) ListUserMemberships(ctx context.Context, userID uuid.UUID) ([]UserOrganization, error) {
 	if _, err := s.store.GetUserByID(ctx, userID); err != nil {
 		return nil, err
@@ -232,11 +250,49 @@ func (s *Service) ListUserMemberships(ctx context.Context, userID uuid.UUID) ([]
 	return s.ListUserOrganizations(ctx, userID)
 }
 
+func (s *Service) ListUserMembershipsPage(ctx context.Context, userID uuid.UUID, options ListOptions) (Page[UserOrganization], error) {
+	if _, err := s.store.GetUserByID(ctx, userID); err != nil {
+		return Page[UserOrganization]{}, err
+	}
+	cursor, limit, err := decodeListOptions(options, membershipsCursorKind, userID)
+	if err != nil {
+		return Page[UserOrganization]{}, err
+	}
+	rows, err := s.store.ListUserOrganizationsPage(ctx, userID, cursor, limit+1)
+	if err != nil {
+		return Page[UserOrganization]{}, err
+	}
+	items := make([]UserOrganization, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, UserOrganization{Organization: row.Organization, Membership: row.Membership})
+	}
+	return finishPage(items, limit, membershipsCursorKind, userID, func(item UserOrganization) (time.Time, uuid.UUID) {
+		return item.Membership.CreatedAt, item.Membership.OrganizationID
+	})
+}
+
 func (s *Service) ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]domain.OrganizationMember, error) {
 	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
 		return nil, err
 	}
 	return s.store.ListOrganizationMembersByOrganizationID(ctx, organizationID)
+}
+
+func (s *Service) ListOrganizationMembersPage(ctx context.Context, organizationID uuid.UUID, options ListOptions) (Page[domain.OrganizationMember], error) {
+	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
+		return Page[domain.OrganizationMember]{}, err
+	}
+	cursor, limit, err := decodeListOptions(options, membersCursorKind, organizationID)
+	if err != nil {
+		return Page[domain.OrganizationMember]{}, err
+	}
+	items, err := s.store.ListOrganizationMembersPage(ctx, organizationID, cursor, limit+1)
+	if err != nil {
+		return Page[domain.OrganizationMember]{}, err
+	}
+	return finishPage(items, limit, membersCursorKind, organizationID, func(item domain.OrganizationMember) (time.Time, uuid.UUID) {
+		return item.Membership.CreatedAt, item.Membership.UserID
+	})
 }
 
 func (s *Service) ListCurrentOrganizationMembers(ctx context.Context, userID uuid.UUID, organizationID uuid.UUID) ([]domain.OrganizationMember, error) {
@@ -247,6 +303,16 @@ func (s *Service) ListCurrentOrganizationMembers(ctx context.Context, userID uui
 		return nil, err
 	}
 	return s.ListOrganizationMembers(ctx, organizationID)
+}
+
+func (s *Service) ListCurrentOrganizationMembersPage(ctx context.Context, userID uuid.UUID, organizationID uuid.UUID, options ListOptions) (Page[domain.OrganizationMember], error) {
+	if !s.mode.HasVisibleOrganizations() {
+		return Page[domain.OrganizationMember]{}, ErrOrganizationOperationForbidden
+	}
+	if _, err := s.store.GetOrganizationMembership(ctx, organizationID, userID); err != nil {
+		return Page[domain.OrganizationMember]{}, err
+	}
+	return s.ListOrganizationMembersPage(ctx, organizationID, options)
 }
 
 func (s *Service) GetOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID) (domain.OrganizationMember, error) {

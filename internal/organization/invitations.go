@@ -339,6 +339,26 @@ func (s *Service) ListInvitations(ctx context.Context, organizationID uuid.UUID)
 	return s.store.ListOrganizationInvitationsByOrganizationID(ctx, organizationID)
 }
 
+func (s *Service) ListInvitationsPage(ctx context.Context, organizationID uuid.UUID, options ListOptions) (Page[domain.OrganizationInvitation], error) {
+	if !s.mode.AllowsInvitations() {
+		return Page[domain.OrganizationInvitation]{}, ErrOrganizationInviteForbidden
+	}
+	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
+		return Page[domain.OrganizationInvitation]{}, err
+	}
+	cursor, limit, err := decodeListOptions(options, invitationsCursorKind, organizationID)
+	if err != nil {
+		return Page[domain.OrganizationInvitation]{}, err
+	}
+	items, err := s.store.ListOrganizationInvitationsPage(ctx, organizationID, cursor, limit+1)
+	if err != nil {
+		return Page[domain.OrganizationInvitation]{}, err
+	}
+	return finishPage(items, limit, invitationsCursorKind, organizationID, func(item domain.OrganizationInvitation) (time.Time, uuid.UUID) {
+		return item.CreatedAt, item.ID
+	})
+}
+
 func (s *Service) InvitationByOrganizationAndID(ctx context.Context, organizationID uuid.UUID, invitationID uuid.UUID) (InvitationPreview, error) {
 	preview, err := s.InvitationByID(ctx, invitationID)
 	if err != nil {

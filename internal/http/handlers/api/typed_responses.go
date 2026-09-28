@@ -299,8 +299,10 @@ func listCurrentUserOrganizationsError(code response.ErrorCode, message string) 
 	spec := mustRouteError(ListCurrentUserOrganizationsErrors, code)
 	body := apiErrorBody(spec.Code, message)
 	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.ListCurrentUserOrganizations400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
 	case http.StatusUnauthorized:
-		return contract.ListCurrentUserOrganizations401JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+		return contract.ListCurrentUserOrganizations401JSONResponse(body)
 	default:
 		return contract.ListCurrentUserOrganizations500JSONResponse(body)
 	}
@@ -321,8 +323,10 @@ func listCurrentOrganizationMembersError(code response.ErrorCode, message string
 	spec := mustRouteError(ListCurrentOrganizationMembersErrors, code)
 	body := apiErrorBody(spec.Code, message)
 	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.ListCurrentOrganizationMembers400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
 	case http.StatusUnauthorized:
-		return contract.ListCurrentOrganizationMembers401JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+		return contract.ListCurrentOrganizationMembers401JSONResponse(body)
 	case http.StatusForbidden:
 		return contract.ListCurrentOrganizationMembers403JSONResponse(body)
 	default:

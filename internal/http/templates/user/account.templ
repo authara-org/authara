@@ -18,6 +18,10 @@ type AccountConfig struct {
 	CurrentSessionID uuid.UUID
 	AuthProviders    []viewmodel.AuthProvider
 	Passkeys         []viewmodel.Passkey
+	SessionsCursor   string
+	SessionsNext     string
+	PasskeysCursor   string
+	PasskeysNext     string
 }
 
 templ Account(cfg AccountConfig) {
@@ -39,9 +43,15 @@ templ Account(cfg AccountConfig) {
 							}
 							@CollapsibleSection(true) {
 								@SessionSection(cfg.Sessions, cfg.CurrentSessionID)
+								if cfg.SessionsNext != "" {
+									@AccountCollectionNext("More sessions", accountPageHref(cfg.SessionsNext, cfg.PasskeysCursor))
+								}
 							}
 							@CollapsibleSection(false) {
 								@LinkedProvidersSection(cfg.AuthProviders, cfg.Passkeys, cfg.GoogleClientID)
+								if cfg.PasskeysNext != "" {
+									@AccountCollectionNext("More passkeys", accountPageHref(cfg.SessionsCursor, cfg.PasskeysNext))
+								}
 							}
 						</div>
 					</div>
@@ -55,6 +65,12 @@ templ Account(cfg AccountConfig) {
 			@AccountPasswordDialog()
 		</div>
 	}
+}
+
+templ AccountCollectionNext(label string, href string) {
+	<div class="mt-4 flex justify-end">
+		<a class="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400" href={ templ.SafeURL(href) }>{ label }</a>
+	</div>
 }
 
 templ CollapsibleSection(bordered bool) {

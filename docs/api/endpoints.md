@@ -502,6 +502,31 @@ See [Errors](errors.md) for error definitions.
 
 ---
 
+## Get current account
+
+```text
+GET /auth/api/v1/account
+```
+
+Returns the authenticated user, authentication methods, active sessions, and
+passkeys. Sessions and passkeys are independently cursor-paginated: use
+`sessions_limit` and `sessions_cursor` for sessions, and `passkeys_limit` and
+`passkeys_cursor` for passkeys. Each limit defaults to 50 and must be from 1
+through 100. Continue with `sessions_next_cursor` or `passkeys_next_cursor`.
+Sessions are ordered by creation time and UUID descending; passkeys are ordered
+by creation time and UUID ascending. Invalid, cross-user, or cross-collection
+cursors return `400 invalid_request`.
+
+The hosted `/auth/account` page applies the same bounds and exposes links for
+additional sessions and passkeys.
+
+Compatibility: all pagination query parameters are optional, existing response
+arrays keep their names and element shapes, and the next-cursor fields are
+optional. Existing clients therefore receive the first 50 items without a
+request change and can adopt continuation cursors incrementally.
+
+---
+
 ## Set current user password
 
 Creates the authenticated user's password only when the account does not
@@ -646,6 +671,8 @@ Available routes:
 
 ```text
 GET   /auth/api/v1/capabilities
+GET   /auth/api/v1/organizations
+GET   /auth/api/v1/organizations/current/members
 GET   /auth/api/v1/organizations/{organizationID}
 PATCH /auth/api/v1/organizations/{organizationID}
 GET   /auth/api/v1/organizations/{organizationID}/members
@@ -655,6 +682,21 @@ GET   /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}
 POST  /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
 GET   /auth/api/v1/users/{userID}/memberships
 ```
+
+The current-user organization, member, membership, and invitation collection
+routes use cursor pagination. Pass an optional `limit` from 1 through 100
+(default 50) and the opaque `cursor` returned as `next_cursor` by the preceding
+response. Results
+are ordered deterministically by creation time and UUID. `next_cursor` is
+omitted on the final page. A malformed cursor, a cursor from another
+collection or tenant, or an out-of-range limit returns `400 invalid_request`.
+
+`GET /auth/api/v1/organizations/current/members` uses the same pagination
+parameters and response behavior.
+
+Hosted administrator user details independently paginate session history and
+passkeys. The operator email-template editor also bounds version history to 25
+entries per page (maximum 100).
 
 The capabilities route remains available to authenticated clients when direct
 management is disabled and reports

@@ -55,6 +55,39 @@ func TestOrganizationsGetAndCurrentGet(t *testing.T) {
 		assertOrganizationListContains(t, list.Organizations, personalOrg.ID.String(), personalOrg.Name, string(personalMembership.Role))
 		assertOrganizationListContains(t, list.Organizations, teamOrg.ID.String(), teamOrg.Name, string(teamMembership.Role))
 
+		limit := contract.Limit(1)
+		firstResponse, err := h.ListCurrentUserOrganizations(reqCtx, contract.ListCurrentUserOrganizationsRequestObject{
+			Params: contract.ListCurrentUserOrganizationsParams{Limit: &limit},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		first, ok := firstResponse.(contract.ListCurrentUserOrganizations200JSONResponse)
+		if !ok || len(first.Organizations) != 1 || first.NextCursor == nil {
+			t.Fatalf("unexpected first organization page: %#v", firstResponse)
+		}
+		cursor := contract.Cursor(*first.NextCursor)
+		finalResponse, err := h.ListCurrentUserOrganizations(reqCtx, contract.ListCurrentUserOrganizationsRequestObject{
+			Params: contract.ListCurrentUserOrganizationsParams{Limit: &limit, Cursor: &cursor},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		final, ok := finalResponse.(contract.ListCurrentUserOrganizations200JSONResponse)
+		if !ok || len(final.Organizations) != 1 || final.Organizations[0].Id == first.Organizations[0].Id || final.NextCursor != nil {
+			t.Fatalf("unexpected final organization page: %#v", finalResponse)
+		}
+		invalidCursor := contract.Cursor("invalid")
+		invalidResponse, err := h.ListCurrentUserOrganizations(reqCtx, contract.ListCurrentUserOrganizationsRequestObject{
+			Params: contract.ListCurrentUserOrganizationsParams{Cursor: &invalidCursor},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := invalidResponse.(contract.ListCurrentUserOrganizations400JSONResponse); !ok {
+			t.Fatalf("invalid cursor response = %#v", invalidResponse)
+		}
+
 		currentCtx := httpctx.WithOrganizationID(ctx, teamOrg.ID)
 		currentCtx = httpctx.WithOrganizationRole(currentCtx, teamMembership.Role)
 		currentReq := httptest.NewRequest(http.MethodGet, "/auth/api/v1/organizations/current", nil).WithContext(currentCtx)

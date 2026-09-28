@@ -25,6 +25,11 @@ type Page struct {
 	Size int
 }
 
+type UserDetailPages struct {
+	Sessions Page
+	Passkeys Page
+}
+
 type DashboardStats struct {
 	TotalUsers         int
 	SignupsLast24Hours int
@@ -101,8 +106,17 @@ type UserDetail struct {
 	AuthProviders []AuthProviderSummary
 	Passkeys      []PasskeySummary
 	Sessions      []SessionSummary
+	SessionPage   int
+	SessionSize   int
+	SessionsNext  bool
+	PasskeyPage   int
+	PasskeySize   int
+	PasskeysNext  bool
 	Actions       UserDetailActions
 }
+
+func (d UserDetail) SessionsPrevious() bool { return d.SessionPage > 1 }
+func (d UserDetail) PasskeysPrevious() bool { return d.PasskeyPage > 1 }
 
 type AllowedEmailPage struct {
 	Emails  []domain.AllowedEmail

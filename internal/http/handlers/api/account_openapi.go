@@ -22,7 +22,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-func (h *APIHandler) GetCurrentAccount(ctx context.Context, _ contract.GetCurrentAccountRequestObject) (contract.GetCurrentAccountResponseObject, error) {
+func (h *APIHandler) GetCurrentAccount(ctx context.Context, request contract.GetCurrentAccountRequestObject) (contract.GetCurrentAccountResponseObject, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return getCurrentAccountError(responseCodeUnauthorized(), "Unauthorized."), nil
@@ -36,7 +36,14 @@ func (h *APIHandler) GetCurrentAccount(ctx context.Context, _ contract.GetCurren
 	if err != nil {
 		return getCurrentAccountError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
-	sessions, err := h.Session.ListUserSessions(ctx, userID, currentSessionID, time.Now().UTC())
+	sessionOptions := session.ListOptions{Limit: request.Params.SessionsLimit}
+	if request.Params.SessionsCursor != nil {
+		sessionOptions.Cursor = *request.Params.SessionsCursor
+	}
+	sessionPage, err := h.Session.ListUserSessionsPage(ctx, userID, time.Now().UTC(), sessionOptions)
+	if errors.Is(err, session.ErrInvalidListPage) {
+		return getCurrentAccountError(responseCodeInvalidRequest(), "Invalid session pagination parameters."), nil
+	}
 	if err != nil {
 		return getCurrentAccountError(responseCodeInternalError(), "Account error."), nil
 	}
@@ -45,11 +52,22 @@ func (h *APIHandler) GetCurrentAccount(ctx context.Context, _ contract.GetCurren
 		return getCurrentAccountError(responseCodeInternalError(), "Account error."), nil
 	}
 	var passkeys []domain.Passkey
+	var passkeysNextCursor string
 	if h.Passkeys != nil {
-		passkeys, err = h.Passkeys.ListUserPasskeys(ctx, userID)
+		passkeyOptions := passkey.ListOptions{Limit: request.Params.PasskeysLimit}
+		if request.Params.PasskeysCursor != nil {
+			passkeyOptions.Cursor = *request.Params.PasskeysCursor
+		}
+		passkeyPage, pageErr := h.Passkeys.ListUserPasskeysPage(ctx, userID, passkeyOptions)
+		if errors.Is(pageErr, passkey.ErrInvalidListPage) {
+			return getCurrentAccountError(responseCodeInvalidRequest(), "Invalid passkey pagination parameters."), nil
+		}
+		err = pageErr
 		if err != nil {
 			return getCurrentAccountError(responseCodeInternalError(), "Account error."), nil
 		}
+		passkeys = passkeyPage.Items
+		passkeysNextCursor = passkeyPage.NextCursor
 	}
 
 	out := contract.Account{
@@ -60,11 +78,17 @@ func (h *APIHandler) GetCurrentAccount(ctx context.Context, _ contract.GetCurren
 			Disabled:  user.DisabledAt != nil,
 			CreatedAt: user.CreatedAt,
 		},
-		Sessions:    make([]contract.AccountSession, 0, len(sessions)),
+		Sessions:    make([]contract.AccountSession, 0, len(sessionPage.Items)),
 		AuthMethods: make([]contract.AuthMethod, 0, len(providers)),
 		Passkeys:    make([]contract.AccountPasskey, 0, len(passkeys)),
 	}
-	for _, s := range sessions {
+	if sessionPage.NextCursor != "" {
+		out.SessionsNextCursor = &sessionPage.NextCursor
+	}
+	if passkeysNextCursor != "" {
+		out.PasskeysNextCursor = &passkeysNextCursor
+	}
+	for _, s := range sessionPage.Items {
 		out.Sessions = append(out.Sessions, contract.AccountSession{
 			Id:        s.ID,
 			Current:   s.ID == currentSessionID,

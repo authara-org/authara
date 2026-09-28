@@ -253,7 +253,7 @@ func (h *UIHandler) OperatorEmailTemplatePage(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	model, err := h.emailTemplateEditorModel(r.Context(), effective)
+	model, err := h.emailTemplateEditorModel(r.Context(), effective, pageNumber(r), pageSize(r, 25))
 	if err != nil {
 		h.logEmailTemplateError("render operator email template", err)
 		h.renderInternalError(w, r)
@@ -284,7 +284,7 @@ func (h *UIHandler) OperatorEmailTemplateVersionPage(w http.ResponseWriter, r *h
 		return
 	}
 
-	model, err := h.emailTemplateEditorModel(r.Context(), effective)
+	model, err := h.emailTemplateEditorModel(r.Context(), effective, pageNumber(r), pageSize(r, 25))
 	if err != nil {
 		h.logEmailTemplateError("render operator email template version", err)
 		h.renderInternalError(w, r)
@@ -369,7 +369,7 @@ func (h *UIHandler) OperatorEmailTemplateSavePost(w http.ResponseWriter, r *http
 			}
 			model := emailTemplateEditorModelFromForm(saved, form)
 			model.Revision = saved.Override.Revision
-			if err := h.populateEmailTemplateHistory(r.Context(), &model); err != nil {
+			if err := h.populateEmailTemplateHistory(r.Context(), &model, 1, 25); err != nil {
 				h.logEmailTemplateError("load saved operator email template history", err)
 				h.renderInternalError(w, r)
 				return
@@ -437,7 +437,7 @@ func (h *UIHandler) OperatorEmailTemplateSavePost(w http.ResponseWriter, r *http
 		_ = h.Render(w, r, status, operatorview.EmailTemplateFeedback(model))
 		return
 	}
-	if err := h.populateEmailTemplateHistory(r.Context(), &model); err != nil {
+	if err := h.populateEmailTemplateHistory(r.Context(), &model, 1, 25); err != nil {
 		h.logEmailTemplateError("load operator email template history after failed save", err)
 		h.renderInternalError(w, r)
 		return
@@ -469,7 +469,7 @@ func (h *UIHandler) OperatorEmailTemplateResetPost(w http.ResponseWriter, r *htt
 				h.renderInternalError(w, r)
 				return
 			}
-			model, modelErr := h.emailTemplateEditorModel(r.Context(), effective)
+			model, modelErr := h.emailTemplateEditorModel(r.Context(), effective, 1, 25)
 			if modelErr != nil {
 				h.logEmailTemplateError("render restored operator email template", modelErr)
 				h.renderInternalError(w, r)
@@ -494,7 +494,7 @@ func (h *UIHandler) OperatorEmailTemplateResetPost(w http.ResponseWriter, r *htt
 			h.renderInternalError(w, r)
 			return
 		}
-		model, modelErr := h.emailTemplateEditorModel(r.Context(), effective)
+		model, modelErr := h.emailTemplateEditorModel(r.Context(), effective, 1, 25)
 		if modelErr != nil {
 			h.logEmailTemplateError("render conflicted operator email template", modelErr)
 			h.renderInternalError(w, r)
@@ -569,7 +569,7 @@ func (h *UIHandler) parseEmailTemplateRevision(w http.ResponseWriter, r *http.Re
 	return revision, true
 }
 
-func (h *UIHandler) emailTemplateEditorModel(ctx context.Context, effective email.EffectiveTemplate) (operatorview.EmailTemplateEditorModel, error) {
+func (h *UIHandler) emailTemplateEditorModel(ctx context.Context, effective email.EffectiveTemplate, historyPage, historySize int) (operatorview.EmailTemplateEditorModel, error) {
 	model := operatorview.EmailTemplateEditorModel{
 		Definition:      effective.Definition,
 		Source:          effective.Source,
@@ -593,22 +593,44 @@ func (h *UIHandler) emailTemplateEditorModel(ctx context.Context, effective emai
 		return operatorview.EmailTemplateEditorModel{}, err
 	}
 	model.Preview = &preview
-	if err := h.populateEmailTemplateHistory(ctx, &model); err != nil {
+	if err := h.populateEmailTemplateHistory(ctx, &model, historyPage, historySize); err != nil {
 		return operatorview.EmailTemplateEditorModel{}, err
 	}
 	return model, nil
 }
 
-func (h *UIHandler) populateEmailTemplateHistory(ctx context.Context, model *operatorview.EmailTemplateEditorModel) error {
-	versions, err := h.EmailTemplates.History(ctx, model.Definition.Key)
+func (h *UIHandler) populateEmailTemplateHistory(ctx context.Context, model *operatorview.EmailTemplateEditorModel, page, size int) error {
+	history, err := h.EmailTemplates.HistoryPage(ctx, model.Definition.Key, page, size)
 	if err != nil {
 		return err
 	}
-	model.Versions = versions
-	if model.Source == email.TemplateSourceOverride && len(versions) > 0 {
-		model.ActiveVersion = versions[0].Version
+	model.Versions = history.Versions
+	model.HistoryPage = history.Page
+	model.HistorySize = history.Size
+	model.HistoryHasNext = history.HasNext
+	if model.Source == email.TemplateSourceOverride && history.Page == 1 && len(history.Versions) > 0 {
+		model.ActiveVersion = history.Versions[0].Version
 	}
 	return nil
+}
+
+func pageNumber(r *http.Request) int {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		return 1
+	}
+	return page
+}
+
+func pageSize(r *http.Request, fallback int) int {
+	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
+	if size < 1 {
+		return fallback
+	}
+	if size > 100 {
+		return 100
+	}
+	return size
 }
 
 func emailTemplateEditorModelFromForm(effective email.EffectiveTemplate, form emailTemplateForm) operatorview.EmailTemplateEditorModel {

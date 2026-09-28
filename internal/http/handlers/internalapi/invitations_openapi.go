@@ -15,7 +15,7 @@ import (
 )
 
 func (h *Handler) ListPublicOrganizationInvitations(ctx context.Context, request contract.ListPublicOrganizationInvitationsRequestObject) (contract.ListPublicOrganizationInvitationsResponseObject, error) {
-	return h.listOrganizationInvitations(ctx, request.OrganizationID), nil
+	return h.listOrganizationInvitations(ctx, request.OrganizationID, organizationListOptions(request.Params.Cursor, request.Params.Limit)), nil
 }
 
 func (h *Handler) GetPublicOrganizationInvitation(ctx context.Context, request contract.GetPublicOrganizationInvitationRequestObject) (contract.GetPublicOrganizationInvitationResponseObject, error) {
@@ -56,21 +56,21 @@ func (h *Handler) ResendInternalOrganizationInvitation(ctx context.Context, requ
 	return h.resendOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID), nil
 }
 
-func (h *Handler) listOrganizationInvitations(ctx context.Context, organizationID openapi_types.UUID) contract.ListPublicOrganizationInvitationsResponseObject {
+func (h *Handler) listOrganizationInvitations(ctx context.Context, organizationID openapi_types.UUID, options organization.ListOptions) contract.ListPublicOrganizationInvitationsResponseObject {
 	if _, code, message, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, true); !ok {
 		return listPublicOrganizationInvitationsError(code, message)
 	}
 	now := time.Now().UTC()
-	invitations, err := h.Organizations.ListInvitations(ctx, organizationID)
+	page, err := h.Organizations.ListInvitationsPage(ctx, organizationID, options)
 	if err != nil {
 		code, message := organizationError(err)
 		return listPublicOrganizationInvitationsError(code, message)
 	}
-	outInvitations := make([]contract.OrganizationInvitation, 0, len(invitations))
-	for _, invitation := range invitations {
+	outInvitations := make([]contract.OrganizationInvitation, 0, len(page.Items))
+	for _, invitation := range page.Items {
 		outInvitations = append(outInvitations, toContractInvitation(invitation, "", now))
 	}
-	return contract.ListPublicOrganizationInvitations200JSONResponse(contract.OrganizationInvitations{Invitations: outInvitations})
+	return contract.ListPublicOrganizationInvitations200JSONResponse(contract.OrganizationInvitations{Invitations: outInvitations, NextCursor: optionalCursor(page.NextCursor)})
 }
 
 func (h *Handler) getOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID) contract.GetPublicOrganizationInvitationResponseObject {

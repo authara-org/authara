@@ -54,8 +54,48 @@ func TestCurrentAccountReadAndPasswordMutations(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &account); err != nil {
 			t.Fatalf("decode account: %v", err)
 		}
-		if len(account.Sessions) != 2 || !account.Sessions[0].Current {
-			t.Fatalf("expected current session first, got %+v", account.Sessions)
+		if len(account.Sessions) != 2 {
+			t.Fatalf("expected two sessions, got %+v", account.Sessions)
+		}
+		currentFound := false
+		for _, listed := range account.Sessions {
+			currentFound = currentFound || listed.Current
+		}
+		if !currentFound {
+			t.Fatalf("expected current session to be marked, got %+v", account.Sessions)
+		}
+
+		limit := contract.SessionsLimit(1)
+		firstResponse, err := h.GetCurrentAccount(requestCtx, contract.GetCurrentAccountRequestObject{
+			Params: contract.GetCurrentAccountParams{SessionsLimit: &limit},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		first, ok := firstResponse.(contract.GetCurrentAccount200JSONResponse)
+		if !ok || len(first.Sessions) != 1 || first.SessionsNextCursor == nil {
+			t.Fatalf("unexpected first session page: %#v", firstResponse)
+		}
+		cursor := contract.SessionsCursor(*first.SessionsNextCursor)
+		secondResponse, err := h.GetCurrentAccount(requestCtx, contract.GetCurrentAccountRequestObject{
+			Params: contract.GetCurrentAccountParams{SessionsLimit: &limit, SessionsCursor: &cursor},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		second, ok := secondResponse.(contract.GetCurrentAccount200JSONResponse)
+		if !ok || len(second.Sessions) != 1 || second.Sessions[0].Id == first.Sessions[0].Id || second.SessionsNextCursor != nil {
+			t.Fatalf("unexpected final session page: %#v", secondResponse)
+		}
+		invalidCursor := contract.SessionsCursor("invalid")
+		invalidResponse, err := h.GetCurrentAccount(requestCtx, contract.GetCurrentAccountRequestObject{
+			Params: contract.GetCurrentAccountParams{SessionsCursor: &invalidCursor},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := invalidResponse.(contract.GetCurrentAccount400JSONResponse); !ok {
+			t.Fatalf("invalid cursor response = %#v", invalidResponse)
 		}
 
 		rr = httptest.NewRecorder()

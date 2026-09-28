@@ -341,8 +341,15 @@ func TestGetUserDetailActionAvailability(t *testing.T) {
 		actor := createAdminTestUser(t, ctx, tdb, "detail-actor@example.com", "detail-actor", true)
 		target := createAdminTestUser(t, ctx, tdb, "detail-target@example.com", "detail-target", true)
 		svc := newAdminTestService(tdb)
+		for i := 0; i < 3; i++ {
+			if _, err := tdb.Store.CreatePasskey(ctx, domain.Passkey{
+				UserID: target.ID, CredentialID: []byte{byte(i + 1)}, PublicKey: []byte("public-key"), Name: "Passkey",
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
 
-		selfDetail, err := svc.GetUserDetail(ctx, Actor{UserID: actor.ID}, actor.ID)
+		selfDetail, err := svc.GetUserDetail(ctx, Actor{UserID: actor.ID}, actor.ID, UserDetailPages{Sessions: Page{Page: 1, Size: 25}, Passkeys: Page{Page: 1, Size: 25}})
 		if err != nil {
 			t.Fatalf("GetUserDetail self failed: %v", err)
 		}
@@ -356,7 +363,7 @@ func TestGetUserDetailActionAvailability(t *testing.T) {
 			t.Fatalf("expected self revoke sessions to be blocked, got %+v", selfDetail.Actions.RevokeAllSessions)
 		}
 
-		targetDetail, err := svc.GetUserDetail(ctx, Actor{UserID: actor.ID}, target.ID)
+		targetDetail, err := svc.GetUserDetail(ctx, Actor{UserID: actor.ID}, target.ID, UserDetailPages{Sessions: Page{Page: 1, Size: 25}, Passkeys: Page{Page: 1, Size: 2}})
 		if err != nil {
 			t.Fatalf("GetUserDetail target failed: %v", err)
 		}
@@ -368,6 +375,13 @@ func TestGetUserDetailActionAvailability(t *testing.T) {
 		}
 		if !targetDetail.Actions.RevokeAllSessions.Allowed {
 			t.Fatalf("expected target session revoke to be allowed, got %+v", targetDetail.Actions.RevokeAllSessions)
+		}
+		if len(targetDetail.Passkeys) != 2 || !targetDetail.PasskeysNext {
+			t.Fatalf("unexpected first passkey page: %+v", targetDetail)
+		}
+		finalDetail, err := svc.GetUserDetail(ctx, Actor{UserID: actor.ID}, target.ID, UserDetailPages{Sessions: Page{Page: 1, Size: 25}, Passkeys: Page{Page: 2, Size: 2}})
+		if err != nil || len(finalDetail.Passkeys) != 1 || finalDetail.PasskeysNext || !finalDetail.PasskeysPrevious() {
+			t.Fatalf("unexpected final passkey page: %+v, err = %v", finalDetail, err)
 		}
 	})
 }

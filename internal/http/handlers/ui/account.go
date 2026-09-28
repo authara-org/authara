@@ -23,6 +23,7 @@ import (
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
@@ -36,8 +37,14 @@ func (h *UIHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(httpctx.WithFlash(r.Context(), msg))
 	}
 
-	accountCfg, err := h.accountConfig(ctx)
+	sessionOptions := session.ListOptions{Cursor: r.URL.Query().Get("sessions_cursor")}
+	passkeyOptions := passkey.ListOptions{Cursor: r.URL.Query().Get("passkeys_cursor")}
+	accountCfg, err := h.accountConfig(ctx, sessionOptions, passkeyOptions)
 	if err != nil {
+		if errors.Is(err, session.ErrInvalidListPage) || errors.Is(err, passkey.ErrInvalidListPage) {
+			h.renderRequestError(w, r, http.StatusBadRequest, "Invalid pagination cursor.")
+			return
+		}
 		session.ClearSessionCookies(w)
 		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/account"), http.StatusSeeOther)
 		return
@@ -351,7 +358,7 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 		return
 	}
 
-	accountCfg, err := h.accountConfig(ctx)
+	accountCfg, err := h.accountConfig(ctx, session.ListOptions{}, passkey.ListOptions{})
 	if err != nil {
 		session.ClearSessionCookies(w)
 		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/account"), http.StatusSeeOther)
@@ -403,7 +410,7 @@ func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	redirect.Redirect(w, r, "/auth/successful-deletion", http.StatusSeeOther)
 }
 
-func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, error) {
+func (h *UIHandler) accountConfig(ctx context.Context, sessionOptions session.ListOptions, passkeyOptions passkey.ListOptions) (userview.AccountConfig, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return userview.AccountConfig{}, errors.New("missing user id")
@@ -416,10 +423,11 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 
 	currentSessionID, _ := httpctx.SessionID(ctx)
 
-	sessions, err := h.Session.ListUserSessions(ctx, userID, currentSessionID, time.Now().UTC())
+	sessionPage, err := h.Session.ListUserSessionsPage(ctx, userID, time.Now().UTC(), sessionOptions)
 	if err != nil {
 		return userview.AccountConfig{}, err
 	}
+	sessions := sessionPage.Items
 
 	providers, err := h.Auth.ListUserAuthProviders(ctx, userID)
 	if err != nil {
@@ -427,11 +435,15 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 	}
 
 	var passkeys []domain.Passkey
+	var passkeysNextCursor string
 	if h.Passkeys != nil {
-		passkeys, err = h.Passkeys.ListUserPasskeys(ctx, userID)
+		page, pageErr := h.Passkeys.ListUserPasskeysPage(ctx, userID, passkeyOptions)
+		err = pageErr
 		if err != nil {
 			return userview.AccountConfig{}, err
 		}
+		passkeys = page.Items
+		passkeysNextCursor = page.NextCursor
 	}
 
 	totalAuthMethods := len(providers) + len(passkeys)
@@ -443,9 +455,13 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 		OperatorAccess:   platformRoles.IsOperator(),
 		GoogleClientID:   h.Google.ClientID,
 		Sessions:         toSessionViewModels(sessions, currentSessionID),
+		SessionsCursor:   sessionOptions.Cursor,
+		SessionsNext:     sessionPage.NextCursor,
 		CurrentSessionID: currentSessionID,
 		AuthProviders:    viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers),
 		Passkeys:         viewmodel.PasskeysFromDomain(passkeys, totalAuthMethods),
+		PasskeysCursor:   passkeyOptions.Cursor,
+		PasskeysNext:     passkeysNextCursor,
 	}, nil
 }
 
@@ -514,7 +530,7 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, msg))
 		return
 	}
-	cfg, err := h.accountConfig(ctx)
+	cfg, err := h.accountConfig(ctx, session.ListOptions{}, passkey.ListOptions{})
 	if err != nil {
 		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load account.")
 		return

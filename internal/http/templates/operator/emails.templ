@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/authara-org/authara/internal/domain"
@@ -208,7 +209,7 @@ templ emailTemplateSourceStatus(model EmailTemplateEditorModel, oob bool) {
 templ emailTemplateHistory(model EmailTemplateEditorModel, oob bool) {
 	<div
 		id="email-template-history"
-		class="w-44"
+		class="w-64 space-y-2"
 		if oob {
 			hx-swap-oob="outerHTML"
 		}
@@ -225,6 +226,18 @@ templ emailTemplateHistory(model EmailTemplateEditorModel, oob bool) {
 				"@email-template-persisted.window": "close(false)",
 			},
 		})
+		if model.HistoryPage > 1 || model.HistoryHasNext {
+			<div class="flex justify-between text-xs">
+				if model.HistoryPage > 1 {
+					<a class="text-blue-600 hover:underline" href={ templ.URL(fmt.Sprintf("/auth/operator/emails/%s?page=%d&size=%d", model.Definition.Key, model.HistoryPage-1, model.HistorySize)) }>Newer</a>
+				} else {
+					<span></span>
+				}
+				if model.HistoryHasNext {
+					<a class="text-blue-600 hover:underline" href={ templ.URL(fmt.Sprintf("/auth/operator/emails/%s?page=%d&size=%d", model.Definition.Key, model.HistoryPage+1, model.HistorySize)) }>Older</a>
+				}
+			</div>
+		}
 	</div>
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
@@ -56,12 +57,13 @@ func (h *UIHandler) ReauthenticatePage(w http.ResponseWriter, r *http.Request) {
 	}
 	hasPasskey := false
 	if h.Passkeys != nil {
-		passkeys, err := h.Passkeys.ListUserPasskeys(r.Context(), userID)
+		limit := 1
+		page, err := h.Passkeys.ListUserPasskeysPage(r.Context(), userID, passkey.ListOptions{Limit: &limit})
 		if err != nil {
 			h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load authentication methods.")
 			return
 		}
-		hasPasskey = len(passkeys) > 0
+		hasPasskey = len(page.Items) > 0
 	}
 	googleClientID := ""
 	if hasGoogle && h.Google != nil {

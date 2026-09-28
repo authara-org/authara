@@ -172,12 +172,24 @@ func (s *Store) CreatePasskey(ctx context.Context, passkey domain.Passkey) (doma
 }
 
 func (s *Store) ListPasskeysByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Passkey, error) {
+	return s.ListPasskeysPageByUserID(ctx, userID, nil, 0)
+}
+
+func (s *Store) ListPasskeysPageByUserID(ctx context.Context, userID uuid.UUID, cursor *ListCursor, limit int) ([]domain.Passkey, error) {
+	var cursorCreatedAt any
+	var cursorID any
+	if cursor != nil {
+		cursorCreatedAt = cursor.CreatedAt
+		cursorID = cursor.ID
+	}
 	rows, err := s.queryRows(ctx, `
 		SELECT `+passkeyColumns+`
 		FROM passkeys
 		WHERE user_id = $1
-		ORDER BY created_at ASC
-	`, userID)
+		  AND ($2::timestamptz IS NULL OR (created_at, id) > ($2, $3))
+		ORDER BY created_at ASC, id ASC
+		LIMIT NULLIF($4, 0)
+	`, userID, cursorCreatedAt, cursorID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +208,30 @@ func (s *Store) ListPasskeysByUserID(ctx context.Context, userID uuid.UUID) ([]d
 	}
 
 	return out, nil
+}
+
+func (s *Store) ListPasskeysByUserIDOffsetPage(ctx context.Context, userID uuid.UUID, limit, offset int) ([]domain.Passkey, error) {
+	rows, err := s.queryRows(ctx, `
+		SELECT `+passkeyColumns+`
+		FROM passkeys
+		WHERE user_id = $1
+		ORDER BY created_at ASC, id ASC
+		LIMIT $2 OFFSET $3
+	`, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.Passkey, 0)
+	for rows.Next() {
+		var row model.Passkey
+		if err := scanPasskey(rows, &row); err != nil {
+			return nil, err
+		}
+		out = append(out, toDomainPasskey(row))
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) GetPasskeyByCredentialID(ctx context.Context, credentialID []byte) (domain.Passkey, error) {
