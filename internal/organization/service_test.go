@@ -109,7 +109,7 @@ func TestOrganizationLifecycleWebhooks(t *testing.T) {
 			WebhookPublisher: pub,
 		})
 
-		org, membership, err := svc.CreateOrganization(ctx, CreateOrganizationInput{
+		org, ownerMembership, err := svc.CreateOrganization(ctx, CreateOrganizationInput{
 			Name:            "Webhook Org",
 			CreatedByUserID: user.ID,
 		})
@@ -119,21 +119,34 @@ func TestOrganizationLifecycleWebhooks(t *testing.T) {
 		if _, err := svc.UpdateOrganization(ctx, org.ID, "Webhook Org Updated"); err != nil {
 			t.Fatalf("UpdateOrganization failed: %v", err)
 		}
-		otherOwner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "org-webhook-owner@example.com", Username: "org-webhook-owner"})
+		member, err := tdb.Store.CreateUser(ctx, domain.User{Email: "org-webhook-member@example.com", Username: "org-webhook-member"})
 		if err != nil {
-			t.Fatalf("CreateUser other owner failed: %v", err)
+			t.Fatalf("CreateUser member failed: %v", err)
 		}
 		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
 			OrganizationID: org.ID,
-			UserID:         otherOwner.ID,
-			Role:           domain.OrganizationRoleOwner,
+			UserID:         member.ID,
+			Role:           domain.OrganizationRoleMember,
 		}); err != nil {
-			t.Fatalf("CreateOrganizationMembership other owner failed: %v", err)
+			t.Fatalf("CreateOrganizationMembership member failed: %v", err)
 		}
-		if _, err := svc.UpdateOrganizationMember(ctx, org.ID, membership.UserID, domain.OrganizationRoleAdmin); err != nil {
+		roleUpdate := UpdateOrganizationMemberInput{
+			OrganizationID: org.ID,
+			UserID:         member.ID,
+			ActorUserID:    ownerMembership.UserID,
+			Role:           domain.OrganizationRoleAdmin,
+		}
+		if _, err := svc.UpdateOrganizationMember(ctx, roleUpdate); err != nil {
 			t.Fatalf("UpdateOrganizationMember failed: %v", err)
 		}
-		if err := svc.DeleteOrganizationMember(ctx, org.ID, membership.UserID); err != nil {
+		eventCount := len(pub.events)
+		if _, err := svc.UpdateOrganizationMember(ctx, roleUpdate); err != nil {
+			t.Fatalf("no-op UpdateOrganizationMember failed: %v", err)
+		}
+		if len(pub.events) != eventCount {
+			t.Fatal("no-op role update published a webhook")
+		}
+		if err := svc.DeleteOrganizationMember(ctx, org.ID, member.ID); err != nil {
 			t.Fatalf("DeleteOrganizationMember failed: %v", err)
 		}
 
@@ -151,16 +164,95 @@ func TestOrganizationLifecycleWebhooks(t *testing.T) {
 		if !ok || !data.IsInitialMembership || data.InvitationID != nil || string(data.Metadata) != "{}" {
 			t.Fatalf("unexpected initial membership webhook data: %#v", created.Data)
 		}
-		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateOrganizationRoleChanged); got != 1 {
+		if got := testutil.CountEmailJobs(t, ctx, member.Email, domain.EmailTemplateOrganizationRoleChanged); got != 1 {
 			t.Fatalf("organization-role-changed email jobs = %d, want 1", got)
 		}
-		roleData := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateOrganizationRoleChanged)
-		if roleData[email.TemplateVariablePreviousRole] != string(domain.OrganizationRoleOwner) ||
+		roleData := testutil.LatestEmailTemplateData(t, ctx, member.Email, domain.EmailTemplateOrganizationRoleChanged)
+		if roleData[email.TemplateVariablePreviousRole] != string(domain.OrganizationRoleMember) ||
 			roleData[email.TemplateVariableRole] != string(domain.OrganizationRoleAdmin) {
 			t.Fatalf("unexpected role-change template data: %#v", roleData)
 		}
-		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplateOrganizationMembershipRemoved); got != 1 {
+		if got := testutil.CountEmailJobs(t, ctx, member.Email, domain.EmailTemplateOrganizationMembershipRemoved); got != 1 {
 			t.Fatalf("organization-membership-removed email jobs = %d, want 1", got)
+		}
+	})
+}
+
+func TestUpdateOrganizationMemberAuthorization(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "role-owner@example.com", Username: "role-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "Role Org", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		createMember := func(email string, role domain.OrganizationRole) domain.User {
+			t.Helper()
+			user, err := tdb.Store.CreateUser(ctx, domain.User{Email: email, Username: email})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{OrganizationID: org.ID, UserID: user.ID, Role: role}); err != nil {
+				t.Fatal(err)
+			}
+			return user
+		}
+		admin := createMember("role-admin@example.com", domain.OrganizationRoleAdmin)
+		member := createMember("role-member@example.com", domain.OrganizationRoleMember)
+		secondMember := createMember("role-member-2@example.com", domain.OrganizationRoleMember)
+		outsider, err := tdb.Store.CreateUser(ctx, domain.User{Email: "role-outsider@example.com", Username: "role-outsider"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, Mode: OrgModeMulti})
+		for _, tc := range []struct {
+			name   string
+			input  UpdateOrganizationMemberInput
+			wanted error
+		}{
+			{"member cannot manage", UpdateOrganizationMemberInput{org.ID, secondMember.ID, member.ID, domain.OrganizationRoleAdmin}, ErrOrganizationActorNotAllowed},
+			{"outsider cannot manage", UpdateOrganizationMemberInput{org.ID, member.ID, outsider.ID, domain.OrganizationRoleAdmin}, ErrOrganizationActorNotMember},
+			{"admin cannot change owner", UpdateOrganizationMemberInput{org.ID, owner.ID, admin.ID, domain.OrganizationRoleAdmin}, ErrOrganizationActorNotAllowed},
+			{"sole owner cannot demote", UpdateOrganizationMemberInput{org.ID, owner.ID, owner.ID, domain.OrganizationRoleAdmin}, ErrLastOrganizationOwner},
+			{"owner role is reserved", UpdateOrganizationMemberInput{org.ID, member.ID, owner.ID, domain.OrganizationRoleOwner}, ErrInvalidOrganizationRole},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				if _, err := svc.UpdateOrganizationMember(ctx, tc.input); !errors.Is(err, tc.wanted) {
+					t.Fatalf("got %v, want %v", err, tc.wanted)
+				}
+			})
+		}
+
+		if _, err := svc.UpdateOrganizationMember(ctx, UpdateOrganizationMemberInput{org.ID, member.ID, owner.ID, domain.OrganizationRoleAdmin}); err != nil {
+			t.Fatalf("owner update failed: %v", err)
+		}
+		if _, err := svc.UpdateOrganizationMember(ctx, UpdateOrganizationMemberInput{org.ID, secondMember.ID, admin.ID, domain.OrganizationRoleAdmin}); err != nil {
+			t.Fatalf("admin update failed: %v", err)
+		}
+	})
+}
+
+func TestOrganizationHasOneOwner(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "single-owner@example.com", Username: "single-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "Single Owner", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		other, err := tdb.Store.CreateUser(ctx, domain.User{Email: "second-owner@example.com", Username: "second-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{OrganizationID: org.ID, UserID: other.ID, Role: domain.OrganizationRoleOwner}); err == nil {
+			t.Fatal("expected second owner to violate the database constraint")
 		}
 	})
 }

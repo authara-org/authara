@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
@@ -42,6 +43,28 @@ func (h *Handler) RemoveInternalOrganizationMember(ctx context.Context, request 
 	return contract.RemoveInternalOrganizationMember204Response{}, nil
 }
 
+func (h *Handler) UpdateInternalOrganizationMember(ctx context.Context, request contract.UpdateInternalOrganizationMemberRequestObject) (contract.UpdateInternalOrganizationMemberResponseObject, error) {
+	if request.Body == nil {
+		return updateInternalOrganizationMemberError(response.CodeInvalidRequest, "Invalid request body"), nil
+	}
+	_, err := h.Organizations.UpdateOrganizationMember(ctx, organization.UpdateOrganizationMemberInput{
+		OrganizationID: request.OrganizationID,
+		UserID:         request.UserID,
+		ActorUserID:    request.Body.ActorUserId,
+		Role:           domain.OrganizationRole(request.Body.Role),
+	})
+	if err != nil {
+		code, message := organizationLifecycleError(err)
+		return updateInternalOrganizationMemberError(code, message), nil
+	}
+	member, err := h.Organizations.GetOrganizationMember(ctx, request.OrganizationID, request.UserID)
+	if err != nil {
+		code, message := organizationLifecycleError(err)
+		return updateInternalOrganizationMemberError(code, message), nil
+	}
+	return contract.UpdateInternalOrganizationMember200JSONResponse(contract.OrganizationMemberEnvelope{Member: toContractOrganizationMember(member)}), nil
+}
+
 func (h *Handler) TransferInternalOrganizationOwnership(ctx context.Context, request contract.TransferInternalOrganizationOwnershipRequestObject) (contract.TransferInternalOrganizationOwnershipResponseObject, error) {
 	if request.Body == nil {
 		return transferInternalOrganizationOwnershipError(response.CodeInvalidRequest, "Invalid request body"), nil
@@ -69,6 +92,8 @@ func (h *Handler) DeleteInternalUser(ctx context.Context, request contract.Delet
 
 func organizationLifecycleError(err error) (response.ErrorCode, string) {
 	switch {
+	case errors.Is(err, organization.ErrInvalidOrganizationRole):
+		return response.CodeInvalidRequest, "Invalid organization role"
 	case errors.Is(err, organization.ErrInvalidOrganizationOwnershipTransfer):
 		return response.CodeInvalidRequest, "New owner must differ from current owner"
 	case errors.Is(err, store.ErrOrganizationNotFound):
@@ -90,6 +115,13 @@ func organizationLifecycleError(err error) (response.ErrorCode, string) {
 	default:
 		return response.CodeInternalError, "Internal server error"
 	}
+}
+
+func publicOrganizationMemberUpdateError(err error) (response.ErrorCode, string) {
+	if errors.Is(err, organization.ErrOrganizationActorNotMember) || errors.Is(err, organization.ErrOrganizationActorNotAllowed) {
+		return response.CodeForbidden, "Organization operation forbidden"
+	}
+	return organizationLifecycleError(err)
 }
 
 func userLifecycleError(err error) (response.ErrorCode, string) {

@@ -322,50 +322,64 @@ func (s *Service) GetOrganizationMember(ctx context.Context, organizationID uuid
 	return s.store.GetOrganizationMember(ctx, organizationID, userID)
 }
 
-func (s *Service) UpdateOrganizationMember(ctx context.Context, organizationID uuid.UUID, userID uuid.UUID, role domain.OrganizationRole) (domain.OrganizationMembership, error) {
-	if !validOrganizationRole(role) {
+type UpdateOrganizationMemberInput struct {
+	OrganizationID uuid.UUID
+	UserID         uuid.UUID
+	ActorUserID    uuid.UUID
+	Role           domain.OrganizationRole
+}
+
+func (s *Service) UpdateOrganizationMember(ctx context.Context, in UpdateOrganizationMemberInput) (domain.OrganizationMembership, error) {
+	if in.Role != domain.OrganizationRoleAdmin && in.Role != domain.OrganizationRoleMember {
 		return domain.OrganizationMembership{}, ErrInvalidOrganizationRole
 	}
 	var membership domain.OrganizationMembership
 	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		org, err := s.store.GetOrganizationByIDForUpdate(txCtx, organizationID)
+		org, err := s.store.GetOrganizationByIDForUpdate(txCtx, in.OrganizationID)
 		if err != nil {
 			return err
 		}
-		current, err := s.store.GetOrganizationMembership(txCtx, organizationID, userID)
+		actor, err := s.store.GetOrganizationMembership(txCtx, in.OrganizationID, in.ActorUserID)
+		if err != nil {
+			if errors.Is(err, store.ErrOrganizationMembershipNotFound) {
+				return ErrOrganizationActorNotMember
+			}
+			return err
+		}
+		current, err := s.store.GetOrganizationMembership(txCtx, in.OrganizationID, in.UserID)
 		if err != nil {
 			return err
 		}
-		if current.Role == domain.OrganizationRoleOwner && role != domain.OrganizationRoleOwner {
-			memberships, err := s.store.ListOrganizationMembershipsByOrganizationID(txCtx, organizationID)
-			if err != nil {
-				return err
-			}
-			if countOrganizationOwners(memberships) == 1 {
-				return ErrLastOrganizationOwner
-			}
+		if actor.Role != domain.OrganizationRoleOwner &&
+			(actor.Role != domain.OrganizationRoleAdmin || current.Role == domain.OrganizationRoleOwner) {
+			return ErrOrganizationActorNotAllowed
+		}
+		if current.Role == domain.OrganizationRoleOwner {
+			return ErrLastOrganizationOwner
+		}
+		if current.Role == in.Role {
+			membership = current
+			return nil
 		}
 		now := time.Now().UTC()
-		if err := s.accessTokenRevocations.RevokeMembership(txCtx, userID, organizationID, now); err != nil {
+		if err := s.accessTokenRevocations.RevokeMembership(txCtx, in.UserID, in.OrganizationID, now); err != nil {
 			return err
 		}
-		membership, err = s.store.UpdateOrganizationMembershipRole(txCtx, organizationID, userID, role)
+		membership, err = s.store.UpdateOrganizationMembershipRole(txCtx, in.OrganizationID, in.UserID, in.Role)
 		if err != nil {
 			return err
 		}
-		if current.Role != membership.Role {
-			user, err := s.store.GetUserByID(txCtx, userID)
-			if err != nil {
-				return err
-			}
-			if err := emailpkg.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateOrganizationRoleChanged, emailpkg.TemplateData{
-				emailpkg.TemplateVariableOrganizationName: org.Name,
-				emailpkg.TemplateVariablePreviousRole:     string(current.Role),
-				emailpkg.TemplateVariableRole:             string(membership.Role),
-				emailpkg.TemplateVariableOccurredAt:       emailpkg.OccurredAt(now),
-			}, now); err != nil {
-				return err
-			}
+		user, err := s.store.GetUserByID(txCtx, in.UserID)
+		if err != nil {
+			return err
+		}
+		if err := emailpkg.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateOrganizationRoleChanged, emailpkg.TemplateData{
+			emailpkg.TemplateVariableOrganizationName: org.Name,
+			emailpkg.TemplateVariablePreviousRole:     string(current.Role),
+			emailpkg.TemplateVariableRole:             string(membership.Role),
+			emailpkg.TemplateVariableOccurredAt:       emailpkg.OccurredAt(now),
+		}, now); err != nil {
+			return err
 		}
 		return s.publish(txCtx, webhook.NewOrganizationMembershipUpdated(membership, now))
 	})
@@ -399,15 +413,6 @@ func defaultOrganizationName(username, email string) string {
 		return local
 	}
 	return "Personal workspace"
-}
-
-func validOrganizationRole(role domain.OrganizationRole) bool {
-	switch role {
-	case domain.OrganizationRoleOwner, domain.OrganizationRoleAdmin, domain.OrganizationRoleMember:
-		return true
-	default:
-		return false
-	}
 }
 
 func (s *Service) publish(ctx context.Context, evt webhook.Envelope) error {

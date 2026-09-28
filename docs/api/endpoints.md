@@ -677,6 +677,7 @@ GET   /auth/api/v1/organizations/{organizationID}
 PATCH /auth/api/v1/organizations/{organizationID}
 GET   /auth/api/v1/organizations/{organizationID}/members
 GET   /auth/api/v1/organizations/{organizationID}/members/{userID}
+PATCH /auth/api/v1/organizations/{organizationID}/members/{userID}
 GET   /auth/api/v1/organizations/{organizationID}/invitations
 GET   /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}
 POST  /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
@@ -707,6 +708,9 @@ In `single` mode, `allows_organization_leave` is `true` because a departure can
 be approved by the application backend, while `allows_org_switching` remains
 `false`: the user may never hold two memberships and cannot switch between
 simultaneously available organizations.
+
+Owners and admins can set a non-owner member's role to `admin` or `member`.
+Ownership is singular and changes only through the ownership-transfer endpoint.
 
 ---
 
@@ -760,6 +764,23 @@ last member or sole owner. Sessions currently using the removed organization
 and their refresh tokens are deleted; access tokens for that user and
 organization are revoked. The operation emits
 `organization.membership.deleted`.
+
+## Update an organization member role
+
+```text
+PATCH /auth/internal/v1/organizations/{organization_id}/members/{user_id}
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
+```json
+{
+  "actor_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1",
+  "role": "admin"
+}
+```
+
+Owners and admins can assign `admin` or `member`; admins cannot modify the
+owner. Use ownership transfer to change the organization's sole owner.
 
 ## Transfer organization ownership
 

@@ -363,6 +363,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 						r.Use(mw.RequireRecentAuthenticationAPI)
 
 						r.Patch("/organizations/{organizationID}", contracth.UpdatePublicOrganization)
+						r.Patch("/organizations/{organizationID}/members/{userID}", contracth.UpdatePublicOrganizationMember)
 						r.Post("/organizations/{organizationID}/invitations/{invitationID}/revoke", contracth.RevokePublicOrganizationInvitation)
 					})
 				})
@@ -382,6 +383,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 			r.Post("/organizations", contracth.CreateInternalOrganization)
 			r.Delete("/organizations/{organizationID}", contracth.DeleteInternalOrganization)
+			r.Patch("/organizations/{organizationID}/members/{userID}", contracth.UpdateInternalOrganizationMember)
 			r.Delete("/organizations/{organizationID}/members/{userID}", contracth.RemoveInternalOrganizationMember)
 			r.Post("/organizations/{organizationID}/ownership-transfer", contracth.TransferInternalOrganizationOwnership)
 			r.Post("/organizations/{organizationID}/invitations", contracth.CreateInternalOrganizationInvitation)

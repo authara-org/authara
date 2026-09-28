@@ -163,20 +163,20 @@ func (s *Service) TransferOrganizationOwnership(ctx context.Context, in Transfer
 			}
 		}
 
-		newOwner, err := s.store.UpdateOrganizationMembershipRole(
-			txCtx,
-			in.OrganizationID,
-			in.NewOwnerUserID,
-			domain.OrganizationRoleOwner,
-		)
-		if err != nil {
-			return err
-		}
 		oldOwner, err := s.store.UpdateOrganizationMembershipRole(
 			txCtx,
 			in.OrganizationID,
 			in.ActorUserID,
 			domain.OrganizationRoleAdmin,
+		)
+		if err != nil {
+			return err
+		}
+		newOwner, err := s.store.UpdateOrganizationMembershipRole(
+			txCtx,
+			in.OrganizationID,
+			in.NewOwnerUserID,
+			domain.OrganizationRoleOwner,
 		)
 		if err != nil {
 			return err

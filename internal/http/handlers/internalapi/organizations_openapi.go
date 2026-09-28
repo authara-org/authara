@@ -3,6 +3,7 @@ package internalapi
 import (
 	"context"
 
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
@@ -27,6 +28,32 @@ func (h *Handler) ListPublicOrganizationMembers(ctx context.Context, request con
 
 func (h *Handler) GetPublicOrganizationMember(ctx context.Context, request contract.GetPublicOrganizationMemberRequestObject) (contract.GetPublicOrganizationMemberResponseObject, error) {
 	return h.getOrganizationMember(ctx, request.OrganizationID, request.UserID), nil
+}
+
+func (h *Handler) UpdatePublicOrganizationMember(ctx context.Context, request contract.UpdatePublicOrganizationMemberRequestObject) (contract.UpdatePublicOrganizationMemberResponseObject, error) {
+	if request.Body == nil {
+		return updatePublicOrganizationMemberError(response.CodeInvalidRequest, "Invalid request body"), nil
+	}
+	actorUserID, code, message, ok := h.contractAuthorizePublicOrganization(ctx, request.OrganizationID, true)
+	if !ok {
+		return updatePublicOrganizationMemberError(code, message), nil
+	}
+	_, err := h.Organizations.UpdateOrganizationMember(ctx, organization.UpdateOrganizationMemberInput{
+		OrganizationID: request.OrganizationID,
+		UserID:         request.UserID,
+		ActorUserID:    actorUserID,
+		Role:           domain.OrganizationRole(request.Body.Role),
+	})
+	if err != nil {
+		code, message := publicOrganizationMemberUpdateError(err)
+		return updatePublicOrganizationMemberError(code, message), nil
+	}
+	member, err := h.Organizations.GetOrganizationMember(ctx, request.OrganizationID, request.UserID)
+	if err != nil {
+		code, message := organizationError(err)
+		return updatePublicOrganizationMemberError(code, message), nil
+	}
+	return contract.UpdatePublicOrganizationMember200JSONResponse(contract.OrganizationMemberEnvelope{Member: toContractOrganizationMember(member)}), nil
 }
 
 func (h *Handler) ListPublicUserMemberships(ctx context.Context, request contract.ListPublicUserMembershipsRequestObject) (contract.ListPublicUserMembershipsResponseObject, error) {

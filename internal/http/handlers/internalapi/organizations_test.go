@@ -162,3 +162,44 @@ func TestPublicOrganizationAuthorizationUsesCurrentMembership(t *testing.T) {
 		}
 	})
 }
+
+func TestUpdatePublicOrganizationMember(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "public-role-owner@example.com", Username: "public-role-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		member, err := tdb.Store.CreateUser(ctx, domain.User{Email: "public-role-member@example.com", Username: "public-role-member"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "Public Role", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{OrganizationID: org.ID, UserID: member.ID, Role: domain.OrganizationRoleMember}); err != nil {
+			t.Fatal(err)
+		}
+
+		handler := New(nil, organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti}), true)
+		reqCtx := httpctx.WithOrganizationID(httpctx.WithUserID(ctx, owner.ID), org.ID)
+		resp, err := handler.UpdatePublicOrganizationMember(reqCtx, contract.UpdatePublicOrganizationMemberRequestObject{
+			OrganizationID: org.ID,
+			UserID:         member.ID,
+			Body:           &contract.UpdateOrganizationMemberRequest{Role: contract.OrganizationMemberRoleAdmin},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rr := httptest.NewRecorder()
+		writeContractResponse(t, rr, resp)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+		}
+		updated, err := tdb.Store.GetOrganizationMembership(ctx, org.ID, member.ID)
+		if err != nil || updated.Role != domain.OrganizationRoleAdmin {
+			t.Fatalf("membership = %+v, %v", updated, err)
+		}
+	})
+}

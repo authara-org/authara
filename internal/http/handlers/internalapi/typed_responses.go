@@ -82,6 +82,25 @@ func removeInternalOrganizationMemberError(code response.ErrorCode, message stri
 	}
 }
 
+func updateInternalOrganizationMemberError(code response.ErrorCode, message string) contract.UpdateInternalOrganizationMemberResponseObject {
+	spec := mustRouteError(UpdateInternalOrganizationMemberErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.UpdateInternalOrganizationMember400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.UpdateInternalOrganizationMember401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.UpdateInternalOrganizationMember403JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.UpdateInternalOrganizationMember404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.UpdateInternalOrganizationMember409JSONResponse(body)
+	default:
+		return contract.UpdateInternalOrganizationMember500JSONResponse(body)
+	}
+}
+
 func transferInternalOrganizationOwnershipError(code response.ErrorCode, message string) contract.TransferInternalOrganizationOwnershipResponseObject {
 	spec := mustRouteError(TransferInternalOrganizationOwnershipErrors, code)
 	body := apiErrorBody(spec.Code, message)
@@ -183,6 +202,25 @@ func getPublicOrganizationMemberError(code response.ErrorCode, message string) c
 		return contract.GetPublicOrganizationMember404JSONResponse(body)
 	default:
 		return contract.GetPublicOrganizationMember500JSONResponse(body)
+	}
+}
+
+func updatePublicOrganizationMemberError(code response.ErrorCode, message string) contract.UpdatePublicOrganizationMemberResponseObject {
+	spec := mustRouteError(UpdatePublicOrganizationMemberErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.UpdatePublicOrganizationMember400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.UpdatePublicOrganizationMember401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.UpdatePublicOrganizationMember403JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.UpdatePublicOrganizationMember404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.UpdatePublicOrganizationMember409JSONResponse(body)
+	default:
+		return contract.UpdatePublicOrganizationMember500JSONResponse(body)
 	}
 }
 

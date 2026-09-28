@@ -1931,6 +1931,57 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+    patch:
+      operationId: updatePublicOrganizationMember
+      tags: [Organizations]
+      summary: Update an organization member role
+      description: Assigns the admin or member role; ownership changes use the ownership-transfer operation.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+        - $ref: "#/components/parameters/UserID"
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-recent-auth: required
+      x-authara-availability: public-organization-management-enabled
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found, organization_not_found, membership_not_found]
+        "409": [last_organization_owner]
+        "428": [recent_authentication_required]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrganizationMemberRequest"
+      responses:
+        "200":
+          description: Updated organization member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMemberEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "428":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
 
   /auth/api/v1/organizations/{organizationID}/invitations:
     parameters:
@@ -2171,6 +2222,46 @@ paths:
     parameters:
       - $ref: "#/components/parameters/OrganizationID"
       - $ref: "#/components/parameters/UserID"
+    patch:
+      operationId: updateInternalOrganizationMember
+      tags: [Internal]
+      summary: Update an organization member role
+      description: Assigns the admin or member role on behalf of an authorized organization owner or admin.
+      security:
+        - internalBearer: []
+      x-authara-access: internal
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [actor_not_member, actor_not_allowed]
+        "404": [organization_not_found, membership_not_found]
+        "409": [last_organization_owner]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InternalUpdateOrganizationMemberRequest"
+      responses:
+        "200":
+          description: Updated organization member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMemberEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     delete:
       operationId: removeInternalOrganizationMember
       tags: [Internal]
@@ -3122,6 +3213,23 @@ components:
       properties:
         name:
           type: string
+    UpdateOrganizationMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/OrganizationMemberRole"
+    InternalUpdateOrganizationMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [actor_user_id, role]
+      properties:
+        actor_user_id:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/OrganizationMemberRole"
     InternalCreateInvitationRequest:
       type: object
       additionalProperties: false
@@ -3319,6 +3427,10 @@ components:
     OrganizationRole:
       type: string
       enum: [owner, admin, member]
+    OrganizationMemberRole:
+      type: string
+      enum: [admin, member]
+      description: Mutable member role. Ownership changes use the ownership-transfer operation.
     OrganizationInvitationRole:
       type: string
       enum: [admin, member]

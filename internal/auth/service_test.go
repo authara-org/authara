@@ -1439,10 +1439,10 @@ func TestDeleteUserUsesMembershipRoleAfterOrganizationLock(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 
-	if _, err := tdb.Store.UpdateOrganizationMembershipRole(lockCtx, org.ID, user.ID, domain.OrganizationRoleOwner); err != nil {
+	if _, err := tdb.Store.UpdateOrganizationMembershipRole(lockCtx, org.ID, owner.ID, domain.OrganizationRoleAdmin); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tdb.Store.UpdateOrganizationMembershipRole(lockCtx, org.ID, owner.ID, domain.OrganizationRoleAdmin); err != nil {
+	if _, err := tdb.Store.UpdateOrganizationMembershipRole(lockCtx, org.ID, user.ID, domain.OrganizationRoleOwner); err != nil {
 		t.Fatal(err)
 	}
 	if err := tdb.Tx.Commit(lockCtx); err != nil {
