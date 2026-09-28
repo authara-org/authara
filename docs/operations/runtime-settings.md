@@ -153,11 +153,34 @@ Polling is also reconciliation: there is no notification that can be lost,
 and a temporarily failed query is retried on the next interval. Reads on hot
 paths only load an atomic in-memory snapshot and never query PostgreSQL.
 
-Invalid values, unknown keys, attempts to replace locked settings, and stale
-revisions are rejected without persistence or publication. The only locked
-state an operator can mutate is removal of an existing dormant override. Startup
-fails clearly if a stored override is unknown, malformed, outside operator
+Invalid values for known settings, attempts to replace locked settings, and
+stale revisions are rejected without persistence or publication. The only
+locked state an operator can mutate is removal of an existing dormant override.
+Startup fails clearly if a known stored override is malformed, outside operator
 safety bounds, or makes the effective typed policy invalid.
+
+An override whose key is unknown to a replica is preserved in PostgreSQL and
+ignored by that replica. The replica logs the key and revision, but never the
+value, and continues to start and reconcile normally. This permits N and N-1
+replicas to coexist while a rolling deployment is in progress. Known keys
+continue to receive their complete type, range, editability, and related-policy
+validation; only interpretation of an unknown key is deferred to a version
+whose catalog defines it.
+
+## Mixed-version rollout and rollback
+
+A setting introduced by N is not fleet-wide while N-1 replicas remain. N
+replicas apply its persisted override, while N-1 replicas preserve and ignore
+it and continue using their previous behavior. Operators must not enable a new
+setting during the mixed-version window when that difference would make N-1
+behavior unsafe or incompatible. Drain N-1 first, then enable the setting.
+
+Before rolling back from N, clear overrides for new settings whose behavior is
+not safe to ignore. If rollback occurs first, N-1 remains healthy and preserves
+those overrides, but cannot display, apply, edit, or clear them through its
+older operator UI. Reinstalling N makes the preserved overrides effective
+again. Recovery without an N replica requires a deliberate database operation
+and should be reserved for emergencies.
 
 ## Backup and rollback
 
@@ -169,9 +192,10 @@ authara.runtime_setting_overrides
 authara.operator_audit_events
 ```
 
-The normal rollback path is to clear an override in the operator page. A
-deployment environment value can enforce an emergency value on every replica
-after restart while preserving the dormant override for later review.
+The normal rollback path is to clear an override in the operator page before
+downgrading past the version that introduced its key. A deployment environment
+value can enforce an emergency value on every replica after restart while
+preserving the dormant override for later review.
 
 ## Startup-only boundary
 

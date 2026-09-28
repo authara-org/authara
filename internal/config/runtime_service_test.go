@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -818,7 +820,6 @@ func TestInvalidPersistedSettingsFailStartupWithoutPublishing(t *testing.T) {
 		key  Key
 		raw  string
 	}{
-		{name: "unknown", key: "unknown.key", raw: `true`},
 		{name: "wrong JSON type", key: KeyChallengeMaxAttempts, raw: `"five"`},
 		{name: "outside bounds", key: KeyChallengeMaxAttempts, raw: `100`},
 		{name: "environment only", key: KeyChallengeEnabled, raw: `true`},
@@ -831,6 +832,105 @@ func TestInvalidPersistedSettingsFailStartupWithoutPublishing(t *testing.T) {
 				t.Fatal("New succeeded with invalid persisted setting")
 			}
 		})
+	}
+}
+
+func TestUnknownPersistedSettingsArePreservedAcrossMixedVersionOperations(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	const futureKey Key = "authentication.future_policy"
+	const futureValue = "strict-future-value"
+	store.seed(futureKey, `"`+futureValue+`"`, 1)
+
+	var logs bytes.Buffer
+	service, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: store, LookupEnvironment: environment(nil),
+		Logger: slog.New(slog.NewTextHandler(&logs, nil)),
+	})
+	if err != nil {
+		t.Fatalf("start older replica with future setting: %v", err)
+	}
+	if got := service.Current().MaxAttempts; got != 5 {
+		t.Fatalf("older replica policy = %+v", service.Current())
+	}
+	if len(service.current.Load().unsupportedOverrides) != 1 {
+		t.Fatalf("unsupported overrides = %+v", service.current.Load().unsupportedOverrides)
+	}
+	if output := logs.String(); !strings.Contains(output, "unsupported runtime setting preserved and ignored") ||
+		!strings.Contains(output, string(futureKey)) || !strings.Contains(output, "revision=1") {
+		t.Fatalf("unknown-setting warning = %q", output)
+	} else if strings.Contains(output, futureValue) {
+		t.Fatalf("unknown-setting warning exposed value: %q", output)
+	}
+
+	if _, err := service.Set(ctx, KeyChallengeMaxAttempts, "8", uuid.New(), 0); err != nil {
+		t.Fatalf("mutate known setting from older replica: %v", err)
+	}
+	if len(service.current.Load().unsupportedOverrides) != 1 {
+		t.Fatalf("local mutation discarded unsupported-setting observability: %+v", service.current.Load().unsupportedOverrides)
+	}
+	state, err := store.LoadRuntimeSettings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Overrides) != 2 {
+		t.Fatalf("stored overrides = %+v", state.Overrides)
+	}
+	var preserved PersistedOverride
+	for _, override := range state.Overrides {
+		if override.Key == futureKey {
+			preserved = override
+		}
+	}
+	if preserved.Key != futureKey || string(preserved.Value) != `"`+futureValue+`"` || preserved.Revision != 1 {
+		t.Fatalf("future override was changed: %+v", preserved)
+	}
+
+	newer, err := NewService(ctx, ServiceOptions{Startup: &Config{}, Store: store, LookupEnvironment: environment(nil)})
+	if err != nil {
+		t.Fatalf("start newer replica baseline: %v", err)
+	}
+	definition := Definition{
+		Key: futureKey, Name: "Future policy", Control: ControlOperator, Reload: ReloadDynamic,
+		Type: TypeString, HasDefault: true, DefaultValue: "legacy", defaultValue: "legacy",
+	}
+	newer.definitions = append(newer.definitions, definition)
+	newer.definitionByKey[futureKey] = definition
+	newer.defaultValues[futureKey] = "legacy"
+	if err := newer.reloadLocked(ctx, true); err != nil {
+		t.Fatalf("reload preserved setting with newer catalog: %v", err)
+	}
+	description, err := newer.Describe(futureKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description.EffectiveSource != SourceOperator || description.EffectiveValue != futureValue || description.Revision != 1 {
+		t.Fatalf("restored future setting = %+v", description)
+	}
+}
+
+func TestReconcileIgnoresNewUnknownSettingAndKeepsKnownValidationStrict(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	service, err := NewService(ctx, ServiceOptions{Startup: &Config{}, Store: store, LookupEnvironment: environment(nil)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store.seed("future.setting", `{"mode":"strict"}`, 1)
+	if err := service.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile future setting: %v", err)
+	}
+	if service.current.Load().revision != 1 || len(service.current.Load().unsupportedOverrides) != 1 {
+		t.Fatalf("reconciled snapshot = %+v", service.current.Load())
+	}
+
+	store.seed(KeyChallengeMaxAttempts, `100`, 2)
+	if err := service.Reconcile(ctx); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("known invalid setting error = %v, want ErrInvalidValue", err)
+	}
+	if service.current.Load().revision != 1 {
+		t.Fatalf("invalid known setting published revision %d", service.current.Load().revision)
 	}
 }
 

@@ -31,21 +31,27 @@ type ServiceOptions struct {
 }
 
 type snapshot struct {
-	revision       int64
-	ui             UIPolicy
-	authentication AuthenticationPolicy
-	token          TokenPolicy
-	session        SessionPolicy
-	organization   OrganizationPolicy
-	allowlist      AllowlistPolicy
-	admin          AdminPolicy
-	email          EmailPolicy
-	webhook        WebhookPolicy
-	challenge      ChallengePolicy
-	rateLimits     RateLimitPolicy
-	descriptions   map[Key]Description
-	overrides      map[Key]PersistedOverride
-	fallbackValues map[Key]any
+	revision             int64
+	ui                   UIPolicy
+	authentication       AuthenticationPolicy
+	token                TokenPolicy
+	session              SessionPolicy
+	organization         OrganizationPolicy
+	allowlist            AllowlistPolicy
+	admin                AdminPolicy
+	email                EmailPolicy
+	webhook              WebhookPolicy
+	challenge            ChallengePolicy
+	rateLimits           RateLimitPolicy
+	descriptions         map[Key]Description
+	overrides            map[Key]PersistedOverride
+	unsupportedOverrides []unsupportedOverride
+	fallbackValues       map[Key]any
+}
+
+type unsupportedOverride struct {
+	key      Key
+	revision int64
 }
 
 type Service struct {
@@ -255,6 +261,7 @@ func (s *Service) Set(ctx context.Context, key Key, rawValue string, actorID uui
 	if err != nil {
 		return Description{}, err
 	}
+	proposed.unsupportedOverrides = append([]unsupportedOverride(nil), before.unsupportedOverrides...)
 	if err := s.validateEnvironmentRemovalProjections(key, proposed.fallbackValues); err != nil {
 		return Description{}, err
 	}
@@ -318,6 +325,7 @@ func (s *Service) Clear(ctx context.Context, key Key, actorID uuid.UUID, expecte
 	if err != nil {
 		return Description{}, err
 	}
+	proposed.unsupportedOverrides = append([]unsupportedOverride(nil), before.unsupportedOverrides...)
 	beforeProjectionErrors := s.environmentRemovalProjectionErrors(key, before.fallbackValues)
 	afterProjectionErrors := s.environmentRemovalProjectionErrors(key, proposed.fallbackValues)
 	for mask, projectionErr := range afterProjectionErrors {
@@ -406,24 +414,34 @@ func (s *Service) reloadLocked(ctx context.Context, force bool) error {
 		return err
 	}
 	s.current.Store(next)
+	for _, override := range next.unsupportedOverrides {
+		s.logger.WarnContext(ctx, "unsupported runtime setting preserved and ignored",
+			"key", override.key,
+			"revision", override.revision,
+		)
+	}
 	return nil
 }
 
 func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 	overrides := make(map[Key]PersistedOverride, len(state.Overrides))
+	seen := make(map[Key]struct{}, len(state.Overrides))
+	unsupportedOverrides := make([]unsupportedOverride, 0)
 	for _, override := range state.Overrides {
-		definition, ok := s.definitionByKey[override.Key]
-		if !ok {
-			return nil, fmt.Errorf("%w in database: %q", ErrUnknownSetting, override.Key)
-		}
-		if definition.Control == ControlEnvironment || definition.Sensitive || definition.Reload != ReloadDynamic {
-			return nil, fmt.Errorf("%w in database: %q is not operator-editable", ErrInvalidValue, override.Key)
-		}
 		if override.Revision <= 0 {
 			return nil, fmt.Errorf("%w in database: %q has revision %d", ErrInvalidValue, override.Key, override.Revision)
 		}
-		if _, exists := overrides[override.Key]; exists {
+		if _, exists := seen[override.Key]; exists {
 			return nil, fmt.Errorf("%w in database: duplicate %q", ErrInvalidValue, override.Key)
+		}
+		seen[override.Key] = struct{}{}
+		definition, ok := s.definitionByKey[override.Key]
+		if !ok {
+			unsupportedOverrides = append(unsupportedOverrides, unsupportedOverride{key: override.Key, revision: override.Revision})
+			continue
+		}
+		if definition.Control == ControlEnvironment || definition.Sensitive || definition.Reload != ReloadDynamic {
+			return nil, fmt.Errorf("%w in database: %q is not operator-editable", ErrInvalidValue, override.Key)
 		}
 		if _, err := parseJSON(definition, override.Value, true); err != nil {
 			return nil, fmt.Errorf("stored %s: %w", override.Key, err)
@@ -572,6 +590,7 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		organization: organization, allowlist: allowlist, admin: adminPolicy,
 		email: emailPolicy, webhook: webhookPolicy, challenge: challengePolicy, rateLimits: rateLimits,
 		descriptions: descriptions, overrides: overrides, fallbackValues: fallbackValues,
+		unsupportedOverrides: unsupportedOverrides,
 	}, nil
 }
 
