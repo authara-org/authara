@@ -23,7 +23,8 @@ type ServerConfig struct {
 	OAuthProviders    oauth.OAuthProviders
 	Handlers          Handlers
 
-	disableOpenAPIValidation bool
+	disableOpenAPIValidation        bool
+	strictOpenAPIResponseValidation bool
 }
 
 type Handlers struct {

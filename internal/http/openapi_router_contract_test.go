@@ -103,9 +103,10 @@ func newOpenAPIContractTestRouter(mode organization.OrgMode) http.Handler {
 	}
 
 	return NewRouter(ServerConfig{
-		Version:  "test",
-		Logger:   logger,
-		Handlers: handlers,
+		Version:                         "test",
+		Logger:                          logger,
+		Handlers:                        handlers,
+		strictOpenAPIResponseValidation: true,
 	}, Middlewares{
 		RedirectIfAuthenticated:              pass,
 		RequireAppAccessAuthWithRefresh:      pass,

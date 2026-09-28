@@ -31,7 +31,7 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
 	if !cfg.disableOpenAPIValidation {
-		r.Use(openapicontract.ValidationMiddleware(cfg.Logger))
+		r.Use(openapicontract.ValidationMiddleware(cfg.Logger, cfg.Dev || cfg.strictOpenAPIResponseValidation))
 	}
 
 	registerRoutes(r, cfg, mw)
