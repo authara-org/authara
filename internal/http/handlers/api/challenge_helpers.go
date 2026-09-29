@@ -37,6 +37,7 @@ func isExpectedPasswordResetVerifyError(err error) bool {
 
 func isExpectedEmailChangeVerifyError(err error) bool {
 	return isExpectedChallengeVerifyError(err) ||
+		errors.Is(err, challenge.ErrEmailAlreadyInUse) ||
 		errors.Is(err, store.ErrorPendingEmailChangeNotFound)
 }
 

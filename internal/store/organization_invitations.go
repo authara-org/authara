@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
 )
@@ -35,7 +36,7 @@ func toModelOrganizationInvitation(d domain.OrganizationInvitation) model.Organi
 	}
 	return model.OrganizationInvitation{
 		OrganizationID:   d.OrganizationID,
-		Email:            normalizeEmail(d.Email),
+		Email:            identity.CanonicalEmail(d.Email),
 		Role:             string(d.Role),
 		Metadata:         metadata,
 		TokenHash:        d.TokenHash,
@@ -187,7 +188,7 @@ func (s *Store) GetActiveOrganizationInvitationByOrganizationAndEmail(ctx contex
 		  AND revoked_at IS NULL
 		ORDER BY created_at DESC
 		LIMIT 1
-	`, organizationID, normalizeEmail(email)), &m)
+	`, organizationID, identity.CanonicalEmail(email)), &m)
 	if err != nil {
 		return domain.OrganizationInvitation{}, mapNoRows(err, ErrOrganizationInvitationNotFound)
 	}

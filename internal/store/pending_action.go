@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
 )
@@ -45,7 +46,7 @@ func scanPendingSignupAction(row rowScanner, m *model.PendingSignupAction) error
 func toModelPendingSignupAction(d domain.PendingSignupAction) model.PendingSignupAction {
 	return model.PendingSignupAction{
 		ChallengeID:  d.ChallengeID,
-		Email:        d.Email,
+		Email:        identity.CanonicalEmail(d.Email),
 		Username:     d.Username,
 		PasswordHash: d.PasswordHash,
 		InvitationID: d.InvitationID,
@@ -216,8 +217,8 @@ func toModelPendingEmailChange(d domain.PendingEmailChange) model.PendingEmailCh
 		ChallengeID:         d.ChallengeID,
 		UserID:              d.UserID,
 		InitiatingSessionID: d.InitiatingSessionID,
-		OldEmail:            d.OldEmail,
-		NewEmail:            d.NewEmail,
+		OldEmail:            identity.CanonicalEmail(d.OldEmail),
+		NewEmail:            identity.CanonicalEmail(d.NewEmail),
 	}
 }
 
@@ -280,10 +281,12 @@ func (s *Store) DeletePendingEmailChangesByUserID(ctx context.Context, userID uu
 }
 
 func (s *Store) UpdateUserEmailIfCurrent(ctx context.Context, userID uuid.UUID, currentEmail, newEmail string) (bool, error) {
+	currentEmail = identity.CanonicalEmail(currentEmail)
+	newEmail = identity.CanonicalEmail(newEmail)
 	res, err := s.exec(ctx, `
 		UPDATE users
 		SET email = $1
-		WHERE id = $2 AND lower(email) = lower($3)
+		WHERE id = $2 AND email = $3
 	`, newEmail, userID, currentEmail)
 	if err != nil {
 		return false, err

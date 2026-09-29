@@ -3,12 +3,12 @@ package api
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/response"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
@@ -20,6 +20,7 @@ func authSignupErrorCode(err error) response.ErrorCode {
 	case errors.Is(err, auth.ErrEmailNotAllowed):
 		return response.CodeForbidden
 	case errors.Is(err, auth.ErrUserAlreadyExists),
+		errors.Is(err, auth.ErrUsernameTaken),
 		errors.Is(err, auth.ErrInvalidUsername),
 		errors.Is(err, auth.ErrUnsupportedProvider),
 		errors.Is(err, store.ErrOrganizationInvitationNotFound),
@@ -68,7 +69,7 @@ func (h *APIHandler) invitationIDForSignupCode(ctx context.Context, email, invit
 	if err != nil {
 		return nil, err
 	}
-	if strings.ToLower(strings.TrimSpace(preview.Invitation.Email)) != email {
+	if identity.CanonicalEmail(preview.Invitation.Email) != identity.CanonicalEmail(email) {
 		return nil, organization.ErrOrganizationInviteEmailMismatch
 	}
 	switch preview.Invitation.Status(time.Now().UTC()) {

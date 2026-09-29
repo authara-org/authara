@@ -12,4 +12,5 @@ var (
 	ErrUnsupportedChallengePurpose = errors.New("unsupported challenge purpose")
 	ErrPasswordResetUnavailable    = errors.New("password reset unavailable for account")
 	ErrEmailChangeNotAuthorized    = errors.New("email change not authorized for session")
+	ErrEmailAlreadyInUse           = errors.New("email already in use")
 )

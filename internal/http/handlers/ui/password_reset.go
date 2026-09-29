@@ -3,7 +3,6 @@ package ui
 import (
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -15,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
@@ -156,8 +156,7 @@ func (h *UIHandler) parsePasswordResetForm(r *http.Request) (*passwordResetFormI
 		return nil, err
 	}
 
-	email := strings.TrimSpace(r.FormValue("email"))
-	email = strings.ToLower(email)
+	email := identity.CanonicalEmail(r.FormValue("email"))
 
 	return &passwordResetFormInput{
 		Email:       email,

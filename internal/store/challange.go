@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
 )
@@ -32,7 +33,7 @@ func toDomainChallenge(m model.Challenge) domain.Challenge {
 func toModelChallenge(d domain.Challenge) model.Challenge {
 	return model.Challenge{
 		Purpose:                  string(d.Purpose),
-		Email:                    d.Email,
+		Email:                    identity.CanonicalEmail(d.Email),
 		ExpiresAt:                d.ExpiresAt,
 		ConsumedAt:               d.ConsumedAt,
 		AttemptCount:             d.AttemptCount,

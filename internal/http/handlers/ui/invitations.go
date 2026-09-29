@@ -15,6 +15,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/organization"
 	authsession "github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
@@ -691,7 +692,7 @@ func (h *UIHandler) renderInvitationError(w http.ResponseWriter, r *http.Request
 }
 
 func normalizeEmailForDisplay(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
+	return identity.CanonicalEmail(email)
 }
 
 func invitationAuthReturnTo(returnTo string) (path string, token string, ok bool) {

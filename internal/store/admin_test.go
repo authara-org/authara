@@ -186,7 +186,7 @@ func TestAdminStoreAllowedEmailsPaginationAndDelete(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListAllowedEmailsPage case-insensitive failed: %v", err)
 		}
-		if len(casePage) != 1 || casePage[0].Email != "Case@Example.com" {
+		if len(casePage) != 1 || casePage[0].Email != "case@example.com" {
 			t.Fatalf("expected case-insensitive result, got %+v", casePage)
 		}
 

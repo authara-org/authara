@@ -11,6 +11,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -27,7 +28,7 @@ func (h *APIHandler) StartPasswordResetChallenge(ctx context.Context, request co
 		return startPasswordResetChallengeError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
 
-	email := strings.ToLower(strings.TrimSpace(string(request.Body.Email)))
+	email := identity.CanonicalEmail(string(request.Body.Email))
 	password := request.Body.NewPassword
 	if !validation.IsValidEmail(email) {
 		return startPasswordResetChallengeError(responseCodeInvalidRequest(), "Please provide a valid email address."), nil

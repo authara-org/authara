@@ -16,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
@@ -152,7 +153,7 @@ func (h *APIHandler) StartCurrentUserEmailChange(ctx context.Context, request co
 	if request.Body == nil {
 		return startCurrentUserEmailChangeError(responseCodeInvalidRequest(), "Invalid email address."), nil
 	}
-	newEmail := strings.ToLower(strings.TrimSpace(string(request.Body.NewEmail)))
+	newEmail := identity.CanonicalEmail(string(request.Body.NewEmail))
 	if !validation.IsValidEmail(newEmail) {
 		return startCurrentUserEmailChangeError(responseCodeInvalidRequest(), "Invalid email address."), nil
 	}

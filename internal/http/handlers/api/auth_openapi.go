@@ -13,6 +13,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/google/uuid"
@@ -39,7 +40,7 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 	}
 	loginInput := auth.LoginInput{
 		Provider: domain.ProviderPassword,
-		Email:    strings.ToLower(identifier),
+		Email:    identity.CanonicalUsername(identifier),
 		Password: password,
 	}
 	invalidCredentialsMessage := "Invalid email or password."
@@ -54,7 +55,7 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	rateLimitIdentifier := strings.ToLower(identifier)
+	rateLimitIdentifier := identity.CanonicalUsername(identifier)
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), rateLimitIdentifier)
 	if err != nil || !allowed {
 		return loginWithPasswordError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
@@ -123,7 +124,7 @@ func signupInputFromBody(body *contract.SignupRequest) (contractSignupInput, res
 		return contractSignupInput{}, responseCodeInvalidRequest(), "Invalid JSON body.", false
 	}
 	in := contractSignupInput{
-		Email:    strings.ToLower(strings.TrimSpace(string(body.Email))),
+		Email:    identity.CanonicalEmail(string(body.Email)),
 		Password: body.Password,
 	}
 	if body.InvitationCode != nil {

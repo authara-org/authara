@@ -16,6 +16,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	emailpkg "github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
@@ -646,7 +647,7 @@ func (s *Service) ensureInvitationTargetNotMember(ctx context.Context, organizat
 }
 
 func normalizeInvitationEmail(raw string) (string, error) {
-	email := strings.ToLower(strings.TrimSpace(raw))
+	email := identity.CanonicalEmail(raw)
 	if email == "" {
 		return "", ErrInvalidOrganizationInvitationEmail
 	}

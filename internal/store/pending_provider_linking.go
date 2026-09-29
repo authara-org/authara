@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
 )
@@ -30,13 +31,18 @@ func toDomainPendingProviderLink(m model.PendingProviderLink) domain.PendingProv
 }
 
 func toModelPendingProviderLink(d domain.PendingProviderLink) model.PendingProviderLink {
+	var providerEmail *string
+	if d.ProviderEmail != nil {
+		canonical := identity.CanonicalEmail(*d.ProviderEmail)
+		providerEmail = &canonical
+	}
 	return model.PendingProviderLink{
 		UserID:                d.UserID,
 		SessionID:             d.SessionID,
 		ChallengeID:           d.ChallengeID,
 		Provider:              string(d.Provider),
 		ProviderUserID:        d.ProviderUserID,
-		ProviderEmail:         d.ProviderEmail,
+		ProviderEmail:         providerEmail,
 		ProviderEmailVerified: d.ProviderEmailVerified,
 		Purpose:               string(d.Purpose),
 		ExpiresAt:             d.ExpiresAt,

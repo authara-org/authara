@@ -139,6 +139,9 @@ func (s *Service) executeEmailChange(
 	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		updated, err := s.store.UpdateUserEmailIfCurrent(txCtx, action.UserID, action.OldEmail, action.NewEmail)
 		if err != nil {
+			if store.IsUniqueViolation(err, store.ConstraintUserEmail) {
+				return ErrEmailAlreadyInUse
+			}
 			return err
 		}
 		if !updated {

@@ -22,6 +22,7 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
@@ -231,8 +232,7 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	newEmail := strings.TrimSpace(r.FormValue("new_email"))
-	newEmail = strings.ToLower(newEmail)
+	newEmail := identity.CanonicalEmail(r.FormValue("new_email"))
 
 	if !validation.IsValidEmail(newEmail) {
 		htmx.ReSwap(w, "none")

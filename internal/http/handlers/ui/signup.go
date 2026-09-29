@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -17,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/google/uuid"
@@ -108,8 +108,7 @@ func (h *UIHandler) parseSignupForm(r *http.Request) (*signupFormInput, error) {
 		return nil, err
 	}
 
-	email := strings.TrimSpace(r.FormValue("email"))
-	email = strings.ToLower(email)
+	email := identity.CanonicalEmail(r.FormValue("email"))
 
 	return &signupFormInput{
 		Email:    email,

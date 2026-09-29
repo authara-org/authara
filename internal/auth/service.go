@@ -10,6 +10,7 @@ import (
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/securityevent"
@@ -309,6 +310,9 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 			if store.IsUniqueViolation(err, store.ConstraintUserEmail) {
 				return ErrUserAlreadyExists
 			}
+			if store.IsUniqueViolation(err, store.ConstraintUserUsername) {
+				return ErrUsernameTaken
+			}
 			return err
 		}
 		user = created
@@ -429,7 +433,7 @@ func (s *Service) requirePendingInvitationForEmail(ctx context.Context, email st
 		return err
 	}
 
-	if normalizeAuthEmail(preview.Invitation.Email) != normalizeAuthEmail(email) {
+	if identity.CanonicalEmail(preview.Invitation.Email) != identity.CanonicalEmail(email) {
 		return organization.ErrOrganizationInviteEmailMismatch
 	}
 
@@ -445,10 +449,6 @@ func (s *Service) requirePendingInvitationForEmail(ctx context.Context, email st
 	default:
 		return organization.ErrOrganizationInviteForbidden
 	}
-}
-
-func normalizeAuthEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func (s *Service) acceptSignupInvitation(ctx context.Context, invitationToken string, invitationID uuid.UUID, userID uuid.UUID) error {
@@ -583,6 +583,12 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 		}
 		user, err = s.store.CreateUser(txCtx, domainUser)
 		if err != nil {
+			if store.IsUniqueViolation(err, store.ConstraintUserEmail) {
+				return ErrAccountExistsMustLink
+			}
+			if store.IsUniqueViolation(err, store.ConstraintUserUsername) {
+				return ErrUsernameTaken
+			}
 			return err
 		}
 		createdUser = true

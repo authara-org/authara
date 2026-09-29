@@ -1021,7 +1021,7 @@ func TestLoginWithExternalIdentity_ExistingEmailMustLink(t *testing.T) {
 
 		_, err = svc.Login(ctx, LoginInput{
 			Provider: domain.ProviderGoogle,
-			Email:    "oauth-link@example.com",
+			Email:    "OAUTH-LINK@Example.com",
 			Username: "oauth-link",
 			OAuthID:  "google-oauth-id-456",
 		})
@@ -1164,7 +1164,7 @@ func TestChangeUsername_UsernameTaken(t *testing.T) {
 			Tx:    tdb.Tx,
 		})
 
-		err = svc.ChangeUsername(ctx, user.ID, "taken-name")
+		err = svc.ChangeUsername(ctx, user.ID, "Taken-Name")
 		if !errors.Is(err, ErrUsernameTaken) {
 			t.Fatalf("expected ErrUsernameTaken, got %v", err)
 		}
@@ -2451,7 +2451,7 @@ func TestSignup_DuplicateEmailReturnsUserAlreadyExists(t *testing.T) {
 
 		_, err = svc.Signup(ctx, SignupInput{
 			Provider:     domain.ProviderPassword,
-			Email:        "duplicate@example.com",
+			Email:        "  DUPLICATE@Example.com  ",
 			Username:     "new-user",
 			PasswordHash: "hashed-password",
 		})

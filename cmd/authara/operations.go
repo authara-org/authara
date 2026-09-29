@@ -6,13 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/bootstrap"
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/validation"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/schema"
@@ -117,7 +117,7 @@ func parseOperationalCommand(args []string) (operationalCommand, error) {
 		return operationalCommand{}, errors.New(operationalCommandUsage)
 	}
 
-	normalizedEmail := strings.ToLower(strings.TrimSpace(*email))
+	normalizedEmail := identity.CanonicalEmail(*email)
 	if !validation.IsValidEmail(normalizedEmail) {
 		return operationalCommand{}, errors.New(operationalCommandUsage)
 	}

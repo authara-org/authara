@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	identitypkg "github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
@@ -134,7 +135,7 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 	if !ok {
 		return authenticateAndAcceptInvitationWithGoogleError(code, message), nil
 	}
-	if normalizeEmail(identity.Email) != normalizeEmail(preview.Invitation.Email) {
+	if identitypkg.CanonicalEmail(identity.Email) != identitypkg.CanonicalEmail(preview.Invitation.Email) {
 		return authenticateAndAcceptInvitationWithGoogleError(codeInvitationEmailMismatch, "This invitation is for a different account."), nil
 	}
 	exists, err := h.Auth.UserExistsByEmail(ctx, preview.Invitation.Email)
@@ -362,7 +363,7 @@ func (h *APIHandler) validateRecoveryInvitation(ctx context.Context, rawToken st
 	if !ok {
 		return code, message, false
 	}
-	if normalizeEmail(preview.Invitation.Email) != normalizeEmail(email) {
+	if identitypkg.CanonicalEmail(preview.Invitation.Email) != identitypkg.CanonicalEmail(email) {
 		return codeInvitationEmailMismatch, "This invitation is for a different account.", false
 	}
 	return "", "", true
@@ -510,10 +511,6 @@ func invitationSessionError(err error) (response.ErrorCode, string) {
 	default:
 		return response.CodeUnauthorized, "Unauthorized."
 	}
-}
-
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func optionalString(value *string) string {

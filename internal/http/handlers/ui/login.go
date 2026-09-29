@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/session"
 )
 
@@ -59,7 +60,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	input := auth.LoginInput{
 		Provider: domain.ProviderPassword,
-		Email:    strings.ToLower(identifier),
+		Email:    identity.CanonicalUsername(identifier),
 		Password: password,
 	}
 	invalidCredentialsMessage := "Invalid email or password."
@@ -73,7 +74,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip := httputil.ClientIP(r)
-	rateLimitIdentifier := strings.ToLower(identifier)
+	rateLimitIdentifier := identity.CanonicalUsername(identifier)
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, ip, rateLimitIdentifier)
 	if err != nil || !allowed {
 		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.LoginForm(usernameLoginEnabled))
