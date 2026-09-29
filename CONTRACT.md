@@ -280,6 +280,12 @@ mode is `immediate`, already-issued access tokens for those sessions are also
 rejected immediately. In `expiry` mode, they remain usable only until the
 capped access-token expiry.
 
+## 8.5 Platform roles
+
+Authara exposes two platform roles: `authara:admin` and `authara:operator`.
+Admin-audience sessions require the admin role, and operator-audience sessions
+require the operator role. Neither role implies the other.
+
 ---
 
 # 9. Webhook Contract

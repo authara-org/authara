@@ -12,15 +12,11 @@ func TestRoles_AddMethods_Deduplicate(t *testing.T) {
 
 	rs.AddAdmin()
 	rs.AddAdmin()
-	rs.AddAuditor()
-	rs.AddAuditor()
-	rs.AddMonitor()
-	rs.AddMonitor()
 	rs.AddOperator()
 	rs.AddOperator()
 
 	got := rs.List()
-	want := []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator}
+	want := []Role{AutharaAdmin, AutharaOperator}
 
 	if !slices.Equal(got, want) {
 		t.Fatalf("List() = %v, want %v", got, want)
@@ -32,13 +28,13 @@ func TestRoles_List_ReturnsClone(t *testing.T) {
 
 	var rs Roles
 	rs.AddAdmin()
-	rs.AddAuditor()
+	rs.AddOperator()
 
 	got := rs.List()
-	got[0] = AutharaMonitor
+	got[0] = AutharaOperator
 
 	after := rs.List()
-	want := []Role{AutharaAdmin, AutharaAuditor}
+	want := []Role{AutharaAdmin, AutharaOperator}
 
 	if !slices.Equal(after, want) {
 		t.Fatalf("List() returned non-cloned slice, got %v, want %v", after, want)
@@ -50,17 +46,13 @@ func TestRoles_Has(t *testing.T) {
 
 	var rs Roles
 	rs.AddAdmin()
-	rs.AddMonitor()
 	rs.AddOperator()
 
 	if !rs.Has(AutharaAdmin) {
 		t.Fatal("expected Has(AutharaAdmin) to be true")
 	}
-	if rs.Has(AutharaAuditor) {
-		t.Fatal("expected Has(AutharaAuditor) to be false")
-	}
-	if !rs.Has(AutharaMonitor) {
-		t.Fatal("expected Has(AutharaMonitor) to be true")
+	if rs.Has("authara:auditor") {
+		t.Fatal("expected removed auditor role to be absent")
 	}
 	if !rs.Has(AutharaOperator) {
 		t.Fatal("expected Has(AutharaOperator) to be true")
@@ -71,7 +63,7 @@ func TestRoles_HasAny(t *testing.T) {
 	t.Parallel()
 
 	var rs Roles
-	rs.AddAuditor()
+	rs.AddAdmin()
 
 	tests := []struct {
 		name    string
@@ -80,12 +72,12 @@ func TestRoles_HasAny(t *testing.T) {
 	}{
 		{
 			name:    "matching role",
-			allowed: []Role{AutharaAdmin, AutharaAuditor},
+			allowed: []Role{AutharaOperator, AutharaAdmin},
 			want:    true,
 		},
 		{
 			name:    "no matching role",
-			allowed: []Role{AutharaAdmin, AutharaMonitor},
+			allowed: []Role{AutharaOperator},
 			want:    false,
 		},
 		{
@@ -95,7 +87,7 @@ func TestRoles_HasAny(t *testing.T) {
 		},
 		{
 			name:    "duplicate allowed roles",
-			allowed: []Role{AutharaAuditor, AutharaAuditor},
+			allowed: []Role{AutharaAdmin, AutharaAdmin},
 			want:    true,
 		},
 	}
@@ -118,79 +110,13 @@ func TestRoles_IsHelpers(t *testing.T) {
 
 	var rs Roles
 	rs.AddAdmin()
-	rs.AddMonitor()
 	rs.AddOperator()
 
 	if !rs.IsAdmin() {
 		t.Fatal("expected IsAdmin() to be true")
 	}
-	if rs.IsAuditor() {
-		t.Fatal("expected IsAuditor() to be false")
-	}
-	if !rs.IsMonitor() {
-		t.Fatal("expected IsMonitor() to be true")
-	}
 	if !rs.IsOperator() {
 		t.Fatal("expected IsOperator() to be true")
-	}
-}
-
-func TestRoles_CanAccessAdmin(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		setup func(*Roles)
-		want  bool
-	}{
-		{
-			name:  "empty roles cannot access admin",
-			setup: func(r *Roles) {},
-			want:  false,
-		},
-		{
-			name:  "admin can access admin",
-			setup: func(r *Roles) { r.AddAdmin() },
-			want:  true,
-		},
-		{
-			name:  "auditor can access admin",
-			setup: func(r *Roles) { r.AddAuditor() },
-			want:  true,
-		},
-		{
-			name:  "monitor can access admin",
-			setup: func(r *Roles) { r.AddMonitor() },
-			want:  true,
-		},
-		{
-			name:  "operator cannot access admin",
-			setup: func(r *Roles) { r.AddOperator() },
-			want:  false,
-		},
-		{
-			name: "multiple valid roles can access admin",
-			setup: func(r *Roles) {
-				r.AddAuditor()
-				r.AddMonitor()
-			},
-			want: true,
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			var rs Roles
-			tt.setup(&rs)
-
-			got := rs.CanAccessAdmin()
-			if got != tt.want {
-				t.Fatalf("CanAccessAdmin() = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }
 
@@ -217,14 +143,14 @@ func TestFromClaims(t *testing.T) {
 		},
 		{
 			name:   "multiple valid claims",
-			claims: []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator},
-			want:   []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator},
+			claims: []Role{AutharaAdmin, AutharaOperator},
+			want:   []Role{AutharaAdmin, AutharaOperator},
 			err:    false,
 		},
 		{
 			name:   "duplicate claims deduplicated",
-			claims: []Role{AutharaAdmin, AutharaAdmin, AutharaMonitor},
-			want:   []Role{AutharaAdmin, AutharaMonitor},
+			claims: []Role{AutharaAdmin, AutharaAdmin, AutharaOperator},
+			want:   []Role{AutharaAdmin, AutharaOperator},
 			err:    false,
 		},
 		{
@@ -291,18 +217,6 @@ func TestFromDBRoleNames(t *testing.T) {
 			err:   false,
 		},
 		{
-			name:  "auditor maps correctly",
-			input: []string{DBAuditorRoleName},
-			want:  []Role{AutharaAuditor},
-			err:   false,
-		},
-		{
-			name:  "monitor maps correctly",
-			input: []string{DBMonitorRoleName},
-			want:  []Role{AutharaMonitor},
-			err:   false,
-		},
-		{
 			name:  "operator maps correctly",
 			input: []string{DBOperatorRoleName},
 			want:  []Role{AutharaOperator},
@@ -310,14 +224,14 @@ func TestFromDBRoleNames(t *testing.T) {
 		},
 		{
 			name:  "multiple role names map correctly",
-			input: []string{DBAdminRoleName, DBAuditorRoleName, DBMonitorRoleName, DBOperatorRoleName},
-			want:  []Role{AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator},
+			input: []string{DBAdminRoleName, DBOperatorRoleName},
+			want:  []Role{AutharaAdmin, AutharaOperator},
 			err:   false,
 		},
 		{
 			name:  "duplicate db role names deduplicated",
-			input: []string{DBAdminRoleName, DBAdminRoleName, DBMonitorRoleName},
-			want:  []Role{AutharaAdmin, AutharaMonitor},
+			input: []string{DBAdminRoleName, DBAdminRoleName, DBOperatorRoleName},
+			want:  []Role{AutharaAdmin, AutharaOperator},
 			err:   false,
 		},
 		{
@@ -365,9 +279,9 @@ func TestValidate(t *testing.T) {
 		err  bool
 	}{
 		{name: "admin valid", role: AutharaAdmin, err: false},
-		{name: "auditor valid", role: AutharaAuditor, err: false},
-		{name: "monitor valid", role: AutharaMonitor, err: false},
 		{name: "operator valid", role: AutharaOperator, err: false},
+		{name: "removed auditor invalid", role: "authara:auditor", err: true},
+		{name: "removed monitor invalid", role: "authara:monitor", err: true},
 		{name: "unknown authara role invalid", role: "authara:unknown", err: true},
 		{name: "wrong namespace invalid", role: "tenant:admin", err: true},
 		{name: "empty invalid", role: "", err: true},

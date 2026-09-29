@@ -64,7 +64,7 @@ func TestAccessTokenService_GenerateAndParse_AppAudience(t *testing.T) {
 
 	var rs roles.Roles
 	rs.AddAdmin()
-	rs.AddMonitor()
+	rs.AddOperator()
 
 	tokenString, err := svc.Generate(userID, sessionID, organizationID, "owner", AudienceApp, rs, now)
 	if err != nil {
@@ -111,7 +111,7 @@ func TestAccessTokenService_GenerateAndParse_AdminAudience(t *testing.T) {
 	sessionID := uuid.New()
 
 	var rs roles.Roles
-	rs.AddAuditor()
+	rs.AddAdmin()
 
 	tokenString, err := svc.Generate(userID, sessionID, uuid.New(), "owner", AudienceAdmin, rs, now)
 	if err != nil {

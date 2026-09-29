@@ -104,6 +104,21 @@ func TestOperatorPlatformRoleIsProvisionedByMigration(t *testing.T) {
 	})
 }
 
+func TestDormantPlatformRolesAreRemovedByMigration(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user := createAdminStoreUser(t, ctx, tdb, "store-removed-role@example.com", "store-removed-role")
+
+		for _, roleName := range []string{"auditor", "monitor"} {
+			err := tdb.Store.AddUserPlatformRoleByName(ctx, user.ID, roleName)
+			if !errors.Is(err, store.ErrorRoleNotFound) {
+				t.Fatalf("AddUserPlatformRoleByName(%q) error = %v, want %v", roleName, err, store.ErrorRoleNotFound)
+			}
+		}
+	})
+}
+
 func TestAdminStoreGetUserByEmailOrUsername(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

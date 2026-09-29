@@ -1022,8 +1022,6 @@ func (s *Service) ensureUserAllowed(ctx context.Context, userID uuid.UUID) (doma
 var audienceAccess = map[token.Audience][]roles.Role{
 	token.AudienceAdmin: {
 		roles.AutharaAdmin,
-		roles.AutharaAuditor,
-		roles.AutharaMonitor,
 	},
 	token.AudienceOperator: {
 		roles.AutharaOperator,

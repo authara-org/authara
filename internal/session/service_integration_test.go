@@ -1454,7 +1454,7 @@ func TestValidateAccessToken_Succeeds(t *testing.T) {
 
 	var rs roles.Roles
 	rs.AddAdmin()
-	rs.AddMonitor()
+	rs.AddOperator()
 
 	accessToken, err := svc.accessTokens.Generate(
 		userID,
@@ -1494,8 +1494,8 @@ func TestValidateAccessToken_Succeeds(t *testing.T) {
 	if !identity.Roles.IsAdmin() {
 		t.Fatal("expected admin role to be present")
 	}
-	if !identity.Roles.IsMonitor() {
-		t.Fatal("expected monitor role to be present")
+	if !identity.Roles.IsOperator() {
+		t.Fatal("expected operator role to be present")
 	}
 }
 
@@ -1653,7 +1653,7 @@ func TestIdentityFromClaims_Succeeds(t *testing.T) {
 		SessionID: sessionID,
 		OrgID:     organizationID,
 		OrgRole:   string(domain.OrganizationRoleOwner),
-		Roles:     []roles.Role{roles.AutharaAdmin, roles.AutharaAuditor},
+		Roles:     []roles.Role{roles.AutharaAdmin, roles.AutharaOperator},
 	}
 	claims.Subject = userID.String()
 
@@ -1677,11 +1677,8 @@ func TestIdentityFromClaims_Succeeds(t *testing.T) {
 	if !identity.Roles.IsAdmin() {
 		t.Fatal("expected admin role")
 	}
-	if !identity.Roles.IsAuditor() {
-		t.Fatal("expected auditor role")
-	}
-	if identity.Roles.IsMonitor() {
-		t.Fatal("did not expect monitor role")
+	if !identity.Roles.IsOperator() {
+		t.Fatal("expected operator role")
 	}
 }
 
@@ -1812,22 +1809,6 @@ func TestCanAccessAudience(t *testing.T) {
 			name: "admin audience allows admin",
 			setup: func(r *roles.Roles) {
 				r.AddAdmin()
-			},
-			audience: token.AudienceAdmin,
-			want:     true,
-		},
-		{
-			name: "admin audience allows auditor",
-			setup: func(r *roles.Roles) {
-				r.AddAuditor()
-			},
-			audience: token.AudienceAdmin,
-			want:     true,
-		},
-		{
-			name: "admin audience allows monitor",
-			setup: func(r *roles.Roles) {
-				r.AddMonitor()
 			},
 			audience: token.AudienceAdmin,
 			want:     true,

@@ -3025,7 +3025,7 @@ components:
           type: array
           items:
             type: string
-            enum: ["authara:admin", "authara:auditor", "authara:monitor", "authara:operator"]
+            enum: ["authara:admin", "authara:operator"]
         organization:
           $ref: "#/components/schemas/OrganizationSummary"
     Account:

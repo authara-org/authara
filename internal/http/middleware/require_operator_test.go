@@ -41,8 +41,6 @@ func TestRequireOperatorRejectsOtherRoles(t *testing.T) {
 		{name: "missing role context"},
 		{name: "no roles", setup: func(*roles.Roles) {}},
 		{name: "admin", setup: func(r *roles.Roles) { r.AddAdmin() }},
-		{name: "auditor", setup: func(r *roles.Roles) { r.AddAuditor() }},
-		{name: "monitor", setup: func(r *roles.Roles) { r.AddMonitor() }},
 	}
 
 	for _, tt := range tests {

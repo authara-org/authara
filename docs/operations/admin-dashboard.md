@@ -14,6 +14,20 @@ Admin pages require an authenticated admin-audience session and the `admin` plat
 
 State-changing admin actions use `POST` routes and require the normal Authara CSRF token. Browser form submissions include the token as `csrf_token`.
 
+Authara intentionally supports only the `admin` and `operator` platform roles.
+The dormant `auditor` and `monitor` roles were removed in schema version 33;
+the migration also removes any assignments that were created manually.
+
+| Route family | Admin | Operator | Other users |
+| --- | --- | --- | --- |
+| All `GET` and `POST` routes under `/auth/admin` | Allowed | Denied | Denied |
+| All `GET` and `POST` routes under `/auth/operator` | Denied | Allowed | Denied |
+
+The internal `/auth/api/v1/admin` group follows the same exact-admin rule. It
+currently contains no registered operations. Internal service-to-service routes
+under `/auth/internal/v1` use their separate internal API token instead of a
+platform role.
+
 ## Bootstrap The First Admin
 
 Create a user through the normal signup or user provisioning flow, then grant the built-in `admin` platform role:
