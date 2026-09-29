@@ -17,6 +17,10 @@ These endpoints are primarily intended for:
 Authara also provides hosted HTML flows under `/auth`; applications that own
 their authentication UI can use the JSON endpoints documented here.
 
+Authara currently provides no headless admin or operator API. `/auth/admin/*`
+and `/auth/operator/*` are unstable, server-rendered browser interfaces and
+must not be used as automation contracts.
+
 Internal server-to-server endpoints are available under:
 
 ```

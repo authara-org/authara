@@ -369,12 +369,6 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				})
 			})
 
-			r.Route("/admin", func(r chi.Router) {
-				r.Use(mw.RequireAdminAccessAuthAPI)
-				r.Use(mw.RequireAdminRole)
-
-			})
-
 		})
 
 		// Internal server-to-server organization management.
