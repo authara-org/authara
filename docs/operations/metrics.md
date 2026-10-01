@@ -55,6 +55,9 @@ again after a short cooldown instead of waiting for the normal cleanup interval.
 Lease outcomes include skipped acquisition, which is expected on healthy follower
 replicas and must not be used as a readiness failure.
 
+Maintenance job labels include `admin_audit` and `operator_audit` for their
+respective audit-retention cleanup passes.
+
 The rows-processed counter reports directly deleted root rows. Rows removed by
 foreign-key cascades are intentionally not included.
 

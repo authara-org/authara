@@ -24,6 +24,7 @@ type Config struct {
 	Webhook        Webhook
 	AccessPolicy   AccessPolicy
 	Admin          Admin
+	OperatorAudit  OperatorAudit
 	InternalAPI    InternalAPI
 	Organization   Organization
 	Authentication Authentication
@@ -73,6 +74,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.Admin.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.OperatorAudit.validate(); err != nil {
 		return nil, err
 	}
 	if err := cfg.InternalAPI.validate(); err != nil {

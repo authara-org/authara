@@ -199,6 +199,9 @@ cleanup once immediately and then follows those intervals. During a rolling
 upgrade, singleton behavior is guaranteed only after replicas running the old
 unleased workers have drained.
 
+Operator audit cleanup uses a fixed 24-hour schedule. Configure its startup-only
+retention with `AUTHARA_OPERATOR_AUDIT_RETENTION_DAYS`, which defaults to `180`.
+
 ## Process shutdown and restart behavior
 
 Authara treats `SIGTERM` and `SIGINT` as normal termination requests. It first

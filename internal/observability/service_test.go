@@ -90,6 +90,7 @@ func TestDatabaseAndBackgroundMetrics(t *testing.T) {
 	service.ObserveMaintenanceLease("skipped")
 	service.SetMaintenanceLeader(true)
 	service.ObserveMaintenanceRun("sessions_expired", "incomplete", 50*time.Millisecond, 17)
+	service.ObserveMaintenanceRun("operator_audit", "completed", 25*time.Millisecond, 3)
 
 	metrics := scrape(t, service)
 	assertContains(t, metrics, `go_sql_open_connections{db_name="primary"} 0`)
@@ -102,6 +103,8 @@ func TestDatabaseAndBackgroundMetrics(t *testing.T) {
 	assertContains(t, metrics, `authara_maintenance_runs_total{job="sessions_expired",outcome="incomplete"} 1`)
 	assertContains(t, metrics, `authara_maintenance_run_duration_seconds_count{job="sessions_expired",outcome="incomplete"} 1`)
 	assertContains(t, metrics, `authara_maintenance_rows_processed_total{job="sessions_expired"} 17`)
+	assertContains(t, metrics, `authara_maintenance_runs_total{job="operator_audit",outcome="completed"} 1`)
+	assertContains(t, metrics, `authara_maintenance_rows_processed_total{job="operator_audit"} 3`)
 }
 
 func TestBackgroundMetricLabelsAreBounded(t *testing.T) {

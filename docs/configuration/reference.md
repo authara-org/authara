@@ -347,15 +347,16 @@ AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED
 
 ---
 
-### Admin audit
+### Audit retention
 
-Controls retention for admin audit events.
+Controls retention for admin and operator audit events.
 
 Examples:
 
 ```
 AUTHARA_ADMIN_AUDIT_RETENTION_DAYS
 AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL
+AUTHARA_OPERATOR_AUDIT_RETENTION_DAYS
 ```
 
 ---

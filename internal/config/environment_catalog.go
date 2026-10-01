@@ -119,7 +119,7 @@ func environmentGroup(configSection, variableName string) string {
 		return "Webhooks"
 	case "AccessPolicy":
 		return "Access policy"
-	case "Admin":
+	case "Admin", "OperatorAudit":
 		return "Retention"
 	case "SecurityEvents":
 		if strings.Contains(variableName, "RETENTION") || strings.Contains(variableName, "CLEANUP") {

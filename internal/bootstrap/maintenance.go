@@ -7,7 +7,10 @@ import (
 	"github.com/authara-org/authara/internal/maintenance"
 )
 
-const cleanupBatchSize = 1000
+const (
+	cleanupBatchSize             = 1000
+	operatorAuditCleanupInterval = 24 * time.Hour
+)
 
 func newCleanupCoordinator(app *App) (*maintenance.Coordinator, error) {
 	cfg := app.Config.Startup()
@@ -87,6 +90,15 @@ func newCleanupCoordinator(app *App) (*maintenance.Coordinator, error) {
 			Interval: cfg.Admin.AuditCleanupInterval,
 			RunBatch: func(ctx context.Context, now time.Time) (int64, bool, error) {
 				return app.Services.Admin.CleanupExpiredAuditEventsBatch(ctx, now, cleanupBatchSize)
+			},
+		},
+		{
+			Name:     "operator_audit",
+			Interval: operatorAuditCleanupInterval,
+			RunBatch: func(ctx context.Context, now time.Time) (int64, bool, error) {
+				cutoff := now.Add(-time.Duration(cfg.OperatorAudit.RetentionDays) * 24 * time.Hour)
+				rows, err := app.Store.DeleteOperatorAuditEventsBefore(ctx, cutoff, cleanupBatchSize)
+				return rows, rows == int64(cleanupBatchSize), err
 			},
 		},
 		{

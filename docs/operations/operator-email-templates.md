@@ -133,9 +133,12 @@ Operators can review and filter these events at:
 The page exposes only the action, template, operator ID, timestamp, revision,
 and version. Admin-only and regular accounts cannot access it.
 
-Audit records remain until removed through normal database-retention
-procedures. If the actor user is deleted, the event remains and its actor ID is
-set to `NULL`.
+`AUTHARA_OPERATOR_AUDIT_RETENTION_DAYS` controls how long operator audit events
+are retained. It defaults to `180` days, must be greater than zero, and is read
+at startup. The shared cleanup leader removes older events in bounded batches
+once every 24 hours; a newly elected leader runs the cleanup immediately. If the
+actor user is deleted before an event expires, the event remains and its actor
+ID is set to `NULL`.
 
 ## Backup
 

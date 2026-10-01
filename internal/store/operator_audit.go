@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/google/uuid"
@@ -100,4 +101,24 @@ func (s *Store) ListOperatorAuditEvents(ctx context.Context, filter OperatorAudi
 		return nil, err
 	}
 	return events, nil
+}
+
+func (s *Store) DeleteOperatorAuditEventsBefore(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM operator_audit_events
+			WHERE created_at < $1
+			ORDER BY created_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM operator_audit_events AS event
+		USING oldest
+		WHERE event.id = oldest.id
+	`, cutoff, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
