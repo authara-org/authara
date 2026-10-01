@@ -199,6 +199,28 @@ cleanup once immediately and then follows those intervals. During a rolling
 upgrade, singleton behavior is guaranteed only after replicas running the old
 unleased workers have drained.
 
+## Process shutdown and restart behavior
+
+Authara treats `SIGTERM` and `SIGINT` as normal termination requests. It first
+marks `/auth/ready` and its compatibility alias `/auth/health` unavailable and
+stops accepting new HTTP and background work, then drains HTTP requests, email
+and webhook deliveries, runtime-setting reconciliation, and maintenance work
+under one shared 10-second deadline. `/auth/live` remains independent of
+PostgreSQL and should be used only as a liveness probe; readiness includes a
+bounded PostgreSQL ping.
+
+A clean signal-driven shutdown exits with status `0`. Listener failures,
+unexpected server or worker termination, shutdown timeouts, and resource-close
+failures exit non-zero. Normal `http.ErrServerClosed` completion is not an
+error. A second termination signal during the drain uses the operating system's
+default behavior and can force the process to exit.
+
+Configure the deployment platform's termination grace period above 10 seconds
+so Authara can consume its full drain budget and still leave time for the
+container runtime to observe the exit. In-flight durable email and webhook jobs
+that cannot settle before the deadline remain protected by their processing
+leases and are recovered by the stale-job reapers.
+
 ---
 
 # Operational model

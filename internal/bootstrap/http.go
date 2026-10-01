@@ -9,6 +9,7 @@ import (
 	httpserver "github.com/authara-org/authara/internal/http"
 	"github.com/authara-org/authara/internal/http/handlers/api"
 	"github.com/authara-org/authara/internal/http/handlers/internalapi"
+	"github.com/authara-org/authara/internal/http/handlers/meta"
 	"github.com/authara-org/authara/internal/http/handlers/ui"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
@@ -143,6 +144,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		Observability:     app.Observability,
 		OAuthProviders:    app.Services.OAuthProviders,
 		Handlers:          handlers,
+		Readiness:         meta.NewReadinessWithChecker(false, app.Store),
 	}, mw)
 
 	return server, nil

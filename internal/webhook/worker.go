@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/authara-org/authara/internal/store"
@@ -42,7 +43,16 @@ type Worker struct {
 	metrics WorkerMetrics
 	cfg     WorkerConfig
 	policy  func() WorkerPolicy
+
+	lifecycleMu sync.Mutex
+	started     bool
+	stopClaims  context.CancelFunc
+	stopWork    context.CancelFunc
+	workers     sync.WaitGroup
+	done        chan struct{}
 }
+
+const webhookForcedShutdownGrace = time.Second
 
 func NewWorker(store *store.Store, sender *Sender, logger *slog.Logger, cfg WorkerConfig) *Worker {
 	if logger == nil {
@@ -58,27 +68,107 @@ func NewWorker(store *store.Store, sender *Sender, logger *slog.Logger, cfg Work
 			}
 		}
 	}
-	return &Worker{store: store, sender: sender, logger: logger, metrics: cfg.Metrics, cfg: cfg, policy: policy}
+	return &Worker{
+		store: store, sender: sender, logger: logger, metrics: cfg.Metrics, cfg: cfg, policy: policy,
+		done: make(chan struct{}),
+	}
 }
 
 func (w *Worker) Run(ctx context.Context) {
-	for i := range w.cfg.WorkerCount {
-		go w.run(ctx, i+1)
+	w.lifecycleMu.Lock()
+	if w.started {
+		w.lifecycleMu.Unlock()
+		return
 	}
-	go w.runMaintenance(ctx)
+	w.started = true
+	claimCtx, stopClaims := context.WithCancel(ctx)
+	workCtx, stopWork := context.WithCancel(context.Background())
+	w.stopClaims = stopClaims
+	w.stopWork = stopWork
+
+	for i := range w.cfg.WorkerCount {
+		w.workers.Add(1)
+		go func(workerID int) {
+			defer w.workers.Done()
+			w.run(claimCtx, workCtx, workerID)
+		}(i + 1)
+	}
+	w.workers.Add(1)
+	go func() {
+		defer w.workers.Done()
+		w.runMaintenance(claimCtx)
+	}()
+	go func() {
+		w.workers.Wait()
+		close(w.done)
+	}()
+	w.lifecycleMu.Unlock()
 }
 
-func (w *Worker) run(ctx context.Context, workerID int) {
+func (w *Worker) Shutdown(ctx context.Context) error {
+	w.lifecycleMu.Lock()
+	if !w.started {
+		w.lifecycleMu.Unlock()
+		return nil
+	}
+	stopClaims := w.stopClaims
+	stopWork := w.stopWork
+	done := w.done
+	w.lifecycleMu.Unlock()
+
+	stopClaims()
+	force, stopForce := webhookShutdownForce(ctx, webhookForcedShutdownGrace)
+	defer stopForce()
+	select {
+	case <-done:
+		stopWork()
+		return nil
+	case <-force:
+		stopWork()
+	case <-ctx.Done():
+		stopWork()
+		return fmt.Errorf("%w: webhook workers did not stop before the shutdown deadline", ctx.Err())
+	}
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("%w: webhook workers did not stop before the shutdown deadline", ctx.Err())
+	}
+}
+
+func (w *Worker) Done() <-chan struct{} {
+	return w.done
+}
+
+func webhookShutdownForce(ctx context.Context, reserve time.Duration) (<-chan time.Time, func()) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil, func() {}
+	}
+	wait := time.Until(deadline.Add(-reserve))
+	if wait < 0 {
+		wait = 0
+	}
+	timer := time.NewTimer(wait)
+	return timer.C, func() { timer.Stop() }
+}
+
+func (w *Worker) run(claimCtx, workCtx context.Context, workerID int) {
 	for {
 		select {
-		case <-ctx.Done():
+		case <-claimCtx.Done():
 			return
 		default:
 		}
 
-		processed, err := w.RunOnce(ctx, time.Now().UTC())
+		processed, err := w.runOnce(claimCtx, workCtx, time.Now().UTC())
 		if err != nil {
-			w.logger.ErrorContext(ctx, "webhook worker iteration failed",
+			if claimCtx.Err() != nil {
+				return
+			}
+			w.logger.ErrorContext(claimCtx, "webhook worker iteration failed",
 				"worker_id", workerID,
 				"error", err,
 			)
@@ -88,7 +178,7 @@ func (w *Worker) run(ctx context.Context, workerID int) {
 		}
 
 		select {
-		case <-ctx.Done():
+		case <-claimCtx.Done():
 			return
 		case <-time.After(w.cfg.PollInterval):
 		}
@@ -96,8 +186,12 @@ func (w *Worker) run(ctx context.Context, workerID int) {
 }
 
 func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
+	return w.runOnce(ctx, ctx, now)
+}
+
+func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool, error) {
 	policy := w.policy()
-	event, err := w.store.ClaimNextWebhookEvent(ctx, now)
+	event, err := w.store.ClaimNextWebhookEvent(claimCtx, now)
 	if err != nil {
 		if errors.Is(err, store.ErrorWebhookEventNotFound) {
 			return false, nil
@@ -106,13 +200,13 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 	}
 	started := time.Now()
 
-	retryable, err := w.sender.sendOnce(ctx, EventType(event.EventType), event.ID, event.Payload)
+	retryable, err := w.sender.sendOnce(workCtx, EventType(event.EventType), event.ID, event.Payload)
 	if err != nil {
 		processingStartedAt := *event.ProcessingStartedAt
 		if retryable && event.AttemptCount < policy.MaxDeliveryAttempts {
 			nextAttemptAt := now.Add(deliveryRetryDelay(event.AttemptCount))
 			if requeueErr := w.store.RequeueWebhookEvent(
-				ctx,
+				workCtx,
 				event.ID,
 				processingStartedAt,
 				err.Error(),
@@ -121,7 +215,7 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 				w.observeJob("error", started)
 				return true, fmt.Errorf("requeue webhook event: %w", requeueErr)
 			}
-			w.logger.WarnContext(ctx, "webhook event retry scheduled",
+			w.logger.WarnContext(workCtx, "webhook event retry scheduled",
 				"event_id", event.ID,
 				"event_type", event.EventType,
 				"attempt", event.AttemptCount,
@@ -132,11 +226,11 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 			return true, nil
 		}
 
-		if markErr := w.store.MarkWebhookEventFailed(ctx, event.ID, processingStartedAt, err.Error()); markErr != nil {
+		if markErr := w.store.MarkWebhookEventFailed(workCtx, event.ID, processingStartedAt, err.Error()); markErr != nil {
 			w.observeJob("error", started)
 			return true, fmt.Errorf("mark failed webhook event: %w", markErr)
 		}
-		w.logger.WarnContext(ctx, "webhook event failed",
+		w.logger.WarnContext(workCtx, "webhook event failed",
 			"event_id", event.ID,
 			"event_type", event.EventType,
 			"attempt", event.AttemptCount,
@@ -146,11 +240,11 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 		return true, nil
 	}
 
-	if err := w.store.MarkWebhookEventDelivered(ctx, event.ID, *event.ProcessingStartedAt, now); err != nil {
+	if err := w.store.MarkWebhookEventDelivered(workCtx, event.ID, *event.ProcessingStartedAt, now); err != nil {
 		w.observeJob("error", started)
 		return true, err
 	}
-	w.logger.InfoContext(ctx, "webhook event delivered",
+	w.logger.InfoContext(workCtx, "webhook event delivered",
 		"event_id", event.ID,
 		"event_type", event.EventType,
 	)

@@ -496,12 +496,17 @@ func TestWorkerForcedShutdownRequeuesCancelledSend(t *testing.T) {
 	}
 	select {
 	case err := <-shutdownResult:
-		t.Fatalf("Shutdown returned before cancelled delivery settled: %v", err)
-	case <-time.After(20 * time.Millisecond):
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Shutdown error = %v, want deadline exceeded", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Shutdown did not respect its deadline")
 	}
 	close(releaseAfterCancel)
-	if err := <-shutdownResult; !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Shutdown error = %v, want deadline exceeded", err)
+	select {
+	case <-worker.Done():
+	case <-time.After(time.Second):
+		t.Fatal("email worker did not settle after the blocked sender returned")
 	}
 
 	stored, err := tdb.Store.GetEmailJobByID(context.Background(), job.ID)

@@ -59,10 +59,11 @@ type Coordinator struct {
 	jobs    []Job
 	cfg     Config
 
-	mu      sync.Mutex
-	started bool
-	cancel  context.CancelFunc
-	workers sync.WaitGroup
+	mu          sync.Mutex
+	started     bool
+	cancel      context.CancelFunc
+	done        chan struct{}
+	shutdownCtx context.Context
 }
 
 func New(store LeaseStore, logger *slog.Logger, metrics Metrics, jobs []Job, cfg Config) (*Coordinator, error) {
@@ -110,7 +111,7 @@ func New(store LeaseStore, logger *slog.Logger, metrics Metrics, jobs []Job, cfg
 
 	return &Coordinator{
 		store: store, logger: logger, metrics: metrics, ownerID: uuid.New(),
-		jobs: append([]Job(nil), jobs...), cfg: cfg,
+		jobs: append([]Job(nil), jobs...), cfg: cfg, done: make(chan struct{}),
 	}, nil
 }
 
@@ -123,9 +124,8 @@ func (c *Coordinator) Run(ctx context.Context) {
 	workerCtx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 	c.started = true
-	c.workers.Add(1)
 	go func() {
-		defer c.workers.Done()
+		defer close(c.done)
 		c.run(workerCtx)
 	}()
 }
@@ -136,14 +136,10 @@ func (c *Coordinator) Shutdown(ctx context.Context) error {
 		c.mu.Unlock()
 		return nil
 	}
+	c.shutdownCtx = ctx
 	c.cancel()
+	done := c.done
 	c.mu.Unlock()
-
-	done := make(chan struct{})
-	go func() {
-		c.workers.Wait()
-		close(done)
-	}()
 
 	select {
 	case <-done:
@@ -151,6 +147,10 @@ func (c *Coordinator) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (c *Coordinator) Done() <-chan struct{} {
+	return c.done
 }
 
 func (c *Coordinator) run(ctx context.Context) {
@@ -189,7 +189,13 @@ func (c *Coordinator) runAsLeader(parent context.Context, lease store.Maintenanc
 	cancel()
 	<-renewed
 
-	releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	releaseParent := context.Background()
+	c.mu.Lock()
+	if c.shutdownCtx != nil {
+		releaseParent = c.shutdownCtx
+	}
+	c.mu.Unlock()
+	releaseCtx, releaseCancel := context.WithTimeout(releaseParent, 2*time.Second)
 	defer releaseCancel()
 	released, err := c.store.ReleaseMaintenanceLease(releaseCtx, lease)
 	if err != nil {

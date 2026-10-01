@@ -58,6 +58,7 @@ type Worker struct {
 	stopClaims  context.CancelFunc
 	stopWork    context.CancelFunc
 	workers     sync.WaitGroup
+	done        chan struct{}
 }
 
 const (
@@ -129,6 +130,7 @@ func NewWorker(
 		cfg:       cfg,
 		policy:    policy,
 		claimNext: store.ClaimNextEmailJob,
+		done:      make(chan struct{}),
 	}
 }
 
@@ -159,6 +161,10 @@ func (w *Worker) Run(ctx context.Context) {
 			w.runStaleReaperLoop(claimCtx)
 		}()
 	}
+	go func() {
+		w.workers.Wait()
+		close(w.done)
+	}()
 	w.lifecycleMu.Unlock()
 }
 
@@ -170,36 +176,46 @@ func (w *Worker) Shutdown(ctx context.Context) error {
 	}
 	stopClaims := w.stopClaims
 	stopWork := w.stopWork
+	done := w.done
 	w.lifecycleMu.Unlock()
 
 	stopClaims()
-	done := make(chan struct{})
-	go func() {
-		w.workers.Wait()
-		close(done)
-	}()
-
+	force, stopForce := shutdownForce(ctx, w.cfg.TransitionTimeout+emailForcedShutdownWait)
+	defer stopForce()
 	select {
 	case <-done:
 		stopWork()
 		return nil
-	case <-ctx.Done():
-		drainErr := ctx.Err()
+	case <-force:
 		stopWork()
-
-		// Keep the store available long enough for cancelled deliveries to
-		// persist their final lease-fenced transition. A sender that ignores
-		// cancellation cannot hold shutdown open indefinitely; its lease will
-		// still be reclaimed by the stale-job reaper.
-		forcedWait := time.NewTimer(w.cfg.TransitionTimeout + emailForcedShutdownWait)
-		defer forcedWait.Stop()
-		select {
-		case <-done:
-			return drainErr
-		case <-forcedWait.C:
-			return fmt.Errorf("%w: email workers did not stop after cancellation", drainErr)
-		}
+	case <-ctx.Done():
+		stopWork()
+		return fmt.Errorf("%w: email workers did not stop before the shutdown deadline", ctx.Err())
 	}
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("%w: email workers did not stop before the shutdown deadline", ctx.Err())
+	}
+}
+
+func (w *Worker) Done() <-chan struct{} {
+	return w.done
+}
+
+func shutdownForce(ctx context.Context, reserve time.Duration) (<-chan time.Time, func()) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil, func() {}
+	}
+	wait := time.Until(deadline.Add(-reserve))
+	if wait < 0 {
+		wait = 0
+	}
+	timer := time.NewTimer(wait)
+	return timer.C, func() { timer.Stop() }
 }
 
 func (w *Worker) runWorker(claimCtx, workCtx context.Context, workerID int) {

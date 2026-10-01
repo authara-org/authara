@@ -66,6 +66,10 @@ type Service struct {
 	interval            time.Duration
 	mu                  sync.Mutex
 	current             atomic.Pointer[snapshot]
+	reconcilerMu        sync.Mutex
+	reconcilerStarted   bool
+	reconcilerCancel    context.CancelFunc
+	reconcilerDone      chan struct{}
 }
 
 func NewService(ctx context.Context, cfg ServiceOptions) (*Service, error) {
@@ -92,6 +96,7 @@ func NewService(ctx context.Context, cfg ServiceOptions) (*Service, error) {
 		store:  cfg.Store, logger: logger, interval: interval,
 		definitions: buildCatalog(cfg.Environment), definitionByKey: make(map[Key]Definition),
 		defaultValues: make(map[Key]any), environmentValues: make(map[Key]any), explicitEnvironment: make(map[Key]bool),
+		reconcilerDone: make(chan struct{}),
 	}
 	for _, definition := range s.definitions {
 		if _, exists := s.definitionByKey[definition.Key]; exists {
@@ -379,20 +384,54 @@ func (s *Service) operatorDefinition(key Key) (Definition, error) {
 }
 
 func (s *Service) StartReconciler(ctx context.Context) {
+	s.reconcilerMu.Lock()
+	if s.reconcilerStarted {
+		s.reconcilerMu.Unlock()
+		return
+	}
+	reconcilerCtx, cancel := context.WithCancel(ctx)
+	s.reconcilerStarted = true
+	s.reconcilerCancel = cancel
+	s.reconcilerMu.Unlock()
+
 	go func() {
+		defer close(s.reconcilerDone)
 		ticker := time.NewTicker(s.interval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-reconcilerCtx.Done():
 				return
 			case <-ticker.C:
-				if err := s.Reconcile(ctx); err != nil && ctx.Err() == nil {
-					s.logger.ErrorContext(ctx, "runtime settings reconciliation failed", "err", err)
+				if err := s.Reconcile(reconcilerCtx); err != nil && reconcilerCtx.Err() == nil {
+					s.logger.ErrorContext(reconcilerCtx, "runtime settings reconciliation failed", "err", err)
 				}
 			}
 		}
 	}()
+}
+
+func (s *Service) ShutdownReconciler(ctx context.Context) error {
+	s.reconcilerMu.Lock()
+	if !s.reconcilerStarted {
+		s.reconcilerMu.Unlock()
+		return nil
+	}
+	cancel := s.reconcilerCancel
+	done := s.reconcilerDone
+	s.reconcilerMu.Unlock()
+
+	cancel()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Service) ReconcilerDone() <-chan struct{} {
+	return s.reconcilerDone
 }
 
 func (s *Service) Reconcile(ctx context.Context) error {

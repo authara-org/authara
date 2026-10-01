@@ -1,6 +1,7 @@
 # Health Checks
 
-Authara exposes a health check command that can be used by container runtimes and orchestration systems to verify that the service is running correctly.
+Authara exposes separate liveness and readiness endpoints plus a health-check
+command for container runtimes and orchestration systems.
 
 This allows systems such as:
 
@@ -40,7 +41,9 @@ Authara provides a dedicated command for health checks:
 authara healthcheck
 ```
 
-The command performs a minimal internal check to verify that the server is operational.
+The command requests `http://127.0.0.1:8080/auth/ready`. It succeeds only when
+the running Authara process is accepting traffic and PostgreSQL responds within
+the bounded readiness-check timeout.
 
 It exits with:
 
@@ -50,6 +53,29 @@ It exits with:
 | non-zero | Service is unhealthy |
 
 The command does not produce user-facing output and is intended for automated checks.
+
+During graceful shutdown Authara marks this endpoint unavailable before closing
+the HTTP listener. Health checks then return a non-zero result while existing
+HTTP requests and background deliveries drain.
+
+---
+
+# HTTP Endpoints
+
+| Endpoint | Purpose | PostgreSQL checked |
+|---|---|---|
+| `/auth/live` | Confirms the HTTP process is alive | No |
+| `/auth/ready` | Confirms the instance can receive application traffic | Yes |
+| `/auth/health` | Compatibility alias for `/auth/ready` | Yes |
+
+Readiness requires both lifecycle readiness and a successful PostgreSQL ping.
+The database ping has a one-second timeout. A database outage therefore removes
+the instance from readiness without terminating it, allowing the connection
+pool to recover when PostgreSQL becomes available again.
+
+Use `/auth/live` for Kubernetes liveness probes and `/auth/ready` for readiness
+probes. Do not use the database-dependent endpoint as a liveness probe: a shared
+database outage should not restart every Authara replica.
 
 ---
 
@@ -77,7 +103,7 @@ Container orchestration systems may then:
 Health checks allow operators to ensure that:
 
 - the Authara process is running
-- the container is functioning correctly
+- ready instances can reach PostgreSQL
 - the service can be restarted automatically if necessary
 
 They are an important part of production deployments.

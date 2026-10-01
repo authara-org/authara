@@ -4,88 +4,30 @@ import (
 	"context"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
-	"github.com/authara-org/authara/internal/bootstrap"
+	"github.com/authara-org/authara/internal/lifecycle"
+	"github.com/authara-org/authara/internal/operations"
 )
 
 var Version = "dev"
 
 func main() {
-	// Binary self-check for Docker HEALTHCHECK
+	// Local readiness probe for Docker HEALTHCHECK.
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		if err := lifecycle.RunHealthcheck(context.Background()); err != nil {
+			os.Exit(1)
+		}
 		return
 	}
-	if len(os.Args) > 1 && isOperationalCommand(os.Args[1]) {
-		if err := runOperationalCommand(
-			context.Background(),
-			os.Args[1:],
-			os.Stdout,
-			executeOperationalCommandFromEnvironment,
-		); err != nil {
+	if len(os.Args) > 1 && operations.IsCommand(os.Args[1]) {
+		if err := operations.Run(context.Background(), os.Args[1:], os.Stdout); err != nil {
 			log.Fatalf("operational command failed: %v", err)
 		}
 		return
 	}
 
-	app, err := bootstrap.NewApp(Version)
-	if err != nil {
-		log.Fatalf("startup failed: %v", err)
+	if err := lifecycle.Run(Version); err != nil {
+		log.Printf("authara failed: %v", err)
+		os.Exit(1)
 	}
-	defer func() {
-		if err := app.Close(); err != nil {
-			app.Logger.Error("app close failed", "err", err)
-		}
-	}()
-
-	app.Logger.Info("starting authara", "version", Version)
-
-	server, err := bootstrap.NewHTTPServer(app, Version)
-	if err != nil {
-		log.Fatalf("build http server: %v", err)
-	}
-
-	ctx, stop := signal.NotifyContext(
-		context.Background(),
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
-	defer stop()
-
-	app.StartBackgroundWorkers(ctx)
-
-	go func() {
-		app.Logger.Info("http server listening", "addr", app.Config.Values.HttpAddr)
-		if err := server.Start(); err != nil {
-			app.Logger.Error("http server stopped unexpectedly", "err", err)
-			stop()
-		}
-	}()
-
-	<-ctx.Done()
-
-	app.Logger.Info("shutting down authara")
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		app.Logger.Error("graceful shutdown failed", "err", err)
-	}
-
-	maintenanceShutdownCtx, maintenanceShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer maintenanceShutdownCancel()
-	if err := app.Maintenance.Shutdown(maintenanceShutdownCtx); err != nil {
-		app.Logger.Warn("cleanup coordinator shutdown timed out", "err", err)
-	}
-
-	emailShutdownCtx, emailShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer emailShutdownCancel()
-	if err := app.Services.EmailWorker.Shutdown(emailShutdownCtx); err != nil {
-		app.Logger.Warn("email worker drain timed out; in-flight jobs will be recovered from their leases", "err", err)
-	}
-
-	app.Logger.Info("authara stopped")
 }

@@ -1003,6 +1003,16 @@ func TestReconciliationRepairsAnotherReplicaAndPersistsAcrossReconstruction(t *t
 		}
 	}
 	cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second)
+	defer shutdownCancel()
+	if err := second.ShutdownReconciler(shutdownCtx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-second.ReconcilerDone():
+	default:
+		t.Fatal("reconciler shutdown returned before the goroutine stopped")
+	}
 
 	restarted, err := NewService(ctx, ServiceOptions{Startup: &Config{}, Store: store, LookupEnvironment: environment(nil)})
 	if err != nil {
