@@ -35,6 +35,7 @@ Authara exports:
 - `authara_maintenance_lease_attempts_total` by acquisition/lifecycle outcome
 - `authara_maintenance_runs_total` and `authara_maintenance_run_duration_seconds` by cleanup job and outcome
 - `authara_maintenance_rows_processed_total` by cleanup job
+- `authara_readiness_checks_total` by bounded dependency (`postgres`, `schema`, or `redis`) and result
 - standard `go_sql_*` database pool metrics for the primary PostgreSQL connection
 - standard `go_*` runtime metrics
 - standard `process_*` CPU, memory, file descriptor, and process-start metrics where supported
@@ -77,6 +78,9 @@ increase(authara_background_jobs_total{outcome=~"failed|error"}[10m])
 
 # Cleanup failures by job
 increase(authara_maintenance_runs_total{outcome="failed"}[30m])
+
+# Dependency readiness failures
+increase(authara_readiness_checks_total{result="failed"}[10m])
 ```
 
 ## Prometheus configuration

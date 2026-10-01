@@ -169,8 +169,10 @@ services:
       AUTHARA_UPSTREAM: authara:8080
       APP_UPSTREAM: app:80
     depends_on:
-      - authara
-      - app
+      authara:
+        condition: service_healthy
+      app:
+        condition: service_started
 ```
 
 Use the compatible Core and migrations images in the Core release notes when

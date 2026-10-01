@@ -209,8 +209,8 @@ marks `/auth/ready` and its compatibility alias `/auth/health` unavailable and
 stops accepting new HTTP and background work, then drains HTTP requests, email
 and webhook deliveries, runtime-setting reconciliation, and maintenance work
 under one shared 10-second deadline. `/auth/live` remains independent of
-PostgreSQL and should be used only as a liveness probe; readiness includes a
-bounded PostgreSQL ping.
+external dependencies and should be used only as a liveness probe; readiness
+includes bounded PostgreSQL, required-schema, and configured-Redis checks.
 
 A clean signal-driven shutdown exits with status `0`. Listener failures,
 unexpected server or worker termination, shutdown timeouts, and resource-close

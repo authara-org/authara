@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -60,7 +61,7 @@ func TestMetricsRouteIsRegistered(t *testing.T) {
 }
 
 func TestHealthRoutesAreRegistered(t *testing.T) {
-	readiness := meta.NewReadiness(false)
+	readiness := meta.NewReadinessWithChecker(false, successfulReadinessChecker{})
 	router := newContractTestRouterWithReadiness(readiness)
 	for path, wantStatus := range map[string]int{
 		"/auth/live":   http.StatusOK,
@@ -86,6 +87,21 @@ func TestHealthRoutesAreRegistered(t *testing.T) {
 		}
 	}
 }
+
+func TestReadinessRoutesFailClosedWithoutConfiguration(t *testing.T) {
+	router := newContractTestRouterWithReadiness(nil)
+	for _, path := range []string{"/auth/ready", "/auth/health"} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusServiceUnavailable {
+			t.Errorf("GET %s status = %d, want %d", path, response.Code, http.StatusServiceUnavailable)
+		}
+	}
+}
+
+type successfulReadinessChecker struct{}
+
+func (successfulReadinessChecker) Check(context.Context) error { return nil }
 
 func TestMetricsRouteIsNotRegisteredWhenObservabilityIsDisabled(t *testing.T) {
 	router := newContractTestRouterWithObservability(nil)

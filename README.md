@@ -71,8 +71,10 @@ services:
       AUTHARA_UPSTREAM: authara:8080
       APP_UPSTREAM: app:80
     depends_on:
-      - authara
-      - app
+      authara:
+        condition: service_healthy
+      app:
+        condition: service_started
 ```
 
 Each Core release lists the compatible image tags and immutable digests in its

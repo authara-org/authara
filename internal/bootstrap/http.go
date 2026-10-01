@@ -21,6 +21,11 @@ import (
 const assetsManifestPath = "./internal/http/static/manifest.json"
 
 func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
+	readinessChecker, err := newReadinessChecker(app)
+	if err != nil {
+		return nil, fmt.Errorf("configure readiness: %w", err)
+	}
+
 	authenticationPolicy := app.Config.CurrentAuthentication()
 	allowlistPolicy := app.Config.CurrentAllowlist()
 	cookiePolicy := app.Config.CurrentSessionCookies()
@@ -144,7 +149,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		Observability:     app.Observability,
 		OAuthProviders:    app.Services.OAuthProviders,
 		Handlers:          handlers,
-		Readiness:         meta.NewReadinessWithChecker(false, app.Store),
+		Readiness:         meta.NewReadinessWithChecker(false, readinessChecker),
 	}, mw)
 
 	return server, nil

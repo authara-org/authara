@@ -22,9 +22,10 @@ type Redis struct {
 
 func NewRedis(cfg RedisConfig) (*Redis, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Password: cfg.Password,
-		DB:       cfg.DB,
+		Addr:                  fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Password:              cfg.Password,
+		DB:                    cfg.DB,
+		ContextTimeoutEnabled: true,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -38,6 +39,13 @@ func NewRedis(cfg RedisConfig) (*Redis, error) {
 	}
 
 	return &Redis{client: client}, nil
+}
+
+func (r *Redis) Ping(ctx context.Context) error {
+	if err := r.client.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("ping redis: %w", err)
+	}
+	return nil
 }
 
 func (r *Redis) Get(ctx context.Context, key string) ([]byte, error) {

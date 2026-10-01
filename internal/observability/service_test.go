@@ -91,6 +91,8 @@ func TestDatabaseAndBackgroundMetrics(t *testing.T) {
 	service.SetMaintenanceLeader(true)
 	service.ObserveMaintenanceRun("sessions_expired", "incomplete", 50*time.Millisecond, 17)
 	service.ObserveMaintenanceRun("operator_audit", "completed", 25*time.Millisecond, 3)
+	service.ObserveReadinessCheck("postgres", "succeeded")
+	service.ObserveReadinessCheck("schema", "failed")
 
 	metrics := scrape(t, service)
 	assertContains(t, metrics, `go_sql_open_connections{db_name="primary"} 0`)
@@ -105,6 +107,8 @@ func TestDatabaseAndBackgroundMetrics(t *testing.T) {
 	assertContains(t, metrics, `authara_maintenance_rows_processed_total{job="sessions_expired"} 17`)
 	assertContains(t, metrics, `authara_maintenance_runs_total{job="operator_audit",outcome="completed"} 1`)
 	assertContains(t, metrics, `authara_maintenance_rows_processed_total{job="operator_audit"} 3`)
+	assertContains(t, metrics, `authara_readiness_checks_total{dependency="postgres",result="succeeded"} 1`)
+	assertContains(t, metrics, `authara_readiness_checks_total{dependency="schema",result="failed"} 1`)
 }
 
 func TestBackgroundMetricLabelsAreBounded(t *testing.T) {
@@ -121,6 +125,18 @@ func TestBackgroundMetricLabelsAreBounded(t *testing.T) {
 func TestObserveBackgroundJobIsSafeWhenObservabilityIsDisabled(t *testing.T) {
 	var service *Service
 	service.ObserveBackgroundJob("webhook", "succeeded", time.Second)
+	service.ObserveReadinessCheck("postgres", "succeeded")
+}
+
+func TestReadinessMetricLabelsAreBounded(t *testing.T) {
+	service := New("test-version")
+	service.ObserveReadinessCheck("user-controlled-dependency", "user-controlled-result")
+
+	metrics := scrape(t, service)
+	assertContains(t, metrics, `authara_readiness_checks_total{dependency="other",result="other"} 1`)
+	if strings.Contains(metrics, "user-controlled") {
+		t.Fatal("unknown readiness metric labels must be normalized")
+	}
 }
 
 func TestHandlerExposesRuntimeAndBuildMetrics(t *testing.T) {

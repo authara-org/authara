@@ -10,7 +10,7 @@ import (
 const healthcheckURL = "http://127.0.0.1:8080/auth/ready"
 
 func RunHealthcheck(ctx context.Context) error {
-	client := &http.Client{Timeout: 3 * time.Second}
+	client := &http.Client{Timeout: 2 * time.Second}
 	return checkHealth(ctx, client, healthcheckURL)
 }
 

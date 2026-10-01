@@ -161,6 +161,21 @@ func TestCheckHealth(t *testing.T) {
 			t.Fatal("health check unexpectedly succeeded")
 		}
 	})
+	t.Run("timeout", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			<-r.Context().Done()
+		}))
+		defer server.Close()
+		client := server.Client()
+		client.Timeout = 25 * time.Millisecond
+		started := time.Now()
+		if err := checkHealth(context.Background(), client, server.URL); err == nil {
+			t.Fatal("timed-out health check unexpectedly succeeded")
+		}
+		if elapsed := time.Since(started); elapsed > 250*time.Millisecond {
+			t.Fatalf("health check timeout took %s", elapsed)
+		}
+	})
 }
 
 type fakeLifecycleServer struct {

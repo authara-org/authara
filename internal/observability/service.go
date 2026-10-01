@@ -31,6 +31,7 @@ type Service struct {
 	maintenanceRuns       *prometheus.CounterVec
 	maintenanceDuration   *prometheus.HistogramVec
 	maintenanceRows       *prometheus.CounterVec
+	readinessChecks       *prometheus.CounterVec
 }
 
 func New(version string) *Service {
@@ -116,6 +117,12 @@ func New(version string) *Service {
 		Name:      "rows_processed_total",
 		Help:      "Root rows committed by Authara cleanup passes; foreign-key cascades are not included.",
 	}, []string{"job"})
+	readinessChecks := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "authara",
+		Subsystem: "readiness",
+		Name:      "checks_total",
+		Help:      "Dependency readiness checks performed by Authara.",
+	}, []string{"dependency", "result"})
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "authara",
 		Name:      "build_info",
@@ -139,6 +146,7 @@ func New(version string) *Service {
 		maintenanceRuns,
 		maintenanceDuration,
 		maintenanceRows,
+		readinessChecks,
 	)
 
 	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{
@@ -161,6 +169,7 @@ func New(version string) *Service {
 		maintenanceRuns:       maintenanceRuns,
 		maintenanceDuration:   maintenanceDuration,
 		maintenanceRows:       maintenanceRows,
+		readinessChecks:       readinessChecks,
 	}
 }
 
@@ -232,6 +241,16 @@ func (s *Service) ObserveMaintenanceRun(job, outcome string, duration time.Durat
 	if rows > 0 {
 		s.maintenanceRows.WithLabelValues(job).Add(float64(rows))
 	}
+}
+
+func (s *Service) ObserveReadinessCheck(dependency, result string) {
+	if s == nil {
+		return
+	}
+	s.readinessChecks.WithLabelValues(
+		normalizeReadinessDependency(dependency),
+		normalizeReadinessResult(result),
+	).Inc()
 }
 
 func (s *Service) Handler() http.Handler {
@@ -323,6 +342,24 @@ func normalizeMaintenanceLeaseOutcome(outcome string) string {
 	switch outcome {
 	case "acquired", "skipped", "released", "lost", "failed":
 		return outcome
+	default:
+		return "other"
+	}
+}
+
+func normalizeReadinessDependency(dependency string) string {
+	switch dependency {
+	case "postgres", "schema", "redis":
+		return dependency
+	default:
+		return "other"
+	}
+}
+
+func normalizeReadinessResult(result string) string {
+	switch result {
+	case "succeeded", "failed":
+		return result
 	default:
 		return "other"
 	}

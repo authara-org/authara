@@ -10,7 +10,7 @@ import (
 )
 
 func TestReadinessHandler(t *testing.T) {
-	readiness := NewReadiness(false)
+	readiness := NewReadinessWithChecker(false, readinessCheckerFunc(func(context.Context) error { return nil }))
 	request := httptest.NewRequest(http.MethodGet, "/auth/health", nil)
 
 	unavailable := httptest.NewRecorder()
@@ -77,6 +77,17 @@ func TestReadinessHandlerSkipsDependencyWhileLifecycleIsUnready(t *testing.T) {
 	}
 }
 
+func TestReadinessHandlerFailsClosedWithoutChecker(t *testing.T) {
+	readiness := NewReadiness(true)
+	response := httptest.NewRecorder()
+
+	readiness.Handler(response, httptest.NewRequest(http.MethodGet, "/auth/ready", nil))
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("readiness without checker status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+}
+
 func TestLivenessDoesNotCheckDependencies(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/auth/live", nil)
 	response := httptest.NewRecorder()
@@ -90,6 +101,6 @@ func TestLivenessDoesNotCheckDependencies(t *testing.T) {
 
 type readinessCheckerFunc func(context.Context) error
 
-func (f readinessCheckerFunc) Ping(ctx context.Context) error {
+func (f readinessCheckerFunc) Check(ctx context.Context) error {
 	return f(ctx)
 }

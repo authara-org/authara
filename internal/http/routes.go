@@ -69,13 +69,12 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 	r.Group(func(r chi.Router) {
 		r.Get("/auth/live", meta.Liveness)
-		if cfg.Readiness == nil {
-			r.Get("/auth/health", meta.Health)
-			r.Get("/auth/ready", meta.Health)
-		} else {
-			r.Get("/auth/health", cfg.Readiness.Handler)
-			r.Get("/auth/ready", cfg.Readiness.Handler)
+		readiness := cfg.Readiness
+		if readiness == nil {
+			readiness = meta.NewReadiness(false)
 		}
+		r.Get("/auth/health", readiness.Handler)
+		r.Get("/auth/ready", readiness.Handler)
 		r.Get("/auth/version", meta.Version(cfg.Version))
 	})
 

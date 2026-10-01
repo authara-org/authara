@@ -10,19 +10,13 @@ import (
 const readinessCheckTimeout = time.Second
 
 type ReadinessChecker interface {
-	Ping(context.Context) error
+	Check(context.Context) error
 }
 
 func Liveness(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
-}
-
-// Health is retained for callers that do not configure dependency-aware
-// readiness. Production routes use Readiness.Handler instead.
-func Health(w http.ResponseWriter, r *http.Request) {
-	Liveness(w, r)
 }
 
 type Readiness struct {
@@ -48,17 +42,15 @@ func (r *Readiness) Set(ready bool) {
 
 func (r *Readiness) Handler(w http.ResponseWriter, request *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if r == nil || !r.ready.Load() {
+	if r == nil || !r.ready.Load() || r.checker == nil {
 		writeUnavailable(w)
 		return
 	}
-	if r.checker != nil {
-		ctx, cancel := context.WithTimeout(request.Context(), readinessCheckTimeout)
-		defer cancel()
-		if err := r.checker.Ping(ctx); err != nil {
-			writeUnavailable(w)
-			return
-		}
+	ctx, cancel := context.WithTimeout(request.Context(), readinessCheckTimeout)
+	defer cancel()
+	if err := r.checker.Check(ctx); err != nil {
+		writeUnavailable(w)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))

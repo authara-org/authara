@@ -42,8 +42,10 @@ authara healthcheck
 ```
 
 The command requests `http://127.0.0.1:8080/auth/ready`. It succeeds only when
-the running Authara process is accepting traffic and PostgreSQL responds within
-the bounded readiness-check timeout.
+the running Authara process is accepting traffic, PostgreSQL responds with the
+required schema version, and configured Redis is available. The HTTP request is
+bounded by a two-second client timeout; dependency checks share a one-second
+server-side timeout.
 
 It exits with:
 
@@ -62,20 +64,56 @@ HTTP requests and background deliveries drain.
 
 # HTTP Endpoints
 
-| Endpoint | Purpose | PostgreSQL checked |
+| Endpoint | Purpose | Dependencies checked |
 |---|---|---|
-| `/auth/live` | Confirms the HTTP process is alive | No |
-| `/auth/ready` | Confirms the instance can receive application traffic | Yes |
-| `/auth/health` | Compatibility alias for `/auth/ready` | Yes |
+| `/auth/live` | Confirms the HTTP process is alive | None |
+| `/auth/ready` | Confirms the instance can receive application traffic | PostgreSQL, schema, and configured Redis |
+| `/auth/health` | Compatibility alias for `/auth/ready` | Same as `/auth/ready` |
 
-Readiness requires both lifecycle readiness and a successful PostgreSQL ping.
-The database ping has a one-second timeout. A database outage therefore removes
-the instance from readiness without terminating it, allowing the connection
-pool to recover when PostgreSQL becomes available again.
+Readiness requires lifecycle readiness, a successful PostgreSQL ping, the exact
+schema version required by the running Core binary, and a successful Redis ping
+when `AUTHARA_CACHE_PROVIDER=redis`. Dependency checks share a one-second
+timeout. An outage removes the instance from readiness without terminating it,
+allowing dependency clients to recover when service returns.
 
 Use `/auth/live` for Kubernetes liveness probes and `/auth/ready` for readiness
 probes. Do not use the database-dependent endpoint as a liveness probe: a shared
 database outage should not restart every Authara replica.
+
+Example Kubernetes container configuration:
+
+```yaml
+spec:
+  terminationGracePeriodSeconds: 15
+  containers:
+    - name: authara
+      image: ghcr.io/authara-org/authara-core:v0.21.1
+      ports:
+        - name: http
+          containerPort: 8080
+      startupProbe:
+        httpGet:
+          path: /auth/live
+          port: http
+        periodSeconds: 2
+        failureThreshold: 30
+      livenessProbe:
+        httpGet:
+          path: /auth/live
+          port: http
+        periodSeconds: 10
+        failureThreshold: 3
+      readinessProbe:
+        httpGet:
+          path: /auth/ready
+          port: http
+        periodSeconds: 5
+        failureThreshold: 2
+```
+
+The startup and liveness probes verify only the running HTTP process. Kubernetes
+uses readiness to add or remove the pod from service routing. Keep the
+termination grace period above Authara's ten-second drain deadline.
 
 ---
 

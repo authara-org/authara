@@ -17,3 +17,7 @@ type Cache interface {
 type Counter interface {
 	Increment(ctx context.Context, key string, ttl time.Duration) (count int64, remainingTTL time.Duration, err error)
 }
+
+type Pinger interface {
+	Ping(context.Context) error
+}

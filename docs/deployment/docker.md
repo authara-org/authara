@@ -93,8 +93,10 @@ services:
       AUTHARA_UPSTREAM: authara:8080
       APP_UPSTREAM: app:80
     depends_on:
-      - authara
-      - app
+      authara:
+        condition: service_healthy
+      app:
+        condition: service_started
 ```
 
 Each Core release lists its compatible image tags and immutable digests in the
@@ -102,6 +104,11 @@ release notes. The attached `authara-images.env` contains the same pairing for
 deployment tooling.
 
 This example shows the network shape only.
+
+The Core image's readiness health check gates the gateway's initial startup.
+Docker Compose does not remove an already-running Core container from routing if
+it later becomes unhealthy; deployments that need dynamic traffic removal
+should use an orchestrator with readiness probes.
 
 Application-specific configuration is intentionally omitted.
 

@@ -37,6 +37,30 @@ func TestOfficialDockerCommandsRunMigrationsUp(t *testing.T) {
 	}
 }
 
+func TestOfficialComposeExamplesWaitForCoreReadiness(t *testing.T) {
+	required := "authara:\n        condition: service_healthy"
+	for _, path := range []string{"../README.md", "quickstart.md", "deployment/docker.md"} {
+		if contents := readDocumentation(t, path); !strings.Contains(contents, required) {
+			t.Errorf("%s does not gate gateway startup on Core readiness", path)
+		}
+	}
+}
+
+func TestKubernetesProbeExampleSeparatesLivenessAndReadiness(t *testing.T) {
+	contents := readDocumentation(t, "operations/healthchecks.md")
+	for _, required := range []string{
+		"startupProbe:",
+		"livenessProbe:",
+		"readinessProbe:",
+		"path: /auth/live",
+		"path: /auth/ready",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Errorf("operations/healthchecks.md is missing %q", required)
+		}
+	}
+}
+
 func readDocumentation(t *testing.T, path string) string {
 	t.Helper()
 	contents, err := os.ReadFile(path)
