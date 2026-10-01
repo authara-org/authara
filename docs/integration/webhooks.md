@@ -204,8 +204,8 @@ Always verify signatures before processing webhook events.
 - Other HTTP 4xx responses fail immediately
 - A reaper restores stale processing events according to the configured interval
   and threshold
-- Cleanup applies the configured delivered and failed retention periods in
-  configured batch sizes
+- The shared cleanup leader applies the configured delivered and failed
+  retention periods in bounded batches
 
 This means:
 

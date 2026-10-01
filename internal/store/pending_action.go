@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/identity"
@@ -285,9 +286,29 @@ func (s *Store) UpdateUserEmailIfCurrent(ctx context.Context, userID uuid.UUID, 
 	newEmail = identity.CanonicalEmail(newEmail)
 	res, err := s.exec(ctx, `
 		UPDATE users
-		SET email = $1
+		SET email = $1,
+		    email_verified_at = NULL
 		WHERE id = $2 AND email = $3
 	`, newEmail, userID, currentEmail)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected == 1, nil
+}
+
+func (s *Store) UpdateUserEmailVerifiedIfCurrent(ctx context.Context, userID uuid.UUID, currentEmail, newEmail string, verifiedAt time.Time) (bool, error) {
+	currentEmail = identity.CanonicalEmail(currentEmail)
+	newEmail = identity.CanonicalEmail(newEmail)
+	res, err := s.exec(ctx, `
+		UPDATE users
+		SET email = $1,
+		    email_verified_at = $2
+		WHERE id = $3 AND email = $4
+	`, newEmail, verifiedAt, userID, currentEmail)
 	if err != nil {
 		return false, err
 	}

@@ -146,10 +146,11 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 		return authenticateAndAcceptInvitationWithGoogleError(codeInvitationFlowMismatch, "Invitation signup or login flow does not match the account."), nil
 	}
 	user, err := h.Auth.Login(ctx, auth.LoginInput{
-		Provider:        domain.ProviderGoogle,
-		Email:           preview.Invitation.Email,
-		OAuthID:         identity.OAuthID,
-		InvitationToken: request.Body.Token,
+		Provider:              domain.ProviderGoogle,
+		Email:                 preview.Invitation.Email,
+		OAuthID:               identity.OAuthID,
+		ProviderEmailVerified: identity.EmailVerified,
+		InvitationToken:       request.Body.Token,
 	})
 	if errors.Is(err, auth.ErrAccountExistsMustLink) {
 		link, code, message, ok := h.startAccountRecoveryLink(ctx, identity)

@@ -73,11 +73,13 @@ func (h *APIHandler) GetCurrentAccount(ctx context.Context, request contract.Get
 
 	out := contract.Account{
 		User: contract.AuthUser{
-			Id:        user.ID,
-			Email:     openapi_types.Email(user.Email),
-			Username:  user.Username,
-			Disabled:  user.DisabledAt != nil,
-			CreatedAt: user.CreatedAt,
+			Id:              user.ID,
+			Email:           openapi_types.Email(user.Email),
+			EmailVerified:   user.EmailVerifiedAt != nil,
+			EmailVerifiedAt: user.EmailVerifiedAt,
+			Username:        user.Username,
+			Disabled:        user.DisabledAt != nil,
+			CreatedAt:       user.CreatedAt,
 		},
 		Sessions:    make([]contract.AccountSession, 0, len(sessionPage.Items)),
 		AuthMethods: make([]contract.AuthMethod, 0, len(providers)),

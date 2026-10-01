@@ -42,6 +42,10 @@ type Middlewares struct {
 	RequireAdminAccessAuthAPI            func(http.Handler) http.Handler
 	RequireOperatorAccessAuthWithRefresh func(http.Handler) http.Handler
 	RequireOperatorAccessAuthAPI         func(http.Handler) http.Handler
+	RequireAppVerifiedEmailUI            func(http.Handler) http.Handler
+	RequireAppVerifiedEmailAPI           func(http.Handler) http.Handler
+	RequireAdminVerifiedEmailUI          func(http.Handler) http.Handler
+	RequireOperatorVerifiedEmailUI       func(http.Handler) http.Handler
 	RequireRecentAuthenticationUI        func(http.Handler) http.Handler
 	RequireRecentAuthenticationAPI       func(http.Handler) http.Handler
 	RequireInternalAPIAuth               func(http.Handler) http.Handler

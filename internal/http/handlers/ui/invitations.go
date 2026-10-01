@@ -588,10 +588,11 @@ func (h *UIHandler) finishInvitationOAuth(
 	}
 
 	input := auth.LoginInput{
-		Provider:        domain.ProviderGoogle,
-		Email:           preview.Invitation.Email,
-		OAuthID:         oauthID,
-		InvitationToken: token,
+		Provider:              domain.ProviderGoogle,
+		Email:                 preview.Invitation.Email,
+		OAuthID:               oauthID,
+		ProviderEmailVerified: emailVerified,
+		InvitationToken:       token,
 	}
 
 	user, err := h.Auth.Login(r.Context(), input)

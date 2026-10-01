@@ -229,13 +229,14 @@ func (s *Service) createSession(
 			return err
 		}
 
-		accessToken, err = s.accessTokens.Generate(
+		accessToken, err = s.accessTokens.GenerateWithEmailVerification(
 			userID,
 			createdSession.ID,
 			org.ID,
 			string(membership.Role),
 			audience,
 			platformRoles,
+			user.EmailVerifiedAt != nil,
 			now,
 		)
 		if err != nil {
@@ -508,7 +509,7 @@ func (s *Service) SwitchSessionOrganization(
 ) {
 	policy := s.policy.CurrentSession()
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
-		_, err := s.ensureUserAllowed(ctx, userID)
+		user, err := s.ensureUserAllowed(ctx, userID)
 		if err != nil {
 			return err
 		}
@@ -583,13 +584,14 @@ func (s *Service) SwitchSessionOrganization(
 			return err
 		}
 
-		accessToken, err = s.accessTokens.Generate(
+		accessToken, err = s.accessTokens.GenerateWithEmailVerification(
 			userID,
 			sessionID,
 			organizationID,
 			string(membership.Role),
 			audience,
 			platformRoles,
+			user.EmailVerifiedAt != nil,
 			now,
 		)
 		return err
@@ -649,7 +651,7 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			return ErrInvalidRefreshToken
 		}
 
-		_, err = s.ensureUserAllowed(ctx, session.UserID)
+		user, err := s.ensureUserAllowed(ctx, session.UserID)
 		if err != nil {
 			return err
 		}
@@ -720,13 +722,14 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			newRefreshToken = refreshToken
 		}
 
-		newAccessToken, err = s.accessTokens.Generate(
+		newAccessToken, err = s.accessTokens.GenerateWithEmailVerification(
 			session.UserID,
 			rt.SessionID,
 			rt.OrganizationID,
 			string(membership.Role),
 			audience,
 			platformRoles,
+			user.EmailVerifiedAt != nil,
 			now,
 		)
 		if err != nil {
@@ -959,6 +962,7 @@ func (s *Service) identityFromClaims(claims *token.AccessClaims) (*AccessIdentit
 		OrganizationID:   claims.OrgID,
 		OrganizationRole: domain.OrganizationRole(claims.OrgRole),
 		Roles:            rs,
+		EmailVerified:    claims.EmailVerified,
 	}, nil
 }
 

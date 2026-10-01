@@ -148,6 +148,12 @@ func (c *Config) validate() error {
 	if c.Values.AppEnv == "prod" && !c.Email.IsDeliverable() {
 		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must be smtp in production because password recovery routes are enabled")
 	}
+	if c.Authentication.EmailVerificationRequired && !c.Email.IsDeliverable() {
+		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must be configured when AUTHARA_EMAIL_VERIFICATION_REQUIRED is true")
+	}
+	if c.Authentication.EmailVerificationRequired && !c.Challenge.Enabled {
+		return fmt.Errorf("AUTHARA_CHALLENGE_ENABLED must be true when AUTHARA_EMAIL_VERIFICATION_REQUIRED is true")
+	}
 
 	if c.Values.AppEnv == "prod" && c.DB.LogSQL {
 		return fmt.Errorf("POSTGRESQL_LOG_SQL must be false when APP_ENV=prod")

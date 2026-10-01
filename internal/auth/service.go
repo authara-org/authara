@@ -301,8 +301,9 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 
 	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		user = domain.User{
-			Email:    in.Email,
-			Username: in.Username,
+			Email:           in.Email,
+			EmailVerifiedAt: in.EmailVerifiedAt,
+			Username:        in.Username,
 		}
 
 		created, err := s.store.CreateUser(txCtx, user)
@@ -556,6 +557,16 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 		if err == nil {
 			// provider exists => just log in
 			user, err = s.store.GetUserByID(txCtx, providerRecord.UserID)
+			if err == nil && in.ProviderEmailVerified && user.EmailVerifiedAt == nil && strings.EqualFold(user.Email, in.Email) {
+				verifiedAt := time.Now().UTC()
+				updated, updateErr := s.store.MarkUserEmailVerified(txCtx, user.ID, user.Email, verifiedAt)
+				if updateErr != nil {
+					return updateErr
+				}
+				if updated {
+					user.EmailVerifiedAt = &verifiedAt
+				}
+			}
 			return err
 		}
 
@@ -580,6 +591,10 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 		domainUser := domain.User{
 			Email:    in.Email,
 			Username: in.Username,
+		}
+		if in.ProviderEmailVerified {
+			verifiedAt := time.Now().UTC()
+			domainUser.EmailVerifiedAt = &verifiedAt
 		}
 		user, err = s.store.CreateUser(txCtx, domainUser)
 		if err != nil {
@@ -781,6 +796,9 @@ func (s *Service) CompleteProviderLink(
 		if err != nil {
 			return err
 		}
+		if err := s.markCurrentEmailVerified(txCtx, &user, providerEmail, now); err != nil {
+			return err
+		}
 		return s.enqueueAuthMethodChanged(txCtx, user, provider, domain.EmailTemplateAuthMethodAdded, now)
 	})
 }
@@ -853,6 +871,9 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithPassword(
 		}
 
 		if err := s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
+			return err
+		}
+		if err := s.markCurrentEmailVerified(txCtx, &user, *link.ProviderEmail, now); err != nil {
 			return err
 		}
 		return s.enqueueAuthMethodChanged(txCtx, user, link.Provider, domain.EmailTemplateAuthMethodAdded, now)
@@ -943,6 +964,9 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
 		} else if err := s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
 			return err
 		}
+		if err := s.markCurrentEmailVerified(txCtx, &user, *link.ProviderEmail, now); err != nil {
+			return err
+		}
 		return s.enqueueAuthMethodChanged(txCtx, user, link.Provider, domain.EmailTemplateAuthMethodAdded, now)
 	})
 	if err != nil {
@@ -950,6 +974,20 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
 	}
 
 	return user, nil
+}
+
+func (s *Service) markCurrentEmailVerified(ctx context.Context, user *domain.User, providerEmail string, verifiedAt time.Time) error {
+	if user.EmailVerifiedAt != nil || !strings.EqualFold(user.Email, providerEmail) {
+		return nil
+	}
+	updated, err := s.store.MarkUserEmailVerified(ctx, user.ID, user.Email, verifiedAt)
+	if err != nil {
+		return err
+	}
+	if updated {
+		user.EmailVerifiedAt = &verifiedAt
+	}
+	return nil
 }
 
 func (s *Service) linkExternalIdentityToUser(

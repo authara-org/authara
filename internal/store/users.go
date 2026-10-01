@@ -12,12 +12,13 @@ import (
 
 func toDomainUser(m model.User) domain.User {
 	return domain.User{
-		ID:         m.ID,
-		CreatedAt:  m.CreatedAt,
-		UpdatedAt:  m.UpdatedAt,
-		DisabledAt: m.DisabledAt,
-		Username:   m.Username,
-		Email:      m.Email,
+		ID:              m.ID,
+		CreatedAt:       m.CreatedAt,
+		UpdatedAt:       m.UpdatedAt,
+		DisabledAt:      m.DisabledAt,
+		Username:        m.Username,
+		Email:           m.Email,
+		EmailVerifiedAt: m.EmailVerifiedAt,
 	}
 }
 
@@ -26,6 +27,7 @@ func toModelUser(d domain.User) model.User {
 		Username:           d.Username,
 		UsernameNormalized: identity.CanonicalUsername(d.Username),
 		Email:              identity.CanonicalEmail(d.Email),
+		EmailVerifiedAt:    d.EmailVerifiedAt,
 		DisabledAt:         d.DisabledAt,
 	}
 }
@@ -37,7 +39,8 @@ const userColumns = `
 	disabled_at,
 	username,
 	username_normalized,
-	email
+	email,
+	email_verified_at
 `
 
 func scanUser(row rowScanner, m *model.User) error {
@@ -49,6 +52,7 @@ func scanUser(row rowScanner, m *model.User) error {
 		&m.Username,
 		&m.UsernameNormalized,
 		&m.Email,
+		&m.EmailVerifiedAt,
 	)
 }
 
@@ -56,12 +60,13 @@ func (s *Store) CreateUser(ctx context.Context, user domain.User) (domain.User, 
 	m := toModelUser(user)
 
 	if err := scanUser(s.queryRow(ctx, `
-		INSERT INTO users (username, username_normalized, email, disabled_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (username, username_normalized, email, email_verified_at, disabled_at)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING `+userColumns,
 		m.Username,
 		m.UsernameNormalized,
 		m.Email,
+		m.EmailVerifiedAt,
 		m.DisabledAt,
 	), &m); err != nil {
 		return domain.User{}, err
@@ -266,6 +271,22 @@ func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username s
 	}
 
 	return nil
+}
+
+func (s *Store) MarkUserEmailVerified(ctx context.Context, userID uuid.UUID, email string, verifiedAt time.Time) (bool, error) {
+	res, err := s.exec(ctx, `
+		UPDATE users
+		SET email_verified_at = $1
+		WHERE id = $2 AND email = $3
+	`, verifiedAt, userID, identity.CanonicalEmail(email))
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected == 1, nil
 }
 
 func (s *Store) DeleteUser(ctx context.Context, userID uuid.UUID) error {

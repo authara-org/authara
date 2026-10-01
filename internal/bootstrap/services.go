@@ -125,6 +125,7 @@ func NewServices(app *App) (Services, error) {
 		Store:                  app.Store,
 		Tx:                     txManager,
 		Policy:                 app.Config,
+		AuthenticationPolicy:   app.Config,
 		AllowlistPolicy:        app.Config,
 		WebhookPublisher:       webhookPublisher,
 		AccessTokenRevocations: accessTokenRevocations,

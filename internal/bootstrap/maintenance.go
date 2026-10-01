@@ -75,6 +75,14 @@ func newCleanupCoordinator(app *App) (*maintenance.Coordinator, error) {
 			},
 		},
 		{
+			Name:     "email_verifications",
+			Interval: cfg.Email.CleanupInterval,
+			RunBatch: func(ctx context.Context, now time.Time) (int64, bool, error) {
+				rows, err := app.Store.DeleteExpiredEmailVerificationTransactions(ctx, now, cfg.Email.MaintenanceBatchSize)
+				return rows, rows == int64(cfg.Email.MaintenanceBatchSize), err
+			},
+		},
+		{
 			Name:     "admin_audit",
 			Interval: cfg.Admin.AuditCleanupInterval,
 			RunBatch: func(ctx context.Context, now time.Time) (int64, bool, error) {

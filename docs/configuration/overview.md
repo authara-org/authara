@@ -99,10 +99,16 @@ Example:
 
 ```
 AUTHARA_USERNAME_LOGIN_ENABLED
+AUTHARA_EMAIL_VERIFICATION_REQUIRED
 AUTHARA_PASSKEY_CLONE_RESPONSE
 AUTHARA_PASSKEY_CLONE_NOTIFY_USER
 AUTHARA_PASSWORD_MIN_LENGTH
 ```
+
+`AUTHARA_EMAIL_VERIFICATION_REQUIRED` defaults to `false`. Enabling it requires
+challenge delivery and a configured email provider. Existing unverified users
+are signed out on their next authenticated request and routed through the email
+verification page, where they may replace and verify an obsolete address.
 
 ---
 

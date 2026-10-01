@@ -24,6 +24,7 @@ type Config struct {
 	MaxResends             int
 	MinResendInterval      time.Duration
 	Policy                 config.ChallengePolicyReader
+	AuthenticationPolicy   config.AuthenticationPolicyReader
 	AllowlistPolicy        config.AllowlistPolicyReader
 	WebhookPublisher       webhook.Publisher
 	AccessTokenRevocations *token.AccessTokenRevocations
@@ -34,6 +35,7 @@ type Service struct {
 	store                  *store.Store
 	tx                     *tx.Manager
 	policy                 config.ChallengePolicyReader
+	authenticationPolicy   config.AuthenticationPolicyReader
 	allowlistPolicy        config.AllowlistPolicyReader
 	webhookPublisher       webhook.Publisher
 	accessTokenRevocations *token.AccessTokenRevocations
@@ -60,6 +62,12 @@ func New(cfg Config) *Service {
 			return config.AllowlistPolicy{AllowlistEnabled: cfg.AllowlistEnabled}
 		})
 	}
+	authenticationPolicy := cfg.AuthenticationPolicy
+	if authenticationPolicy == nil {
+		authenticationPolicy = config.AuthenticationPolicyReaderFunc(func() config.AuthenticationPolicy {
+			return config.AuthenticationPolicy{}
+		})
+	}
 	securityEvents := cfg.SecurityEvents
 	if securityEvents == nil {
 		securityEvents = securityevent.NoopRecorder{}
@@ -69,6 +77,7 @@ func New(cfg Config) *Service {
 		store:                  cfg.Store,
 		tx:                     cfg.Tx,
 		policy:                 policy,
+		authenticationPolicy:   authenticationPolicy,
 		allowlistPolicy:        allowlistPolicy,
 		webhookPublisher:       pub,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
@@ -238,6 +247,12 @@ func (s *Service) pendingActionUserID(ctx context.Context, challenge domain.Chal
 			return uuid.Nil, true, ErrChallengeConsumed
 		}
 		return action.UserID, true, err
+	case domain.ChallengePurposeEmailVerification:
+		action, err := s.store.GetEmailVerificationTransactionByChallengeID(ctx, challenge.ID)
+		if errors.Is(err, store.ErrEmailVerificationTransactionNotFound) {
+			return uuid.Nil, true, ErrChallengeConsumed
+		}
+		return action.UserID, true, err
 	default:
 		return uuid.Nil, false, nil
 	}
@@ -384,6 +399,8 @@ func (s *Service) emailTemplateForPurpose(
 	case domain.ChallengePurposePasswordReset:
 		return domain.EmailTemplatePasswordResetCode, nil
 	case domain.ChallengePurposeEmailChange:
+		return domain.EmailTemplateEmailChangeCode, nil
+	case domain.ChallengePurposeEmailVerification:
 		return domain.EmailTemplateEmailChangeCode, nil
 	default:
 		return "", ErrUnsupportedChallengePurpose

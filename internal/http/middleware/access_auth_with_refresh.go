@@ -46,6 +46,7 @@ func RequireAccessAuthWithRefreshPolicy(
 					ctx = httpctx.WithSessionID(ctx, identity.SessionID)
 					ctx = httpctx.WithOrganizationID(ctx, identity.OrganizationID)
 					ctx = httpctx.WithOrganizationRole(ctx, identity.OrganizationRole)
+					ctx = httpctx.WithEmailVerified(ctx, identity.EmailVerified)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -78,6 +79,7 @@ func RequireAccessAuthWithRefreshPolicy(
 						ctx = httpctx.WithSessionID(ctx, identity.SessionID)
 						ctx = httpctx.WithOrganizationID(ctx, identity.OrganizationID)
 						ctx = httpctx.WithOrganizationRole(ctx, identity.OrganizationRole)
+						ctx = httpctx.WithEmailVerified(ctx, identity.EmailVerified)
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
 					}

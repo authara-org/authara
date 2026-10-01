@@ -42,11 +42,13 @@ func currentOrganization(ctx context.Context) (openapi_types.UUID, domain.Organi
 func toContractAuthSession(user domain.User, accessToken, refreshToken string) contract.AuthSession {
 	return contract.AuthSession{
 		User: contract.AuthUser{
-			Id:        user.ID,
-			Email:     openapi_types.Email(user.Email),
-			Username:  user.Username,
-			Disabled:  user.DisabledAt != nil,
-			CreatedAt: user.CreatedAt,
+			Id:              user.ID,
+			Email:           openapi_types.Email(user.Email),
+			EmailVerified:   user.EmailVerifiedAt != nil,
+			EmailVerifiedAt: user.EmailVerifiedAt,
+			Username:        user.Username,
+			Disabled:        user.DisabledAt != nil,
+			CreatedAt:       user.CreatedAt,
 		},
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,

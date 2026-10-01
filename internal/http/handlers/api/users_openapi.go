@@ -38,13 +38,15 @@ func (h *APIHandler) GetCurrentUser(ctx context.Context, _ contract.GetCurrentUs
 		roles = append(roles, contract.CurrentUserRoles(role))
 	}
 	return contract.GetCurrentUser200JSONResponse(contract.CurrentUser{
-		Id:           user.ID,
-		Email:        openapi_types.Email(user.Email),
-		Username:     user.Username,
-		Disabled:     user.DisabledAt != nil,
-		CreatedAt:    user.CreatedAt,
-		Roles:        roles,
-		Organization: toContractOrganizationSummary(org, organizationRole),
+		Id:              user.ID,
+		Email:           openapi_types.Email(user.Email),
+		EmailVerified:   user.EmailVerifiedAt != nil,
+		EmailVerifiedAt: user.EmailVerifiedAt,
+		Username:        user.Username,
+		Disabled:        user.DisabledAt != nil,
+		CreatedAt:       user.CreatedAt,
+		Roles:           roles,
+		Organization:    toContractOrganizationSummary(org, organizationRole),
 	}), nil
 }
 

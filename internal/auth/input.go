@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"time"
+
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/google/uuid"
 )
@@ -13,6 +15,7 @@ type SignupInput struct {
 	PasswordHash    string
 	InvitationToken string
 	InvitationID    uuid.UUID
+	EmailVerifiedAt *time.Time
 
 	OAuthID string
 }
@@ -25,8 +28,9 @@ type LoginInput struct {
 	Email      string
 	Password   string
 
-	OAuthID         string
-	InvitationToken string
+	OAuthID               string
+	ProviderEmailVerified bool
+	InvitationToken       string
 }
 
 type OAuthIdentityInput struct {

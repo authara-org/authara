@@ -289,6 +289,10 @@ Default: `1000`.
 
 Authara automatically cleans up old email records.
 
+Only the replica holding the shared cleanup lease performs retention cleanup.
+`AUTHARA_EMAIL_CLEANUP_INTERVAL` controls the startup-only schedule and defaults
+to `1h`. Cleanup is bounded and unfinished rows are resumed by a later pass.
+
 ### AUTHARA_EMAIL_CLEANUP_SENT_AFTER
 
 Delete successfully sent emails after:

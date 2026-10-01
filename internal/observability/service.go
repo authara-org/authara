@@ -302,7 +302,7 @@ func normalizeBackgroundOutcome(outcome string) string {
 func normalizeMaintenanceJob(job string) string {
 	switch job {
 	case "sessions_expired", "sessions_revoked", "refresh_tokens", "webauthn_challenges",
-		"email_sent", "email_failed", "challenges",
+		"email_sent", "email_failed", "challenges", "email_verifications",
 		"webhook", "admin_audit", "security_events":
 		return job
 	default:

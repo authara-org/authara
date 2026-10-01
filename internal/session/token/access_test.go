@@ -103,6 +103,24 @@ func TestAccessTokenService_GenerateAndParse_AppAudience(t *testing.T) {
 	}
 }
 
+func TestAccessTokenService_EmailVerificationClaim(t *testing.T) {
+	svc := newTestAccessTokenService(t, 10*time.Minute)
+	now := time.Now().UTC()
+	tokenString, err := svc.GenerateWithEmailVerification(
+		uuid.New(), uuid.New(), uuid.New(), "owner", AudienceApp, roles.Roles{}, true, now,
+	)
+	if err != nil {
+		t.Fatalf("GenerateWithEmailVerification failed: %v", err)
+	}
+	claims, err := svc.Parse(tokenString, AudienceApp, now)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if !claims.EmailVerified {
+		t.Fatal("email_verified claim is false")
+	}
+}
+
 func TestAccessTokenService_GenerateAndParse_AdminAudience(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestAccessTokenService(t, 10*time.Minute)

@@ -2914,7 +2914,7 @@ components:
     AuthUser:
       type: object
       additionalProperties: false
-      required: [id, email, username, disabled, created_at]
+      required: [id, email, email_verified, username, disabled, created_at]
       properties:
         id:
           type: string
@@ -2922,6 +2922,11 @@ components:
         email:
           type: string
           format: email
+        email_verified:
+          type: boolean
+        email_verified_at:
+          type: string
+          format: date-time
         username:
           type: string
         disabled:
@@ -3006,7 +3011,7 @@ components:
     CurrentUser:
       type: object
       additionalProperties: false
-      required: [id, email, username, disabled, created_at, roles, organization]
+      required: [id, email, email_verified, username, disabled, created_at, roles, organization]
       properties:
         id:
           type: string
@@ -3014,6 +3019,11 @@ components:
         email:
           type: string
           format: email
+        email_verified:
+          type: boolean
+        email_verified_at:
+          type: string
+          format: date-time
         username:
           type: string
         disabled:

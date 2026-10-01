@@ -753,6 +753,46 @@ func TestCreatePasswordResetChallengeUsesOpaqueChallengeWithoutPasswordProvider(
 	})
 }
 
+func TestRequiredEmailVerificationMakesUnverifiedPasswordResetOpaque(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 9, 18, 10, 0, 0, time.UTC)
+		svc := New(Config{
+			Store:        tdb.Store,
+			Tx:           tdb.Tx,
+			ChallengeTTL: 30 * time.Minute,
+			MaxAttempts:  5,
+			MaxResends:   3,
+			AuthenticationPolicy: config.AuthenticationPolicyReaderFunc(func() config.AuthenticationPolicy {
+				return config.AuthenticationPolicy{EmailVerificationRequired: true}
+			}),
+		})
+		user := createPendingActionTestUser(t, ctx, tdb, "unverified-reset@example.com")
+
+		challengeID, err := svc.CreatePasswordResetChallenge(ctx, CreatePasswordResetChallengeInput{
+			UserID: user.ID, Email: user.Email, PasswordHash: "new-password-hash",
+		}, now)
+		if err != nil {
+			t.Fatalf("CreatePasswordResetChallenge failed: %v", err)
+		}
+
+		challenge, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		if challenge.MaxResends != 0 {
+			t.Fatalf("unverified challenge max_resends = %d, want 0", challenge.MaxResends)
+		}
+		if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+			t.Fatalf("unverified account created pending reset: %v", err)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordResetCode); got != 0 {
+			t.Fatalf("unverified reset-code email jobs = %d, want 0", got)
+		}
+	})
+}
+
 func TestPasswordResetCompletionFailureDoesNotConsumeChallenge(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -1209,6 +1249,69 @@ func TestConcurrentEmailChangeCompletionHasSingleWinner(t *testing.T) {
 	if got := countCommittedEmailJobs(t, tdb, newEmail, domain.EmailTemplateEmailChangedNewAddress); got != 1 {
 		t.Fatalf("new-address jobs after concurrent completion = %d, want 1", got)
 	}
+}
+
+func TestRequiredEmailVerificationRevokesSessionAndCanReplaceEmail(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+		user := createPendingActionTestUser(t, ctx, tdb, "temporary@example.com")
+		org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sessionRow, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID:               user.ID,
+			ActiveOrganizationID: org.ID,
+			ExpiresAt:            now.Add(time.Hour),
+			AuthenticatedAt:      &now,
+			AuthenticationMethod: domain.AuthenticationMethodPassword,
+			UserAgent:            "verification-test",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		svc, verifier := newPendingActionTestServices(tdb)
+		transaction, err := svc.BeginRequiredEmailVerification(ctx, user.ID, sessionRow.ID, "app", "/account", now)
+		if err != nil {
+			t.Fatalf("BeginRequiredEmailVerification failed: %v", err)
+		}
+		revokedSession, err := tdb.Store.GetSessionByID(ctx, sessionRow.ID)
+		if err != nil || revokedSession.RevokedAt == nil {
+			t.Fatalf("session was not revoked: session=%+v err=%v", revokedSession, err)
+		}
+
+		newEmail := "real@example.com"
+		challengeID, err := svc.CreateRequiredEmailVerificationChallenge(ctx, transaction.ID, newEmail, now)
+		if err != nil {
+			t.Fatalf("CreateRequiredEmailVerificationChallenge failed: %v", err)
+		}
+		challengeRow, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		code, err := verifier.GenerateCode(ctx, challengeRow, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		completed, verifiedUser, err := svc.CompleteRequiredEmailVerification(ctx, transaction.ID, challengeID, code, verifier, now.Add(time.Minute))
+		if err != nil {
+			t.Fatalf("CompleteRequiredEmailVerification failed: %v", err)
+		}
+		if completed.AuthenticationMethod != domain.AuthenticationMethodPassword || completed.Audience != "app" || completed.ReturnTo != "/account" {
+			t.Fatalf("verification handoff changed: %+v", completed)
+		}
+		if verifiedUser.Email != newEmail || verifiedUser.EmailVerifiedAt == nil || !verifiedUser.EmailVerifiedAt.Equal(now.Add(time.Minute)) {
+			t.Fatalf("verified user = %+v", verifiedUser)
+		}
+		storedUser, err := tdb.Store.GetUserByID(ctx, user.ID)
+		if err != nil || storedUser.Email != newEmail || storedUser.EmailVerifiedAt == nil {
+			t.Fatalf("stored user = %+v err=%v", storedUser, err)
+		}
+	})
 }
 
 func assertSingleConcurrentWinner(t *testing.T, complete func(context.Context) error) {

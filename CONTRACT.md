@@ -110,6 +110,9 @@ Unless explicitly stated otherwise, documented public behavior is considered **S
 - `POST /auth/login`
 - `GET /auth/signup`
 - `POST /auth/signup`
+- `GET /auth/verify-email`
+- `POST /auth/verify-email`
+- `POST /auth/verify-email/complete`
 
 ### Session actions
 
@@ -243,7 +246,28 @@ Core and server-side SDK middleware in immediate mode share the Redis key
 templates in `contract/access-token-revocations.json`. An incompatible change
 is breaking unless a compatible rollout supports both formats.
 
-## 8.3 Passkey clone-warning contract
+## 8.3 Email-verification contract
+
+Users persist the time at which their current email address was verified.
+Changing the address clears that proof unless the replacement is completed by
+an email challenge or a verified federated identity for the same address.
+Public user representations and access tokens expose the boolean
+`email_verified`; user responses also expose `email_verified_at` when present.
+Challenge-disabled signup and admin-created accounts start unverified.
+Challenge-backed signup starts verified, and a federated provider marks the
+current address verified only when the provider asserts that exact address as
+verified.
+
+`AUTHARA_EMAIL_VERIFICATION_REQUIRED` defaults to `false`. When enabled, it
+applies immediately to existing accounts: an authenticated request carrying an
+unverified identity revokes the backing session, records immediate access-token
+revocation when Redis revocation is configured, and sends browser users to
+`/auth/verify-email`. The verification flow can confirm the existing address or
+atomically replace and confirm it, then issues a new session. Password recovery
+for an unverified address is opaque and does not send a usable reset code while
+the policy is enabled.
+
+## 8.4 Passkey clone-warning contract
 
 A newly detected passkey sign-counter anomaly creates a durable security event.
 `AUTHARA_PASSKEY_CLONE_RESPONSE` selects `alert`, `restrict`, or
@@ -255,7 +279,7 @@ that never includes credential IDs, public keys, authenticator IDs, or counter
 values. Authenticators that legitimately keep both counters at zero do not
 trigger this response.
 
-## 8.4 Password recovery contract
+## 8.5 Password recovery contract
 
 Password reset rotates an existing password provider. It does not add password
 authentication to an OAuth-only or passkey-only account. Unknown and
@@ -280,7 +304,7 @@ mode is `immediate`, already-issued access tokens for those sessions are also
 rejected immediately. In `expiry` mode, they remain usable only until the
 capped access-token expiry.
 
-## 8.5 Platform roles
+## 8.6 Platform roles
 
 Authara exposes two platform roles: `authara:admin` and `authara:operator`.
 Admin-audience sessions require the admin role, and operator-audience sessions

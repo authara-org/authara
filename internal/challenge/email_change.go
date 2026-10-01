@@ -137,7 +137,7 @@ func (s *Service) executeEmailChange(
 	now time.Time,
 ) error {
 	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		updated, err := s.store.UpdateUserEmailIfCurrent(txCtx, action.UserID, action.OldEmail, action.NewEmail)
+		updated, err := s.store.UpdateUserEmailVerifiedIfCurrent(txCtx, action.UserID, action.OldEmail, action.NewEmail, now)
 		if err != nil {
 			if store.IsUniqueViolation(err, store.ConstraintUserEmail) {
 				return ErrEmailAlreadyInUse

@@ -177,9 +177,10 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := auth.LoginInput{
-		Provider: domain.ProviderGoogle,
-		Email:    identity.Email,
-		OAuthID:  identity.OAuthID,
+		Provider:              domain.ProviderGoogle,
+		Email:                 identity.Email,
+		OAuthID:               identity.OAuthID,
+		ProviderEmailVerified: identity.EmailVerified,
 	}
 
 	user, err := h.Auth.Login(ctx, input)

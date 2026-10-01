@@ -498,9 +498,16 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		return nil, fmt.Errorf("%w: default return path must be a safe relative path", ErrInvalidValue)
 	}
 	authentication := AuthenticationPolicy{
-		UsernameLoginEnabled:   values[KeyAuthenticationUsernameLoginEnabled].(bool),
-		PasskeyCloneResponse:   values[KeyAuthenticationPasskeyCloneResponse].(string),
-		PasskeyCloneNotifyUser: values[KeyAuthenticationPasskeyCloneNotifyUser].(bool),
+		UsernameLoginEnabled:      values[KeyAuthenticationUsernameLoginEnabled].(bool),
+		EmailVerificationRequired: values[KeyAuthenticationEmailVerificationRequired].(bool),
+		PasskeyCloneResponse:      values[KeyAuthenticationPasskeyCloneResponse].(string),
+		PasskeyCloneNotifyUser:    values[KeyAuthenticationPasskeyCloneNotifyUser].(bool),
+	}
+	if authentication.EmailVerificationRequired && !s.Email.IsDeliverable() {
+		return nil, fmt.Errorf("%w: email delivery must be configured before requiring email verification", ErrInvalidValue)
+	}
+	if authentication.EmailVerificationRequired && !values[KeyChallengeEnabled].(bool) {
+		return nil, fmt.Errorf("%w: challenge flows must be enabled before requiring email verification", ErrInvalidValue)
 	}
 	tokenPolicy := TokenPolicy{
 		AccessTokenTTL: time.Duration(values[KeyTokenAccessTTL].(int)) * time.Minute,

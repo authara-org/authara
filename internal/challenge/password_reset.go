@@ -123,6 +123,9 @@ func (s *Service) requirePasswordResetEligibility(
 	if !strings.EqualFold(strings.TrimSpace(user.Email), strings.TrimSpace(challengeEmail)) {
 		return domain.User{}, ErrPasswordResetUnavailable
 	}
+	if s.authenticationPolicy.CurrentAuthentication().EmailVerificationRequired && user.EmailVerifiedAt == nil {
+		return domain.User{}, ErrPasswordResetUnavailable
+	}
 
 	provider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, userID)
 	if errors.Is(err, store.ErrorAuthProviderNotFound) {

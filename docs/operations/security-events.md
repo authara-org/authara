@@ -22,5 +22,6 @@ refresh and logout events. `none` disables persistence and `all` enables every
 supported event. Unknown or duplicate names fail startup validation.
 
 `AUTHARA_SECURITY_EVENT_RETENTION_DAYS` controls independent security-event
-retention and defaults to 180 days. A dedicated daily cleanup worker applies
-the configured cutoff.
+retention and defaults to 180 days. The shared cleanup leader applies the
+configured cutoff at `AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL`, which defaults
+to `24h` and is read at startup.

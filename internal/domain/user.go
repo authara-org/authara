@@ -13,6 +13,7 @@ type User struct {
 
 	DisabledAt *time.Time
 
-	Email    string
-	Username string
+	Email           string
+	EmailVerifiedAt *time.Time
+	Username        string
 }

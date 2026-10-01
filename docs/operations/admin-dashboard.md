@@ -75,10 +75,10 @@ Technical identifiers are minimized in the UI:
 The audit log is for security and accountability, not casual monitoring. The default audit table shows timestamps, actions, shortened actor/target user IDs, and masked emails. Personal data and metadata are behind a disclosure. Audit events are personal data; choose retention based on your legal and security requirements.
 
 `AUTHARA_ADMIN_AUDIT_RETENTION_DAYS` controls admin audit retention. The default
-is `180` days and must be greater than zero. Authara runs a cleanup worker that
-removes older admin audit events. If the environment variable is absent, an
-operator can change the retention at runtime and the next cleanup run uses the
-new cutoff.
+is `180` days and must be greater than zero. The shared cleanup leader removes
+older events at the startup-only `AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL`, which
+defaults to `24h`. If the retention environment variable is absent, an operator
+can change it at runtime and the next cleanup run uses the new cutoff.
 
 ## Security Notes
 

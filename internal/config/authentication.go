@@ -12,10 +12,11 @@ const (
 )
 
 type Authentication struct {
-	UsernameLoginEnabled   bool   `env:"AUTHARA_USERNAME_LOGIN_ENABLED,default=false"`
-	PasswordMinimumLength  int    `env:"AUTHARA_PASSWORD_MIN_LENGTH,default=8"`
-	PasskeyCloneResponse   string `env:"AUTHARA_PASSKEY_CLONE_RESPONSE,default=alert"`
-	PasskeyCloneNotifyUser bool   `env:"AUTHARA_PASSKEY_CLONE_NOTIFY_USER,default=true"`
+	UsernameLoginEnabled      bool   `env:"AUTHARA_USERNAME_LOGIN_ENABLED,default=false"`
+	EmailVerificationRequired bool   `env:"AUTHARA_EMAIL_VERIFICATION_REQUIRED,default=false"`
+	PasswordMinimumLength     int    `env:"AUTHARA_PASSWORD_MIN_LENGTH,default=8"`
+	PasskeyCloneResponse      string `env:"AUTHARA_PASSKEY_CLONE_RESPONSE,default=alert"`
+	PasskeyCloneNotifyUser    bool   `env:"AUTHARA_PASSKEY_CLONE_NOTIFY_USER,default=true"`
 }
 
 func (a *Authentication) validate() error {

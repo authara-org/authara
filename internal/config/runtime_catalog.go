@@ -81,6 +81,13 @@ func generalPolicyDefinitions() []Definition {
 			Impact: "Applies to subsequent hosted and API password-login requests.",
 		},
 		{
+			Key: KeyAuthenticationEmailVerificationRequired, Name: "Verified email required",
+			Description: "Requires users to verify their current email before receiving normal authenticated access.",
+			Environment: "AUTHARA_EMAIL_VERIFICATION_REQUIRED", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Authentication", Type: TypeBool, DefaultValue: "false", HasDefault: true, defaultValue: false,
+			Impact: "Applies immediately. Existing unverified sessions are revoked and redirected to the email-verification flow.",
+		},
+		{
 			Key: KeyAuthenticationPasskeyCloneResponse, Name: "Passkey clone response",
 			Description: "Action taken when an authenticator sign counter indicates possible credential cloning.",
 			Environment: "AUTHARA_PASSKEY_CLONE_RESPONSE", Control: ControlHybrid, Reload: ReloadDynamic,

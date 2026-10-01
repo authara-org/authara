@@ -332,10 +332,11 @@ func (h *UIHandler) verifySignupChallengePost(
 		now,
 		func(txCtx context.Context, action domain.PendingSignupAction) error {
 			input := auth.SignupInput{
-				Provider:     domain.ProviderPassword,
-				Username:     action.Username,
-				Email:        action.Email,
-				PasswordHash: action.PasswordHash,
+				Provider:        domain.ProviderPassword,
+				Username:        action.Username,
+				Email:           action.Email,
+				PasswordHash:    action.PasswordHash,
+				EmailVerifiedAt: &now,
 			}
 			if action.InvitationID != nil {
 				input.InvitationID = *action.InvitationID

@@ -17,10 +17,11 @@ const (
 )
 
 type AccessClaims struct {
-	SessionID uuid.UUID    `json:"sid"`
-	OrgID     uuid.UUID    `json:"org_id"`
-	OrgRole   string       `json:"org_role"`
-	Roles     []roles.Role `json:"roles"`
+	SessionID     uuid.UUID    `json:"sid"`
+	OrgID         uuid.UUID    `json:"org_id"`
+	OrgRole       string       `json:"org_role"`
+	Roles         []roles.Role `json:"roles"`
+	EmailVerified bool         `json:"email_verified"`
 
 	jwt.RegisteredClaims
 }
@@ -60,13 +61,27 @@ func (s *AccessTokenService) Generate(
 	roles roles.Roles,
 	now time.Time,
 ) (string, error) {
+	return s.GenerateWithEmailVerification(userID, sessionID, organizationID, organizationRole, audience, roles, false, now)
+}
+
+func (s *AccessTokenService) GenerateWithEmailVerification(
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	organizationID uuid.UUID,
+	organizationRole string,
+	audience Audience,
+	roles roles.Roles,
+	emailVerified bool,
+	now time.Time,
+) (string, error) {
 	kid, key := s.keys.SigningKey()
 
 	claims := AccessClaims{
-		SessionID: sessionID,
-		OrgID:     organizationID,
-		OrgRole:   organizationRole,
-		Roles:     roles.List(),
+		SessionID:     sessionID,
+		OrgID:         organizationID,
+		OrgRole:       organizationRole,
+		Roles:         roles.List(),
+		EmailVerified: emailVerified,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
 			Subject:   userID.String(),

@@ -68,9 +68,10 @@ func (h *APIHandler) contractGoogleLogin(
 	header http.Header,
 ) contract.LoginWithGoogleResponseObject {
 	user, err := h.Auth.Login(ctx, auth.LoginInput{
-		Provider: domain.ProviderGoogle,
-		Email:    identity.Email,
-		OAuthID:  identity.OAuthID,
+		Provider:              domain.ProviderGoogle,
+		Email:                 identity.Email,
+		OAuthID:               identity.OAuthID,
+		ProviderEmailVerified: identity.EmailVerified,
 	})
 	if err != nil {
 		code := googleLoginErrorCode(err)

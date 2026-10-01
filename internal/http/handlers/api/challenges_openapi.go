@@ -74,10 +74,11 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 	now := time.Now().UTC()
 	_, err := h.Challenge.VerifySignupChallenge(ctx, request.Body.ChallengeId, strings.TrimSpace(request.Body.Code), h.Verification, now, func(txCtx context.Context, action domain.PendingSignupAction) error {
 		signup := auth.SignupInput{
-			Provider:     domain.ProviderPassword,
-			Username:     action.Username,
-			Email:        action.Email,
-			PasswordHash: action.PasswordHash,
+			Provider:        domain.ProviderPassword,
+			Username:        action.Username,
+			Email:           action.Email,
+			PasswordHash:    action.PasswordHash,
+			EmailVerifiedAt: &now,
 		}
 		if action.InvitationID != nil {
 			signup.InvitationID = *action.InvitationID

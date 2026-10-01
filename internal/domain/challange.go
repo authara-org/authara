@@ -9,9 +9,10 @@ import (
 type ChallengePurpose string
 
 const (
-	ChallengePurposeSignup        ChallengePurpose = "signup"
-	ChallengePurposePasswordReset ChallengePurpose = "password_reset"
-	ChallengePurposeEmailChange   ChallengePurpose = "email_change"
+	ChallengePurposeSignup            ChallengePurpose = "signup"
+	ChallengePurposePasswordReset     ChallengePurpose = "password_reset"
+	ChallengePurposeEmailChange       ChallengePurpose = "email_change"
+	ChallengePurposeEmailVerification ChallengePurpose = "email_verification"
 )
 
 type Challenge struct {

@@ -50,6 +50,19 @@ func hasOAuthProvider(cfg ServerConfig, name domain.Provider) bool {
 }
 
 func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
+	pass := func(next http.Handler) http.Handler { return next }
+	if mw.RequireAppVerifiedEmailUI == nil {
+		mw.RequireAppVerifiedEmailUI = pass
+	}
+	if mw.RequireAppVerifiedEmailAPI == nil {
+		mw.RequireAppVerifiedEmailAPI = pass
+	}
+	if mw.RequireAdminVerifiedEmailUI == nil {
+		mw.RequireAdminVerifiedEmailUI = pass
+	}
+	if mw.RequireOperatorVerifiedEmailUI == nil {
+		mw.RequireOperatorVerifiedEmailUI = pass
+	}
 	if cfg.Observability != nil {
 		r.Get("/metrics", cfg.Observability.Handler().ServeHTTP)
 	}
@@ -112,6 +125,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Use(mw.OptionalAppAccessIdentity)
 				r.Get("/password-reset", uih.PasswordResetPage)
 				r.Get("/verify-challenge/{action}", uih.VerifyChallengePage)
+				r.Get("/verify-email", uih.EmailVerificationPage)
 
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireCSRF)
@@ -119,12 +133,15 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 					r.Post("/password-reset", uih.PasswordResetRequestPost)
 					r.Post("/verify-challenge/{action}", uih.VerifyChallengePost)
 					r.Post("/resend-challenge", uih.ResendChallengePost)
+					r.Post("/verify-email", uih.EmailVerificationStartPost)
+					r.Post("/verify-email/complete", uih.EmailVerificationCompletePost)
 				})
 			})
 
 			// Email-change completion must use the initiating authenticated session.
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAppAccessAuthWithRefresh)
+				r.Use(mw.RequireAppVerifiedEmailUI)
 
 				r.Get("/verify-challenge/email-change", uih.VerifyEmailChangeChallengePage)
 
@@ -140,6 +157,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireChallengeEnabled)
 				r.Use(mw.RequireAppAccessAuthWithRefresh)
+				r.Use(mw.RequireAppVerifiedEmailUI)
 				r.Use(mw.RequireCSRF)
 				r.Use(mw.RequireRecentAuthenticationUI)
 
@@ -156,6 +174,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			// regular user
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAppAccessAuthWithRefresh)
+				r.Use(mw.RequireAppVerifiedEmailUI)
 
 				r.Get("/account", uih.AccountGet)
 				r.Get("/passkeys/setup", uih.PasskeySetupPage)
@@ -196,6 +215,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			// admin
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAdminAccessAuthWithRefresh)
+				r.Use(mw.RequireAdminVerifiedEmailUI)
 				r.Use(mw.RequireAdminRole)
 
 				r.Get("/admin", uih.AdminPage)
@@ -243,6 +263,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			// operator
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireOperatorAccessAuthWithRefresh)
+				r.Use(mw.RequireOperatorVerifiedEmailUI)
 				r.Use(mw.RequireOperatorRole)
 
 				r.Get("/operator", uih.OperatorPage)
@@ -312,6 +333,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAppAccessAuthAPI)
+				r.Use(mw.RequireAppVerifiedEmailAPI)
 
 				r.Get("/account", contracth.GetCurrentAccount)
 				r.Get("/user", contracth.GetCurrentUser)

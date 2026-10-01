@@ -13,4 +13,6 @@ var (
 	ErrPasswordResetUnavailable    = errors.New("password reset unavailable for account")
 	ErrEmailChangeNotAuthorized    = errors.New("email change not authorized for session")
 	ErrEmailAlreadyInUse           = errors.New("email already in use")
+	ErrEmailVerificationRequired   = errors.New("email verification required")
+	ErrEmailVerificationInvalid    = errors.New("email verification transaction is invalid or expired")
 )
