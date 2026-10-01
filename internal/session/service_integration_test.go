@@ -483,8 +483,6 @@ func TestCleanupExpiredDataDeletesWebAuthnChallenges(t *testing.T) {
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
-		svc := New(SessionConfig{Store: tdb.Store})
-
 		expired, err := tdb.Store.CreateWebAuthnChallenge(ctx, domain.WebAuthnChallenge{
 			Purpose:     domain.WebAuthnChallengePurposeAuthentication,
 			Challenge:   "expired",
@@ -517,7 +515,7 @@ func TestCleanupExpiredDataDeletesWebAuthnChallenges(t *testing.T) {
 			t.Fatalf("CreateWebAuthnChallenge active failed: %v", err)
 		}
 
-		if err := svc.CleanupExpiredData(ctx, now); err != nil {
+		if _, err := tdb.Store.DeleteExpiredWebAuthnChallenges(ctx, now, 1000); err != nil {
 			t.Fatalf("CleanupExpiredData failed: %v", err)
 		}
 
@@ -603,7 +601,7 @@ func TestCleanupExpiredDataRetainsConsumedRefreshTokensUntilFamilyEnds(t *testin
 		}
 
 		cleanupAt := now.Add(40 * time.Minute)
-		if err := svc.CleanupExpiredData(ctx, cleanupAt); err != nil {
+		if _, err := tdb.Store.DeleteExpiredRefreshTokens(ctx, cleanupAt, 1000); err != nil {
 			t.Fatal(err)
 		}
 		retained, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(originalRefreshToken))
@@ -641,7 +639,7 @@ func TestCleanupExpiredDataRetainsConsumedRefreshTokensUntilFamilyEnds(t *testin
 			t.Fatalf("expected descendant refresh token to be rejected, got %v", err)
 		}
 
-		if err := svc.CleanupExpiredData(ctx, reusedAt.Add(2*time.Minute)); err != nil {
+		if _, err := tdb.Store.DeleteRevokedSessions(ctx, 1000); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(originalRefreshToken)); !errors.Is(err, store.ErrRefreshTokenNotFound) {
@@ -689,8 +687,7 @@ func TestCleanupExpiredDataRemovesConsumedRefreshTokensAfterSessionExpiry(t *tes
 			t.Fatal(err)
 		}
 
-		svc := New(SessionConfig{Store: tdb.Store})
-		if err := svc.CleanupExpiredData(ctx, now); err != nil {
+		if _, err := tdb.Store.DeleteExpiredSessions(ctx, now, 1000); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := tdb.Store.GetSessionByID(ctx, session.ID); !errors.Is(err, store.ErrSessionNotFound) {

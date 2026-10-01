@@ -87,6 +87,9 @@ func TestDatabaseAndBackgroundMetrics(t *testing.T) {
 	service.ObserveBackgroundJob("email", "retried", 250*time.Millisecond)
 	service.ObserveBackgroundJob("webhook", "succeeded", 100*time.Millisecond)
 	service.ObserveEmailQueueAge("retried", 25*time.Minute)
+	service.ObserveMaintenanceLease("skipped")
+	service.SetMaintenanceLeader(true)
+	service.ObserveMaintenanceRun("sessions_expired", "incomplete", 50*time.Millisecond, 17)
 
 	metrics := scrape(t, service)
 	assertContains(t, metrics, `go_sql_open_connections{db_name="primary"} 0`)
@@ -94,6 +97,11 @@ func TestDatabaseAndBackgroundMetrics(t *testing.T) {
 	assertContains(t, metrics, `authara_background_jobs_total{outcome="succeeded",worker="webhook"} 1`)
 	assertContains(t, metrics, `authara_background_job_duration_seconds_count{outcome="retried",worker="email"} 1`)
 	assertContains(t, metrics, `authara_email_queue_age_seconds_count{outcome="retried"} 1`)
+	assertContains(t, metrics, `authara_maintenance_leader 1`)
+	assertContains(t, metrics, `authara_maintenance_lease_attempts_total{outcome="skipped"} 1`)
+	assertContains(t, metrics, `authara_maintenance_runs_total{job="sessions_expired",outcome="incomplete"} 1`)
+	assertContains(t, metrics, `authara_maintenance_run_duration_seconds_count{job="sessions_expired",outcome="incomplete"} 1`)
+	assertContains(t, metrics, `authara_maintenance_rows_processed_total{job="sessions_expired"} 17`)
 }
 
 func TestBackgroundMetricLabelsAreBounded(t *testing.T) {

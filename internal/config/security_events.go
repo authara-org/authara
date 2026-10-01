@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 )
@@ -14,8 +15,9 @@ const (
 )
 
 type SecurityEvents struct {
-	EnabledEvents []string `env:"AUTHARA_SECURITY_EVENT_ENABLED_EVENTS"`
-	RetentionDays int      `env:"AUTHARA_SECURITY_EVENT_RETENTION_DAYS,default=180"`
+	EnabledEvents   []string      `env:"AUTHARA_SECURITY_EVENT_ENABLED_EVENTS"`
+	RetentionDays   int           `env:"AUTHARA_SECURITY_EVENT_RETENTION_DAYS,default=180"`
+	CleanupInterval time.Duration `env:"AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL,default=24h"`
 
 	EnabledEventSet map[domain.SecurityEventType]struct{}
 }
@@ -23,6 +25,9 @@ type SecurityEvents struct {
 func (s *SecurityEvents) validate() error {
 	if s.RetentionDays <= 0 {
 		return fmt.Errorf("AUTHARA_SECURITY_EVENT_RETENTION_DAYS must be greater than 0")
+	}
+	if s.CleanupInterval <= 0 {
+		return fmt.Errorf("AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL must be greater than 0")
 	}
 	seen := make(map[string]struct{}, len(s.EnabledEvents))
 	for _, raw := range s.EnabledEvents {

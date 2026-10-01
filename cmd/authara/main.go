@@ -75,6 +75,12 @@ func main() {
 		app.Logger.Error("graceful shutdown failed", "err", err)
 	}
 
+	maintenanceShutdownCtx, maintenanceShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer maintenanceShutdownCancel()
+	if err := app.Maintenance.Shutdown(maintenanceShutdownCtx); err != nil {
+		app.Logger.Warn("cleanup coordinator shutdown timed out", "err", err)
+	}
+
 	emailShutdownCtx, emailShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer emailShutdownCancel()
 	if err := app.Services.EmailWorker.Shutdown(emailShutdownCtx); err != nil {

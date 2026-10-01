@@ -205,3 +205,13 @@ index for reclaiming expired email-processing leases. Existing challenge email
 jobs inherit their challenge expiry; other existing jobs receive a deadline 72
 hours after their original creation time. Apply migration 026 before deploying
 the matching Core binary.
+
+## Singleton cleanup upgrade
+
+Schema version 34 adds the shared cleanup lease. Schema version 35 adds the
+supporting partial indexes with concurrent PostgreSQL index builds so existing
+table writes remain available during the migration. Apply both migrations
+before deploying the matching Core binary. Because migration 035 is
+non-transactional, it drops its own known index names before rebuilding them;
+this makes an interrupted run safe to retry even if PostgreSQL left an invalid
+concurrent index behind.

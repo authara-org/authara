@@ -243,19 +243,64 @@ func (s *Store) SetChallengeLastSentAt(ctx context.Context, challengeID uuid.UUI
 	return err
 }
 
-func (s *Store) DeleteSentEmailJobsBefore(ctx context.Context, t time.Time) error {
-	_, err := s.exec(ctx, `DELETE FROM email_jobs WHERE status = $1 AND sent_at < $2`, string(domain.EmailJobStatusSent), t)
-	return err
+func (s *Store) DeleteSentEmailJobsBefore(ctx context.Context, t time.Time, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM email_jobs
+			WHERE status = $1 AND sent_at < $2
+			ORDER BY sent_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $3
+		)
+		DELETE FROM email_jobs AS job
+		USING oldest
+		WHERE job.id = oldest.id
+	`, string(domain.EmailJobStatusSent), t, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
-func (s *Store) DeleteFailedEmailJobsBefore(ctx context.Context, t time.Time) error {
-	_, err := s.exec(ctx, `DELETE FROM email_jobs WHERE status = $1 AND COALESCE(failed_at, created_at) < $2`, string(domain.EmailJobStatusFailed), t)
-	return err
+func (s *Store) DeleteFailedEmailJobsBefore(ctx context.Context, t time.Time, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM email_jobs
+			WHERE status = $1 AND COALESCE(failed_at, created_at) < $2
+			ORDER BY COALESCE(failed_at, created_at), id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $3
+		)
+		DELETE FROM email_jobs AS job
+		USING oldest
+		WHERE job.id = oldest.id
+	`, string(domain.EmailJobStatusFailed), t, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
-func (s *Store) DeleteExpiredChallenges(ctx context.Context, now time.Time) error {
-	_, err := s.exec(ctx, `DELETE FROM challenges WHERE expires_at < $1`, now)
-	return err
+func (s *Store) DeleteExpiredChallenges(ctx context.Context, now time.Time, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM challenges
+			WHERE expires_at < $1
+			ORDER BY expires_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM challenges AS challenge
+		USING oldest
+		WHERE challenge.id = oldest.id
+	`, now, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 func (s *Store) ListRecentRiskyChallenges(ctx context.Context, now time.Time, limit, offset int) ([]domain.Challenge, error) {

@@ -417,12 +417,24 @@ func (s *Store) ConsumeWebAuthnChallenge(ctx context.Context, challengeID uuid.U
 	return nil
 }
 
-func (s *Store) DeleteExpiredWebAuthnChallenges(ctx context.Context, now time.Time) error {
-	_, err := s.exec(ctx, `
-		DELETE FROM webauthn_challenges
-		WHERE expires_at < $1 OR consumed_at IS NOT NULL
-	`, now)
-	return err
+func (s *Store) DeleteExpiredWebAuthnChallenges(ctx context.Context, now time.Time, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM webauthn_challenges
+			WHERE expires_at < $1 OR consumed_at IS NOT NULL
+			ORDER BY LEAST(expires_at, COALESCE(consumed_at, expires_at)), id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM webauthn_challenges AS challenge
+		USING oldest
+		WHERE challenge.id = oldest.id
+	`, now, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const webAuthnChallengeColumns = `

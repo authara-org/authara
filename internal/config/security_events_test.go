@@ -2,12 +2,13 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 )
 
 func TestSecurityEventsDefaultExcludesRoutineSessionNoise(t *testing.T) {
-	cfg := SecurityEvents{RetentionDays: 180}
+	cfg := SecurityEvents{RetentionDays: 180, CleanupInterval: 24 * time.Hour}
 	if err := cfg.validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +24,7 @@ func TestSecurityEventsDefaultExcludesRoutineSessionNoise(t *testing.T) {
 }
 
 func TestSecurityEventsExactSelectionAndNone(t *testing.T) {
-	cfg := SecurityEvents{RetentionDays: 30, EnabledEvents: []string{string(domain.SecurityEventSessionLogout)}}
+	cfg := SecurityEvents{RetentionDays: 30, CleanupInterval: 24 * time.Hour, EnabledEvents: []string{string(domain.SecurityEventSessionLogout)}}
 	if err := cfg.validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +35,7 @@ func TestSecurityEventsExactSelectionAndNone(t *testing.T) {
 		t.Fatalf("unexpected enabled set: %#v", cfg.EnabledEventSet)
 	}
 
-	cfg = SecurityEvents{RetentionDays: 30, EnabledEvents: []string{SecurityEventSelectionNone}}
+	cfg = SecurityEvents{RetentionDays: 30, CleanupInterval: 24 * time.Hour, EnabledEvents: []string{SecurityEventSelectionNone}}
 	if err := cfg.validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func TestSecurityEventsRejectsUnknownDuplicateAndMixedSelections(t *testing.T) {
 		{string(domain.SecurityEventAuthenticationLogin), string(domain.SecurityEventAuthenticationLogin)},
 		{SecurityEventSelectionAll, string(domain.SecurityEventSessionLogout)},
 	} {
-		cfg := SecurityEvents{RetentionDays: 30, EnabledEvents: events}
+		cfg := SecurityEvents{RetentionDays: 30, CleanupInterval: 24 * time.Hour, EnabledEvents: events}
 		if err := cfg.validate(); err == nil {
 			t.Fatalf("selection %#v was accepted", events)
 		}

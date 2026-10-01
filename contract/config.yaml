@@ -42,6 +42,7 @@ settings_metadata:
   AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_RECENT_AUTHENTICATION_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_RECENT_AUTHENTICATION_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
+  AUTHARA_SESSION_CLEANUP_INTERVAL: {control: env, reload: startup, sensitive: false, group: sessions}
   AUTHARA_ORG_MODE: {control: env, reload: startup, sensitive: false, group: organizations}
   AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
   AUTHARA_ORGANIZATION_INVITATION_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
@@ -82,8 +83,10 @@ settings_metadata:
   AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
   AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: access_policy}
   AUTHARA_ADMIN_AUDIT_RETENTION_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
+  AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL: {control: env, reload: startup, sensitive: false, group: retention}
   AUTHARA_SECURITY_EVENT_ENABLED_EVENTS: {control: env, reload: startup, sensitive: false, group: security_events}
   AUTHARA_SECURITY_EVENT_RETENTION_DAYS: {control: env, reload: startup, sensitive: false, group: retention}
+  AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL: {control: env, reload: startup, sensitive: false, group: retention}
   AUTHARA_CHALLENGE_ENABLED: {control: env, reload: startup, sensitive: false, group: challenges}
   AUTHARA_CHALLENGE_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
   AUTHARA_CHALLENGE_VERIFICATION_CODE_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
@@ -106,6 +109,7 @@ settings_metadata:
   AUTHARA_EMAIL_MAINTENANCE_BATCH_SIZE: {control: env, reload: startup, sensitive: false, group: email}
   AUTHARA_EMAIL_CLEANUP_SENT_AFTER: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
   AUTHARA_EMAIL_CLEANUP_FAILED_AFTER: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
+  AUTHARA_EMAIL_CLEANUP_INTERVAL: {control: env, reload: startup, sensitive: false, group: retention}
 
 # Operator-only settings live in purpose-built database tables rather than as
 # environment variables: email template contents and per-template delivery.
@@ -389,6 +393,13 @@ variables:
     type: duration
     default: 10m
     description: Maximum age of password, passkey, or linked-provider proof accepted for sensitive account and administrative mutations; must be between 1m and 1h.
+
+  - name: AUTHARA_SESSION_CLEANUP_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 5m
+    description: How often the cleanup leader removes expired and revoked session data.
 
   - name: AUTHARA_ORG_MODE
     stability: stable
@@ -694,6 +705,13 @@ variables:
     default: 180
     notes: Delete admin audit events after this many days. Must be greater than 0.
 
+  - name: AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 24h
+    notes: How often the cleanup leader applies admin audit retention.
+
   # ------------------------------------------------------------
   # Security events
   # ------------------------------------------------------------
@@ -710,6 +728,13 @@ variables:
     type: int
     default: 180
     notes: Delete core security events after this many days. Must be greater than 0.
+
+  - name: AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 24h
+    notes: How often the cleanup leader applies security-event retention.
 
   # ------------------------------------------------------------
   # Challenge / Verification
@@ -865,3 +890,10 @@ variables:
     type: duration
     default: 2160h
     notes: Delete failed emails after duration (90 days)
+
+  - name: AUTHARA_EMAIL_CLEANUP_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 1h
+    notes: How often the cleanup leader applies email and challenge retention.

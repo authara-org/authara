@@ -801,23 +801,6 @@ func (s *Service) revokeReusedRefreshToken(
 	return errors.Join(ErrRefreshTokenReuse, cacheErr)
 }
 
-func (s *Service) CleanupExpiredData(ctx context.Context, now time.Time) error {
-	err := s.store.DeleteExpiredSessions(ctx, now)
-	if err != nil {
-		return err
-	}
-
-	err = s.store.DeleteExpiredRefreshTokens(ctx, now)
-	if err != nil {
-		return err
-	}
-	err = s.store.DeleteExpiredWebAuthnChallenges(ctx, now)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (s *Service) Logout(ctx context.Context, refreshToken, accessToken string) error {
 	refreshTokenFound := false
 	if refreshToken != "" {

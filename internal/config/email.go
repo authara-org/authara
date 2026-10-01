@@ -26,6 +26,7 @@ type Email struct {
 	MaintenanceBatchSize int           `env:"AUTHARA_EMAIL_MAINTENANCE_BATCH_SIZE,default=1000"`
 	CleanupSentAfter     time.Duration `env:"AUTHARA_EMAIL_CLEANUP_SENT_AFTER,default=720h"`    // 30d
 	CleanupFailedAfter   time.Duration `env:"AUTHARA_EMAIL_CLEANUP_FAILED_AFTER,default=2160h"` // 90d
+	CleanupInterval      time.Duration `env:"AUTHARA_EMAIL_CLEANUP_INTERVAL,default=1h"`
 }
 
 // IsDeliverable reports whether the configured provider can deliver email to
@@ -92,6 +93,9 @@ func (e *Email) validate() error {
 	}
 	if e.CleanupFailedAfter <= 0 {
 		return fmt.Errorf("AUTHARA_EMAIL_CLEANUP_FAILED_AFTER must be > 0")
+	}
+	if e.CleanupInterval <= 0 {
+		return fmt.Errorf("AUTHARA_EMAIL_CLEANUP_INTERVAL must be > 0")
 	}
 
 	return nil

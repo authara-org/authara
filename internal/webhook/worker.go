@@ -18,7 +18,6 @@ type WorkerConfig struct {
 	StaleReaperInterval  time.Duration
 	DeliveredRetention   time.Duration
 	FailedRetention      time.Duration
-	CleanupInterval      time.Duration
 	MaintenanceBatchSize int
 	Metrics              WorkerMetrics
 	Policy               func() WorkerPolicy
@@ -185,16 +184,15 @@ func (w *Worker) reapStale(ctx context.Context, now time.Time) (int64, error) {
 	})
 }
 
-func (w *Worker) cleanup(ctx context.Context, now time.Time) (int64, error) {
+func (w *Worker) CleanupExpiredEventsBatch(ctx context.Context, now time.Time) (int64, bool, error) {
 	policy := w.policy()
-	return drainBatches(policy.MaintenanceBatchSize, func() (int64, error) {
-		return w.store.DeleteExpiredWebhookEvents(
-			ctx,
-			now.Add(-policy.DeliveredRetention),
-			now.Add(-policy.FailedRetention),
-			policy.MaintenanceBatchSize,
-		)
-	})
+	deleted, err := w.store.DeleteExpiredWebhookEvents(
+		ctx,
+		now.Add(-policy.DeliveredRetention),
+		now.Add(-policy.FailedRetention),
+		policy.MaintenanceBatchSize,
+	)
+	return deleted, deleted == int64(policy.MaintenanceBatchSize), err
 }
 
 func drainBatches(batchSize int, deleteBatch func() (int64, error)) (int64, error) {
@@ -213,9 +211,7 @@ func drainBatches(batchSize int, deleteBatch func() (int64, error)) (int64, erro
 
 func (w *Worker) runMaintenance(ctx context.Context) {
 	reaper := time.NewTicker(w.cfg.StaleReaperInterval)
-	cleanup := time.NewTicker(w.cfg.CleanupInterval)
 	defer reaper.Stop()
-	defer cleanup.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -226,13 +222,6 @@ func (w *Worker) runMaintenance(ctx context.Context) {
 				w.logger.ErrorContext(ctx, "webhook stale reaper failed", "error", err)
 			} else if count > 0 {
 				w.logger.WarnContext(ctx, "stale webhook events reaped", "event_count", count)
-			}
-		case now := <-cleanup.C:
-			count, err := w.cleanup(ctx, now.UTC())
-			if err != nil {
-				w.logger.ErrorContext(ctx, "webhook event cleanup failed", "error", err)
-			} else if count > 0 {
-				w.logger.InfoContext(ctx, "webhook events cleaned up", "event_count", count)
 			}
 		}
 	}

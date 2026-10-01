@@ -12,11 +12,12 @@ const (
 )
 
 type Session struct {
-	SessionTTLDays                int    `env:"AUTHARA_SESSION_TTL_DAYS,default=60"`
-	RefreshTokenTTLDays           int    `env:"AUTHARA_REFRESH_TOKEN_TTL_DAYS,default=14"`
-	RefreshTokenRotationRaw       string `env:"AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL,default=24h"`
-	RecentAuthenticationEnabled   bool   `env:"AUTHARA_RECENT_AUTHENTICATION_ENABLED,default=true"`
-	RecentAuthenticationWindowRaw string `env:"AUTHARA_RECENT_AUTHENTICATION_WINDOW,default=10m"`
+	SessionTTLDays                int           `env:"AUTHARA_SESSION_TTL_DAYS,default=60"`
+	RefreshTokenTTLDays           int           `env:"AUTHARA_REFRESH_TOKEN_TTL_DAYS,default=14"`
+	RefreshTokenRotationRaw       string        `env:"AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL,default=24h"`
+	RecentAuthenticationEnabled   bool          `env:"AUTHARA_RECENT_AUTHENTICATION_ENABLED,default=true"`
+	RecentAuthenticationWindowRaw string        `env:"AUTHARA_RECENT_AUTHENTICATION_WINDOW,default=10m"`
+	CleanupInterval               time.Duration `env:"AUTHARA_SESSION_CLEANUP_INTERVAL,default=5m"`
 
 	SessionTTL                 time.Duration
 	RefreshTokenTTL            time.Duration
@@ -45,6 +46,9 @@ func (s *Session) validate() error {
 			s.RefreshTokenTTLDays,
 			s.SessionTTLDays,
 		)
+	}
+	if s.CleanupInterval <= 0 {
+		return fmt.Errorf("AUTHARA_SESSION_CLEANUP_INTERVAL must be greater than 0")
 	}
 
 	return nil

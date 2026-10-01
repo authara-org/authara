@@ -27,7 +27,6 @@ type WorkerConfig struct {
 	MaintenanceBatchSize int
 	CleanupSentAfter     time.Duration
 	CleanupFailedAfter   time.Duration
-	CleanupInterval      time.Duration
 	SendTimeout          time.Duration
 	TransitionTimeout    time.Duration
 	Policy               config.EmailPolicyReader
@@ -153,13 +152,6 @@ func (w *Worker) Run(ctx context.Context) {
 		}(i + 1)
 	}
 
-	if w.cfg.CleanupInterval > 0 {
-		w.workers.Add(1)
-		go func() {
-			defer w.workers.Done()
-			w.runCleanupLoop(claimCtx)
-		}()
-	}
 	if w.cfg.StaleReaperInterval > 0 {
 		w.workers.Add(1)
 		go func() {
@@ -480,20 +472,6 @@ func (w *Worker) verificationCodeForJob(ctx context.Context, job domain.EmailJob
 	return code, err
 }
 
-func (w *Worker) runCleanupLoop(ctx context.Context) {
-	ticker := time.NewTicker(w.cfg.CleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			w.cleanup(ctx, time.Now().UTC())
-		}
-	}
-}
-
 func (w *Worker) runStaleReaperLoop(ctx context.Context) {
 	ticker := time.NewTicker(w.cfg.StaleReaperInterval)
 	defer ticker.Stop()
@@ -535,25 +513,4 @@ func (w *Worker) reapStale(ctx context.Context, now time.Time) (int64, error) {
 		w.logger.WarnContext(ctx, "recovered stale email jobs", "jobs", total)
 	}
 	return total, nil
-}
-
-func (w *Worker) cleanup(ctx context.Context, now time.Time) {
-	policy := w.policy.CurrentEmail()
-	if policy.CleanupSentAfter > 0 {
-		cutoff := now.Add(-policy.CleanupSentAfter)
-		if err := w.store.DeleteSentEmailJobsBefore(ctx, cutoff); err != nil {
-			w.logger.ErrorContext(ctx, "failed to cleanup sent email jobs", "error", err)
-		}
-	}
-
-	if policy.CleanupFailedAfter > 0 {
-		cutoff := now.Add(-policy.CleanupFailedAfter)
-		if err := w.store.DeleteFailedEmailJobsBefore(ctx, cutoff); err != nil {
-			w.logger.ErrorContext(ctx, "failed to cleanup failed email jobs", "error", err)
-		}
-	}
-
-	if err := w.store.DeleteExpiredChallenges(ctx, now); err != nil {
-		w.logger.ErrorContext(ctx, "failed to cleanup expired challenges", "error", err)
-	}
 }

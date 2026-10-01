@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -82,27 +83,44 @@ func TestSecurityEventRoundTripAndFilters(t *testing.T) {
 func TestDeleteSecurityEventsBeforeUsesRetentionCutoff(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		if _, err := tdb.Store.CreateSecurityEvent(ctx, domain.SecurityEvent{
-			Type:      domain.SecurityEventSessionLogout,
-			Outcome:   domain.SecurityEventOutcomeSuccess,
-			ActorType: domain.SecurityEventActorUser,
-		}); err != nil {
+		ids := make([]uuid.UUID, 0, 3)
+		for range 3 {
+			created, err := tdb.Store.CreateSecurityEvent(ctx, domain.SecurityEvent{
+				Type:      domain.SecurityEventSessionLogout,
+				Outcome:   domain.SecurityEventOutcomeSuccess,
+				ActorType: domain.SecurityEventActorUser,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ids = append(ids, created.ID)
+		}
+		txDB := ctx.Value(store.DbKey).(*sql.Tx)
+		if _, err := txDB.ExecContext(ctx, `
+			UPDATE security_events
+			SET created_at = '1900-01-01'
+			WHERE id IN ($1, $2, $3)
+		`, ids[0], ids[1], ids[2]); err != nil {
 			t.Fatal(err)
 		}
 
-		deleted, err := tdb.Store.DeleteSecurityEventsBefore(ctx, time.Now().UTC().Add(time.Minute))
+		deleted, err := tdb.Store.DeleteSecurityEventsBefore(
+			ctx, time.Date(1901, 1, 1, 0, 0, 0, 0, time.UTC), 2,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if deleted != 1 {
-			t.Fatalf("deleted = %d, want 1", deleted)
+		if deleted != 2 {
+			t.Fatalf("deleted = %d, want bounded batch of 2", deleted)
 		}
-		events, err := tdb.Store.ListSecurityEvents(ctx, 10, 0)
-		if err != nil {
+		var remaining int
+		if err := txDB.QueryRowContext(ctx, `
+			SELECT count(*) FROM security_events WHERE id IN ($1, $2, $3)
+		`, ids[0], ids[1], ids[2]).Scan(&remaining); err != nil {
 			t.Fatal(err)
 		}
-		if len(events) != 0 {
-			t.Fatalf("retained expired events: %+v", events)
+		if remaining != 1 {
+			t.Fatalf("remaining expired events = %d, want 1", remaining)
 		}
 	})
 }

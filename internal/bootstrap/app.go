@@ -9,6 +9,7 @@ import (
 
 	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/maintenance"
 	"github.com/authara-org/authara/internal/observability"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/schema"
@@ -18,6 +19,7 @@ type App struct {
 	Config        *config.Service
 	Logger        *slog.Logger
 	Observability *observability.Service
+	Maintenance   *maintenance.Coordinator
 	Store         *store.Store
 	Cache         cache.Cache
 	Services      Services
@@ -90,6 +92,13 @@ func NewApp(version string) (*App, error) {
 		return nil, err
 	}
 	a.Services = services
+	cleanup, err := newCleanupCoordinator(a)
+	if err != nil {
+		_ = ca.Close()
+		_ = st.Close()
+		return nil, fmt.Errorf("create cleanup coordinator: %w", err)
+	}
+	a.Maintenance = cleanup
 	return a, nil
 }
 

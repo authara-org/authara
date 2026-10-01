@@ -309,25 +309,67 @@ func (s *Store) DeleteSessionsByOrganization(ctx context.Context, organizationID
 	return err
 }
 
-func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time) error {
+func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time, batchSize int) (int64, error) {
 	// Consumed rows are replay-detection tombstones. Keep them until the
 	// parent session family expires or is revoked; deleting that session
 	// removes the family through the refresh_tokens ON DELETE CASCADE.
-	_, err := s.exec(ctx, `
-		DELETE FROM refresh_tokens
-		WHERE expires_at < $1 AND consumed_at IS NULL
-	`, now)
-	return err
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM refresh_tokens
+			WHERE expires_at < $1 AND consumed_at IS NULL
+			ORDER BY expires_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM refresh_tokens AS token
+		USING oldest
+		WHERE token.id = oldest.id
+	`, now, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
-func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error {
-	_, err := s.exec(ctx, `DELETE FROM sessions WHERE expires_at < $1`, now)
+func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM sessions
+			WHERE expires_at < $1
+			ORDER BY expires_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM sessions AS session
+		USING oldest
+		WHERE session.id = oldest.id
+	`, now, batchSize)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	return result.RowsAffected()
+}
 
-	_, err = s.exec(ctx, `DELETE FROM sessions WHERE revoked_at IS NOT NULL`)
-	return err
+func (s *Store) DeleteRevokedSessions(ctx context.Context, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM sessions
+			WHERE revoked_at IS NOT NULL
+			ORDER BY revoked_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $1
+		)
+		DELETE FROM sessions AS session
+		USING oldest
+		WHERE session.id = oldest.id
+	`, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 func (s *Store) ListActiveSessionsByUserID(ctx context.Context, userID uuid.UUID, now time.Time) ([]domain.Session, error) {

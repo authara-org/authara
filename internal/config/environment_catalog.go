@@ -122,7 +122,7 @@ func environmentGroup(configSection, variableName string) string {
 	case "Admin":
 		return "Retention"
 	case "SecurityEvents":
-		if strings.Contains(variableName, "RETENTION") {
+		if strings.Contains(variableName, "RETENTION") || strings.Contains(variableName, "CLEANUP") {
 			return "Retention"
 		}
 		return "Security events"

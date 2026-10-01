@@ -134,8 +134,20 @@ func (s *Store) ListSecurityEvents(ctx context.Context, limit, offset int) ([]do
 	return s.QuerySecurityEvents(ctx, SecurityEventFilter{Limit: limit, Offset: offset})
 }
 
-func (s *Store) DeleteSecurityEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
-	result, err := s.exec(ctx, `DELETE FROM security_events WHERE created_at < $1`, cutoff)
+func (s *Store) DeleteSecurityEventsBefore(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM security_events
+			WHERE created_at < $1
+			ORDER BY created_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM security_events AS event
+		USING oldest
+		WHERE event.id = oldest.id
+	`, cutoff, batchSize)
 	if err != nil {
 		return 0, err
 	}

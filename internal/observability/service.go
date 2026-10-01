@@ -26,6 +26,11 @@ type Service struct {
 	backgroundJobs        *prometheus.CounterVec
 	backgroundJobDuration *prometheus.HistogramVec
 	emailQueueAge         *prometheus.HistogramVec
+	maintenanceLeader     prometheus.Gauge
+	maintenanceLeases     *prometheus.CounterVec
+	maintenanceRuns       *prometheus.CounterVec
+	maintenanceDuration   *prometheus.HistogramVec
+	maintenanceRows       *prometheus.CounterVec
 }
 
 func New(version string) *Service {
@@ -80,6 +85,37 @@ func New(version string) *Service {
 		Help:      "Age of email jobs when a delivery outcome is recorded.",
 		Buckets:   prometheus.ExponentialBuckets(1, 4, 10),
 	}, []string{"outcome"})
+	maintenanceLeader := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "authara",
+		Subsystem: "maintenance",
+		Name:      "leader",
+		Help:      "Whether this Authara replica currently holds cleanup leadership.",
+	})
+	maintenanceLeases := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "authara",
+		Subsystem: "maintenance",
+		Name:      "lease_attempts_total",
+		Help:      "Cleanup lease lifecycle events observed by this Authara replica.",
+	}, []string{"outcome"})
+	maintenanceRuns := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "authara",
+		Subsystem: "maintenance",
+		Name:      "runs_total",
+		Help:      "Cleanup passes performed by Authara.",
+	}, []string{"job", "outcome"})
+	maintenanceDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "authara",
+		Subsystem: "maintenance",
+		Name:      "run_duration_seconds",
+		Help:      "Duration of cleanup passes performed by Authara.",
+		Buckets:   prometheus.DefBuckets,
+	}, []string{"job", "outcome"})
+	maintenanceRows := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "authara",
+		Subsystem: "maintenance",
+		Name:      "rows_processed_total",
+		Help:      "Root rows committed by Authara cleanup passes; foreign-key cascades are not included.",
+	}, []string{"job"})
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "authara",
 		Name:      "build_info",
@@ -98,6 +134,11 @@ func New(version string) *Service {
 		backgroundJobs,
 		backgroundJobDuration,
 		emailQueueAge,
+		maintenanceLeader,
+		maintenanceLeases,
+		maintenanceRuns,
+		maintenanceDuration,
+		maintenanceRows,
 	)
 
 	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{
@@ -115,6 +156,11 @@ func New(version string) *Service {
 		backgroundJobs:        backgroundJobs,
 		backgroundJobDuration: backgroundJobDuration,
 		emailQueueAge:         emailQueueAge,
+		maintenanceLeader:     maintenanceLeader,
+		maintenanceLeases:     maintenanceLeases,
+		maintenanceRuns:       maintenanceRuns,
+		maintenanceDuration:   maintenanceDuration,
+		maintenanceRows:       maintenanceRows,
 	}
 }
 
@@ -155,6 +201,37 @@ func (s *Service) ObserveEmailQueueAge(outcome string, age time.Duration) {
 		age = 0
 	}
 	s.emailQueueAge.WithLabelValues(normalizeBackgroundOutcome(outcome)).Observe(age.Seconds())
+}
+
+func (s *Service) ObserveMaintenanceLease(outcome string) {
+	if s == nil {
+		return
+	}
+	s.maintenanceLeases.WithLabelValues(normalizeMaintenanceLeaseOutcome(outcome)).Inc()
+}
+
+func (s *Service) SetMaintenanceLeader(leader bool) {
+	if s == nil {
+		return
+	}
+	if leader {
+		s.maintenanceLeader.Set(1)
+		return
+	}
+	s.maintenanceLeader.Set(0)
+}
+
+func (s *Service) ObserveMaintenanceRun(job, outcome string, duration time.Duration, rows int64) {
+	if s == nil {
+		return
+	}
+	job = normalizeMaintenanceJob(job)
+	outcome = normalizeMaintenanceRunOutcome(outcome)
+	s.maintenanceRuns.WithLabelValues(job, outcome).Inc()
+	s.maintenanceDuration.WithLabelValues(job, outcome).Observe(duration.Seconds())
+	if rows > 0 {
+		s.maintenanceRows.WithLabelValues(job).Add(float64(rows))
+	}
 }
 
 func (s *Service) Handler() http.Handler {
@@ -216,6 +293,35 @@ func normalizeBackgroundWorker(worker string) string {
 func normalizeBackgroundOutcome(outcome string) string {
 	switch outcome {
 	case "succeeded", "retried", "failed", "error":
+		return outcome
+	default:
+		return "other"
+	}
+}
+
+func normalizeMaintenanceJob(job string) string {
+	switch job {
+	case "sessions_expired", "sessions_revoked", "refresh_tokens", "webauthn_challenges",
+		"email_sent", "email_failed", "challenges",
+		"webhook", "admin_audit", "security_events":
+		return job
+	default:
+		return "other"
+	}
+}
+
+func normalizeMaintenanceRunOutcome(outcome string) string {
+	switch outcome {
+	case "completed", "incomplete", "failed", "canceled":
+		return outcome
+	default:
+		return "other"
+	}
+}
+
+func normalizeMaintenanceLeaseOutcome(outcome string) string {
+	switch outcome {
+	case "acquired", "skipped", "released", "lost", "failed":
 		return outcome
 	default:
 		return "other"

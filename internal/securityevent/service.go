@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
@@ -251,41 +250,10 @@ func (s *Service) ExportNDJSON(ctx context.Context, filter Filter, dst io.Writer
 	}
 }
 
-func (s *Service) CleanupExpired(ctx context.Context, now time.Time) (int64, error) {
+func (s *Service) CleanupExpiredBatch(ctx context.Context, now time.Time, batchSize int) (int64, bool, error) {
 	if s == nil || s.retention <= 0 {
-		return 0, nil
+		return 0, false, nil
 	}
-	return s.store.DeleteSecurityEventsBefore(ctx, now.Add(-s.retention))
-}
-
-func (s *Service) StartCleanupWorker(ctx context.Context, logger *slog.Logger, interval time.Duration) {
-	if s == nil || interval <= 0 || s.retention <= 0 {
-		return
-	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-	ticker := time.NewTicker(interval)
-	go func() {
-		defer ticker.Stop()
-		logger.Info("starting security-event cleanup worker", "interval", interval.String())
-		for {
-			select {
-			case <-ctx.Done():
-				logger.Info("stopping security-event cleanup worker")
-				return
-			case now := <-ticker.C:
-				cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				deleted, err := s.CleanupExpired(cleanupCtx, now.UTC())
-				cancel()
-				if err != nil {
-					logger.Error("security-event cleanup failed", "err", err)
-					continue
-				}
-				if deleted > 0 {
-					logger.Info("security events cleaned up", "deleted", deleted)
-				}
-			}
-		}
-	}()
+	deleted, err := s.store.DeleteSecurityEventsBefore(ctx, now.Add(-s.retention), batchSize)
+	return deleted, deleted == int64(batchSize), err
 }

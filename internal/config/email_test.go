@@ -22,6 +22,7 @@ func validEmailConfig() Email {
 		MaintenanceBatchSize: 1000,
 		CleanupSentAfter:     30 * 24 * time.Hour,
 		CleanupFailedAfter:   90 * 24 * time.Hour,
+		CleanupInterval:      time.Hour,
 	}
 }
 

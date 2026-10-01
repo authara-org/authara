@@ -283,7 +283,7 @@ func TestAdminStoreAuditEvents(t *testing.T) {
 			t.Fatalf("expected created audit event, got %+v", events)
 		}
 
-		deleted, err := tdb.Store.DeleteAdminAuditEventsBefore(ctx, time.Now().Add(time.Hour))
+		deleted, err := tdb.Store.DeleteAdminAuditEventsBefore(ctx, time.Now().Add(time.Hour), 100)
 		if err != nil {
 			t.Fatalf("DeleteAdminAuditEventsBefore failed: %v", err)
 		}

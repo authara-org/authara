@@ -181,6 +181,24 @@ Runtime-setting writes take effect immediately on the accepting Core replica.
 Other replicas reconcile the PostgreSQL revision every two seconds. Plan for
 that bounded delay during concurrent rollouts and policy changes.
 
+One replica at a time holds the PostgreSQL-backed `cleanup` lease and runs all
+retention cleanup schedules. Followers continue serving traffic and retry
+leadership without failing health checks. Graceful shutdown releases leadership
+immediately; after a crash or partition another replica takes over after the
+30-second lease expires. Cleanup passes are fenced by the lease generation,
+limited to one deterministic delete category per database batch, and stop after
+a bounded time. A pass that reaches its row or time budget yields to other due
+jobs and resumes after a five-second cooldown.
+
+Cleanup intervals are startup-only environment settings. Configure the same
+values on every replica: `AUTHARA_SESSION_CLEANUP_INTERVAL`,
+`AUTHARA_EMAIL_CLEANUP_INTERVAL`, `AUTHARA_WEBHOOK_CLEANUP_INTERVAL`,
+`AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL`, and
+`AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL`. A newly elected leader runs each
+cleanup once immediately and then follows those intervals. During a rolling
+upgrade, singleton behavior is guaranteed only after replicas running the old
+unleased workers have drained.
+
 ---
 
 # Operational model

@@ -31,6 +31,10 @@ Authara exports:
 - `authara_background_jobs_total` by worker and outcome (`succeeded`, `retried`, `failed`, or `error`)
 - `authara_background_job_duration_seconds` by worker and outcome
 - `authara_email_queue_age_seconds` by bounded delivery outcome
+- `authara_maintenance_leader` (`1` on the cleanup leader, `0` on followers)
+- `authara_maintenance_lease_attempts_total` by acquisition/lifecycle outcome
+- `authara_maintenance_runs_total` and `authara_maintenance_run_duration_seconds` by cleanup job and outcome
+- `authara_maintenance_rows_processed_total` by cleanup job
 - standard `go_sql_*` database pool metrics for the primary PostgreSQL connection
 - standard `go_*` runtime metrics
 - standard `process_*` CPU, memory, file descriptor, and process-start metrics where supported
@@ -45,6 +49,15 @@ Background metrics currently cover the `email` and `webhook` workers. They make
 terminal failures, retries, and slow external delivery visible without including
 recipient addresses, event IDs, or other high-cardinality labels.
 
+Maintenance outcomes distinguish completed, incomplete, failed, and canceled
+cleanup passes. An incomplete pass reached its row or time budget and is queued
+again after a short cooldown instead of waiting for the normal cleanup interval.
+Lease outcomes include skipped acquisition, which is expected on healthy follower
+replicas and must not be used as a readiness failure.
+
+The rows-processed counter reports directly deleted root rows. Rows removed by
+foreign-key cascades are intentionally not included.
+
 Database pool metrics include open, in-use, and idle connections as well as
 connection wait counts, wait duration, and connection churn. Useful signals include:
 
@@ -58,6 +71,9 @@ rate(go_sql_wait_count_total{db_name="primary"}[5m])
 
 # Background jobs reaching a terminal failure or an unexpected state error
 increase(authara_background_jobs_total{outcome=~"failed|error"}[10m])
+
+# Cleanup failures by job
+increase(authara_maintenance_runs_total{outcome="failed"}[30m])
 ```
 
 ## Prometheus configuration
