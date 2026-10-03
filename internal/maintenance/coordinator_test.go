@@ -235,9 +235,50 @@ func TestCoordinatorQuicklyContinuesAnIncompleteJob(t *testing.T) {
 	}
 }
 
+func TestCoordinatorDoesNotReportCanceledLeaseClaimAsFailure(t *testing.T) {
+	leaseStore := &cancelingLeaseStore{fakeLeaseStore: &fakeLeaseStore{}, started: make(chan struct{})}
+	metrics := &leaseMetrics{}
+	coordinator, err := New(leaseStore, discardLogger(), metrics, nil, Config{
+		LeaseDuration: time.Second,
+		RenewInterval: 200 * time.Millisecond,
+		RetryInterval: time.Second,
+		PassTimeout:   500 * time.Millisecond,
+		MaxBatches:    1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	coordinator.Run(ctx)
+	<-leaseStore.started
+	cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second)
+	defer shutdownCancel()
+	if err := coordinator.Shutdown(shutdownCtx); err != nil {
+		t.Fatal(err)
+	}
+	if outcomes := metrics.snapshot(); len(outcomes) != 0 {
+		t.Fatalf("lease outcomes during shutdown = %v, want none", outcomes)
+	}
+}
+
 type fakeLeaseStore struct {
 	mu    sync.Mutex
 	lease store.MaintenanceLease
+}
+
+type cancelingLeaseStore struct {
+	*fakeLeaseStore
+	started chan struct{}
+}
+
+func (s *cancelingLeaseStore) TryAcquireMaintenanceLease(
+	ctx context.Context, _ string, _ uuid.UUID, _ time.Duration,
+) (store.MaintenanceLease, bool, error) {
+	close(s.started)
+	<-ctx.Done()
+	return store.MaintenanceLease{}, false, ctx.Err()
 }
 
 func (s *fakeLeaseStore) TryAcquireMaintenanceLease(
@@ -298,6 +339,27 @@ type fakeMetrics struct {
 	lastJob     string
 	lastOutcome string
 	lastRows    int64
+}
+
+type leaseMetrics struct {
+	mu       sync.Mutex
+	outcomes []string
+}
+
+func (m *leaseMetrics) ObserveMaintenanceLease(outcome string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.outcomes = append(m.outcomes, outcome)
+}
+
+func (*leaseMetrics) SetMaintenanceLeader(bool) {}
+func (*leaseMetrics) ObserveMaintenanceRun(string, string, time.Duration, int64) {
+}
+
+func (m *leaseMetrics) snapshot() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.outcomes...)
 }
 
 func (*fakeMetrics) ObserveMaintenanceLease(string) {}

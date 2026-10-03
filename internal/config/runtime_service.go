@@ -28,6 +28,12 @@ type ServiceOptions struct {
 	Environment       []EnvironmentVariable
 	Logger            *slog.Logger
 	ReconcileInterval time.Duration
+	Metrics           RuntimeSettingsMetrics
+}
+
+type RuntimeSettingsMetrics interface {
+	SetRuntimeSettingsRevision(revision int64)
+	ObserveRuntimeSettingsReconciliation(result string, duration time.Duration, revision int64)
 }
 
 type snapshot struct {
@@ -66,6 +72,7 @@ type Service struct {
 	interval            time.Duration
 	mu                  sync.Mutex
 	current             atomic.Pointer[snapshot]
+	metrics             RuntimeSettingsMetrics
 	reconcilerMu        sync.Mutex
 	reconcilerStarted   bool
 	reconcilerCancel    context.CancelFunc
@@ -93,7 +100,7 @@ func NewService(ctx context.Context, cfg ServiceOptions) (*Service, error) {
 	}
 	s := &Service{
 		Config: cfg.Startup,
-		store:  cfg.Store, logger: logger, interval: interval,
+		store:  cfg.Store, logger: logger, interval: interval, metrics: cfg.Metrics,
 		definitions: buildCatalog(cfg.Environment), definitionByKey: make(map[Key]Definition),
 		defaultValues: make(map[Key]any), environmentValues: make(map[Key]any), explicitEnvironment: make(map[Key]bool),
 		reconcilerDone: make(chan struct{}),
@@ -285,6 +292,9 @@ func (s *Service) Set(ctx context.Context, key Key, rawValue string, actorID uui
 	description.Revision = saved.Revision
 	proposed.descriptions[key] = description
 	s.current.Store(proposed)
+	if s.metrics != nil {
+		s.metrics.SetRuntimeSettingsRevision(proposed.revision)
+	}
 	return cloneDescription(description), nil
 }
 
@@ -349,6 +359,9 @@ func (s *Service) Clear(ctx context.Context, key Key, actorID uuid.UUID, expecte
 	}
 	proposed.revision = revision
 	s.current.Store(proposed)
+	if s.metrics != nil {
+		s.metrics.SetRuntimeSettingsRevision(proposed.revision)
+	}
 	return cloneDescription(proposed.descriptions[key]), nil
 }
 
@@ -357,7 +370,7 @@ func (s *Service) refreshAfterConflict(ctx context.Context, key Key, mutationErr
 		return
 	}
 	if err := s.reloadLocked(ctx, true); err != nil {
-		s.logger.WarnContext(ctx, "refresh runtime settings after revision conflict failed", "key", key, "err", err)
+		s.logger.WarnContext(ctx, "refresh runtime settings after revision conflict failed", "key", key, "error", err)
 	}
 }
 
@@ -404,7 +417,7 @@ func (s *Service) StartReconciler(ctx context.Context) {
 				return
 			case <-ticker.C:
 				if err := s.Reconcile(reconcilerCtx); err != nil && reconcilerCtx.Err() == nil {
-					s.logger.ErrorContext(reconcilerCtx, "runtime settings reconciliation failed", "err", err)
+					s.logger.ErrorContext(reconcilerCtx, "runtime settings reconciliation failed", "error", err)
 				}
 			}
 		}
@@ -435,9 +448,22 @@ func (s *Service) ReconcilerDone() <-chan struct{} {
 }
 
 func (s *Service) Reconcile(ctx context.Context) error {
+	started := time.Now()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.reloadLocked(ctx, false)
+	before := s.current.Load().revision
+	err := s.reloadLocked(ctx, false)
+	after := s.current.Load().revision
+	s.mu.Unlock()
+	if s.metrics != nil && !(err != nil && ctx.Err() != nil) {
+		result := "unchanged"
+		if err != nil {
+			result = "failed"
+		} else if after != before {
+			result = "applied"
+		}
+		s.metrics.ObserveRuntimeSettingsReconciliation(result, time.Since(started), after)
+	}
+	return err
 }
 
 func (s *Service) reloadLocked(ctx context.Context, force bool) error {
@@ -453,6 +479,9 @@ func (s *Service) reloadLocked(ctx context.Context, force bool) error {
 		return err
 	}
 	s.current.Store(next)
+	if s.metrics != nil {
+		s.metrics.SetRuntimeSettingsRevision(next.revision)
+	}
 	for _, override := range next.unsupportedOverrides {
 		s.logger.WarnContext(ctx, "unsupported runtime setting preserved and ignored",
 			"key", override.key,

@@ -159,8 +159,10 @@ func (c *Coordinator) run(ctx context.Context) {
 			ctx, store.CleanupLeaseName, c.ownerID, c.cfg.LeaseDuration,
 		)
 		if err != nil {
-			c.observeLease("failed")
-			c.logger.ErrorContext(ctx, "cleanup lease acquisition failed", "error", err)
+			if ctx.Err() == nil {
+				c.observeLease("failed")
+				c.logger.ErrorContext(ctx, "cleanup lease acquisition failed", "error", err)
+			}
 		} else if !acquired {
 			c.observeLease("skipped")
 		} else {

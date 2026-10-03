@@ -262,13 +262,19 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 
 func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool, error) {
 	policy := w.policy.CurrentEmail()
+	pollStarted := time.Now()
 	job, err := w.claimNext(claimCtx, now)
 	if err != nil {
 		if errors.Is(err, store.ErrorEmailJobNotFound) {
+			w.observePoll("empty", pollStarted)
 			return false, nil
+		}
+		if claimCtx.Err() == nil {
+			w.observePoll("failed", pollStarted)
 		}
 		return false, err
 	}
+	w.observePoll("claimed", pollStarted)
 	started := time.Now()
 	lease := *job.ProcessingStartedAt
 	queueAge := max(now.Sub(job.CreatedAt), 0)
@@ -409,6 +415,14 @@ func (w *Worker) observeJob(outcome string, started time.Time, queueAge time.Dur
 	}
 }
 
+func (w *Worker) observePoll(result string, started time.Time) {
+	if metrics, ok := w.metrics.(interface {
+		ObserveBackgroundPoll(worker, result string, duration time.Duration)
+	}); ok {
+		metrics.ObserveBackgroundPoll("email", result, time.Since(started))
+	}
+}
+
 func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.Time) error {
 	if w.templates == nil {
 		return email.PermanentError("configuration_error", errors.New("email template renderer is not configured"))
@@ -497,16 +511,27 @@ func (w *Worker) runStaleReaperLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			if _, err := w.reapStale(ctx, now.UTC()); err != nil {
-				w.logger.ErrorContext(ctx, "failed to recover stale email jobs", "error", err)
+			started := time.Now()
+			result, err := w.reapStale(ctx, now.UTC())
+			if err != nil {
+				if ctx.Err() == nil {
+					w.observeReaper("failed", started, result)
+					w.logger.ErrorContext(ctx, "failed to recover stale email jobs",
+						"retried", result.Retried,
+						"failed", result.Failed,
+						"error", err,
+					)
+				}
+			} else {
+				w.observeReaper("succeeded", started, result)
 			}
 		}
 	}
 }
 
-func (w *Worker) reapStale(ctx context.Context, now time.Time) (int64, error) {
+func (w *Worker) reapStale(ctx context.Context, now time.Time) (store.ReapResult, error) {
 	policy := w.policy.CurrentEmail()
-	var total int64
+	var total store.ReapResult
 	for {
 		recovered, err := w.store.ReapStaleEmailJobs(
 			ctx,
@@ -520,13 +545,22 @@ func (w *Worker) reapStale(ctx context.Context, now time.Time) (int64, error) {
 		if err != nil {
 			return total, err
 		}
-		total += recovered
-		if recovered < int64(w.cfg.MaintenanceBatchSize) {
+		total.Retried += recovered.Retried
+		total.Failed += recovered.Failed
+		if recovered.Total() < int64(w.cfg.MaintenanceBatchSize) {
 			break
 		}
 	}
-	if total > 0 {
-		w.logger.WarnContext(ctx, "recovered stale email jobs", "jobs", total)
+	if total.Total() > 0 {
+		w.logger.WarnContext(ctx, "recovered stale email jobs", "retried", total.Retried, "failed", total.Failed)
 	}
 	return total, nil
+}
+
+func (w *Worker) observeReaper(result string, started time.Time, jobs store.ReapResult) {
+	if metrics, ok := w.metrics.(interface {
+		ObserveQueueReaper(queue, result string, duration time.Duration, retried, failed int64)
+	}); ok {
+		metrics.ObserveQueueReaper("email", result, time.Since(started), jobs.Retried, jobs.Failed)
+	}
 }

@@ -155,13 +155,13 @@ func TestWorkerReapsStaleProcessingEvents(t *testing.T) {
 	}
 
 	reaped, err := worker.reapStale(context.Background(), claimAt.Add(worker.cfg.ProcessingStaleAfter-time.Millisecond))
-	if err != nil || reaped != 0 {
-		t.Fatalf("early ReapStale = (%d, %v), want (0, nil)", reaped, err)
+	if err != nil || reaped.Total() != 0 {
+		t.Fatalf("early ReapStale = (%+v, %v), want (0, nil)", reaped, err)
 	}
 
 	reaped, err = worker.reapStale(context.Background(), claimAt.Add(worker.cfg.ProcessingStaleAfter))
-	if err != nil || reaped != 1 {
-		t.Fatalf("ReapStale = (%d, %v), want (1, nil)", reaped, err)
+	if err != nil || reaped.Total() != 1 {
+		t.Fatalf("ReapStale = (%+v, %v), want (1, nil)", reaped, err)
 	}
 	stored := getWebhookEvent(t, tdb, event.ID)
 	if stored.Status != domain.WebhookEventStatusPending || stored.ProcessingStartedAt != nil {

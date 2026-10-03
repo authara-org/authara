@@ -191,13 +191,19 @@ func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
 
 func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool, error) {
 	policy := w.policy()
+	pollStarted := time.Now()
 	event, err := w.store.ClaimNextWebhookEvent(claimCtx, now)
 	if err != nil {
 		if errors.Is(err, store.ErrorWebhookEventNotFound) {
+			w.observePoll("empty", pollStarted)
 			return false, nil
+		}
+		if claimCtx.Err() == nil {
+			w.observePoll("failed", pollStarted)
 		}
 		return false, err
 	}
+	w.observePoll("claimed", pollStarted)
 	started := time.Now()
 
 	retryable, err := w.sender.sendOnce(workCtx, EventType(event.EventType), event.ID, event.Payload)
@@ -258,6 +264,14 @@ func (w *Worker) observeJob(outcome string, started time.Time) {
 	}
 }
 
+func (w *Worker) observePoll(result string, started time.Time) {
+	if metrics, ok := w.metrics.(interface {
+		ObserveBackgroundPoll(worker, result string, duration time.Duration)
+	}); ok {
+		metrics.ObserveBackgroundPoll("webhook", result, time.Since(started))
+	}
+}
+
 func deliveryRetryDelay(attempt int) time.Duration {
 	if attempt == 1 {
 		return 30 * time.Second
@@ -265,17 +279,26 @@ func deliveryRetryDelay(attempt int) time.Duration {
 	return 2 * time.Minute
 }
 
-func (w *Worker) reapStale(ctx context.Context, now time.Time) (int64, error) {
+func (w *Worker) reapStale(ctx context.Context, now time.Time) (store.ReapResult, error) {
 	policy := w.policy()
-	return drainBatches(policy.MaintenanceBatchSize, func() (int64, error) {
-		return w.store.ReapStaleWebhookEvents(
+	var total store.ReapResult
+	for {
+		result, err := w.store.ReapStaleWebhookEvents(
 			ctx,
 			now.Add(-policy.ProcessingStaleAfter),
 			now,
 			policy.MaxDeliveryAttempts,
 			policy.MaintenanceBatchSize,
 		)
-	})
+		if err != nil {
+			return total, err
+		}
+		total.Retried += result.Retried
+		total.Failed += result.Failed
+		if result.Total() < int64(policy.MaintenanceBatchSize) {
+			return total, nil
+		}
+	}
 }
 
 func (w *Worker) CleanupExpiredEventsBatch(ctx context.Context, now time.Time) (int64, bool, error) {
@@ -311,12 +334,31 @@ func (w *Worker) runMaintenance(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-reaper.C:
-			count, err := w.reapStale(ctx, now.UTC())
+			started := time.Now()
+			result, err := w.reapStale(ctx, now.UTC())
 			if err != nil {
-				w.logger.ErrorContext(ctx, "webhook stale reaper failed", "error", err)
-			} else if count > 0 {
-				w.logger.WarnContext(ctx, "stale webhook events reaped", "event_count", count)
+				if ctx.Err() == nil {
+					w.observeReaper("failed", started, result)
+					w.logger.ErrorContext(ctx, "webhook stale reaper failed",
+						"retried", result.Retried,
+						"failed", result.Failed,
+						"error", err,
+					)
+				}
+			} else {
+				w.observeReaper("succeeded", started, result)
+				if result.Total() > 0 {
+					w.logger.WarnContext(ctx, "stale webhook events reaped", "retried", result.Retried, "failed", result.Failed)
+				}
 			}
 		}
+	}
+}
+
+func (w *Worker) observeReaper(result string, started time.Time, jobs store.ReapResult) {
+	if metrics, ok := w.metrics.(interface {
+		ObserveQueueReaper(queue, result string, duration time.Duration, retried, failed int64)
+	}); ok {
+		metrics.ObserveQueueReaper("webhook", result, time.Since(started), jobs.Retried, jobs.Failed)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -58,6 +59,60 @@ func TestReadinessHandlerChecksDependency(t *testing.T) {
 	}
 }
 
+func TestReadinessHandlerPublishesEffectiveState(t *testing.T) {
+	observer := &readinessObserverStub{}
+	checkErr := errors.New("database unavailable")
+	readiness := NewReadinessWithObserver(true, readinessCheckerFunc(func(context.Context) error {
+		return checkErr
+	}), observer)
+	request := httptest.NewRequest(http.MethodGet, "/auth/ready", nil)
+
+	readiness.Handler(httptest.NewRecorder(), request)
+	if ready, calls := observer.state(); ready || calls != 1 {
+		t.Fatalf("observer after dependency failure = ready:%t calls:%d", ready, calls)
+	}
+
+	checkErr = nil
+	readiness.Handler(httptest.NewRecorder(), request)
+	if ready, calls := observer.state(); !ready || calls != 2 {
+		t.Fatalf("observer after recovery = ready:%t calls:%d", ready, calls)
+	}
+
+	readiness.Set(false)
+	if ready, calls := observer.state(); ready || calls != 3 {
+		t.Fatalf("observer after lifecycle stop = ready:%t calls:%d", ready, calls)
+	}
+}
+
+func TestReadinessHandlerCannotRestoreReadinessAfterLifecycleStop(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	observer := &readinessObserverStub{}
+	readiness := NewReadinessWithObserver(true, readinessCheckerFunc(func(context.Context) error {
+		close(started)
+		<-release
+		return nil
+	}), observer)
+	response := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		readiness.Handler(response, httptest.NewRequest(http.MethodGet, "/auth/ready", nil))
+	}()
+
+	<-started
+	readiness.Set(false)
+	close(release)
+	<-done
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("readiness response after lifecycle stop = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if ready, _ := observer.state(); ready {
+		t.Fatal("in-flight readiness check restored readiness after lifecycle stop")
+	}
+}
+
 func TestReadinessHandlerSkipsDependencyWhileLifecycleIsUnready(t *testing.T) {
 	called := false
 	readiness := NewReadinessWithChecker(false, readinessCheckerFunc(func(context.Context) error {
@@ -103,4 +158,23 @@ type readinessCheckerFunc func(context.Context) error
 
 func (f readinessCheckerFunc) Check(ctx context.Context) error {
 	return f(ctx)
+}
+
+type readinessObserverStub struct {
+	mu    sync.Mutex
+	ready bool
+	calls int
+}
+
+func (o *readinessObserverStub) SetReadiness(ready bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.ready = ready
+	o.calls++
+}
+
+func (o *readinessObserverStub) state() (bool, int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.ready, o.calls
 }

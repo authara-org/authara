@@ -277,8 +277,9 @@ func (s *Store) ReapStaleEmailJobs(
 	batchSize int,
 	retryBaseDelay time.Duration,
 	retryMaxDelay time.Duration,
-) (int64, error) {
-	result, err := s.exec(ctx, `
+) (ReapResult, error) {
+	var result ReapResult
+	err := s.queryRow(ctx, `
 		WITH stale AS (
 			SELECT id
 			FROM email_jobs
@@ -287,7 +288,7 @@ func (s *Store) ReapStaleEmailJobs(
 			ORDER BY processing_started_at ASC, id ASC
 			FOR UPDATE SKIP LOCKED
 			LIMIT $2
-		)
+		), updated AS (
 		UPDATE email_jobs AS job
 		SET status = CASE
 				WHEN job.attempt_count >= $3 OR job.delivery_deadline_at <= $4 THEN 'failed'
@@ -316,6 +317,12 @@ func (s *Store) ReapStaleEmailJobs(
 			END
 		FROM stale
 		WHERE job.id = stale.id
+		RETURNING job.status
+		)
+		SELECT
+			count(*) FILTER (WHERE status = 'pending'),
+			count(*) FILTER (WHERE status = 'failed')
+		FROM updated
 	`,
 		staleBefore,
 		batchSize,
@@ -323,11 +330,11 @@ func (s *Store) ReapStaleEmailJobs(
 		now,
 		retryBaseDelay.Seconds(),
 		retryMaxDelay.Seconds(),
-	)
+	).Scan(&result.Retried, &result.Failed)
 	if err != nil {
-		return 0, err
+		return ReapResult{}, err
 	}
-	return result.RowsAffected()
+	return result, nil
 }
 
 func (s *Store) ListActiveOrFailedEmailJobs(ctx context.Context, limit, offset int) ([]domain.EmailJob, error) {

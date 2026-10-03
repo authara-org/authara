@@ -308,8 +308,8 @@ func TestWorkerReclaimsStaleLeaseAndFencesOldOwner(t *testing.T) {
 	oldLease := *claimed.ProcessingStartedAt
 	reapAt := now.Add(3 * time.Minute)
 	recovered, err := tdb.Store.ReapStaleEmailJobs(context.Background(), reapAt.Add(-2*time.Minute), reapAt, 100, 10, 30*time.Second, 6*time.Hour)
-	if err != nil || recovered != 1 {
-		t.Fatalf("ReapStaleEmailJobs = (%d, %v), want (1, nil)", recovered, err)
+	if err != nil || recovered.Total() != 1 {
+		t.Fatalf("ReapStaleEmailJobs = (%+v, %v), want (1, nil)", recovered, err)
 	}
 	stored, err := tdb.Store.GetEmailJobByID(context.Background(), job.ID)
 	if err != nil {
@@ -357,7 +357,7 @@ func TestConcurrentStaleReapersRecoverJobOnce(t *testing.T) {
 			recovered, reapErr := tdb.Store.ReapStaleEmailJobs(
 				context.Background(), reapAt.Add(-2*time.Minute), reapAt, 100, 1, 30*time.Second, 6*time.Hour,
 			)
-			results <- recovered
+			results <- recovered.Total()
 			errorsCh <- reapErr
 		}()
 	}
@@ -408,8 +408,8 @@ func TestStaleReaperTerminatesBoundedJobs(t *testing.T) {
 				t.Fatal(err)
 			}
 			reapAt := claimAt.Add(3 * time.Minute)
-			if recovered, err := tdb.Store.ReapStaleEmailJobs(context.Background(), reapAt.Add(-2*time.Minute), reapAt, 100, 10, 30*time.Second, 6*time.Hour); err != nil || recovered != 1 {
-				t.Fatalf("ReapStaleEmailJobs = (%d, %v)", recovered, err)
+			if recovered, err := tdb.Store.ReapStaleEmailJobs(context.Background(), reapAt.Add(-2*time.Minute), reapAt, 100, 10, 30*time.Second, 6*time.Hour); err != nil || recovered.Total() != 1 {
+				t.Fatalf("ReapStaleEmailJobs = (%+v, %v)", recovered, err)
 			}
 			stored, err := tdb.Store.GetEmailJobByID(context.Background(), job.ID)
 			if err != nil {

@@ -18,7 +18,7 @@ type BackgroundWorkers struct {
 func (a *App) StartBackgroundWorkers(ctx context.Context) *BackgroundWorkers {
 	workers := &BackgroundWorkers{
 		app:      a,
-		failures: make(chan error, 4),
+		failures: make(chan error, 5),
 	}
 
 	a.Config.StartReconciler(ctx)
@@ -26,6 +26,10 @@ func (a *App) StartBackgroundWorkers(ctx context.Context) *BackgroundWorkers {
 
 	a.Maintenance.Run(ctx)
 	workers.monitor("maintenance coordinator", a.Maintenance.Done())
+	if a.QueueMonitor != nil {
+		a.QueueMonitor.Run(ctx)
+		workers.monitor("queue metrics monitor", a.QueueMonitor.Done())
+	}
 
 	// Recovery and security flows enqueue email even when optional challenge
 	// verification is disabled, so email delivery has its own lifecycle.
@@ -63,6 +67,9 @@ func (w *BackgroundWorkers) Shutdown(ctx context.Context) error {
 	if w.app.Services.WebhookWorker != nil {
 		componentCount++
 	}
+	if w.app.QueueMonitor != nil {
+		componentCount++
+	}
 	results := make(chan result, componentCount)
 	shutdown := func(name string, fn func(context.Context) error) {
 		go func() {
@@ -72,6 +79,9 @@ func (w *BackgroundWorkers) Shutdown(ctx context.Context) error {
 
 	shutdown("runtime settings reconciler", w.app.Config.ShutdownReconciler)
 	shutdown("maintenance coordinator", w.app.Maintenance.Shutdown)
+	if w.app.QueueMonitor != nil {
+		shutdown("queue metrics monitor", w.app.QueueMonitor.Shutdown)
+	}
 	shutdown("email worker", w.app.Services.EmailWorker.Shutdown)
 	if w.app.Services.WebhookWorker != nil {
 		shutdown("webhook worker", w.app.Services.WebhookWorker.Shutdown)

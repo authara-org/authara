@@ -76,6 +76,11 @@ when `AUTHARA_CACHE_PROVIDER=redis`. Dependency checks share a one-second
 timeout. An outage removes the instance from readiness without terminating it,
 allowing dependency clients to recover when service returns.
 
+When Prometheus metrics are enabled, each dependency check also updates its
+result counter, duration histogram, and last observed status. The effective
+replica state is exported as `authara_readiness_status`. See
+[Prometheus Metrics](metrics.md) for the complete metric semantics.
+
 Use `/auth/live` for Kubernetes liveness probes and `/auth/ready` for readiness
 probes. Do not use the database-dependent endpoint as a liveness probe: a shared
 database outage should not restart every Authara replica.

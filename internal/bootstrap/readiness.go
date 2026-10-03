@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/observability"
@@ -41,39 +42,42 @@ func newReadinessChecker(app *App) (*readinessChecker, error) {
 }
 
 func (c *readinessChecker) Check(ctx context.Context) error {
+	started := time.Now()
 	if err := c.store.Ping(ctx); err != nil {
-		c.observe("postgres", "failed")
+		c.observe("postgres", "failed", time.Since(started))
 		return fmt.Errorf("ping PostgreSQL: %w", err)
 	}
-	c.observe("postgres", "succeeded")
+	c.observe("postgres", "succeeded", time.Since(started))
 
+	started = time.Now()
 	current, err := c.store.CurrentSchemaVersion(ctx)
 	if err != nil {
-		c.observe("schema", "failed")
+		c.observe("schema", "failed", time.Since(started))
 		return fmt.Errorf("read schema version: %w", err)
 	}
 	if current != schema.RequiredSchemaVersion {
-		c.observe("schema", "failed")
+		c.observe("schema", "failed", time.Since(started))
 		return fmt.Errorf(
 			"schema version mismatch: current=%d required=%d",
 			current,
 			schema.RequiredSchemaVersion,
 		)
 	}
-	c.observe("schema", "succeeded")
+	c.observe("schema", "succeeded", time.Since(started))
 
 	if c.redis != nil {
+		started = time.Now()
 		if err := c.redis.Ping(ctx); err != nil {
-			c.observe("redis", "failed")
+			c.observe("redis", "failed", time.Since(started))
 			return fmt.Errorf("ping Redis: %w", err)
 		}
-		c.observe("redis", "succeeded")
+		c.observe("redis", "succeeded", time.Since(started))
 	}
 	return nil
 }
 
-func (c *readinessChecker) observe(dependency, result string) {
+func (c *readinessChecker) observe(dependency, result string, duration time.Duration) {
 	if c.metrics != nil {
-		c.metrics.ObserveReadinessCheck(dependency, result)
+		c.metrics.ObserveReadinessCheckDuration(dependency, result, duration)
 	}
 }

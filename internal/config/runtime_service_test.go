@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -934,6 +935,37 @@ func TestReconcileIgnoresNewUnknownSettingAndKeepsKnownValidationStrict(t *testi
 	}
 }
 
+func TestRuntimeSettingsMetricsTrackRevisionAndReconciliation(t *testing.T) {
+	ctx := context.Background()
+	store := &reconcileFailStore{memoryStore: newMemoryStore()}
+	metrics := &runtimeSettingsMetricsStub{}
+	service, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: store, LookupEnvironment: environment(nil), Metrics: metrics,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metrics.revisions) != 1 || metrics.revisions[0] != 0 {
+		t.Fatalf("initial revision observations = %v, want [0]", metrics.revisions)
+	}
+
+	if err := service.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	store.seed(KeyChallengeMaxAttempts, `7`, 1)
+	if err := service.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	store.fail = true
+	if err := service.Reconcile(ctx); err == nil {
+		t.Fatal("failed reconciliation returned nil")
+	}
+
+	if got := metrics.reconciliations; len(got) != 3 || got[0] != "unchanged:0" || got[1] != "applied:1" || got[2] != "failed:1" {
+		t.Fatalf("reconciliation observations = %v", got)
+	}
+}
+
 func TestTypedParsersKeepDomainTypesAndValidation(t *testing.T) {
 	min := 1
 	max := 10
@@ -1213,10 +1245,35 @@ type memoryStore struct {
 	audits    []json.RawMessage
 }
 
+type runtimeSettingsMetricsStub struct {
+	revisions       []int64
+	reconciliations []string
+}
+
+func (m *runtimeSettingsMetricsStub) SetRuntimeSettingsRevision(revision int64) {
+	m.revisions = append(m.revisions, revision)
+}
+
+func (m *runtimeSettingsMetricsStub) ObserveRuntimeSettingsReconciliation(result string, _ time.Duration, revision int64) {
+	m.reconciliations = append(m.reconciliations, result+":"+strconv.FormatInt(revision, 10))
+}
+
 type postMutationLoadFailStore struct {
 	*memoryStore
 	loads             int
 	mutationSucceeded bool
+}
+
+type reconcileFailStore struct {
+	*memoryStore
+	fail bool
+}
+
+func (s *reconcileFailStore) LoadRuntimeSettings(ctx context.Context) (PersistedState, error) {
+	if s.fail {
+		return PersistedState{}, errors.New("load failed")
+	}
+	return s.memoryStore.LoadRuntimeSettings(ctx)
 }
 
 type conflictOnMutationStore struct {
