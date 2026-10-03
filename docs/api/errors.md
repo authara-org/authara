@@ -185,4 +185,4 @@ The **error envelope format** and **error codes** are part of the Authara API co
 
 Applications may rely on these codes remaining stable within a given API version.
 
-See the full [`contract/openapi.yaml`](../../contract/openapi.yaml) API contract.
+See the full [`contract/openapi.yaml`](../contract/openapi.yaml) API contract.
