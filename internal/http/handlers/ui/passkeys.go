@@ -148,8 +148,12 @@ func (h *UIHandler) PasskeyAuthenticateOptionsPost(w http.ResponseWriter, r *htt
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginAttempt(r.Context(), httputil.ClientIP(r))
-		if err != nil || !allowed {
-			response.ErrorJSON(w, http.StatusTooManyRequests, response.CodeRateLimited, "Too many attempts. Please try again later.")
+		if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			code := response.CodeRateLimited
+			if status == http.StatusInternalServerError {
+				code = response.CodeInternalError
+			}
+			response.ErrorJSON(w, status, code, message)
 			return
 		}
 	}
@@ -175,8 +179,12 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginFinishAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			response.ErrorJSON(w, http.StatusTooManyRequests, response.CodeRateLimited, "Too many attempts. Please try again later.")
+		if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			code := response.CodeRateLimited
+			if status == http.StatusInternalServerError {
+				code = response.CodeInternalError
+			}
+			response.ErrorJSON(w, status, code, message)
 			return
 		}
 	}
@@ -251,8 +259,12 @@ func (h *UIHandler) ReauthenticatePasskeyOptionsPost(w http.ResponseWriter, r *h
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginAttempt(r.Context(), httputil.ClientIP(r))
-		if err != nil || !allowed {
-			response.ErrorJSON(w, http.StatusTooManyRequests, response.CodeRateLimited, "Too many attempts. Please try again later.")
+		if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			code := response.CodeRateLimited
+			if status == http.StatusInternalServerError {
+				code = response.CodeInternalError
+			}
+			response.ErrorJSON(w, status, code, message)
 			return
 		}
 	}
@@ -277,8 +289,12 @@ func (h *UIHandler) ReauthenticatePasskeyFinishPost(w http.ResponseWriter, r *ht
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginFinishAttempt(r.Context(), httputil.ClientIP(r))
-		if err != nil || !allowed {
-			response.ErrorJSON(w, http.StatusTooManyRequests, response.CodeRateLimited, "Too many attempts. Please try again later.")
+		if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			code := response.CodeRateLimited
+			if status == http.StatusInternalServerError {
+				code = response.CodeInternalError
+			}
+			response.ErrorJSON(w, status, code, message)
 			return
 		}
 	}

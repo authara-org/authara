@@ -1,12 +1,14 @@
 package ui
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/requesterror"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
+	"github.com/authara-org/authara/internal/ratelimiter"
 )
 
 func (h *UIHandler) renderFormError(w http.ResponseWriter, r *http.Request, status int, msg string, form templ.Component) {
@@ -39,4 +41,19 @@ func (h *UIHandler) renderNotFound(w http.ResponseWriter, r *http.Request) {
 
 func (h *UIHandler) renderInternalError(w http.ResponseWriter, r *http.Request) {
 	_ = requesterror.Internal(h.Render, w, r)
+}
+
+func (h *UIHandler) rateLimitResult(allowed bool, err error, limitedMessage string) (int, string, bool) {
+	if _, limited := ratelimiter.IsRateLimited(err); limited || (err == nil && !allowed) {
+		return http.StatusTooManyRequests, limitedMessage, false
+	}
+	if err != nil {
+		logger := h.Logger
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Error("rate limiter unavailable", "err", err)
+		return http.StatusInternalServerError, "Authentication service unavailable.", false
+	}
+	return 0, "", true
 }

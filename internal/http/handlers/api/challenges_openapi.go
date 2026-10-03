@@ -61,8 +61,8 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeVerifyAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return verifySignupChallengeError(responseCodeRateLimited(), "Too many verification attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many verification attempts. Please try again later."); !ok {
+			return verifySignupChallengeError(code, message), nil
 		}
 	}
 
@@ -140,8 +140,8 @@ func (h *APIHandler) ResendChallenge(ctx context.Context, request contract.Resen
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeResendAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return resendChallengeError(responseCodeRateLimited(), "Too many resend attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many resend attempts. Please try again later."); !ok {
+			return resendChallengeError(code, message), nil
 		}
 	}
 	err := h.Challenge.ResendChallenge(ctx, request.Body.ChallengeId, time.Now().UTC())

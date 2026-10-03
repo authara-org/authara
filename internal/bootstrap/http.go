@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"fmt"
+	"net/netip"
+	"strings"
 	"time"
 
 	cachepkg "github.com/authara-org/authara/internal/cache"
@@ -145,6 +147,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		Addr:              app.Config.Values.HttpAddr,
 		Dev:               app.Config.Values.AppEnv == "dev",
 		TrustProxyHeaders: app.Config.Values.TrustProxyHeaders,
+		TrustedProxyCIDRs: trustedProxyCIDRs(app),
 		Logger:            app.Logger,
 		Observability:     app.Observability,
 		OAuthProviders:    app.Services.OAuthProviders,
@@ -153,6 +156,39 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 	}, mw)
 
 	return server, nil
+}
+
+func trustedProxyCIDRs(app *App) []netip.Prefix {
+	raw := strings.TrimSpace(app.Config.Values.TrustedProxyCIDRsRaw)
+	if !app.Config.Values.TrustProxyHeaders {
+		if raw != "" {
+			app.Logger.Warn("trusted proxy CIDRs are configured but proxy header trust is disabled; forwarded headers will be ignored")
+		}
+		return nil
+	}
+
+	var prefixes []netip.Prefix
+	for _, value := range strings.Split(raw, ",") {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			app.Logger.Warn("invalid trusted proxy CIDR; entry will be ignored", "cidr", value)
+			continue
+		}
+		prefix = prefix.Masked()
+		prefixes = append(prefixes, prefix)
+		if prefix.Bits() == 0 {
+			app.Logger.Warn("trusted proxy CIDR permits every address; forwarded client IPs can be spoofed if Core is directly reachable", "cidr", prefix.String())
+		}
+	}
+
+	if len(prefixes) == 0 {
+		app.Logger.Warn("proxy header trust is enabled without a valid trusted proxy CIDR; forwarded headers will be ignored")
+	}
+	return prefixes
 }
 
 func newAuthLimiter(app *App) ratelimiter.AuthLimiter {

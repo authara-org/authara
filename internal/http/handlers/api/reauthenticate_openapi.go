@@ -44,8 +44,8 @@ func (h *APIHandler) ReauthenticateWithPassword(ctx context.Context, request con
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), userID.String())
-		if err != nil || !allowed {
-			return reauthenticateWithPasswordError(response.CodeRateLimited, "Too many attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			return reauthenticateWithPasswordError(code, message), nil
 		}
 	}
 	if err := h.Auth.VerifyPassword(ctx, userID, request.Body.Password); err != nil {
@@ -137,8 +137,8 @@ func (h *APIHandler) BeginPasskeyReauthentication(ctx context.Context, request c
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return beginPasskeyReauthenticationError(response.CodeRateLimited, "Too many attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			return beginPasskeyReauthenticationError(code, message), nil
 		}
 	}
 	optionsJSON, _, err := h.Passkeys.BeginReauthentication(ctx, userID, sessionID)
@@ -180,8 +180,8 @@ func (h *APIHandler) FinishPasskeyReauthentication(ctx context.Context, request 
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginFinishAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return finishPasskeyReauthenticationError(response.CodeRateLimited, "Too many attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			return finishPasskeyReauthenticationError(code, message), nil
 		}
 	}
 	credential, err := json.Marshal(request.Body.Credential)

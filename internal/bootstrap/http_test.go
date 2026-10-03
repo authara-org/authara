@@ -1,8 +1,10 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +52,63 @@ func TestNewLimiterConfigReadsRuntimePolicy(t *testing.T) {
 
 	if got := newLimiterConfig(app).LoginIPLimit; got != 5 {
 		t.Fatalf("limiter config login IP limit = %d, want runtime default 5", got)
+	}
+}
+
+func TestTrustedProxyCIDRsWarnsAndDisablesTrustWithoutValidNetwork(t *testing.T) {
+	var output bytes.Buffer
+	app := &App{
+		Config: newTestConfigService(t, &config.Config{Values: config.Values{
+			TrustProxyHeaders:    true,
+			TrustedProxyCIDRsRaw: "not-a-cidr",
+		}}),
+		Logger: slog.New(slog.NewTextHandler(&output, nil)),
+	}
+
+	if got := trustedProxyCIDRs(app); len(got) != 0 {
+		t.Fatalf("trusted proxy CIDRs = %v, want none", got)
+	}
+	logs := output.String()
+	for _, want := range []string{"invalid trusted proxy CIDR", "forwarded headers will be ignored"} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("logs = %q, want warning containing %q", logs, want)
+		}
+	}
+}
+
+func TestTrustedProxyCIDRsKeepsValidNetworksAndWarnsForTrustAll(t *testing.T) {
+	var output bytes.Buffer
+	app := &App{
+		Config: newTestConfigService(t, &config.Config{Values: config.Values{
+			TrustProxyHeaders:    true,
+			TrustedProxyCIDRsRaw: "10.0.0.5/8, 0.0.0.0/0",
+		}}),
+		Logger: slog.New(slog.NewTextHandler(&output, nil)),
+	}
+
+	got := trustedProxyCIDRs(app)
+	if len(got) != 2 || got[0].String() != "10.0.0.0/8" || got[1].String() != "0.0.0.0/0" {
+		t.Fatalf("trusted proxy CIDRs = %v", got)
+	}
+	if !strings.Contains(output.String(), "permits every address") {
+		t.Fatalf("logs = %q, want trust-all warning", output.String())
+	}
+}
+
+func TestTrustedProxyCIDRsWarnsWhenNetworksAreConfiguredButTrustIsDisabled(t *testing.T) {
+	var output bytes.Buffer
+	app := &App{
+		Config: newTestConfigService(t, &config.Config{Values: config.Values{
+			TrustedProxyCIDRsRaw: "10.0.0.0/8",
+		}}),
+		Logger: slog.New(slog.NewTextHandler(&output, nil)),
+	}
+
+	if got := trustedProxyCIDRs(app); len(got) != 0 {
+		t.Fatalf("trusted proxy CIDRs = %v, want none", got)
+	}
+	if !strings.Contains(output.String(), "proxy header trust is disabled") {
+		t.Fatalf("logs = %q, want disabled-trust warning", output.String())
 	}
 }
 

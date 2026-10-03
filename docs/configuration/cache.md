@@ -29,6 +29,11 @@ Refresh-token reuse detection is the exception: the compromised database
 session is revoked even if the Redis marker cannot be written, and the request
 still fails.
 
+Authentication endpoints also fail closed when Redis-backed rate limiting is
+unavailable. The API returns `500 internal_error` rather than incorrectly
+reporting `429 rate_limited`; HTML flows show a generic authentication-service
+error. Readiness returns `503` while Redis cannot be reached.
+
 Core's Redis revocation key templates are defined by the stable machine-readable
 contract in `contract/access-token-revocations.json`. Server-side SDKs that
 perform revocation checks synchronize and test their keys against it.
@@ -86,6 +91,10 @@ residual risk. Redis infers `immediate`; dev/noop infers `expiry`.
 ## Redis
 
 Used when `AUTHARA_CACHE_PROVIDER=redis`.
+
+The current Redis transport is unencrypted. Core emits a startup warning when
+Redis is selected; place Redis on a trusted private network and prevent direct
+or shared-network access until TLS transport support is configured.
 
 ### AUTHARA_REDIS_HOST
 

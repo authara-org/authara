@@ -64,12 +64,12 @@ func (h *UIHandler) PasswordResetRequestPost(w http.ResponseWriter, r *http.Requ
 	}
 
 	allowed, err := h.Limiter.AllowPasswordResetAttempt(ctx, httputil.ClientIP(r), form.Email)
-	if err != nil || !allowed {
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many reset attempts. Please try again later."); !ok {
 		h.renderFormError(
 			w,
 			r,
-			http.StatusTooManyRequests,
-			"Too many reset attempts. Please try again later.",
+			status,
+			message,
 			authview.PasswordResetForm(),
 		)
 		return

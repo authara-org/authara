@@ -87,8 +87,8 @@ func (h *APIHandler) LoginAndAcceptInvitation(ctx context.Context, request contr
 		return loginAndAcceptInvitationError(code, message), nil
 	}
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), preview.Invitation.Email)
-	if err != nil || !allowed {
-		return loginAndAcceptInvitationError(response.CodeRateLimited, "Too many attempts. Please try again later."), nil
+	if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		return loginAndAcceptInvitationError(code, message), nil
 	}
 	user, err := h.Auth.Login(ctx, auth.LoginInput{
 		Provider:        domain.ProviderPassword,
@@ -238,8 +238,8 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithPassword(ctx context.Context
 		email = *link.ProviderEmail
 	}
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), email)
-	if err != nil || !allowed {
-		return completeAccountRecoveryLinkWithPasswordError(response.CodeRateLimited, "Too many attempts. Please try again later."), nil
+	if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		return completeAccountRecoveryLinkWithPasswordError(code, message), nil
 	}
 	user, err = h.Auth.CompleteAccountRecoveryProviderLinkWithPassword(ctx, request.LinkID, request.Body.Password, time.Now().UTC())
 	if err != nil {

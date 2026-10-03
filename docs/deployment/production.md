@@ -89,6 +89,32 @@ TLS is usually terminated by:
 - Authara Gateway (depending on configuration)
 - ingress infrastructure
 
+Authara warns, but does not refuse startup, when a production `PUBLIC_URL` does
+not use HTTPS. This preserves operator control for private and unusual
+deployments while making the transport risk visible in startup logs.
+
+## Trusted reverse proxies
+
+Forwarded client addresses affect authentication rate limits, audit data, and
+security notifications. Enable them only for the networks that connect to Core
+directly:
+
+```env
+AUTHARA_TRUST_PROXY_HEADERS=true
+AUTHARA_TRUSTED_PROXY_CIDRS=10.20.0.0/16,fd00:20::/64
+```
+
+Core ignores `X-Forwarded-For` and `X-Real-IP` from any transport peer outside
+those networks. For a chain of trusted proxies, it walks `X-Forwarded-For` from
+right to left and uses the first untrusted hop. A valid, single `X-Real-IP` is
+the fallback when `X-Forwarded-For` is absent or malformed. `True-Client-IP`
+and the RFC `Forwarded` header are not used.
+
+If proxy trust is enabled without any valid CIDR, Core starts with a warning
+and ignores forwarded headers. A trust-all CIDR such as `0.0.0.0/0` is honored
+but produces a security warning because direct access to Core would make client
+addresses spoofable.
+
 ---
 
 # Database

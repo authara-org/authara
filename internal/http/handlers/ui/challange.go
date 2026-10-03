@@ -153,13 +153,13 @@ func (h *UIHandler) verifyChallengePost(w http.ResponseWriter, r *http.Request, 
 	}
 
 	allowed, err := h.Limiter.AllowChallengeVerifyAttempt(r.Context(), httputil.ClientIP(r))
-	if err != nil || !allowed {
-		h.renderVerifyChallengeError(
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many verification attempts. Please try again later."); !ok {
+		h.renderFormError(
 			w,
 			r,
-			action,
-			challengeIDStr,
-			"Too many verification attempts. Please try again later.",
+			status,
+			message,
+			challengeview.VerifyChallengeForm(challengeIDStr, action.Path(), true),
 		)
 		return
 	}
@@ -212,12 +212,12 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 	}
 
 	allowed, err := h.Limiter.AllowChallengeResendAttempt(ctx, httputil.ClientIP(r))
-	if err != nil || !allowed {
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many resend attempts. Please try again later."); !ok {
 		_ = h.Render(
 			w,
 			r,
-			http.StatusTooManyRequests,
-			toast.ToastMessage(toast.Error, "Too many resend attempts. Please try again later."),
+			status,
+			toast.ToastMessage(toast.Error, message),
 		)
 		return
 	}

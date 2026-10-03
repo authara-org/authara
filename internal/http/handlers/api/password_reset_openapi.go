@@ -39,8 +39,8 @@ func (h *APIHandler) StartPasswordResetChallenge(ctx context.Context, request co
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasswordResetAttempt(ctx, httputil.ClientIP(r), email)
-		if err != nil || !allowed {
-			return startPasswordResetChallengeError(responseCodeRateLimited(), "Too many reset attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many reset attempts. Please try again later."); !ok {
+			return startPasswordResetChallengeError(code, message), nil
 		}
 	}
 
@@ -85,8 +85,8 @@ func (h *APIHandler) VerifyPasswordResetChallenge(ctx context.Context, request c
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeVerifyAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return verifyPasswordResetChallengeError(responseCodeRateLimited(), "Too many verification attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many verification attempts. Please try again later."); !ok {
+			return verifyPasswordResetChallengeError(code, message), nil
 		}
 	}
 

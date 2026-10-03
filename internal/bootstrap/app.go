@@ -36,6 +36,7 @@ func NewApp(version string) (*App, error) {
 		return nil, fmt.Errorf("create logger: %w", err)
 	}
 	warnIfEmailDeliveryUnavailable(cfg, logger)
+	warnIfTransportMayBeInsecure(cfg, logger)
 	logAccessTokenRevocationGuarantee(cfg, logger)
 
 	st, err := NewStore(cfg)

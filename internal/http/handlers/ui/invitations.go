@@ -347,8 +347,8 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 
 	ip := httputil.ClientIP(r)
 	allowed, err := h.Limiter.AllowSignupAttempt(r.Context(), ip, preview.Invitation.Email)
-	if err != nil || !allowed {
-		h.renderInvitationSignupError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token)
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		h.renderInvitationSignupError(w, r, status, message, preview, token)
 		return
 	}
 
@@ -460,8 +460,8 @@ func (h *UIHandler) InvitationLoginPost(w http.ResponseWriter, r *http.Request) 
 
 	ip := httputil.ClientIP(r)
 	allowed, err := h.Limiter.AllowLoginAttempt(r.Context(), ip, preview.Invitation.Email)
-	if err != nil || !allowed {
-		h.renderInvitationLoginError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token)
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		h.renderInvitationLoginError(w, r, status, message, preview, token)
 		return
 	}
 

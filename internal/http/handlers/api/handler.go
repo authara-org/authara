@@ -29,6 +29,21 @@ func (h *APIHandler) passwordPolicyError(err error) (response.ErrorCode, string)
 	return responseCodeInvalidRequest(), message
 }
 
+func (h *APIHandler) rateLimitResult(allowed bool, err error, limitedMessage string) (response.ErrorCode, string, bool) {
+	if _, limited := ratelimiter.IsRateLimited(err); limited || (err == nil && !allowed) {
+		return response.CodeRateLimited, limitedMessage, false
+	}
+	if err != nil {
+		logger := h.Logger
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Error("rate limiter unavailable", "err", err)
+		return response.CodeInternalError, "Authentication service unavailable.", false
+	}
+	return "", "", true
+}
+
 type APIHandler struct {
 	Auth           *auth.Service
 	Passkeys       *passkey.Service

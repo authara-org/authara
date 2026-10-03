@@ -116,8 +116,8 @@ func (h *UIHandler) ReauthenticatePasswordPost(w http.ResponseWriter, r *http.Re
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowLoginAttempt(r.Context(), httputil.ClientIP(r), userID.String())
-		if err != nil || !allowed {
-			h.renderRequestError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.")
+		if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			h.renderRequestError(w, r, status, message)
 			return
 		}
 	}

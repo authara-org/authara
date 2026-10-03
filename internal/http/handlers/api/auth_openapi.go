@@ -57,8 +57,8 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 	}
 	rateLimitIdentifier := identity.CanonicalUsername(identifier)
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), rateLimitIdentifier)
-	if err != nil || !allowed {
-		return loginWithPasswordError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
+	if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		return loginWithPasswordError(code, message), nil
 	}
 	user, err := h.Auth.Login(ctx, loginInput)
 	if err != nil {
@@ -149,8 +149,8 @@ func (h *APIHandler) prepareContractSignup(
 		return "", code, message, false
 	}
 	allowed, err := h.Limiter.AllowSignupAttempt(ctx, httputil.ClientIP(r), in.Email)
-	if err != nil || !allowed {
-		return "", responseCodeRateLimited(), "Too many attempts. Please try again later.", false
+	if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		return "", code, message, false
 	}
 	passwordHash, err := h.Auth.HashPassword(ctx, in.Password)
 	if err != nil {

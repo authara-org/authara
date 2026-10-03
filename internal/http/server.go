@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/authara-org/authara/internal/http/handlers/api"
@@ -21,6 +22,7 @@ type ServerConfig struct {
 	Addr              string
 	Dev               bool
 	TrustProxyHeaders bool
+	TrustedProxyCIDRs []netip.Prefix
 	Logger            *slog.Logger
 	Observability     *observability.Service
 	OAuthProviders    oauth.OAuthProviders

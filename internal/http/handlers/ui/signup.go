@@ -68,8 +68,8 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 
 	ip := httputil.ClientIP(r)
 	allowed, err := h.Limiter.AllowSignupAttempt(ctx, ip, form.Email)
-	if err != nil || !allowed {
-		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.SignupForm())
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		h.renderFormError(w, r, status, message, authview.SignupForm())
 		return
 	}
 	passwordHash, err := h.Auth.HashPassword(ctx, form.Password)

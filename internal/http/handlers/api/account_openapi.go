@@ -206,8 +206,8 @@ func (h *APIHandler) VerifyCurrentUserEmailChange(ctx context.Context, request c
 	}
 	if r, ok := contractRequest(ctx); ok && h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeVerifyAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return verifyCurrentUserEmailChangeError(responseCodeRateLimited(), "Too many verification attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many verification attempts. Please try again later."); !ok {
+			return verifyCurrentUserEmailChangeError(code, message), nil
 		}
 	}
 

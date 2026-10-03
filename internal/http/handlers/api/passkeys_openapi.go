@@ -25,8 +25,8 @@ func (h *APIHandler) BeginPasskeyAuthentication(ctx context.Context, _ contract.
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return beginPasskeyAuthenticationError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			return beginPasskeyAuthenticationError(code, message), nil
 		}
 	}
 	optionsJSON, _, err := h.Passkeys.BeginLogin(ctx)
@@ -50,8 +50,8 @@ func (h *APIHandler) FinishPasskeyAuthentication(ctx context.Context, request co
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginFinishAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return finishPasskeyAuthenticationError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			return finishPasskeyAuthenticationError(code, message), nil
 		}
 	}
 	if request.Body == nil {

@@ -29,6 +29,7 @@ settings_metadata:
   PUBLIC_URL: {control: env, reload: startup, sensitive: false, group: public_url}
   AUTHARA_DEFAULT_RETURN_TO: {control: hybrid, reload: dynamic, sensitive: false, group: public_url}
   AUTHARA_TRUST_PROXY_HEADERS: {control: env, reload: startup, sensitive: false, group: public_url}
+  AUTHARA_TRUSTED_PROXY_CIDRS: {control: env, reload: startup, sensitive: false, group: public_url}
   AUTHARA_USERNAME_LOGIN_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
   AUTHARA_EMAIL_VERIFICATION_REQUIRED: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
   AUTHARA_PASSKEY_CLONE_RESPONSE: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
@@ -294,7 +295,13 @@ variables:
     required: false
     type: bool
     default: false
-    notes: Enables trusted X-Forwarded-For/X-Real-IP parsing when Authara is behind a proxy that strips client-supplied forwarded headers.
+    notes: Enables X-Forwarded-For/X-Real-IP parsing only for transport peers in AUTHARA_TRUSTED_PROXY_CIDRS. Without a valid CIDR, Core warns and ignores forwarded headers.
+
+  - name: AUTHARA_TRUSTED_PROXY_CIDRS
+    stability: stable
+    required: false
+    type: string
+    notes: Comma-separated IPv4/IPv6 networks whose transport peers may supply X-Forwarded-For or X-Real-IP. Broad networks are accepted with a security warning.
 
   # ------------------------------------------------------------
   # Authentication

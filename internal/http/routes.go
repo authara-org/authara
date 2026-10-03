@@ -17,8 +17,8 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	if cfg.TrustProxyHeaders {
-		r.Use(middleware.RealIP)
+	if cfg.TrustProxyHeaders && len(cfg.TrustedProxyCIDRs) > 0 {
+		r.Use(httpmiddleware.TrustedRealIP(cfg.TrustedProxyCIDRs))
 	}
 	if cfg.Observability != nil {
 		r.Use(cfg.Observability.Middleware)

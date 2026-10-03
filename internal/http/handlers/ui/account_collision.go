@@ -99,8 +99,8 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 	}
 
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), email)
-	if err != nil || !allowed {
-		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.AccountCollisionForm(linkIDStr, email, "Google"))
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		h.renderFormError(w, r, status, message, authview.AccountCollisionForm(linkIDStr, email, "Google"))
 		return
 	}
 

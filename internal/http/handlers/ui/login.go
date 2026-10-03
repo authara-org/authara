@@ -76,8 +76,8 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	ip := httputil.ClientIP(r)
 	rateLimitIdentifier := identity.CanonicalUsername(identifier)
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, ip, rateLimitIdentifier)
-	if err != nil || !allowed {
-		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.LoginForm(usernameLoginEnabled))
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		h.renderFormError(w, r, status, message, authview.LoginForm(usernameLoginEnabled))
 		return
 	}
 
