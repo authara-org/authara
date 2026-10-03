@@ -1,0 +1,48 @@
+FROM alpine:3.22 AS check
+
+ARG MAX_CONTEXT_KIB=8192
+
+WORKDIR /context
+COPY . .
+
+RUN set -eu; \
+    for pattern in \
+      '.git' \
+      '.env' \
+      '.env.*' \
+      'node_modules' \
+      'dist' \
+      'bin' \
+      '.venv' \
+      '__pycache__' \
+      '.cache' \
+      '.parcel-cache' \
+      'coverage*' \
+      '*.out' \
+      '*.test' \
+      '*.exe' \
+      '*.tmp' \
+      '*.log' \
+      '.DS_Store' \
+      'Thumbs.db' \
+      '.idea' \
+      '.vscode' \
+      '.nvim' \
+      '*.iml' \
+      '*.swp' \
+      '*.swo'; do \
+        match="$(find /context -name "$pattern" -print -quit)"; \
+        if [ -n "$match" ]; then \
+          echo "forbidden build-context path: $match" >&2; \
+          exit 1; \
+        fi; \
+    done
+
+RUN set -eu; \
+    size_kib="$(du -sk /context | awk '{print $1}')"; \
+    echo "build context size: ${size_kib} KiB (limit: ${MAX_CONTEXT_KIB} KiB)"; \
+    test "$size_kib" -le "$MAX_CONTEXT_KIB"; \
+    printf '%s\n' "$size_kib" > /context-size-kib
+
+FROM scratch
+COPY --from=check /context-size-kib /context-size-kib

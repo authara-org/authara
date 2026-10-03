@@ -1,22 +1,23 @@
 **
 
 !Dockerfile
-!package.json
-!package-lock.json
-!index.html
-!nginx.conf
-!vite.config.js
-!src/
-!src/**
+!go.mod
+!go.sum
+!cmd/
+!cmd/**
+!handlers/
+!handlers/**
 
 .env*
 **/.env*
 **/node_modules/
-**/dist/
 **/bin/
 coverage*
 **/coverage*
-**/.cache/
+*.out
+**/*.out
+**/*.test
+**/*.exe
 **/*.tmp
 **/*.log
 **/.DS_Store

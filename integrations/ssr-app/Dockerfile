@@ -7,6 +7,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY . .
+COPY cmd ./cmd
+COPY handlers ./handlers
 
 CMD ["wgo", "go", "run", "./cmd/ssr-app/main.go"]

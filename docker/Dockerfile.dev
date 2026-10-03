@@ -7,8 +7,10 @@ RUN go install github.com/bokwoon95/wgo@v0.6.3
 
 WORKDIR /app
 
-COPY . .
-
+COPY go.mod go.sum ./
 RUN go mod download
+
+COPY cmd ./cmd
+COPY internal ./internal
 
 CMD ["wgo", "-file=.go", "-file=.templ", "-xfile=_templ.go", "--", "templ", "generate", "::", "go", "run", "./cmd/authara"]

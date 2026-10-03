@@ -177,6 +177,41 @@ Quick local setup is described in:
 
 ---
 
+# Build-context policy
+
+Docker build contexts use default-deny `.dockerignore` allowlists. Local
+environment files, Git metadata, dependency trees, generated output, coverage,
+caches, and editor files must not be sent to a builder. The Core production
+image also uses explicit `COPY` instructions so only its source inputs enter
+the builder stage.
+
+CI adds forbidden-path sentinels, audits every context, builds every image from
+a clean checkout, and inspects the final Core image. Baselines and enforced
+limits measured on 2026-10-03 were:
+
+| Context | Size | Limit |
+| --- | ---: | ---: |
+| Core root | 5064 KiB | 8192 KiB |
+| Migrations | 160 KiB | 512 KiB |
+| SSR integration | 104 KiB | 512 KiB |
+| SPA integration | 180 KiB | 1024 KiB |
+
+Reproduce the measurements from the repository root after setting up Docker
+Buildx:
+
+```sh
+scripts/check-docker-context.sh . root 8192
+scripts/check-docker-context.sh ./migrations migrations 512
+scripts/check-docker-context.sh ./integrations/ssr-app ssr-app 512
+scripts/check-docker-context.sh ./integrations/spa-app spa-app 1024
+```
+
+When a build needs a new source file, explicitly add that file to the relevant
+allowlist and Dockerfile rather than widening the context to the whole working
+tree.
+
+---
+
 # Summary
 
 Docker is the recommended way to run Authara.
