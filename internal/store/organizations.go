@@ -275,6 +275,16 @@ func (s *Store) ListOrganizationMembershipsByOrganizationID(ctx context.Context,
 }
 
 func (s *Store) ListOrganizationMembersByOrganizationID(ctx context.Context, organizationID uuid.UUID) ([]domain.OrganizationMember, error) {
+	return s.ListOrganizationMembersPage(ctx, organizationID, nil, 0)
+}
+
+func (s *Store) ListOrganizationMembersPage(ctx context.Context, organizationID uuid.UUID, cursor *ListCursor, limit int) ([]domain.OrganizationMember, error) {
+	var cursorCreatedAt any
+	var cursorID any
+	if cursor != nil {
+		cursorCreatedAt = cursor.CreatedAt
+		cursorID = cursor.ID
+	}
 	rows, err := s.queryRows(ctx, `
 		SELECT
 			u.id, u.created_at, u.updated_at, u.disabled_at, u.username, u.username_normalized, u.email,
@@ -282,8 +292,10 @@ func (s *Store) ListOrganizationMembersByOrganizationID(ctx context.Context, org
 		FROM organization_memberships om
 		JOIN users u ON u.id = om.user_id
 		WHERE om.organization_id = $1
+		  AND ($2::timestamptz IS NULL OR (om.created_at, om.user_id) > ($2, $3))
 		ORDER BY om.created_at ASC, om.user_id ASC
-	`, organizationID)
+		LIMIT NULLIF($4, 0)
+	`, organizationID, cursorCreatedAt, cursorID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -382,6 +394,52 @@ func (s *Store) ListOrganizationMembershipsByUserID(ctx context.Context, userID 
 			return nil, err
 		}
 		out = append(out, toDomainOrganizationMembership(m))
+	}
+	return out, rows.Err()
+}
+
+type UserOrganization struct {
+	Organization domain.Organization
+	Membership   domain.OrganizationMembership
+}
+
+func (s *Store) ListUserOrganizationsPage(ctx context.Context, userID uuid.UUID, cursor *ListCursor, limit int) ([]UserOrganization, error) {
+	var cursorCreatedAt any
+	var cursorID any
+	if cursor != nil {
+		cursorCreatedAt = cursor.CreatedAt
+		cursorID = cursor.ID
+	}
+	rows, err := s.queryRows(ctx, `
+		SELECT
+			o.id, o.created_at, o.updated_at, o.name, o.kind, o.created_by_user_id,
+			om.organization_id, om.user_id, om.role, om.created_at, om.updated_at
+		FROM organization_memberships om
+		JOIN organizations o ON o.id = om.organization_id
+		WHERE om.user_id = $1
+		  AND ($2::timestamptz IS NULL OR (om.created_at, om.organization_id) > ($2, $3))
+		ORDER BY om.created_at ASC, om.organization_id ASC
+		LIMIT $4
+	`, userID, cursorCreatedAt, cursorID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]UserOrganization, 0)
+	for rows.Next() {
+		var org model.Organization
+		var membership model.OrganizationMembership
+		if err := rows.Scan(
+			&org.ID, &org.CreatedAt, &org.UpdatedAt, &org.Name, &org.Kind, &org.CreatedByUserID,
+			&membership.OrganizationID, &membership.UserID, &membership.Role, &membership.CreatedAt, &membership.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, UserOrganization{
+			Organization: toDomainOrganization(org),
+			Membership:   toDomainOrganizationMembership(membership),
+		})
 	}
 	return out, rows.Err()
 }

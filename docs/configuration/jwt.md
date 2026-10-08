@@ -29,7 +29,14 @@ Relevant configuration variables:
 AUTHARA_JWT_ISSUER
 AUTHARA_JWT_ACTIVE_KEY_ID
 AUTHARA_JWT_KEYS
+AUTHARA_ACCESS_TOKEN_TTL_MINUTES
+AUTHARA_ACCESS_TOKEN_REVOCATION_MODE
 ```
+
+When revocation mode is `expiry`, the access-token lifetime is capped at 10
+minutes because already-issued JWTs cannot be invalidated online. Runtime
+updates are subject to the same cap. In `immediate` mode, Redis-backed checks
+reject revoked tokens before their normal expiry.
 
 ---
 
@@ -166,6 +173,9 @@ default:
 ```
 10
 ```
+
+The lifetime must be between 1 and 1440 minutes. Expiry-only revocation mode
+uses the stricter maximum of 10 minutes.
 
 Access tokens are intentionally **short-lived**, while refresh tokens control the overall session lifetime.
 

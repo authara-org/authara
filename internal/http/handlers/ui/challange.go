@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
+	"github.com/authara-org/authara/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -54,13 +56,25 @@ func (a VerifyChallengeAction) Header() string {
 }
 
 func (h *UIHandler) VerifyChallengePage(w http.ResponseWriter, r *http.Request) {
-	challengeIDStr := strings.TrimSpace(r.URL.Query().Get("challenge_id"))
-
 	action, ok := parseVerifyChallengeAction(chi.URLParam(r, "action"))
 	if !ok {
 		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid verification action.")
 		return
 	}
+	if action == VerifyChallengeActionEmailChange {
+		h.renderUnauthorized(w, r)
+		return
+	}
+
+	h.verifyChallengePage(w, r, action)
+}
+
+func (h *UIHandler) VerifyEmailChangeChallengePage(w http.ResponseWriter, r *http.Request) {
+	h.verifyChallengePage(w, r, VerifyChallengeActionEmailChange)
+}
+
+func (h *UIHandler) verifyChallengePage(w http.ResponseWriter, r *http.Request, action VerifyChallengeAction) {
+	challengeIDStr := strings.TrimSpace(r.URL.Query().Get("challenge_id"))
 
 	_ = h.Render(
 		w,
@@ -100,14 +114,26 @@ func (h *UIHandler) renderVerifyChallengeRedirect(
 }
 
 func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid form.")
-		return
-	}
-
 	action, ok := parseVerifyChallengeAction(chi.URLParam(r, "action"))
 	if !ok {
 		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid verification action.")
+		return
+	}
+	if action == VerifyChallengeActionEmailChange {
+		h.renderUnauthorized(w, r)
+		return
+	}
+
+	h.verifyChallengePost(w, r, action)
+}
+
+func (h *UIHandler) VerifyEmailChangeChallengePost(w http.ResponseWriter, r *http.Request) {
+	h.verifyChallengePost(w, r, VerifyChallengeActionEmailChange)
+}
+
+func (h *UIHandler) verifyChallengePost(w http.ResponseWriter, r *http.Request, action VerifyChallengeAction) {
+	if err := r.ParseForm(); err != nil {
+		h.renderRequestError(w, r, http.StatusBadRequest, "Invalid form.")
 		return
 	}
 
@@ -127,13 +153,13 @@ func (h *UIHandler) VerifyChallengePost(w http.ResponseWriter, r *http.Request) 
 	}
 
 	allowed, err := h.Limiter.AllowChallengeVerifyAttempt(r.Context(), httputil.ClientIP(r))
-	if err != nil || !allowed {
-		h.renderVerifyChallengeError(
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many verification attempts. Please try again later."); !ok {
+		h.renderFormError(
 			w,
 			r,
-			action,
-			challengeIDStr,
-			"Too many verification attempts. Please try again later.",
+			status,
+			message,
+			challengeview.VerifyChallengeForm(challengeIDStr, action.Path(), true),
 		)
 		return
 	}
@@ -186,36 +212,23 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 	}
 
 	allowed, err := h.Limiter.AllowChallengeResendAttempt(ctx, httputil.ClientIP(r))
-	if err != nil || !allowed {
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many resend attempts. Please try again later."); !ok {
 		_ = h.Render(
 			w,
 			r,
-			http.StatusTooManyRequests,
-			toast.ToastMessage(toast.Error, "Too many resend attempts. Please try again later."),
+			status,
+			toast.ToastMessage(toast.Error, message),
 		)
 		return
 	}
 
 	err = h.Challenge.ResendChallenge(ctx, challengeID, time.Now().UTC())
-	if err != nil {
-		msg := "Could not resend verification code."
-
-		switch err {
-		case challenge.ErrChallengeExpired:
-			msg = "This verification request has expired."
-		case challenge.ErrChallengeConsumed:
-			msg = "This verification request has already been completed."
-		case challenge.ErrTooManyResends:
-			msg = "Too many resend attempts. Please start again."
-		case challenge.ErrResendTooSoon:
-			msg = "Please wait a moment before requesting another code."
-		}
-
+	if err != nil && !isExpectedChallengeResendError(err) {
 		_ = h.Render(
 			w,
 			r,
 			http.StatusOK,
-			toast.ToastMessage(toast.Error, msg),
+			toast.ToastMessage(toast.Error, "Could not resend verification code."),
 		)
 		return
 	}
@@ -226,6 +239,14 @@ func (h *UIHandler) ResendChallengePost(w http.ResponseWriter, r *http.Request) 
 		http.StatusOK,
 		toast.ToastMessage(toast.Success, "A new verification code has been sent."),
 	)
+}
+
+func isExpectedChallengeResendError(err error) bool {
+	return errors.Is(err, challenge.ErrChallengeExpired) ||
+		errors.Is(err, challenge.ErrChallengeConsumed) ||
+		errors.Is(err, challenge.ErrTooManyResends) ||
+		errors.Is(err, challenge.ErrResendTooSoon) ||
+		errors.Is(err, store.ErrorChallengeNotFound)
 }
 
 func (h *UIHandler) renderVerifyChallengeError(

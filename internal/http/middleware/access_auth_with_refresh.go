@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -45,7 +46,12 @@ func RequireAccessAuthWithRefreshPolicy(
 					ctx = httpctx.WithSessionID(ctx, identity.SessionID)
 					ctx = httpctx.WithOrganizationID(ctx, identity.OrganizationID)
 					ctx = httpctx.WithOrganizationRole(ctx, identity.OrganizationRole)
+					ctx = httpctx.WithEmailVerified(ctx, identity.EmailVerified)
 					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				if errors.Is(err, token.ErrRevocationStoreUnavailable) {
+					http.Error(w, "Authentication service unavailable", http.StatusServiceUnavailable)
 					return
 				}
 			}
@@ -73,7 +79,12 @@ func RequireAccessAuthWithRefreshPolicy(
 						ctx = httpctx.WithSessionID(ctx, identity.SessionID)
 						ctx = httpctx.WithOrganizationID(ctx, identity.OrganizationID)
 						ctx = httpctx.WithOrganizationRole(ctx, identity.OrganizationRole)
+						ctx = httpctx.WithEmailVerified(ctx, identity.EmailVerified)
 						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
+					if errors.Is(err, token.ErrRevocationStoreUnavailable) {
+						http.Error(w, "Authentication service unavailable", http.StatusServiceUnavailable)
 						return
 					}
 

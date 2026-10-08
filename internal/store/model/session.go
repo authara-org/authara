@@ -17,6 +17,9 @@ type Session struct {
 	ExpiresAt time.Time  `db:"expires_at"`
 	RevokedAt *time.Time `db:"revoked_at"`
 
+	AuthenticatedAt      *time.Time `db:"authenticated_at"`
+	AuthenticationMethod *string    `db:"authentication_method"`
+
 	UserAgent string `db:"user_agent"`
 }
 

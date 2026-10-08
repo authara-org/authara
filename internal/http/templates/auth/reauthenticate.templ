@@ -1,0 +1,123 @@
+package auth
+
+import (
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/templates"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/form"
+	"github.com/authara-org/authara/internal/http/templates/components/icons"
+	"github.com/authara-org/authara/internal/http/viewmodel"
+)
+
+templ Reauthenticate(hasPassword bool, hasPasskey bool, googleClientID string, hasApple bool, authenticationChallengeID string, embedded bool) {
+	if embedded {
+		if httpctx.IsHTMX(ctx) {
+			@ReauthenticationModalContent(hasPassword, hasPasskey, googleClientID, hasApple, authenticationChallengeID)
+		} else {
+			@templates.EmbeddedLayout() {
+				@ReauthenticationModalContent(hasPassword, hasPasskey, googleClientID, hasApple, authenticationChallengeID)
+			}
+		}
+	} else {
+		@templates.PartialRender() {
+			@AuthLayout() {
+				@CardHeader()
+				@HeaderSection("Confirm it’s you", "Authenticate again to continue with this sensitive change.")
+				@ReauthenticationMethods(hasPassword, hasPasskey, googleClientID, hasApple, authenticationChallengeID, false)
+			}
+		}
+	}
+}
+
+templ ReauthenticationModalContent(hasPassword bool, hasPasskey bool, googleClientID string, hasApple bool, authenticationChallengeID string) {
+	<div class="px-6 py-5">
+		<p class="mb-5 text-sm leading-relaxed text-grey-600 dark:text-grey-300">
+			Use one of your sign-in methods to continue with this sensitive change.
+		</p>
+		@ReauthenticationMethods(hasPassword, hasPasskey, googleClientID, hasApple, authenticationChallengeID, true)
+	</div>
+}
+
+templ ReauthenticationMethods(hasPassword bool, hasPasskey bool, googleClientID string, hasApple bool, authenticationChallengeID string, embedded bool) {
+	if hasPasskey {
+		<div class="mb-3">
+			@button.Button(button.ButtonConfig{
+				Label:   "Continue with passkey",
+				Type:    button.RegularButton,
+				Color:   button.Light,
+				Variant: button.Outline,
+				Icon:    icons.Key(),
+				Attrs: templ.Attributes{
+					"data-passkey-reauthenticate":      "",
+					"data-return-to":                   httpctx.ReturnToOrManualDefault(ctx, "/auth/account"),
+					"data-authentication-challenge-id": authenticationChallengeID,
+				},
+			})
+		</div>
+	}
+	if hasPassword {
+		<form
+			autocomplete="on"
+			hx-post={ redirect.WithReturnTo("/auth/reauthenticate/password", httpctx.ReturnToOrManualDefault(ctx, "/auth/account")) }
+			hx-target={ reauthenticationTarget(embedded) }
+			hx-swap="innerHTML"
+		>
+			@csrf.CSRFInput()
+			<input type="hidden" name="authentication_challenge_id" value={ authenticationChallengeID }/>
+			if embedded {
+				<input type="hidden" name="embedded" value="1"/>
+			}
+			<label for="reauth-password" class="text-grey-800 dark:text-grey-200">
+				<div class="pb-1.5">Password <span class="text-red-600">*</span></div>
+			</label>
+			@form.Input(form.InputConfig{
+				ID:           "reauth-password",
+				Type:         form.Password,
+				Size:         form.Large,
+				Name:         "password",
+				Autocomplete: "current-password",
+				Placeholder:  "Enter your password",
+				Required:     true,
+				Class:        "mb-3",
+			})
+			@button.Button(button.ButtonConfig{Label: "Continue", Icon: icons.Lock()})
+		</form>
+	}
+	if googleClientID != "" {
+		<div class="mt-3" data-authentication-challenge-id={ authenticationChallengeID }>
+			@GoogleSignin("Continue", googleClientID, viewmodel.AuthProviderFlowReauthenticate, "")
+		</div>
+	}
+	if hasApple {
+		<div class="mt-3">
+			@AppleSignin("Continue", viewmodel.AuthProviderFlowReauthenticate, authenticationChallengeID, "", "")
+		</div>
+	}
+}
+
+func reauthenticationTarget(embedded bool) string {
+	if embedded {
+		return "#recent-authentication-content"
+	}
+	return "#body"
+}
+
+templ ReauthenticationComplete(embedded bool) {
+	if embedded {
+		@templates.EmbeddedLayout() {
+			<div data-recent-authentication-complete class="px-6 py-10 text-center text-sm text-grey-600 dark:text-grey-300">
+				Authentication confirmed. Continuing…
+			</div>
+		}
+	} else {
+		@templates.PartialRender() {
+			@AuthLayout() {
+				<div data-recent-authentication-complete class="py-10 text-center text-grey-700 dark:text-grey-300">
+					Authentication confirmed. Continuing…
+				</div>
+			}
+		}
+	}
+}

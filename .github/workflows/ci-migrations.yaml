@@ -9,6 +9,9 @@ on:
     paths:
       - "migrations/**"
 
+permissions:
+  contents: read
+
 jobs:
   verify-migrations:
     runs-on: ubuntu-latest
@@ -62,7 +65,6 @@ jobs:
           POSTGRESQL_DATABASE: authara
           POSTGRESQL_USERNAME: authara
           POSTGRESQL_PASSWORD: authara
-          POSTGRESQL_SCHEMA: authara
         run: |
           docker run --rm \
             --network host \
@@ -71,7 +73,6 @@ jobs:
             -e POSTGRESQL_DATABASE \
             -e POSTGRESQL_USERNAME \
             -e POSTGRESQL_PASSWORD \
-            -e POSTGRESQL_SCHEMA \
             authara-migrations:test \
             up \
             -env=default \

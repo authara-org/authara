@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -12,8 +13,10 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
+	"github.com/google/uuid"
 )
 
 func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.LoginWithPasswordRequestObject) (contract.LoginWithPasswordResponseObject, error) {
@@ -37,7 +40,7 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 	}
 	loginInput := auth.LoginInput{
 		Provider: domain.ProviderPassword,
-		Email:    strings.ToLower(identifier),
+		Email:    identity.CanonicalUsername(identifier),
 		Password: password,
 	}
 	invalidCredentialsMessage := "Invalid email or password."
@@ -52,10 +55,10 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	rateLimitIdentifier := strings.ToLower(identifier)
+	rateLimitIdentifier := identity.CanonicalUsername(identifier)
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), rateLimitIdentifier)
-	if err != nil || !allowed {
-		return loginWithPasswordError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
+	if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		return loginWithPasswordError(code, message), nil
 	}
 	user, err := h.Auth.Login(ctx, loginInput)
 	if err != nil {
@@ -66,7 +69,7 @@ func (h *APIHandler) LoginWithPassword(ctx context.Context, request contract.Log
 		}
 		return loginWithPasswordError(code, message), nil
 	}
-	sessionBody, header, code, message, ok := h.contractSession(ctx, r, user, audience)
+	sessionBody, header, code, message, ok := h.contractSession(ctx, r, user, audience, domain.AuthenticationMethodPassword)
 	if !ok {
 		return loginWithPasswordError(code, message), nil
 	}
@@ -103,7 +106,7 @@ func (h *APIHandler) SignupDirect(ctx context.Context, request contract.SignupDi
 		code := authSignupErrorCode(err)
 		return signupDirectError(code, authSignupErrorMessage(err, code)), nil
 	}
-	body, header, code, message, ok := h.contractSession(ctx, r, user, audience)
+	body, header, code, message, ok := h.contractSession(ctx, r, user, audience, domain.AuthenticationMethodPassword)
 	if !ok {
 		return signupDirectError(code, message), nil
 	}
@@ -121,7 +124,7 @@ func signupInputFromBody(body *contract.SignupRequest) (contractSignupInput, res
 		return contractSignupInput{}, responseCodeInvalidRequest(), "Invalid JSON body.", false
 	}
 	in := contractSignupInput{
-		Email:    strings.ToLower(strings.TrimSpace(string(body.Email))),
+		Email:    identity.CanonicalEmail(string(body.Email)),
 		Password: body.Password,
 	}
 	if body.InvitationCode != nil {
@@ -138,22 +141,23 @@ func (h *APIHandler) prepareContractSignup(
 	r *http.Request,
 	in contractSignupInput,
 ) (string, response.ErrorCode, string, bool) {
-	if !validationEmailPassword(in.Email, in.Password) {
-		return "", responseCodeInvalidRequest(), "Please provide a valid email and password.", false
+	if !validation.IsValidEmail(in.Email) {
+		return "", responseCodeInvalidRequest(), "Please provide a valid email address.", false
+	}
+	if err := h.Auth.ValidatePassword(ctx, in.Password); err != nil {
+		code, message := h.passwordPolicyError(err)
+		return "", code, message, false
 	}
 	allowed, err := h.Limiter.AllowSignupAttempt(ctx, httputil.ClientIP(r), in.Email)
-	if err != nil || !allowed {
-		return "", responseCodeRateLimited(), "Too many attempts. Please try again later.", false
+	if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		return "", code, message, false
 	}
-	passwordHash, err := auth.Hash(in.Password)
+	passwordHash, err := h.Auth.HashPassword(ctx, in.Password)
 	if err != nil {
-		return "", responseCodeInternalError(), "Password error", false
+		code, message := h.passwordPolicyError(err)
+		return "", code, message, false
 	}
 	return passwordHash, "", "", true
-}
-
-func validationEmailPassword(email, password string) bool {
-	return validation.IsValidEmail(email) && validation.IsValidPassword(password)
 }
 
 func (h *APIHandler) contractSession(
@@ -161,8 +165,19 @@ func (h *APIHandler) contractSession(
 	r *http.Request,
 	user domain.User,
 	audience token.Audience,
+	authenticationMethod domain.AuthenticationMethod,
+	passkeyIDs ...uuid.UUID,
 ) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	var accessToken, refreshToken string
+	var err error
+	if len(passkeyIDs) > 0 {
+		accessToken, refreshToken, err = h.Session.CreatePasskeySession(ctx, user.ID, passkeyIDs[0], audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	} else {
+		accessToken, refreshToken, err = h.Session.CreateSession(ctx, user.ID, audience, authenticationMethod, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	}
+	if errors.Is(err, session.ErrAuthenticationMethodUnavailable) {
+		return contract.AuthSession{}, nil, response.CodeUnauthorized, "Passkey sign-in failed.", false
+	}
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
 		return contract.AuthSession{}, nil, response.CodeForbidden, "Account cannot access requested audience.", false

@@ -28,24 +28,36 @@ type ServiceOptions struct {
 	Environment       []EnvironmentVariable
 	Logger            *slog.Logger
 	ReconcileInterval time.Duration
+	Metrics           RuntimeSettingsMetrics
+}
+
+type RuntimeSettingsMetrics interface {
+	SetRuntimeSettingsRevision(revision int64)
+	ObserveRuntimeSettingsReconciliation(result string, duration time.Duration, revision int64)
 }
 
 type snapshot struct {
-	revision       int64
-	ui             UIPolicy
-	authentication AuthenticationPolicy
-	token          TokenPolicy
-	session        SessionPolicy
-	organization   OrganizationPolicy
-	allowlist      AllowlistPolicy
-	admin          AdminPolicy
-	email          EmailPolicy
-	webhook        WebhookPolicy
-	challenge      ChallengePolicy
-	rateLimits     RateLimitPolicy
-	descriptions   map[Key]Description
-	overrides      map[Key]PersistedOverride
-	fallbackValues map[Key]any
+	revision             int64
+	ui                   UIPolicy
+	authentication       AuthenticationPolicy
+	token                TokenPolicy
+	session              SessionPolicy
+	organization         OrganizationPolicy
+	allowlist            AllowlistPolicy
+	admin                AdminPolicy
+	email                EmailPolicy
+	webhook              WebhookPolicy
+	challenge            ChallengePolicy
+	rateLimits           RateLimitPolicy
+	descriptions         map[Key]Description
+	overrides            map[Key]PersistedOverride
+	unsupportedOverrides []unsupportedOverride
+	fallbackValues       map[Key]any
+}
+
+type unsupportedOverride struct {
+	key      Key
+	revision int64
 }
 
 type Service struct {
@@ -60,6 +72,11 @@ type Service struct {
 	interval            time.Duration
 	mu                  sync.Mutex
 	current             atomic.Pointer[snapshot]
+	metrics             RuntimeSettingsMetrics
+	reconcilerMu        sync.Mutex
+	reconcilerStarted   bool
+	reconcilerCancel    context.CancelFunc
+	reconcilerDone      chan struct{}
 }
 
 func NewService(ctx context.Context, cfg ServiceOptions) (*Service, error) {
@@ -83,9 +100,10 @@ func NewService(ctx context.Context, cfg ServiceOptions) (*Service, error) {
 	}
 	s := &Service{
 		Config: cfg.Startup,
-		store:  cfg.Store, logger: logger, interval: interval,
+		store:  cfg.Store, logger: logger, interval: interval, metrics: cfg.Metrics,
 		definitions: buildCatalog(cfg.Environment), definitionByKey: make(map[Key]Definition),
 		defaultValues: make(map[Key]any), environmentValues: make(map[Key]any), explicitEnvironment: make(map[Key]bool),
+		reconcilerDone: make(chan struct{}),
 	}
 	for _, definition := range s.definitions {
 		if _, exists := s.definitionByKey[definition.Key]; exists {
@@ -255,6 +273,7 @@ func (s *Service) Set(ctx context.Context, key Key, rawValue string, actorID uui
 	if err != nil {
 		return Description{}, err
 	}
+	proposed.unsupportedOverrides = append([]unsupportedOverride(nil), before.unsupportedOverrides...)
 	if err := s.validateEnvironmentRemovalProjections(key, proposed.fallbackValues); err != nil {
 		return Description{}, err
 	}
@@ -273,6 +292,9 @@ func (s *Service) Set(ctx context.Context, key Key, rawValue string, actorID uui
 	description.Revision = saved.Revision
 	proposed.descriptions[key] = description
 	s.current.Store(proposed)
+	if s.metrics != nil {
+		s.metrics.SetRuntimeSettingsRevision(proposed.revision)
+	}
 	return cloneDescription(description), nil
 }
 
@@ -318,6 +340,7 @@ func (s *Service) Clear(ctx context.Context, key Key, actorID uuid.UUID, expecte
 	if err != nil {
 		return Description{}, err
 	}
+	proposed.unsupportedOverrides = append([]unsupportedOverride(nil), before.unsupportedOverrides...)
 	beforeProjectionErrors := s.environmentRemovalProjectionErrors(key, before.fallbackValues)
 	afterProjectionErrors := s.environmentRemovalProjectionErrors(key, proposed.fallbackValues)
 	for mask, projectionErr := range afterProjectionErrors {
@@ -336,6 +359,9 @@ func (s *Service) Clear(ctx context.Context, key Key, actorID uuid.UUID, expecte
 	}
 	proposed.revision = revision
 	s.current.Store(proposed)
+	if s.metrics != nil {
+		s.metrics.SetRuntimeSettingsRevision(proposed.revision)
+	}
 	return cloneDescription(proposed.descriptions[key]), nil
 }
 
@@ -344,7 +370,7 @@ func (s *Service) refreshAfterConflict(ctx context.Context, key Key, mutationErr
 		return
 	}
 	if err := s.reloadLocked(ctx, true); err != nil {
-		s.logger.WarnContext(ctx, "refresh runtime settings after revision conflict failed", "key", key, "err", err)
+		s.logger.WarnContext(ctx, "refresh runtime settings after revision conflict failed", "key", key, "error", err)
 	}
 }
 
@@ -371,26 +397,73 @@ func (s *Service) operatorDefinition(key Key) (Definition, error) {
 }
 
 func (s *Service) StartReconciler(ctx context.Context) {
+	s.reconcilerMu.Lock()
+	if s.reconcilerStarted {
+		s.reconcilerMu.Unlock()
+		return
+	}
+	reconcilerCtx, cancel := context.WithCancel(ctx)
+	s.reconcilerStarted = true
+	s.reconcilerCancel = cancel
+	s.reconcilerMu.Unlock()
+
 	go func() {
+		defer close(s.reconcilerDone)
 		ticker := time.NewTicker(s.interval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-reconcilerCtx.Done():
 				return
 			case <-ticker.C:
-				if err := s.Reconcile(ctx); err != nil && ctx.Err() == nil {
-					s.logger.ErrorContext(ctx, "runtime settings reconciliation failed", "err", err)
+				if err := s.Reconcile(reconcilerCtx); err != nil && reconcilerCtx.Err() == nil {
+					s.logger.ErrorContext(reconcilerCtx, "runtime settings reconciliation failed", "error", err)
 				}
 			}
 		}
 	}()
 }
 
+func (s *Service) ShutdownReconciler(ctx context.Context) error {
+	s.reconcilerMu.Lock()
+	if !s.reconcilerStarted {
+		s.reconcilerMu.Unlock()
+		return nil
+	}
+	cancel := s.reconcilerCancel
+	done := s.reconcilerDone
+	s.reconcilerMu.Unlock()
+
+	cancel()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Service) ReconcilerDone() <-chan struct{} {
+	return s.reconcilerDone
+}
+
 func (s *Service) Reconcile(ctx context.Context) error {
+	started := time.Now()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.reloadLocked(ctx, false)
+	before := s.current.Load().revision
+	err := s.reloadLocked(ctx, false)
+	after := s.current.Load().revision
+	s.mu.Unlock()
+	if s.metrics != nil && !(err != nil && ctx.Err() != nil) {
+		result := "unchanged"
+		if err != nil {
+			result = "failed"
+		} else if after != before {
+			result = "applied"
+		}
+		s.metrics.ObserveRuntimeSettingsReconciliation(result, time.Since(started), after)
+	}
+	return err
 }
 
 func (s *Service) reloadLocked(ctx context.Context, force bool) error {
@@ -406,24 +479,37 @@ func (s *Service) reloadLocked(ctx context.Context, force bool) error {
 		return err
 	}
 	s.current.Store(next)
+	if s.metrics != nil {
+		s.metrics.SetRuntimeSettingsRevision(next.revision)
+	}
+	for _, override := range next.unsupportedOverrides {
+		s.logger.WarnContext(ctx, "unsupported runtime setting preserved and ignored",
+			"key", override.key,
+			"revision", override.revision,
+		)
+	}
 	return nil
 }
 
 func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 	overrides := make(map[Key]PersistedOverride, len(state.Overrides))
+	seen := make(map[Key]struct{}, len(state.Overrides))
+	unsupportedOverrides := make([]unsupportedOverride, 0)
 	for _, override := range state.Overrides {
-		definition, ok := s.definitionByKey[override.Key]
-		if !ok {
-			return nil, fmt.Errorf("%w in database: %q", ErrUnknownSetting, override.Key)
-		}
-		if definition.Control == ControlEnvironment || definition.Sensitive || definition.Reload != ReloadDynamic {
-			return nil, fmt.Errorf("%w in database: %q is not operator-editable", ErrInvalidValue, override.Key)
-		}
 		if override.Revision <= 0 {
 			return nil, fmt.Errorf("%w in database: %q has revision %d", ErrInvalidValue, override.Key, override.Revision)
 		}
-		if _, exists := overrides[override.Key]; exists {
+		if _, exists := seen[override.Key]; exists {
 			return nil, fmt.Errorf("%w in database: duplicate %q", ErrInvalidValue, override.Key)
+		}
+		seen[override.Key] = struct{}{}
+		definition, ok := s.definitionByKey[override.Key]
+		if !ok {
+			unsupportedOverrides = append(unsupportedOverrides, unsupportedOverride{key: override.Key, revision: override.Revision})
+			continue
+		}
+		if definition.Control == ControlEnvironment || definition.Sensitive || definition.Reload != ReloadDynamic {
+			return nil, fmt.Errorf("%w in database: %q is not operator-editable", ErrInvalidValue, override.Key)
 		}
 		if _, err := parseJSON(definition, override.Value, true); err != nil {
 			return nil, fmt.Errorf("stored %s: %w", override.Key, err)
@@ -475,12 +561,24 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		}
 	}
 
-	ui := UIPolicy{DefaultReturnTo: values[KeyUIDefaultReturnTo].(string)}
+	ui := UIPolicy{
+		AppName:         values[KeyUIAppName].(string),
+		DefaultReturnTo: values[KeyUIDefaultReturnTo].(string),
+	}
 	if _, ok := redirect.NormalizeReturnTo(ui.DefaultReturnTo); !ok {
 		return nil, fmt.Errorf("%w: default return path must be a safe relative path", ErrInvalidValue)
 	}
 	authentication := AuthenticationPolicy{
-		UsernameLoginEnabled: values[KeyAuthenticationUsernameLoginEnabled].(bool),
+		UsernameLoginEnabled:      values[KeyAuthenticationUsernameLoginEnabled].(bool),
+		EmailVerificationRequired: values[KeyAuthenticationEmailVerificationRequired].(bool),
+		PasskeyCloneResponse:      values[KeyAuthenticationPasskeyCloneResponse].(string),
+		PasskeyCloneNotifyUser:    values[KeyAuthenticationPasskeyCloneNotifyUser].(bool),
+	}
+	if authentication.EmailVerificationRequired && !s.Email.IsDeliverable() {
+		return nil, fmt.Errorf("%w: email delivery must be configured before requiring email verification", ErrInvalidValue)
+	}
+	if authentication.EmailVerificationRequired && !values[KeyChallengeEnabled].(bool) {
+		return nil, fmt.Errorf("%w: challenge flows must be enabled before requiring email verification", ErrInvalidValue)
 	}
 	tokenPolicy := TokenPolicy{
 		AccessTokenTTL: time.Duration(values[KeyTokenAccessTTL].(int)) * time.Minute,
@@ -490,11 +588,13 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidValue, err)
 	}
 	sessionPolicy := SessionPolicy{
-		SessionTTL:           time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
-		RefreshTokenTTL:      time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
-		RefreshTokenRotation: rotation,
+		SessionTTL:                  time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
+		RefreshTokenTTL:             time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
+		RefreshTokenRotation:        rotation,
+		RecentAuthenticationEnabled: values[KeySessionRecentAuthenticationEnabled].(bool),
+		RecentAuthenticationWindow:  values[KeySessionRecentAuthenticationWindow].(time.Duration),
 	}
-	if err := validateSessionPolicies(tokenPolicy, sessionPolicy); err != nil {
+	if err := validateSessionPolicies(tokenPolicy, sessionPolicy, s.Cache.AccessTokenRevocationMode); err != nil {
 		return nil, err
 	}
 	organization := OrganizationPolicy{
@@ -568,6 +668,7 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		organization: organization, allowlist: allowlist, admin: adminPolicy,
 		email: emailPolicy, webhook: webhookPolicy, challenge: challengePolicy, rateLimits: rateLimits,
 		descriptions: descriptions, overrides: overrides, fallbackValues: fallbackValues,
+		unsupportedOverrides: unsupportedOverrides,
 	}, nil
 }
 
@@ -585,7 +686,7 @@ func environmentRemovalProjectionError(err error) error {
 }
 
 func (s *Service) environmentRemovalProjectionErrors(key Key, fallbackValues map[Key]any) []error {
-	keys, validate := environmentRemovalProjectionValidator(key)
+	keys, validate := environmentRemovalProjectionValidator(key, s.Cache.AccessTokenRevocationMode)
 	if len(keys) == 0 {
 		return nil
 	}
@@ -606,7 +707,7 @@ func (s *Service) environmentRemovalProjectionErrors(key Key, fallbackValues map
 	return errorsByMask
 }
 
-func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) error) {
+func environmentRemovalProjectionValidator(key Key, revocationMode string) ([]Key, func(map[Key]any) error) {
 	switch key {
 	case KeyUIDefaultReturnTo:
 		return []Key{KeyUIDefaultReturnTo}, func(values map[Key]any) error {
@@ -615,8 +716,8 @@ func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) er
 			}
 			return nil
 		}
-	case KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation:
-		return []Key{KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation}, func(values map[Key]any) error {
+	case KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationEnabled, KeySessionRecentAuthenticationWindow:
+		return []Key{KeyTokenAccessTTL, KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationEnabled, KeySessionRecentAuthenticationWindow}, func(values map[Key]any) error {
 			rotation, err := parseRotationInterval(strings.ToLower(strings.TrimSpace(values[KeySessionRotation].(string))))
 			if err != nil {
 				return fmt.Errorf("%w: %v", ErrInvalidValue, err)
@@ -624,10 +725,13 @@ func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) er
 			return validateSessionPolicies(
 				TokenPolicy{AccessTokenTTL: time.Duration(values[KeyTokenAccessTTL].(int)) * time.Minute},
 				SessionPolicy{
-					SessionTTL:           time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
-					RefreshTokenTTL:      time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
-					RefreshTokenRotation: rotation,
+					SessionTTL:                  time.Duration(values[KeySessionTTL].(int)) * 24 * time.Hour,
+					RefreshTokenTTL:             time.Duration(values[KeySessionRefreshTokenTTL].(int)) * 24 * time.Hour,
+					RefreshTokenRotation:        rotation,
+					RecentAuthenticationEnabled: values[KeySessionRecentAuthenticationEnabled].(bool),
+					RecentAuthenticationWindow:  values[KeySessionRecentAuthenticationWindow].(time.Duration),
 				},
+				revocationMode,
 			)
 		}
 	case KeyWebhookEnabledEvents:
@@ -658,8 +762,8 @@ func environmentRemovalProjectionValidator(key Key) ([]Key, func(map[Key]any) er
 	return nil, nil
 }
 
-func validateSessionPolicies(token TokenPolicy, session SessionPolicy) error {
-	if token.AccessTokenTTL <= 0 || session.SessionTTL <= 0 || session.RefreshTokenTTL <= 0 {
+func validateSessionPolicies(token TokenPolicy, session SessionPolicy, revocationMode string) error {
+	if token.AccessTokenTTL <= 0 || session.SessionTTL <= 0 || session.RefreshTokenTTL <= 0 || session.RecentAuthenticationWindow <= 0 {
 		return fmt.Errorf("%w: token and session lifetimes must be greater than zero", ErrInvalidValue)
 	}
 	if session.RefreshTokenTTL > session.SessionTTL {
@@ -667,6 +771,20 @@ func validateSessionPolicies(token TokenPolicy, session SessionPolicy) error {
 	}
 	if token.AccessTokenTTL >= session.RefreshTokenTTL {
 		return fmt.Errorf("%w: access-token lifetime must be shorter than refresh-token lifetime", ErrInvalidValue)
+	}
+	if token.AccessTokenTTL > MaxAccessTokenTTL {
+		return fmt.Errorf(
+			"%w: access-token lifetime must not exceed %s",
+			ErrInvalidValue,
+			MaxAccessTokenTTL,
+		)
+	}
+	if revocationMode == AccessTokenRevocationModeExpiry && token.AccessTokenTTL > ExpiryOnlyMaxAccessTokenTTL {
+		return fmt.Errorf(
+			"%w: access-token lifetime must not exceed %s in expiry-only revocation mode",
+			ErrInvalidValue,
+			ExpiryOnlyMaxAccessTokenTTL,
+		)
 	}
 	if session.RefreshTokenRotation > 0 && session.RefreshTokenRotation >= session.RefreshTokenTTL {
 		return fmt.Errorf("%w: refresh-token rotation interval must be shorter than refresh-token lifetime", ErrInvalidValue)
@@ -781,6 +899,9 @@ func parseText(definition Definition, raw string, enforceOperatorBounds bool) (a
 		}
 	default:
 		err = fmt.Errorf("unsupported type %q", definition.Type)
+	}
+	if err == nil && definition.Key == KeyUIAppName {
+		value, err = normalizeAppName(value.(string))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w for %s: %v", ErrInvalidValue, definition.Key, err)

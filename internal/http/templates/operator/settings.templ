@@ -115,7 +115,14 @@ templ RuntimeSettingRow(setting config.Description, inputValue string, errorMess
 					<input type="hidden" name="revision" value={ strconv.FormatInt(setting.Revision, 10) }/>
 					<div class="min-w-0 flex-1">
 						<label class="sr-only" for={ "runtime-setting-" + string(setting.Key) }>Effective value</label>
-						<input id={ "runtime-setting-" + string(setting.Key) } name="value" value={ inputValue } class="h-9 w-full rounded-lg border border-grey-200 bg-white px-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-grey-700 dark:bg-grey-950 dark:focus:ring-blue-900/40"/>
+						if setting.Type == config.TypeBool {
+							<select id={ "runtime-setting-" + string(setting.Key) } name="value" class="h-9 w-full rounded-lg border border-grey-200 bg-white px-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-grey-700 dark:bg-grey-950 dark:focus:ring-blue-900/40">
+								<option value="true" selected?={ inputValue == "true" }>Enabled (true)</option>
+								<option value="false" selected?={ inputValue == "false" }>Disabled (false)</option>
+							</select>
+						} else {
+							<input id={ "runtime-setting-" + string(setting.Key) } name="value" value={ inputValue } class="h-9 w-full rounded-lg border border-grey-200 bg-white px-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-grey-700 dark:bg-grey-950 dark:focus:ring-blue-900/40"/>
+						}
 					</div>
 					@button.Button(button.ButtonConfig{Label: "Save", Type: button.Submit, Size: button.Small, Class: " !h-9 !w-auto !rounded-lg"})
 				</form>

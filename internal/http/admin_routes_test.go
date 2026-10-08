@@ -270,6 +270,8 @@ func newAdminRouteTestRouterWithConfig(m adminRouteMiddlewareConfig, override ad
 		RedirectIfAuthenticated:              passMiddleware,
 		RequireAppAccessAuthWithRefresh:      passMiddleware,
 		RequireAppAccessAuthAPI:              passMiddleware,
+		RequireRecentAuthenticationUI:        passMiddleware,
+		RequireRecentAuthenticationAPI:       passMiddleware,
 		RequireAdminAccessAuthWithRefresh:    m.adminAuth,
 		RequireAdminAccessAuthAPI:            m.adminAuth,
 		RequireOperatorAccessAuthWithRefresh: passMiddleware,

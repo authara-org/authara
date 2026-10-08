@@ -24,6 +24,7 @@ func toDomainPasskey(m model.Passkey) domain.Passkey {
 		AAGUID:            m.AAGUID,
 		SignCount:         uint32(m.SignCount),
 		CloneWarning:      m.CloneWarning,
+		RestrictedAt:      m.RestrictedAt,
 		Name:              m.Name,
 		LastUsedAt:        m.LastUsedAt,
 		UserPresent:       m.UserPresent,
@@ -44,6 +45,7 @@ func toModelPasskey(d domain.Passkey) model.Passkey {
 		AAGUID:            d.AAGUID,
 		SignCount:         int64(d.SignCount),
 		CloneWarning:      d.CloneWarning,
+		RestrictedAt:      d.RestrictedAt,
 		Name:              d.Name,
 		LastUsedAt:        d.LastUsedAt,
 		UserPresent:       d.UserPresent,
@@ -64,6 +66,7 @@ const passkeyColumns = `
 	aaguid,
 	sign_count,
 	clone_warning,
+	restricted_at,
 	name,
 	created_at,
 	updated_at,
@@ -86,6 +89,7 @@ func scanPasskey(row rowScanner, m *model.Passkey) error {
 		&m.AAGUID,
 		&m.SignCount,
 		&m.CloneWarning,
+		&m.RestrictedAt,
 		&m.Name,
 		&m.CreatedAt,
 		&m.UpdatedAt,
@@ -114,6 +118,7 @@ func (s *Store) CreatePasskey(ctx context.Context, passkey domain.Passkey) (doma
 			aaguid,
 			sign_count,
 			clone_warning,
+			restricted_at,
 			name,
 			last_used_at,
 			user_present,
@@ -136,7 +141,8 @@ func (s *Store) CreatePasskey(ctx context.Context, passkey domain.Passkey) (doma
 			$12,
 			$13,
 			$14,
-			$15
+			$15,
+			$16
 		)
 		RETURNING `+passkeyColumns,
 		m.UserID,
@@ -148,6 +154,7 @@ func (s *Store) CreatePasskey(ctx context.Context, passkey domain.Passkey) (doma
 		m.AAGUID,
 		m.SignCount,
 		m.CloneWarning,
+		m.RestrictedAt,
 		m.Name,
 		m.LastUsedAt,
 		m.UserPresent,
@@ -165,12 +172,24 @@ func (s *Store) CreatePasskey(ctx context.Context, passkey domain.Passkey) (doma
 }
 
 func (s *Store) ListPasskeysByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Passkey, error) {
+	return s.ListPasskeysPageByUserID(ctx, userID, nil, 0)
+}
+
+func (s *Store) ListPasskeysPageByUserID(ctx context.Context, userID uuid.UUID, cursor *ListCursor, limit int) ([]domain.Passkey, error) {
+	var cursorCreatedAt any
+	var cursorID any
+	if cursor != nil {
+		cursorCreatedAt = cursor.CreatedAt
+		cursorID = cursor.ID
+	}
 	rows, err := s.queryRows(ctx, `
 		SELECT `+passkeyColumns+`
 		FROM passkeys
 		WHERE user_id = $1
-		ORDER BY created_at ASC
-	`, userID)
+		  AND ($2::timestamptz IS NULL OR (created_at, id) > ($2, $3))
+		ORDER BY created_at ASC, id ASC
+		LIMIT NULLIF($4, 0)
+	`, userID, cursorCreatedAt, cursorID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +208,30 @@ func (s *Store) ListPasskeysByUserID(ctx context.Context, userID uuid.UUID) ([]d
 	}
 
 	return out, nil
+}
+
+func (s *Store) ListPasskeysByUserIDOffsetPage(ctx context.Context, userID uuid.UUID, limit, offset int) ([]domain.Passkey, error) {
+	rows, err := s.queryRows(ctx, `
+		SELECT `+passkeyColumns+`
+		FROM passkeys
+		WHERE user_id = $1
+		ORDER BY created_at ASC, id ASC
+		LIMIT $2 OFFSET $3
+	`, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.Passkey, 0)
+	for rows.Next() {
+		var row model.Passkey
+		if err := scanPasskey(rows, &row); err != nil {
+			return nil, err
+		}
+		out = append(out, toDomainPasskey(row))
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) GetPasskeyByCredentialID(ctx context.Context, credentialID []byte) (domain.Passkey, error) {
@@ -243,8 +286,8 @@ func (s *Store) DeletePasskeyByIDAndUserID(ctx context.Context, passkeyID, userI
 func (s *Store) UpdatePasskeyAfterLogin(ctx context.Context, credentialID []byte, signCount uint32, cloneWarning bool, now time.Time) error {
 	res, err := s.exec(ctx, `
 		UPDATE passkeys
-		SET sign_count = $1,
-		    clone_warning = $2,
+		SET sign_count = GREATEST(sign_count, $1),
+		    clone_warning = clone_warning OR $2,
 		    last_used_at = $3
 		WHERE credential_id = $4
 	`, int64(signCount), cloneWarning, now, credentialID)
@@ -262,6 +305,25 @@ func (s *Store) UpdatePasskeyAfterLogin(ctx context.Context, credentialID []byte
 	return nil
 }
 
+func (s *Store) RestrictPasskey(ctx context.Context, passkeyID uuid.UUID, now time.Time) error {
+	res, err := s.exec(ctx, `
+		UPDATE passkeys
+		SET restricted_at = COALESCE(restricted_at, $1)
+		WHERE id = $2
+	`, now, passkeyID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrPasskeyNotFound
+	}
+	return nil
+}
+
 func (s *Store) CountAuthMethods(ctx context.Context, userID uuid.UUID) (int, error) {
 	var count int
 	err := s.queryRow(ctx, `
@@ -275,7 +337,7 @@ func (s *Store) CountAuthMethods(ctx context.Context, userID uuid.UUID) (int, er
 			      (provider <> $2 AND provider_user_id IS NOT NULL AND provider_user_id <> '')
 			    )
 			) +
-			(SELECT count(*) FROM passkeys WHERE user_id = $1)
+			(SELECT count(*) FROM passkeys WHERE user_id = $1 AND restricted_at IS NULL)
 	`, userID, string(domain.ProviderPassword)).Scan(&count)
 	if err != nil {
 		return 0, err
@@ -286,6 +348,7 @@ func (s *Store) CountAuthMethods(ctx context.Context, userID uuid.UUID) (int, er
 func (s *Store) CreateWebAuthnChallenge(ctx context.Context, in domain.WebAuthnChallenge) (domain.WebAuthnChallenge, error) {
 	m := model.WebAuthnChallenge{
 		UserID:      in.UserID,
+		SessionID:   in.SessionID,
 		Purpose:     string(in.Purpose),
 		Challenge:   in.Challenge,
 		SessionData: in.SessionData,
@@ -296,15 +359,17 @@ func (s *Store) CreateWebAuthnChallenge(ctx context.Context, in domain.WebAuthnC
 	if err := scanWebAuthnChallenge(s.queryRow(ctx, `
 		INSERT INTO webauthn_challenges (
 			user_id,
+			session_id,
 			purpose,
 			challenge,
 			session_data,
 			expires_at,
 			consumed_at
 		)
-		VALUES ($1, $2, $3, $4::jsonb, $5, $6)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
 		RETURNING `+webAuthnChallengeColumns,
 		m.UserID,
+		m.SessionID,
 		m.Purpose,
 		m.Challenge,
 		string(m.SessionData),
@@ -352,18 +417,31 @@ func (s *Store) ConsumeWebAuthnChallenge(ctx context.Context, challengeID uuid.U
 	return nil
 }
 
-func (s *Store) DeleteExpiredWebAuthnChallenges(ctx context.Context, now time.Time) error {
-	_, err := s.exec(ctx, `
-		DELETE FROM webauthn_challenges
-		WHERE expires_at < $1 OR consumed_at IS NOT NULL
-	`, now)
-	return err
+func (s *Store) DeleteExpiredWebAuthnChallenges(ctx context.Context, now time.Time, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM webauthn_challenges
+			WHERE expires_at < $1 OR consumed_at IS NOT NULL
+			ORDER BY LEAST(expires_at, COALESCE(consumed_at, expires_at)), id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM webauthn_challenges AS challenge
+		USING oldest
+		WHERE challenge.id = oldest.id
+	`, now, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const webAuthnChallengeColumns = `
 	id,
 	created_at,
 	user_id,
+	session_id,
 	purpose,
 	challenge,
 	session_data,
@@ -376,6 +454,7 @@ func scanWebAuthnChallenge(row rowScanner, m *model.WebAuthnChallenge) error {
 		&m.ID,
 		&m.CreatedAt,
 		&m.UserID,
+		&m.SessionID,
 		&m.Purpose,
 		&m.Challenge,
 		&m.SessionData,
@@ -390,6 +469,7 @@ func toDomainWebAuthnChallenge(m model.WebAuthnChallenge) domain.WebAuthnChallen
 		ID:          m.ID,
 		CreatedAt:   m.CreatedAt,
 		UserID:      m.UserID,
+		SessionID:   m.SessionID,
 		Purpose:     domain.WebAuthnChallengePurpose(m.Purpose),
 		Challenge:   m.Challenge,
 		SessionData: m.SessionData,

@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
 )
@@ -45,7 +47,7 @@ func scanPendingSignupAction(row rowScanner, m *model.PendingSignupAction) error
 func toModelPendingSignupAction(d domain.PendingSignupAction) model.PendingSignupAction {
 	return model.PendingSignupAction{
 		ChallengeID:  d.ChallengeID,
-		Email:        d.Email,
+		Email:        identity.CanonicalEmail(d.Email),
 		Username:     d.Username,
 		PasswordHash: d.PasswordHash,
 		InvitationID: d.InvitationID,
@@ -133,6 +135,10 @@ func (s *Store) CreatePendingPasswordReset(ctx context.Context, in domain.Pendin
 	if err := scanPendingPasswordReset(s.queryRow(ctx, `
 		INSERT INTO pending_password_resets (challenge_id, user_id, password_hash)
 		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET created_at = now(),
+			challenge_id = EXCLUDED.challenge_id,
+			password_hash = EXCLUDED.password_hash
 		RETURNING `+pendingPasswordResetColumns,
 		row.ChallengeID,
 		row.UserID,
@@ -175,12 +181,13 @@ func (s *Store) DeletePendingPasswordResetsByUserID(ctx context.Context, userID 
 
 func toDomainPendingEmailChange(m model.PendingEmailChange) domain.PendingEmailChange {
 	return domain.PendingEmailChange{
-		ID:          m.ID,
-		CreatedAt:   m.CreatedAt,
-		ChallengeID: m.ChallengeID,
-		UserID:      m.UserID,
-		OldEmail:    m.OldEmail,
-		NewEmail:    m.NewEmail,
+		ID:                  m.ID,
+		CreatedAt:           m.CreatedAt,
+		ChallengeID:         m.ChallengeID,
+		UserID:              m.UserID,
+		InitiatingSessionID: m.InitiatingSessionID,
+		OldEmail:            m.OldEmail,
+		NewEmail:            m.NewEmail,
 	}
 }
 
@@ -189,6 +196,7 @@ const pendingEmailChangeColumns = `
 	created_at,
 	challenge_id,
 	user_id,
+	initiating_session_id,
 	old_email,
 	new_email
 `
@@ -199,6 +207,7 @@ func scanPendingEmailChange(row rowScanner, m *model.PendingEmailChange) error {
 		&m.CreatedAt,
 		&m.ChallengeID,
 		&m.UserID,
+		&m.InitiatingSessionID,
 		&m.OldEmail,
 		&m.NewEmail,
 	)
@@ -206,10 +215,11 @@ func scanPendingEmailChange(row rowScanner, m *model.PendingEmailChange) error {
 
 func toModelPendingEmailChange(d domain.PendingEmailChange) model.PendingEmailChange {
 	return model.PendingEmailChange{
-		ChallengeID: d.ChallengeID,
-		UserID:      d.UserID,
-		OldEmail:    d.OldEmail,
-		NewEmail:    d.NewEmail,
+		ChallengeID:         d.ChallengeID,
+		UserID:              d.UserID,
+		InitiatingSessionID: d.InitiatingSessionID,
+		OldEmail:            identity.CanonicalEmail(d.OldEmail),
+		NewEmail:            identity.CanonicalEmail(d.NewEmail),
 	}
 }
 
@@ -217,11 +227,18 @@ func (s *Store) CreatePendingEmailChange(ctx context.Context, in domain.PendingE
 	row := toModelPendingEmailChange(in)
 
 	if err := scanPendingEmailChange(s.queryRow(ctx, `
-		INSERT INTO pending_email_changes (challenge_id, user_id, old_email, new_email)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO pending_email_changes (challenge_id, user_id, initiating_session_id, old_email, new_email)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (user_id) DO UPDATE
+		SET created_at = now(),
+			challenge_id = EXCLUDED.challenge_id,
+			initiating_session_id = EXCLUDED.initiating_session_id,
+			old_email = EXCLUDED.old_email,
+			new_email = EXCLUDED.new_email
 		RETURNING `+pendingEmailChangeColumns,
 		row.ChallengeID,
 		row.UserID,
+		row.InitiatingSessionID,
 		row.OldEmail,
 		row.NewEmail,
 	), &row); err != nil {
@@ -232,13 +249,26 @@ func (s *Store) CreatePendingEmailChange(ctx context.Context, in domain.PendingE
 }
 
 func (s *Store) GetPendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID) (domain.PendingEmailChange, error) {
+	return s.getPendingEmailChangeByChallengeID(ctx, challengeID, false)
+}
+
+func (s *Store) GetPendingEmailChangeByChallengeIDForUpdate(ctx context.Context, challengeID uuid.UUID) (domain.PendingEmailChange, error) {
+	return s.getPendingEmailChangeByChallengeID(ctx, challengeID, true)
+}
+
+func (s *Store) getPendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID, forUpdate bool) (domain.PendingEmailChange, error) {
 	var row model.PendingEmailChange
 
-	err := scanPendingEmailChange(s.queryRow(ctx, `
-		SELECT `+pendingEmailChangeColumns+`
+	query := `
+		SELECT ` + pendingEmailChangeColumns + `
 		FROM pending_email_changes
 		WHERE challenge_id = $1
-	`, challengeID), &row)
+	`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+
+	err := scanPendingEmailChange(s.queryRow(ctx, query, challengeID), &row)
 	if err != nil {
 		return domain.PendingEmailChange{}, mapNoRows(err, ErrorPendingEmailChangeNotFound)
 	}
@@ -246,32 +276,45 @@ func (s *Store) GetPendingEmailChangeByChallengeID(ctx context.Context, challeng
 	return toDomainPendingEmailChange(row), nil
 }
 
-func (s *Store) DeletePendingEmailChangeByChallengeID(ctx context.Context, challengeID uuid.UUID) error {
-	res, err := s.exec(ctx, `DELETE FROM pending_email_changes WHERE challenge_id = $1`, challengeID)
-	if err != nil {
-		return err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
-		return ErrorPendingEmailChangeNotFound
-	}
-	return nil
+func (s *Store) DeletePendingEmailChangesByUserID(ctx context.Context, userID uuid.UUID) error {
+	_, err := s.exec(ctx, `DELETE FROM pending_email_changes WHERE user_id = $1`, userID)
+	return err
 }
 
-func (s *Store) UpdateUserEmail(ctx context.Context, userID uuid.UUID, email string) error {
-	res, err := s.exec(ctx, `UPDATE users SET email = $1 WHERE id = $2`, email, userID)
+func (s *Store) UpdateUserEmailIfCurrent(ctx context.Context, userID uuid.UUID, currentEmail, newEmail string) (bool, error) {
+	currentEmail = identity.CanonicalEmail(currentEmail)
+	newEmail = identity.CanonicalEmail(newEmail)
+	res, err := s.exec(ctx, `
+		UPDATE users
+		SET email = $1,
+		    email_verified_at = NULL
+		WHERE id = $2 AND email = $3
+	`, newEmail, userID, currentEmail)
 	if err != nil {
-		return err
+		return false, err
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return false, err
 	}
-	if affected == 0 {
-		return ErrUserNotFound
+	return affected == 1, nil
+}
+
+func (s *Store) UpdateUserEmailVerifiedIfCurrent(ctx context.Context, userID uuid.UUID, currentEmail, newEmail string, verifiedAt time.Time) (bool, error) {
+	currentEmail = identity.CanonicalEmail(currentEmail)
+	newEmail = identity.CanonicalEmail(newEmail)
+	res, err := s.exec(ctx, `
+		UPDATE users
+		SET email = $1,
+		    email_verified_at = $2
+		WHERE id = $3 AND email = $4
+	`, newEmail, verifiedAt, userID, currentEmail)
+	if err != nil {
+		return false, err
 	}
-	return nil
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected == 1, nil
 }

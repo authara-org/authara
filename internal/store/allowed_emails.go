@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
 )
@@ -19,7 +20,7 @@ func toDomainAllowedEmail(m model.AllowedEmail) domain.AllowedEmail {
 
 func toModelAllowedEmail(d domain.AllowedEmail) model.AllowedEmail {
 	return model.AllowedEmail{
-		Email: d.Email,
+		Email: identity.CanonicalEmail(d.Email),
 	}
 }
 
@@ -59,7 +60,7 @@ func (s *Store) CreateAllowedEmail(ctx context.Context, allowedEmail domain.Allo
 }
 
 func (s *Store) EnsureAllowedEmail(ctx context.Context, email string) error {
-	email = normalizeEmail(email)
+	email = identity.CanonicalEmail(email)
 	if email == "" {
 		return nil
 	}
@@ -114,7 +115,7 @@ func (s *Store) DeleteAllowedEmailByID(ctx context.Context, id uuid.UUID) (domai
 
 func (s *Store) CountAllowedEmails(ctx context.Context, query string) (int, error) {
 	var count int
-	query = normalizeEmail(query)
+	query = identity.CanonicalEmail(query)
 	pattern := "%" + query + "%"
 
 	err := s.queryRow(ctx, `
@@ -152,7 +153,7 @@ func (s *Store) ListAllowedEmails(ctx context.Context) ([]domain.AllowedEmail, e
 }
 
 func (s *Store) ListAllowedEmailsPage(ctx context.Context, query string, limit, offset int) ([]domain.AllowedEmail, error) {
-	query = normalizeEmail(query)
+	query = identity.CanonicalEmail(query)
 	pattern := "%" + query + "%"
 
 	rows, err := s.queryRows(ctx, `

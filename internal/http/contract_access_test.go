@@ -17,6 +17,7 @@ import (
 
 const (
 	markerUserAPIAuth  = 419
+	markerUserUIAuth   = 421
 	markerInternalAuth = 423
 )
 
@@ -61,6 +62,91 @@ func TestRouteAccessContract(t *testing.T) {
 	}
 }
 
+func TestUIEmailChangeVerificationRequiresAuthentication(t *testing.T) {
+	router := newAccessContractTestRouter()
+
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		t.Run(method+" canonical", func(t *testing.T) {
+			req := httptest.NewRequest(method, "/auth/verify-challenge/email-change", nil)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+			if rr.Code != markerUserUIAuth {
+				t.Fatalf("expected user UI auth marker %d, got %d", markerUserUIAuth, rr.Code)
+			}
+		})
+
+		t.Run(method+" alternate case", func(t *testing.T) {
+			req := httptest.NewRequest(method, "/auth/verify-challenge/EMAIL-CHANGE", nil)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+			if rr.Code != http.StatusUnauthorized {
+				t.Fatalf("expected alternate-case public route to fail closed with %d, got %d", http.StatusUnauthorized, rr.Code)
+			}
+		})
+	}
+}
+
+func TestRecentAuthenticationRouteContract(t *testing.T) {
+	document, err := openapicontract.GetSwagger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := newRecentAuthContractTestRouter()
+	protected := 0
+	for path, item := range document.Paths.Map() {
+		for method, operation := range item.Operations() {
+			if operation.Extensions["x-authara-recent-auth"] != "required" {
+				continue
+			}
+			protected++
+			req := httptest.NewRequest(method, materializeRoutePath(path), nil)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+			if rr.Code != http.StatusPreconditionRequired {
+				t.Fatalf("%s: expected recent-auth marker %d, got %d", operationKey(method, path), http.StatusPreconditionRequired, rr.Code)
+			}
+		}
+	}
+	if protected < 11 {
+		t.Fatalf("expected at least 11 recent-auth API operations, got %d", protected)
+	}
+
+	uiPaths := []string{
+		"/auth/email-change",
+		"/auth/verify-challenge/email-change",
+		"/auth/user/delete",
+		"/auth/providers/google/unlink",
+		"/auth/providers/password/link",
+		"/auth/providers/google/link/start",
+		"/auth/passkeys/register/options",
+		"/auth/passkeys/register/finish",
+		"/auth/passkeys/11111111-1111-1111-1111-111111111111/delete",
+		"/auth/admin/allowlist",
+		"/auth/admin/allowlist/11111111-1111-1111-1111-111111111111/delete",
+		"/auth/admin/users/11111111-1111-1111-1111-111111111111/disable",
+		"/auth/admin/users/11111111-1111-1111-1111-111111111111/enable",
+		"/auth/admin/users/11111111-1111-1111-1111-111111111111/roles/admin/grant",
+		"/auth/admin/users/11111111-1111-1111-1111-111111111111/roles/admin/revoke",
+		"/auth/admin/users/11111111-1111-1111-1111-111111111111/sessions/22222222-2222-2222-2222-222222222222/revoke",
+		"/auth/admin/users/11111111-1111-1111-1111-111111111111/sessions/revoke-all",
+		"/auth/operator/emails/account-created",
+		"/auth/operator/emails/account-created/reset",
+		"/auth/operator/emails/account-created/delivery",
+		"/auth/operator/settings/session.recent_authentication_enabled",
+		"/auth/operator/settings/session.recent_authentication_enabled/clear",
+		"/auth/operator/settings/session.recent_authentication_window",
+		"/auth/operator/settings/session.recent_authentication_window/clear",
+	}
+	for _, path := range uiPaths {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		if rr.Code != http.StatusPreconditionRequired {
+			t.Fatalf("POST %s: expected recent-auth marker %d, got %d", path, http.StatusPreconditionRequired, rr.Code)
+		}
+	}
+}
+
 func newAccessContractTestRouter() chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -97,8 +183,10 @@ func newAccessContractTestRouter() chi.Router {
 		RequireAPICSRF:            pass,
 		OptionalAppAccessIdentity: pass,
 
-		RequireAppAccessAuthWithRefresh:      pass,
+		RequireAppAccessAuthWithRefresh:      marker(markerUserUIAuth, "user-ui-auth"),
 		RequireAppAccessAuthAPI:              marker(markerUserAPIAuth, "user-api-auth"),
+		RequireRecentAuthenticationUI:        pass,
+		RequireRecentAuthenticationAPI:       pass,
 		RequireAdminAccessAuthWithRefresh:    pass,
 		RequireAdminAccessAuthAPI:            pass,
 		RequireOperatorAccessAuthWithRefresh: pass,
@@ -116,10 +204,52 @@ func newAccessContractTestRouter() chi.Router {
 	return r
 }
 
+func newRecentAuthContractTestRouter() chi.Router {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	pass := func(next http.Handler) http.Handler { return next }
+	recent := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusPreconditionRequired)
+		})
+	}
+	renderer := render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
+		w.WriteHeader(status)
+		return nil
+	})
+	cfg := ServerConfig{Version: "test", Addr: ":0", Dev: true, Logger: logger, Handlers: newTestHandlers(logger, renderer)}
+	mw := Middlewares{
+		RedirectIfAuthenticated:              pass,
+		RequireAppAccessAuthWithRefresh:      pass,
+		RequireAppAccessAuthAPI:              pass,
+		RequireAdminAccessAuthWithRefresh:    pass,
+		RequireAdminAccessAuthAPI:            pass,
+		RequireOperatorAccessAuthWithRefresh: pass,
+		RequireOperatorAccessAuthAPI:         pass,
+		RequireRecentAuthenticationUI:        recent,
+		RequireRecentAuthenticationAPI:       recent,
+		RequireInternalAPIAuth:               pass,
+		RequirePublicOrganizationManagement:  pass,
+		RequireAdminRole:                     pass,
+		RequireOperatorRole:                  pass,
+		RequireCSRF:                          pass,
+		RequireAPICSRF:                       pass,
+		ReturnTo:                             pass,
+		HTMX:                                 pass,
+		RequireChallengeEnabled:              pass,
+		RequireAllowlistEnabled:              pass,
+		OptionalAppAccessIdentity:            pass,
+	}
+	r := chi.NewRouter()
+	registerRoutes(r, cfg, mw)
+	return r
+}
+
 func materializeRoutePath(path string) string {
 	path = strings.ReplaceAll(path, "{userID}", "11111111-1111-1111-1111-111111111111")
 	path = strings.ReplaceAll(path, "{organizationID}", "22222222-2222-2222-2222-222222222222")
 	path = strings.ReplaceAll(path, "{invitationID}", "33333333-3333-3333-3333-333333333333")
+	path = strings.ReplaceAll(path, "{passkeyID}", "44444444-4444-4444-4444-444444444444")
+	path = strings.ReplaceAll(path, "{sessionID}", "55555555-5555-5555-5555-555555555555")
 	return path
 }
 

@@ -59,6 +59,13 @@ var (
 		"If you did not make this change, secure your account immediately.",
 		"You received this email because your Authara sign-in methods changed.",
 	)
+	defaultSuspiciousPasskeyActivity = newNotificationDefaults(
+		"Review unusual passkey activity",
+		"We detected unusual activity involving a passkey on your Authara account.",
+		[]notificationDetail{{Label: "Time", Value: "{{occurred_at}}"}},
+		"If this was not you, use another sign-in method and contact the operator of this Authara deployment.",
+		"You received this email because Authara detected suspicious passkey activity.",
+	)
 	defaultPasswordChanged = newNotificationDefaults(
 		"Password changed",
 		"The password for your Authara account was changed successfully.",

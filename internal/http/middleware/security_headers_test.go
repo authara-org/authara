@@ -21,6 +21,9 @@ func TestSecurityHeadersSetsSafeDefaults(t *testing.T) {
 
 	headers := rr.Result().Header
 
+	if got := headers.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("expected Cache-Control no-store, got %q", got)
+	}
 	if got := headers.Get("X-Frame-Options"); got != "DENY" {
 		t.Fatalf("expected X-Frame-Options DENY, got %q", got)
 	}
@@ -68,8 +71,79 @@ func TestSecurityHeadersAllowsGoogleOAuthSourcesWhenEnabled(t *testing.T) {
 		"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com",
 		"connect-src 'self' https://accounts.google.com",
 		"frame-src 'self' https://accounts.google.com",
+		"style-src 'self' 'unsafe-inline' https://accounts.google.com",
 		"img-src 'self' data: https://www.gstatic.com https://ssl.gstatic.com",
 	)
+	if got := rr.Result().Header.Get(headerReferrerPolicy); got != "strict-origin-when-cross-origin" {
+		t.Fatalf("Google OAuth Referrer-Policy = %q", got)
+	}
+}
+
+func TestSecurityHeadersAllowsAppleOAuthSourcesWhenEnabled(t *testing.T) {
+	handler := SecurityHeaders(SecurityHeadersConfig{AllowAppleOAuth: true})(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+	)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/auth/login", nil))
+
+	csp := recorder.Header().Get(headerContentSecurityPolicy)
+	for _, source := range []string{"https://appleid.cdn-apple.com", "https://appleid.apple.com"} {
+		if !strings.Contains(csp, source) {
+			t.Errorf("CSP does not contain %q: %s", source, csp)
+		}
+	}
+	if got := recorder.Header().Get(headerReferrerPolicy); got != "strict-origin-when-cross-origin" {
+		t.Fatalf("Apple OAuth Referrer-Policy = %q", got)
+	}
+}
+
+func TestSecurityHeadersAllowOnlySameOriginReauthenticationFrames(t *testing.T) {
+	handler := SecurityHeaders(SecurityHeadersConfig{})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for _, path := range []string{"/auth/reauthenticate", "/auth/reauthenticate/complete"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := recorder.Header().Get(headerFrameOptions); got != "SAMEORIGIN" {
+			t.Fatalf("GET %s: X-Frame-Options = %q", path, got)
+		}
+		if csp := recorder.Header().Get(headerContentSecurityPolicy); !strings.Contains(csp, "frame-ancestors 'self'") {
+			t.Fatalf("GET %s: CSP does not allow same-origin frame: %q", path, csp)
+		}
+	}
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/auth/reauthenticate", nil))
+	if got := recorder.Header().Get(headerFrameOptions); got != "DENY" {
+		t.Fatalf("POST reauthentication X-Frame-Options = %q", got)
+	}
+}
+
+func TestSecurityHeadersAllowsShowcaseFramesOnlyWhenEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  SecurityHeadersConfig
+		want string
+	}{
+		{name: "development", cfg: SecurityHeadersConfig{AllowShowcase: true}, want: "SAMEORIGIN"},
+		{name: "production", cfg: SecurityHeadersConfig{}, want: "DENY"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := SecurityHeaders(tc.cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/auth/showcase/pages/login", nil))
+			if got := recorder.Header().Get(headerFrameOptions); got != tc.want {
+				t.Fatalf("X-Frame-Options = %q, want %q", got, tc.want)
+			}
+			csp := recorder.Header().Get(headerContentSecurityPolicy)
+			if tc.cfg.AllowShowcase && !strings.Contains(csp, "form-action 'none'") {
+				t.Fatalf("development showcase CSP permits form submissions: %q", csp)
+			}
+		})
+	}
 }
 
 func requireCSPContains(t *testing.T, csp string, expected ...string) {

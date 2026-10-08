@@ -29,6 +29,7 @@ POSTGRESQL_PORT=5432
 POSTGRESQL_DATABASE=authara
 POSTGRESQL_USERNAME=authara
 POSTGRESQL_PASSWORD=authara
+POSTGRESQL_SSL_MODE=disable
 
 PUBLIC_URL=http://localhost:3000
 
@@ -48,9 +49,13 @@ Authara requires a PostgreSQL database with the correct schema.
 Run the migrations container:
 
 ```bash
+export AUTHARA_CORE_VERSION=v0.21.1
+export AUTHARA_MIGRATIONS_VERSION=v0.1.20
+
 docker run --rm \
   --env-file .env \
-  ghcr.io/authara-org/authara-migrations:latest
+  ghcr.io/authara-org/authara-migrations:$AUTHARA_MIGRATIONS_VERSION \
+  up -env=default -config=/migrations/dbconfig.yaml
 ```
 
 This applies the required database schema.
@@ -64,7 +69,7 @@ docker run -d \
   --name authara \
   --env-file .env \
   -p 8080:8080 \
-  ghcr.io/authara-org/authara-core:latest
+  ghcr.io/authara-org/authara-core:$AUTHARA_CORE_VERSION
 ```
 
 ---
@@ -125,21 +130,32 @@ services:
       POSTGRES_DB: authara
       POSTGRES_USER: authara
       POSTGRES_PASSWORD: authara
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authara -d authara"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
 
   app:
     image: nginx:alpine
 
   authara-migrations:
-    image: ghcr.io/authara-org/authara-migrations:latest
+    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
     env_file:
       - .env
+    environment:
+      POSTGRESQL_HOST: postgres
+    command: ["up", "-env=default", "-config=/migrations/dbconfig.yaml"]
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   authara:
-    image: ghcr.io/authara-org/authara-core:latest
+    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
     env_file:
       - .env
+    environment:
+      POSTGRESQL_HOST: postgres
     depends_on:
       authara-migrations:
         condition: service_completed_successfully
@@ -153,9 +169,15 @@ services:
       AUTHARA_UPSTREAM: authara:8080
       APP_UPSTREAM: app:80
     depends_on:
-      - authara
-      - app
+      authara:
+        condition: service_healthy
+      app:
+        condition: service_started
 ```
+
+Use the compatible Core and migrations images in the Core release notes when
+upgrading. The attached `authara-images.env` provides the same pairing for
+deployment tooling.
 
 Create a `.env` file containing the Authara configuration.
 

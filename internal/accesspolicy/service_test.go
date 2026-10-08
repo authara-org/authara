@@ -154,25 +154,3 @@ func TestService_AllowEmail_DisabledDoesNothing(t *testing.T) {
 		}
 	})
 }
-
-func TestNormalize(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{name: "lowercases", input: "USER@Example.COM", want: "user@example.com"},
-		{name: "trims spaces", input: "  user@example.com  ", want: "user@example.com"},
-		{name: "trims and lowercases", input: "  USER@Example.COM  ", want: "user@example.com"},
-		{name: "empty", input: "", want: ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := normalize(tt.input)
-			if got != tt.want {
-				t.Fatalf("normalize(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}

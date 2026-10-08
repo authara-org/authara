@@ -54,8 +54,48 @@ func TestCurrentAccountReadAndPasswordMutations(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &account); err != nil {
 			t.Fatalf("decode account: %v", err)
 		}
-		if len(account.Sessions) != 2 || !account.Sessions[0].Current {
-			t.Fatalf("expected current session first, got %+v", account.Sessions)
+		if len(account.Sessions) != 2 {
+			t.Fatalf("expected two sessions, got %+v", account.Sessions)
+		}
+		currentFound := false
+		for _, listed := range account.Sessions {
+			currentFound = currentFound || listed.Current
+		}
+		if !currentFound {
+			t.Fatalf("expected current session to be marked, got %+v", account.Sessions)
+		}
+
+		limit := contract.SessionsLimit(1)
+		firstResponse, err := h.GetCurrentAccount(requestCtx, contract.GetCurrentAccountRequestObject{
+			Params: contract.GetCurrentAccountParams{SessionsLimit: &limit},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		first, ok := firstResponse.(contract.GetCurrentAccount200JSONResponse)
+		if !ok || len(first.Sessions) != 1 || first.SessionsNextCursor == nil {
+			t.Fatalf("unexpected first session page: %#v", firstResponse)
+		}
+		cursor := contract.SessionsCursor(*first.SessionsNextCursor)
+		secondResponse, err := h.GetCurrentAccount(requestCtx, contract.GetCurrentAccountRequestObject{
+			Params: contract.GetCurrentAccountParams{SessionsLimit: &limit, SessionsCursor: &cursor},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		second, ok := secondResponse.(contract.GetCurrentAccount200JSONResponse)
+		if !ok || len(second.Sessions) != 1 || second.Sessions[0].Id == first.Sessions[0].Id || second.SessionsNextCursor != nil {
+			t.Fatalf("unexpected final session page: %#v", secondResponse)
+		}
+		invalidCursor := contract.SessionsCursor("invalid")
+		invalidResponse, err := h.GetCurrentAccount(requestCtx, contract.GetCurrentAccountRequestObject{
+			Params: contract.GetCurrentAccountParams{SessionsCursor: &invalidCursor},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := invalidResponse.(contract.GetCurrentAccount400JSONResponse); !ok {
+			t.Fatalf("invalid cursor response = %#v", invalidResponse)
 		}
 
 		rr = httptest.NewRecorder()
@@ -88,6 +128,59 @@ func TestCurrentAccountReadAndPasswordMutations(t *testing.T) {
 		valid, err := auth.Verify("changed-password123", *provider.PasswordHash)
 		if err != nil || !valid {
 			t.Fatalf("expected changed password to verify, valid=%t err=%v", valid, err)
+		}
+		reauthenticationRequest := httptest.NewRequest(http.MethodPost, "/auth/api/v1/reauthenticate/password", nil)
+		reauthenticationCtx := contractCtx(requestCtx, reauthenticationRequest)
+		authenticationChallenge, err := h.Session.StartAuthenticationChallenge(ctx, user.ID, current.ID, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		rr = httptest.NewRecorder()
+		wrongResp, err := h.ReauthenticateWithPassword(reauthenticationCtx, contract.ReauthenticateWithPasswordRequestObject{
+			Body: &contract.PasswordReauthenticationRequest{
+				AuthenticationChallengeId: authenticationChallenge.ID,
+				Password:                  "wrong-password",
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeContractResponse(t, rr, wrongResp)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("expected wrong proof status %d, got %d", http.StatusUnauthorized, rr.Code)
+		}
+
+		rr = httptest.NewRecorder()
+		reauthResp, err := h.ReauthenticateWithPassword(reauthenticationCtx, contract.ReauthenticateWithPasswordRequestObject{
+			Body: &contract.PasswordReauthenticationRequest{
+				AuthenticationChallengeId: authenticationChallenge.ID,
+				Password:                  "changed-password123",
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeContractResponse(t, rr, reauthResp)
+		if rr.Code != http.StatusNoContent {
+			t.Fatalf("expected reauthentication status %d, got %d body=%s", http.StatusNoContent, rr.Code, rr.Body.String())
+		}
+		if err := h.Session.RequireRecentAuthentication(ctx, user.ID, current.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("session was not marked recently authenticated: %v", err)
+		}
+		rr = httptest.NewRecorder()
+		reusedResp, err := h.ReauthenticateWithPassword(reauthenticationCtx, contract.ReauthenticateWithPasswordRequestObject{
+			Body: &contract.PasswordReauthenticationRequest{
+				AuthenticationChallengeId: authenticationChallenge.ID,
+				Password:                  "changed-password123",
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeContractResponse(t, rr, reusedResp)
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("expected consumed challenge status %d, got %d body=%s", http.StatusConflict, rr.Code, rr.Body.String())
 		}
 	})
 }

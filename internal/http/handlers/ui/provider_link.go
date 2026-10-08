@@ -15,10 +15,11 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/http/kit/response"
-	"github.com/authara-org/authara/internal/http/kit/validation"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/passkey"
+	"github.com/authara-org/authara/internal/session"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -179,7 +180,8 @@ func (h *UIHandler) UnlinkProviderPost(w http.ResponseWriter, r *http.Request) {
 
 	var passkeys []domain.Passkey
 	if h.Passkeys != nil {
-		passkeys, err = h.Passkeys.ListUserPasskeys(ctx, userID)
+		page, pageErr := h.Passkeys.ListUserPasskeysPage(ctx, userID, passkey.ListOptions{})
+		err = pageErr
 		if err != nil {
 			htmx.ReSwap(w, "none")
 			_ = h.Render(
@@ -190,6 +192,7 @@ func (h *UIHandler) UnlinkProviderPost(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
+		passkeys = page.Items
 	}
 
 	vm := viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers)
@@ -222,14 +225,8 @@ func (h *UIHandler) PasswordLinkPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	password := strings.TrimSpace(r.FormValue("password"))
-	confirmPassword := strings.TrimSpace(r.FormValue("confirm_password"))
-
-	if !validation.IsValidPassword(password) {
-		htmx.ReSwap(w, "none")
-		_ = h.Render(w, r, http.StatusUnprocessableEntity, toast.ToastMessage(toast.Error, "Please provide a valid password."))
-		return
-	}
+	password := r.FormValue("password")
+	confirmPassword := r.FormValue("confirm_password")
 
 	if password != confirmPassword {
 		htmx.ReSwap(w, "none")
@@ -237,8 +234,13 @@ func (h *UIHandler) PasswordLinkPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	passwordHash, err := auth.Hash(password)
+	passwordHash, err := h.Auth.HashPassword(ctx, password)
 	if err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			htmx.ReSwap(w, "none")
+			_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, message))
+			return
+		}
 		h.Logger.Error("hash password failed", "err", err)
 		htmx.ReSwap(w, "none")
 		_ = h.Render(w, r, http.StatusInternalServerError, toast.ToastMessage(toast.Error, "Something went wrong."))
@@ -264,9 +266,13 @@ func (h *UIHandler) PasswordLinkPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg, err := h.accountConfig(ctx)
+	cfg, err := h.accountConfig(ctx, session.ListOptions{}, passkey.ListOptions{})
 	if err != nil {
 		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load account.")
+		return
+	}
+	if isAccountPasswordDialogSubmission(r) {
+		renderAccountPasswordDialogSuccess(h.Render, w, r, cfg, "Password added.")
 		return
 	}
 

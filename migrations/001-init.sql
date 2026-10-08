@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS authara.users (
 	disabled_at timestamptz,
 
 	CONSTRAINT unique_user_email UNIQUE (email),
-	CONSTRAINT unique_user_username UNIQUE (username)
+	CONSTRAINT unique_user_username UNIQUE (username_normalized),
+	CONSTRAINT user_email_canonical CHECK (email = lower(btrim(email))),
+	CONSTRAINT user_username_normalized_matches CHECK (username_normalized = lower(btrim(username)))
 );
 
 DROP TRIGGER IF EXISTS trg_user_updated_at ON authara.users;

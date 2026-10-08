@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -449,6 +450,39 @@ func TestTemplateServiceLoadsHistoricalVersionWithoutMutationAndCanSaveItAsNew(t
 	}
 }
 
+func TestTemplateServiceHistoryPageBoundsAndSignalsFinalPage(t *testing.T) {
+	fakeStore := newFakeTemplateOverrideStore()
+	service := NewTemplateService(fakeStore)
+	updaterID := uuid.New()
+	input := SaveTemplateOverrideInput{
+		Template:        domain.EmailTemplateSignupCode,
+		SubjectTemplate: "Subject 1",
+		TextTemplate:    "Code: {{code}}",
+		HTMLTemplate:    "<p>{{code}}</p>",
+		UpdatedByUserID: updaterID,
+	}
+	for revision := int64(0); revision < 3; revision++ {
+		input.ExpectedRevision = revision
+		input.SubjectTemplate = fmt.Sprintf("Subject %d", revision+1)
+		if _, err := service.SaveOverride(context.Background(), input); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	first, err := service.HistoryPage(context.Background(), input.Template, 1, 2)
+	if err != nil || len(first.Versions) != 2 || !first.HasNext || first.Versions[0].Version != 3 {
+		t.Fatalf("first history page = %+v, err = %v", first, err)
+	}
+	final, err := service.HistoryPage(context.Background(), input.Template, 2, 2)
+	if err != nil || len(final.Versions) != 1 || final.HasNext || final.Versions[0].Version != 1 {
+		t.Fatalf("final history page = %+v, err = %v", final, err)
+	}
+	bounded, err := service.HistoryPage(context.Background(), input.Template, 0, 1000)
+	if err != nil || bounded.Page != 1 || bounded.Size != 100 {
+		t.Fatalf("bounded history page = %+v, err = %v", bounded, err)
+	}
+}
+
 func TestTemplateServiceListsCatalogWithOverrideState(t *testing.T) {
 	fakeStore := newFakeTemplateOverrideStore()
 	fakeStore.overrides[domain.EmailTemplatePasswordResetCode] = domain.EmailTemplateOverride{
@@ -628,6 +662,15 @@ func (s *fakeTemplateOverrideStore) ListEmailTemplateVersions(_ context.Context,
 		out[len(versions)-1-i] = versions[i]
 	}
 	return out, nil
+}
+
+func (s *fakeTemplateOverrideStore) ListEmailTemplateVersionsPage(ctx context.Context, key domain.EmailTemplate, limit, offset int) ([]domain.EmailTemplateVersion, error) {
+	versions, err := s.ListEmailTemplateVersions(ctx, key)
+	if err != nil || offset >= len(versions) {
+		return nil, err
+	}
+	end := min(offset+limit, len(versions))
+	return versions[offset:end], nil
 }
 
 func (s *fakeTemplateOverrideStore) UpsertEmailTemplateOverride(_ context.Context, override domain.EmailTemplateOverride, expectedRevision int64) (domain.EmailTemplateOverride, error) {

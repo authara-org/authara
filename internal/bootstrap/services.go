@@ -8,10 +8,13 @@ import (
 	"github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -19,17 +22,20 @@ import (
 )
 
 type Services struct {
-	Admin          *admin.Service
-	Auth           *auth.Service
-	Passkeys       *passkey.Service
-	Session        *session.Service
-	Organizations  *organization.Service
-	Challenge      *challenge.Service
-	Verification   *challenge.VerificationCodeService
-	EmailTemplates *email.TemplateService
-	EmailWorker    *challenge.Worker
-	WebhookWorker  *webhook.Worker
-	OAuthProviders oauth.OAuthProviders
+	Admin            *admin.Service
+	Auth             *auth.Service
+	Passkeys         *passkey.Service
+	Session          *session.Service
+	Organizations    *organization.Service
+	Challenge        *challenge.Service
+	Verification     *challenge.VerificationCodeService
+	EmailTemplates   *email.TemplateService
+	EmailWorker      *challenge.Worker
+	WebhookWorker    *webhook.Worker
+	OAuthProviders   oauth.OAuthProviders
+	SecurityEvents   *securityevent.Service
+	Apple            *apple.Client
+	AppleCredentials *apple.Credentials
 }
 
 func NewServices(app *App) (Services, error) {
@@ -42,21 +48,53 @@ func NewServices(app *App) (Services, error) {
 	txManager := tx.New(app.Store)
 	accessPolicy := newAccessPolicy(app)
 	oauthProviders := newOAuthProviders(app.Config.Startup())
+	var appleClient *apple.Client
+	var appleCredentials *apple.Credentials
+	for _, provider := range oauthProviders.Providers {
+		if provider.Name != domain.ProviderApple {
+			continue
+		}
+		var err error
+		appleClient, err = apple.New(apple.Config{
+			ClientID: app.Config.OAuth.AppleClientID, TeamID: app.Config.OAuth.AppleTeamID,
+			KeyID: app.Config.OAuth.AppleKeyID, PrivateKey: app.Config.OAuth.ApplePrivateKey,
+			RedirectURI: provider.RedirectURI,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("create Apple OAuth client: %w", err)
+		}
+		appleCredentials, err = apple.NewCredentials(
+			app.Store,
+			app.Config.OAuth.AppleTokenActiveKeyID,
+			app.Config.OAuth.AppleDecodedTokenKeys,
+			appleClient,
+		)
+		if err != nil {
+			return Services{}, fmt.Errorf("create Apple credential store: %w", err)
+		}
+		break
+	}
 	webhookPublisher := newWebhookPublisher(app.Config, app.Store)
 	webhookWorker := newWebhookWorker(app.Config, app.Store, app.Logger, app.Observability)
+	securityEventService := securityevent.New(securityevent.Config{
+		Store:         app.Store,
+		EnabledEvents: app.Config.Startup().SecurityEvents.EnabledEventSet,
+		Retention:     time.Duration(app.Config.Startup().SecurityEvents.RetentionDays) * 24 * time.Hour,
+	})
 
 	accessTokenService := token.NewAccessTokenServiceWithTTL(
 		app.Config.Token.KeySet,
 		app.Config.Token.Issuer,
 		func() time.Duration { return app.Config.CurrentToken().AccessTokenTTL },
 	)
-	accessTokenRevocations := token.NewAccessTokenRevocationsWithTTL(
+	accessTokenRevocations := NewAccessTokenRevocations(
+		app.Config.Startup(),
 		app.Cache,
 		func() time.Duration {
 			// Operator-managed access-token lifetimes are capped at 24 hours.
 			// Keep scope revocations for at least that long so lowering the
 			// policy cannot let an older, longer-lived token outlast its marker.
-			return max(app.Config.CurrentToken().AccessTokenTTL, 24*time.Hour)
+			return AccessTokenRevocationMarkerTTL(app.Config.CurrentToken().AccessTokenTTL)
 		},
 	)
 
@@ -81,6 +119,9 @@ func NewServices(app *App) (Services, error) {
 		AccessPolicy:           accessPolicy,
 		Organizations:          organizationService,
 		AccessTokenRevocations: accessTokenRevocations,
+		PasswordMinimumLength:  app.Config.Authentication.PasswordMinimumLength,
+		SecurityEvents:         securityEventService,
+		AppleCredentials:       appleCredentials,
 	})
 
 	sessionService := session.New(session.SessionConfig{
@@ -91,6 +132,7 @@ func NewServices(app *App) (Services, error) {
 		Policy:                 app.Config,
 		AccessPolicy:           accessPolicy,
 		Organizations:          organizationService,
+		SecurityEvents:         securityEventService,
 	})
 
 	adminService := admin.New(admin.Config{
@@ -100,9 +142,10 @@ func NewServices(app *App) (Services, error) {
 		AllowlistPolicy:        app.Config,
 		WebhookPublisher:       webhookPublisher,
 		AccessTokenRevocations: accessTokenRevocations,
+		SecurityEvents:         securityEventService,
 	})
 
-	passkeyService, err := newPasskeyService(app, txManager)
+	passkeyService, err := newPasskeyService(app, txManager, sessionService, securityEventService)
 	if err != nil {
 		return Services{}, fmt.Errorf("create passkey service: %w", err)
 	}
@@ -113,9 +156,11 @@ func NewServices(app *App) (Services, error) {
 		Store:                  app.Store,
 		Tx:                     txManager,
 		Policy:                 app.Config,
+		AuthenticationPolicy:   app.Config,
 		AllowlistPolicy:        app.Config,
 		WebhookPublisher:       webhookPublisher,
 		AccessTokenRevocations: accessTokenRevocations,
+		SecurityEvents:         securityEventService,
 	})
 
 	emailWorker := challenge.NewWorker(
@@ -125,42 +170,50 @@ func NewServices(app *App) (Services, error) {
 		newEmailSender(app.Config.Startup(), app.Logger),
 		app.Logger,
 		challenge.WorkerConfig{
-			WorkerCount:     app.Config.Email.WorkerCount,
-			PollInterval:    app.Config.Email.WorkerPollInterval,
-			CleanupInterval: time.Hour,
-			SendTimeout:     app.Config.Email.SMTPTimeout,
-			Policy:          app.Config,
-			Metrics:         app.Observability,
+			WorkerCount:          app.Config.Email.WorkerCount,
+			PollInterval:         app.Config.Email.WorkerPollInterval,
+			ProcessingStaleAfter: app.Config.Email.ProcessingStaleAfter,
+			StaleReaperInterval:  app.Config.Email.StaleReaperInterval,
+			MaintenanceBatchSize: app.Config.Email.MaintenanceBatchSize,
+			SendTimeout:          app.Config.Email.SMTPTimeout,
+			Policy:               app.Config,
+			Metrics:              app.Observability,
 		},
 	)
 
 	return Services{
-		Admin:          adminService,
-		Auth:           authService,
-		Passkeys:       passkeyService,
-		Session:        sessionService,
-		Organizations:  organizationService,
-		Challenge:      challengeService,
-		Verification:   verificationCodeService,
-		EmailTemplates: emailTemplateService,
-		EmailWorker:    emailWorker,
-		WebhookWorker:  webhookWorker,
-		OAuthProviders: oauthProviders,
+		Admin:            adminService,
+		Auth:             authService,
+		Passkeys:         passkeyService,
+		Session:          sessionService,
+		Organizations:    organizationService,
+		Challenge:        challengeService,
+		Verification:     verificationCodeService,
+		EmailTemplates:   emailTemplateService,
+		EmailWorker:      emailWorker,
+		WebhookWorker:    webhookWorker,
+		OAuthProviders:   oauthProviders,
+		SecurityEvents:   securityEventService,
+		Apple:            appleClient,
+		AppleCredentials: appleCredentials,
 	}, nil
 }
 
-func newPasskeyService(app *App, txManager *tx.Manager) (*passkey.Service, error) {
+func newPasskeyService(app *App, txManager *tx.Manager, sessionRevoker passkey.SessionRevoker, securityEvents securityevent.Recorder) (*passkey.Service, error) {
 	publicURL, err := url.Parse(app.Config.Values.PublicURL)
 	if err != nil {
 		return nil, err
 	}
 
 	return passkey.New(passkey.Config{
-		RPDisplayName: "Authara",
-		RPID:          publicURL.Hostname(),
-		RPOrigins:     []string{app.Config.Values.PublicURL},
-		Store:         app.Store,
-		Tx:            txManager,
-		Logger:        app.Logger,
+		RPDisplayName:  "Authara",
+		RPID:           publicURL.Hostname(),
+		RPOrigins:      []string{app.Config.Values.PublicURL},
+		Store:          app.Store,
+		Tx:             txManager,
+		Policy:         app.Config,
+		SessionRevoker: sessionRevoker,
+		Logger:         app.Logger,
+		SecurityEvents: securityEvents,
 	})
 }

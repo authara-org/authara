@@ -111,6 +111,10 @@ func (testEmailTemplateStore) ListEmailTemplateVersions(context.Context, domain.
 	return nil, nil
 }
 
+func (testEmailTemplateStore) ListEmailTemplateVersionsPage(context.Context, domain.EmailTemplate, int, int) ([]domain.EmailTemplateVersion, error) {
+	return nil, nil
+}
+
 func (testEmailTemplateStore) UpsertEmailTemplateOverride(context.Context, domain.EmailTemplateOverride, int64) (domain.EmailTemplateOverride, error) {
 	return domain.EmailTemplateOverride{}, nil
 }

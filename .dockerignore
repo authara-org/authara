@@ -1,0 +1,58 @@
+# Docker builds use an allowlist so local files never become build inputs by
+# accident. Keep this list aligned with docker/Dockerfile.dev and
+# docker/Dockerfile.prod.
+**
+
+!go.mod
+!go.sum
+
+!cmd/
+!cmd/**
+
+!internal/
+!internal/**
+
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/tsconfig.json
+!frontend/webpack.config.js
+!frontend/src/
+!frontend/src/**
+
+!scripts/
+!scripts/build-static.sh
+
+# These may exist below an allowed directory. Keep them excluded after the
+# negated allowlist rules above because the last matching rule wins.
+.git/
+.env*
+**/.env*
+**/node_modules/
+**/dist/
+**/bin/
+.venv/
+**/__pycache__/
+**/.cache/
+**/.parcel-cache/
+coverage*
+**/coverage*
+*.out
+**/*.out
+**/*.test
+**/*.exe
+**/*.exe~
+**/*.dll
+**/*.so
+**/*.dylib
+**/*.tmp
+**/*.log
+**/*_templ.go
+**/.DS_Store
+**/Thumbs.db
+**/.idea/
+**/.vscode/
+**/.nvim/
+**/*.iml
+**/*.swp
+**/*.swo

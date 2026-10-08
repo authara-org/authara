@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -17,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	challengeview "github.com/authara-org/authara/internal/http/templates/challenge"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/google/uuid"
@@ -32,7 +32,7 @@ func (h *UIHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		http.StatusOK,
-		authview.Signup(h.OAuthProviders.Providers),
+		authview.Signup(h.OAuthProviders.Providers, h.appName()),
 	)
 }
 
@@ -50,23 +50,40 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !validation.IsValidEmail(form.Email) || !validation.IsValidPassword(form.Password) {
-		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Please provide a valid email and password.", authview.SignupForm())
+	if !validation.IsValidEmail(form.Email) {
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Please provide a valid email address.", authview.SignupForm())
 		return
 	}
 	if _, ok := h.requireSignupAppAudience(w, r, authview.SignupForm()); !ok {
 		return
 	}
+	if err := h.Auth.ValidatePassword(ctx, form.Password); err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderFormError(w, r, status, message, authview.SignupForm())
+			return
+		}
+		h.renderInternalError(w, r)
+		return
+	}
 
 	ip := httputil.ClientIP(r)
 	allowed, err := h.Limiter.AllowSignupAttempt(ctx, ip, form.Email)
-	if err != nil || !allowed {
-		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.SignupForm())
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		h.renderFormError(w, r, status, message, authview.SignupForm())
+		return
+	}
+	passwordHash, err := h.Auth.HashPassword(ctx, form.Password)
+	if err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderFormError(w, r, status, message, authview.SignupForm())
+			return
+		}
+		h.renderInternalError(w, r)
 		return
 	}
 
 	if h.Features.ChallengeEnabled {
-		h.startSignupChallenge(w, r, form.Email, form.Password)
+		h.startSignupChallenge(w, r, form.Email, passwordHash)
 		return
 	}
 
@@ -74,11 +91,6 @@ func (h *UIHandler) SignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	passwordHash, err := auth.Hash(form.Password)
-	if err != nil {
-		h.renderInternalError(w, r)
-		return
-	}
 	h.finishSignup(
 		w,
 		r,
@@ -96,8 +108,7 @@ func (h *UIHandler) parseSignupForm(r *http.Request) (*signupFormInput, error) {
 		return nil, err
 	}
 
-	email := strings.TrimSpace(r.FormValue("email"))
-	email = strings.ToLower(email)
+	email := identity.CanonicalEmail(r.FormValue("email"))
 
 	return &signupFormInput{
 		Email:    email,
@@ -109,15 +120,9 @@ func (h *UIHandler) startSignupChallenge(
 	w http.ResponseWriter,
 	r *http.Request,
 	email string,
-	password string,
+	passwordHash string,
 ) {
 	ctx := r.Context()
-
-	passwordHash, err := auth.Hash(password)
-	if err != nil {
-		h.renderInternalError(w, r)
-		return
-	}
 
 	exists, err := h.Auth.UserExistsByEmail(ctx, email)
 	if err != nil {
@@ -256,7 +261,7 @@ func (h *UIHandler) finishSignupSession(
 	ua := r.UserAgent()
 	now := time.Now()
 
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, ua, now, httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, ua, now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderFormError(
 			w,
@@ -327,10 +332,11 @@ func (h *UIHandler) verifySignupChallengePost(
 		now,
 		func(txCtx context.Context, action domain.PendingSignupAction) error {
 			input := auth.SignupInput{
-				Provider:     domain.ProviderPassword,
-				Username:     action.Username,
-				Email:        action.Email,
-				PasswordHash: action.PasswordHash,
+				Provider:        domain.ProviderPassword,
+				Username:        action.Username,
+				Email:           action.Email,
+				PasswordHash:    action.PasswordHash,
+				EmailVerifiedAt: &now,
 			}
 			if action.InvitationID != nil {
 				input.InvitationID = *action.InvitationID

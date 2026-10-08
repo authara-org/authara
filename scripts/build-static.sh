@@ -45,6 +45,11 @@ fingerprint_extensions |
 while IFS= read -r -d '' path; do
   original="${path#./}"
 
+  # Webpack chunks and assets processed by an earlier run are already hashed.
+  if printf '%s\n' "$original" | grep -Eq '\.[0-9a-f]{16}\.[^.]+$'; then
+    continue
+  fi
+
   hash="$(
     sha256sum "$original" \
     | awk '{print $1}' \

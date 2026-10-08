@@ -6,11 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
+	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -27,21 +28,26 @@ func (h *APIHandler) StartPasswordResetChallenge(ctx context.Context, request co
 		return startPasswordResetChallengeError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
 
-	email := strings.ToLower(strings.TrimSpace(string(request.Body.Email)))
+	email := identity.CanonicalEmail(string(request.Body.Email))
 	password := request.Body.NewPassword
-	if !validationEmailPassword(email, password) {
-		return startPasswordResetChallengeError(responseCodeInvalidRequest(), "Please provide a valid email and password."), nil
+	if !validation.IsValidEmail(email) {
+		return startPasswordResetChallengeError(responseCodeInvalidRequest(), "Please provide a valid email address."), nil
+	}
+	if err := h.Auth.ValidatePassword(ctx, password); err != nil {
+		code, message := h.passwordPolicyError(err)
+		return startPasswordResetChallengeError(code, message), nil
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasswordResetAttempt(ctx, httputil.ClientIP(r), email)
-		if err != nil || !allowed {
-			return startPasswordResetChallengeError(responseCodeRateLimited(), "Too many reset attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many reset attempts. Please try again later."); !ok {
+			return startPasswordResetChallengeError(code, message), nil
 		}
 	}
 
-	passwordHash, err := auth.Hash(password)
+	passwordHash, err := h.Auth.HashPassword(ctx, password)
 	if err != nil {
-		return startPasswordResetChallengeError(responseCodeInternalError(), "Password error."), nil
+		code, message := h.passwordPolicyError(err)
+		return startPasswordResetChallengeError(code, message), nil
 	}
 
 	now := time.Now().UTC()
@@ -79,12 +85,12 @@ func (h *APIHandler) VerifyPasswordResetChallenge(ctx context.Context, request c
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeVerifyAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return verifyPasswordResetChallengeError(responseCodeRateLimited(), "Too many verification attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many verification attempts. Please try again later."); !ok {
+			return verifyPasswordResetChallengeError(code, message), nil
 		}
 	}
 
-	result, err := h.Challenge.VerifyPasswordResetChallenge(
+	err := h.Challenge.CompletePasswordResetChallenge(
 		ctx,
 		request.Body.ChallengeId,
 		strings.TrimSpace(request.Body.Code),
@@ -92,13 +98,13 @@ func (h *APIHandler) VerifyPasswordResetChallenge(ctx context.Context, request c
 		time.Now().UTC(),
 	)
 	if err != nil {
+		if errors.Is(err, challenge.ErrPasswordResetUnavailable) {
+			return verifyPasswordResetChallengeError(responseCodeInvalidRequest(), "Password reset is no longer available for this request. Start again or sign in with a configured provider or passkey."), nil
+		}
 		if isExpectedPasswordResetVerifyError(err) {
 			return verifyPasswordResetChallengeError(responseCodeInvalidRequest(), "Invalid or expired verification code."), nil
 		}
 		return verifyPasswordResetChallengeError(responseCodeInternalError(), "Challenge error."), nil
-	}
-	if err := h.Challenge.ExecutePasswordReset(ctx, result.Action, time.Now().UTC()); err != nil {
-		return verifyPasswordResetChallengeError(responseCodeInternalError(), "Password reset error."), nil
 	}
 
 	return contract.VerifyPasswordResetChallenge204Response{}, nil

@@ -13,9 +13,10 @@ type User struct {
 
 	DisabledAt *time.Time `db:"disabled_at"`
 
-	Username           string `db:"username"`
-	UsernameNormalized string `db:"username_normalized"`
-	Email              string `db:"email"`
+	Username           string     `db:"username"`
+	UsernameNormalized string     `db:"username_normalized"`
+	Email              string     `db:"email"`
+	EmailVerifiedAt    *time.Time `db:"email_verified_at"`
 }
 
 func (User) TableName() string {

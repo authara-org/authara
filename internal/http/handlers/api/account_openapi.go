@@ -16,13 +16,14 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-func (h *APIHandler) GetCurrentAccount(ctx context.Context, _ contract.GetCurrentAccountRequestObject) (contract.GetCurrentAccountResponseObject, error) {
+func (h *APIHandler) GetCurrentAccount(ctx context.Context, request contract.GetCurrentAccountRequestObject) (contract.GetCurrentAccountResponseObject, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return getCurrentAccountError(responseCodeUnauthorized(), "Unauthorized."), nil
@@ -36,7 +37,14 @@ func (h *APIHandler) GetCurrentAccount(ctx context.Context, _ contract.GetCurren
 	if err != nil {
 		return getCurrentAccountError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
-	sessions, err := h.Session.ListUserSessions(ctx, userID, currentSessionID, time.Now().UTC())
+	sessionOptions := session.ListOptions{Limit: request.Params.SessionsLimit}
+	if request.Params.SessionsCursor != nil {
+		sessionOptions.Cursor = *request.Params.SessionsCursor
+	}
+	sessionPage, err := h.Session.ListUserSessionsPage(ctx, userID, time.Now().UTC(), sessionOptions)
+	if errors.Is(err, session.ErrInvalidListPage) {
+		return getCurrentAccountError(responseCodeInvalidRequest(), "Invalid session pagination parameters."), nil
+	}
 	if err != nil {
 		return getCurrentAccountError(responseCodeInternalError(), "Account error."), nil
 	}
@@ -45,26 +53,45 @@ func (h *APIHandler) GetCurrentAccount(ctx context.Context, _ contract.GetCurren
 		return getCurrentAccountError(responseCodeInternalError(), "Account error."), nil
 	}
 	var passkeys []domain.Passkey
+	var passkeysNextCursor string
 	if h.Passkeys != nil {
-		passkeys, err = h.Passkeys.ListUserPasskeys(ctx, userID)
+		passkeyOptions := passkey.ListOptions{Limit: request.Params.PasskeysLimit}
+		if request.Params.PasskeysCursor != nil {
+			passkeyOptions.Cursor = *request.Params.PasskeysCursor
+		}
+		passkeyPage, pageErr := h.Passkeys.ListUserPasskeysPage(ctx, userID, passkeyOptions)
+		if errors.Is(pageErr, passkey.ErrInvalidListPage) {
+			return getCurrentAccountError(responseCodeInvalidRequest(), "Invalid passkey pagination parameters."), nil
+		}
+		err = pageErr
 		if err != nil {
 			return getCurrentAccountError(responseCodeInternalError(), "Account error."), nil
 		}
+		passkeys = passkeyPage.Items
+		passkeysNextCursor = passkeyPage.NextCursor
 	}
 
 	out := contract.Account{
 		User: contract.AuthUser{
-			Id:        user.ID,
-			Email:     openapi_types.Email(user.Email),
-			Username:  user.Username,
-			Disabled:  user.DisabledAt != nil,
-			CreatedAt: user.CreatedAt,
+			Id:              user.ID,
+			Email:           openapi_types.Email(user.Email),
+			EmailVerified:   user.EmailVerifiedAt != nil,
+			EmailVerifiedAt: user.EmailVerifiedAt,
+			Username:        user.Username,
+			Disabled:        user.DisabledAt != nil,
+			CreatedAt:       user.CreatedAt,
 		},
-		Sessions:    make([]contract.AccountSession, 0, len(sessions)),
+		Sessions:    make([]contract.AccountSession, 0, len(sessionPage.Items)),
 		AuthMethods: make([]contract.AuthMethod, 0, len(providers)),
 		Passkeys:    make([]contract.AccountPasskey, 0, len(passkeys)),
 	}
-	for _, s := range sessions {
+	if sessionPage.NextCursor != "" {
+		out.SessionsNextCursor = &sessionPage.NextCursor
+	}
+	if passkeysNextCursor != "" {
+		out.PasskeysNextCursor = &passkeysNextCursor
+	}
+	for _, s := range sessionPage.Items {
 		out.Sessions = append(out.Sessions, contract.AccountSession{
 			Id:        s.ID,
 			Current:   s.ID == currentSessionID,
@@ -121,10 +148,14 @@ func (h *APIHandler) StartCurrentUserEmailChange(ctx context.Context, request co
 	if !ok {
 		return startCurrentUserEmailChangeError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		return startCurrentUserEmailChangeError(responseCodeUnauthorized(), "Unauthorized."), nil
+	}
 	if request.Body == nil {
 		return startCurrentUserEmailChangeError(responseCodeInvalidRequest(), "Invalid email address."), nil
 	}
-	newEmail := strings.ToLower(strings.TrimSpace(string(request.Body.NewEmail)))
+	newEmail := identity.CanonicalEmail(string(request.Body.NewEmail))
 	if !validation.IsValidEmail(newEmail) {
 		return startCurrentUserEmailChangeError(responseCodeInvalidRequest(), "Invalid email address."), nil
 	}
@@ -143,12 +174,16 @@ func (h *APIHandler) StartCurrentUserEmailChange(ctx context.Context, request co
 		challengeID, err = h.Challenge.CreateOpaqueChallenge(ctx, now, domain.ChallengePurposeEmailChange, newEmail)
 	} else if err == nil {
 		challengeID, err = h.Challenge.CreateEmailChangeChallenge(ctx, challenge.CreateEmailChangeChallengeInput{
-			UserID:   user.ID,
-			OldEmail: user.Email,
-			NewEmail: newEmail,
+			UserID:              user.ID,
+			InitiatingSessionID: sessionID,
+			OldEmail:            user.Email,
+			NewEmail:            newEmail,
 		}, now)
 	}
 	if err != nil {
+		if errors.Is(err, challenge.ErrEmailChangeNotAuthorized) {
+			return startCurrentUserEmailChangeError(responseCodeForbidden(), "Email change cannot be started from this session."), nil
+		}
 		return startCurrentUserEmailChangeError(responseCodeInternalError(), "Email change error."), nil
 	}
 	return contract.StartCurrentUserEmailChange202JSONResponse{ChallengeId: challengeID}, nil
@@ -162,28 +197,31 @@ func (h *APIHandler) VerifyCurrentUserEmailChange(ctx context.Context, request c
 	if !ok {
 		return verifyCurrentUserEmailChangeError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		return verifyCurrentUserEmailChangeError(responseCodeUnauthorized(), "Unauthorized."), nil
+	}
 	if request.Body == nil || !isSixDigitCode(strings.TrimSpace(request.Body.Code)) {
 		return verifyCurrentUserEmailChangeError(responseCodeInvalidRequest(), "Invalid challenge request."), nil
 	}
 	if r, ok := contractRequest(ctx); ok && h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeVerifyAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return verifyCurrentUserEmailChangeError(responseCodeRateLimited(), "Too many verification attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many verification attempts. Please try again later."); !ok {
+			return verifyCurrentUserEmailChangeError(code, message), nil
 		}
 	}
 
-	result, err := h.Challenge.VerifyEmailChangeChallenge(ctx, request.Body.ChallengeId, strings.TrimSpace(request.Body.Code), h.Verification, time.Now().UTC())
+	err := h.Challenge.CompleteEmailChangeChallenge(ctx, challenge.CompleteEmailChangeChallengeInput{
+		ChallengeID: request.Body.ChallengeId,
+		UserID:      userID,
+		SessionID:   sessionID,
+		Code:        strings.TrimSpace(request.Body.Code),
+	}, h.Verification, time.Now().UTC())
 	if err != nil {
-		if isExpectedEmailChangeVerifyError(err) {
+		if errors.Is(err, challenge.ErrEmailChangeNotAuthorized) || isExpectedEmailChangeVerifyError(err) {
 			return verifyCurrentUserEmailChangeError(responseCodeInvalidRequest(), "Invalid or expired verification code."), nil
 		}
 		return verifyCurrentUserEmailChangeError(responseCodeInternalError(), "Challenge error."), nil
-	}
-	if result.Action.UserID != userID {
-		return verifyCurrentUserEmailChangeError(responseCodeForbidden(), "Email change does not belong to the current user."), nil
-	}
-	if err := h.Challenge.ExecuteEmailChange(ctx, result.Action, time.Now().UTC()); err != nil {
-		return verifyCurrentUserEmailChangeError(responseCodeInternalError(), "Email change error."), nil
 	}
 	return contract.VerifyCurrentUserEmailChange204Response{}, nil
 }
@@ -193,14 +231,19 @@ func (h *APIHandler) ChangeCurrentUserPassword(ctx context.Context, request cont
 	if !ok {
 		return changeCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
-	if request.Body == nil || !validation.IsValidPassword(request.Body.NewPassword) {
-		return changeCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid password."), nil
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		return changeCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
-	passwordHash, err := auth.Hash(request.Body.NewPassword)
+	if request.Body == nil {
+		return changeCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
+	}
+	passwordHash, err := h.Auth.HashPassword(ctx, request.Body.NewPassword)
 	if err != nil {
-		return changeCurrentUserPasswordError(responseCodeInternalError(), "Password error."), nil
+		code, message := h.passwordPolicyError(err)
+		return changeCurrentUserPasswordError(code, message), nil
 	}
-	if err := h.Auth.ChangePassword(ctx, userID, request.Body.CurrentPassword, passwordHash); err != nil {
+	if err := h.Auth.ChangePassword(ctx, userID, sessionID, request.Body.CurrentPassword, passwordHash); err != nil {
 		switch {
 		case errors.Is(err, auth.ErrInvalidCredentials):
 			return changeCurrentUserPasswordError(responseCodeInvalidRequest(), "Current password is incorrect."), nil
@@ -218,12 +261,13 @@ func (h *APIHandler) AddCurrentUserPassword(ctx context.Context, request contrac
 	if !ok {
 		return addCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
-	if request.Body == nil || !validation.IsValidPassword(request.Body.Password) {
-		return addCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid password."), nil
+	if request.Body == nil {
+		return addCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
-	passwordHash, err := auth.Hash(request.Body.Password)
+	passwordHash, err := h.Auth.HashPassword(ctx, request.Body.Password)
 	if err != nil {
-		return addCurrentUserPasswordError(responseCodeInternalError(), "Password error."), nil
+		code, message := h.passwordPolicyError(err)
+		return addCurrentUserPasswordError(code, message), nil
 	}
 	if err := h.Auth.AddPassword(ctx, userID, passwordHash); err != nil {
 		if errors.Is(err, auth.ErrPasswordAlreadyExists) {
@@ -278,13 +322,58 @@ func (h *APIHandler) LinkCurrentUserGoogle(ctx context.Context, request contract
 	return contract.LinkCurrentUserGoogle204HeadersResponse{Header: header}, nil
 }
 
+func (h *APIHandler) LinkCurrentUserApple(ctx context.Context, request contract.LinkCurrentUserAppleRequestObject) (contract.LinkCurrentUserAppleResponseObject, error) {
+	r, ok := contractRequest(ctx)
+	if !ok {
+		return linkCurrentUserAppleError(responseCodeInternalError(), "API contract error."), nil
+	}
+	userID, userOK := httpctx.UserID(ctx)
+	sessionID, sessionOK := httpctx.SessionID(ctx)
+	if !userOK || !sessionOK {
+		return linkCurrentUserAppleError(responseCodeUnauthorized(), "Unauthorized."), nil
+	}
+	if request.Body == nil {
+		return linkCurrentUserAppleError(responseCodeInvalidRequest(), "Invalid Apple authorization."), nil
+	}
+	result, header, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State)
+	if !ok {
+		return appleLinkErrorWithHeaders(code, message, header), nil
+	}
+	user, err := h.Auth.GetUser(ctx, userID)
+	if err != nil {
+		h.discardAppleAuthorization(ctx, result.RefreshToken)
+		return appleLinkErrorWithHeaders(responseCodeInternalError(), "Could not link Apple.", header), nil
+	}
+	linkID, err := h.Auth.StartProviderLink(ctx, userID, sessionID, domain.ProviderApple, time.Now().UTC())
+	if err == nil {
+		// An authenticated link is bound to Apple's stable subject. Apple's email
+		// is not required here and must not replace the Authara account email.
+		err = h.Auth.CompleteAppleProviderLink(
+			ctx, linkID, userID, sessionID, result.Identity.OAuthID,
+			user.Email, true, result.RefreshToken, time.Now().UTC(),
+		)
+	}
+	if err != nil {
+		h.discardAppleAuthorization(ctx, result.RefreshToken)
+		switch {
+		case errors.Is(err, auth.ErrAuthProviderAlreadyLinked), errors.Is(err, auth.ErrAuthProviderAlreadyLinkedToUser):
+			return appleLinkErrorWithHeaders(codeAuthMethodAlreadyLinked, "Apple is already linked.", header), nil
+		case errors.Is(err, auth.ErrProviderEmailNotVerified), errors.Is(err, auth.ErrProviderDisabled):
+			return appleLinkErrorWithHeaders(responseCodeForbidden(), "Apple account cannot be linked.", header), nil
+		default:
+			return appleLinkErrorWithHeaders(responseCodeInternalError(), "Could not link Apple.", header), nil
+		}
+	}
+	return contract.LinkCurrentUserApple204HeadersResponse{Header: header}, nil
+}
+
 func (h *APIHandler) UnlinkCurrentUserAuthMethod(ctx context.Context, request contract.UnlinkCurrentUserAuthMethodRequestObject) (contract.UnlinkCurrentUserAuthMethodResponseObject, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return unlinkCurrentUserAuthMethodError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
 	provider := domain.Provider(request.Provider)
-	if provider != domain.ProviderPassword && provider != domain.ProviderGoogle {
+	if provider != domain.ProviderPassword && provider != domain.ProviderGoogle && provider != domain.ProviderApple {
 		return unlinkCurrentUserAuthMethodError(responseCodeInvalidRequest(), "Invalid authentication method."), nil
 	}
 	if err := h.Auth.UnlinkAuthProvider(ctx, userID, provider); err != nil {

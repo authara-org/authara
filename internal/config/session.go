@@ -5,14 +5,24 @@ import (
 	"time"
 )
 
-type Session struct {
-	SessionTTLDays          int    `env:"AUTHARA_SESSION_TTL_DAYS,default=60"`
-	RefreshTokenTTLDays     int    `env:"AUTHARA_REFRESH_TOKEN_TTL_DAYS,default=14"`
-	RefreshTokenRotationRaw string `env:"AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL,default=24h"`
+const (
+	defaultRecentAuthenticationWindow = 10 * time.Minute
+	minimumRecentAuthenticationWindow = time.Minute
+	maximumRecentAuthenticationWindow = time.Hour
+)
 
-	SessionTTL           time.Duration
-	RefreshTokenTTL      time.Duration
-	RefreshTokenRotation time.Duration
+type Session struct {
+	SessionTTLDays                int           `env:"AUTHARA_SESSION_TTL_DAYS,default=60"`
+	RefreshTokenTTLDays           int           `env:"AUTHARA_REFRESH_TOKEN_TTL_DAYS,default=14"`
+	RefreshTokenRotationRaw       string        `env:"AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL,default=24h"`
+	RecentAuthenticationEnabled   bool          `env:"AUTHARA_RECENT_AUTHENTICATION_ENABLED,default=true"`
+	RecentAuthenticationWindowRaw string        `env:"AUTHARA_RECENT_AUTHENTICATION_WINDOW,default=10m"`
+	CleanupInterval               time.Duration `env:"AUTHARA_SESSION_CLEANUP_INTERVAL,default=5m"`
+
+	SessionTTL                 time.Duration
+	RefreshTokenTTL            time.Duration
+	RefreshTokenRotation       time.Duration
+	RecentAuthenticationWindow time.Duration
 }
 
 func (s *Session) validate() error {
@@ -37,6 +47,9 @@ func (s *Session) validate() error {
 			s.SessionTTLDays,
 		)
 	}
+	if s.CleanupInterval <= 0 {
+		return fmt.Errorf("AUTHARA_SESSION_CLEANUP_INTERVAL must be greater than 0")
+	}
 
 	return nil
 }
@@ -48,6 +61,16 @@ func (s *Session) parse() error {
 	}
 
 	s.RefreshTokenRotation = rotation
+	recentAuthenticationWindow, err := time.ParseDuration(s.RecentAuthenticationWindowRaw)
+	if err != nil || recentAuthenticationWindow < minimumRecentAuthenticationWindow || recentAuthenticationWindow > maximumRecentAuthenticationWindow {
+		return fmt.Errorf(
+			"AUTHARA_RECENT_AUTHENTICATION_WINDOW must be between %s and %s (got %q)",
+			minimumRecentAuthenticationWindow,
+			maximumRecentAuthenticationWindow,
+			s.RecentAuthenticationWindowRaw,
+		)
+	}
+	s.RecentAuthenticationWindow = recentAuthenticationWindow
 	s.SessionTTL = time.Duration(s.SessionTTLDays) * 24 * time.Hour
 	s.RefreshTokenTTL = time.Duration(s.RefreshTokenTTLDays) * 24 * time.Hour
 

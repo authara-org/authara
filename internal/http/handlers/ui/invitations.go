@@ -14,8 +14,8 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
-	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/organization"
 	authsession "github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
@@ -46,7 +46,7 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 		description := "Sign in or create an account with " + preview.Invitation.Email + " to accept this invitation."
 		showSignupForm := false
 		actions := []authview.InvitationAction{
-			{Label: "Log in with invited email", Href: invitationAuthURL("/auth/invitations/login", token), Primary: true},
+			{Label: "Sign in with invited email", Href: invitationAuthURL("/auth/invitations/login", token), Primary: true},
 			{Label: "Create account", Href: invitationAuthURL("/auth/invitations/signup", token)},
 		}
 		if h.Organizations.Mode() == organization.OrgModeSingle {
@@ -71,19 +71,19 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 						h.renderInternalError(w, r)
 						return
 					}
-					title = "Log in to accept this invitation"
+					title = "Sign in to accept this invitation"
 					description = "This invitation was sent to an existing account."
 					showSignupForm = false
 					if len(memberships) == 0 {
 						actions = []authview.InvitationAction{{
-							Label:   "Log in with invited email",
+							Label:   "Sign in with invited email",
 							Href:    invitationAuthURL("/auth/invitations/login", token),
 							Primary: true,
 						}}
 					} else {
-						description = "Log in to review what is required before joining " + preview.Organization.Name + "."
+						description = "Sign in to review what is required before joining " + preview.Organization.Name + "."
 						actions = []authview.InvitationAction{{
-							Label: "Log in with invited email",
+							Label: "Sign in with invited email",
 							Href: redirect.WithReturnTo(
 								"/auth/login",
 								invitationAuthURL("/auth/invitations/accept", token),
@@ -210,7 +210,7 @@ func (h *UIHandler) invitationPageForUser(
 		default:
 			page.Description = "This invitation was sent to " + preview.Invitation.Email + ". You are signed in as " + user.Email + "."
 			page.Actions = []authview.InvitationAction{{
-				Label:   "Log in with invited email",
+				Label:   "Sign in with invited email",
 				Href:    invitationAuthURL("/auth/invitations/login", rawToken),
 				Primary: true,
 			}}
@@ -223,7 +223,7 @@ func (h *UIHandler) invitationPageForUser(
 		} else {
 			page.Description = "This invitation was sent to " + preview.Invitation.Email + ". You are signed in as " + user.Email + "."
 			page.Actions = []authview.InvitationAction{
-				{Label: "Log in with invited email", Href: invitationAuthURL("/auth/invitations/login", rawToken), Primary: true},
+				{Label: "Sign in with invited email", Href: invitationAuthURL("/auth/invitations/login", rawToken), Primary: true},
 				{Label: "Create account", Href: invitationAuthURL("/auth/invitations/signup", rawToken)},
 			}
 		}
@@ -336,8 +336,29 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 	}
 
 	password := r.FormValue("password")
-	if !validation.IsValidPassword(password) {
-		h.renderInvitationSignupError(w, r, http.StatusUnprocessableEntity, "Please provide a valid password.", preview, token)
+	if err := h.Auth.ValidatePassword(r.Context(), password); err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderInvitationSignupError(w, r, status, message, preview, token)
+			return
+		}
+		h.renderInternalError(w, r)
+		return
+	}
+
+	ip := httputil.ClientIP(r)
+	allowed, err := h.Limiter.AllowSignupAttempt(r.Context(), ip, preview.Invitation.Email)
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		h.renderInvitationSignupError(w, r, status, message, preview, token)
+		return
+	}
+
+	passwordHash, err := h.Auth.HashPassword(r.Context(), password)
+	if err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderInvitationSignupError(w, r, status, message, preview, token)
+			return
+		}
+		h.renderInternalError(w, r)
 		return
 	}
 
@@ -347,7 +368,7 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if exists {
-		msg := "An account already exists for this invitation email. Use invite login instead."
+		msg := "An account already exists for this invitation email. Use invitation sign-in instead."
 		if h.Organizations.Mode() == organization.OrgModeSingle {
 			msg = "An account already exists for this invitation email. In single-organization mode, existing accounts cannot accept invitations."
 		}
@@ -359,19 +380,6 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 			preview,
 			token,
 		)
-		return
-	}
-
-	ip := httputil.ClientIP(r)
-	allowed, err := h.Limiter.AllowSignupAttempt(r.Context(), ip, preview.Invitation.Email)
-	if err != nil || !allowed {
-		h.renderInvitationSignupError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token)
-		return
-	}
-
-	passwordHash, err := auth.Hash(password)
-	if err != nil {
-		h.renderInternalError(w, r)
 		return
 	}
 
@@ -452,8 +460,8 @@ func (h *UIHandler) InvitationLoginPost(w http.ResponseWriter, r *http.Request) 
 
 	ip := httputil.ClientIP(r)
 	allowed, err := h.Limiter.AllowLoginAttempt(r.Context(), ip, preview.Invitation.Email)
-	if err != nil || !allowed {
-		h.renderInvitationLoginError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", preview, token)
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		h.renderInvitationLoginError(w, r, status, message, preview, token)
 		return
 	}
 
@@ -513,7 +521,7 @@ func (h *UIHandler) invitationPreview(w http.ResponseWriter, r *http.Request, to
 }
 
 func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.Request, user domain.User, invitationID uuid.UUID, now time.Time) {
-	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), r.UserAgent(), now, httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, redirect.AudienceForPath("/"), domain.AuthenticationMethodPassword, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderInternalError(w, r)
 		return
@@ -524,9 +532,13 @@ func (h *UIHandler) finishInvitationSessionByID(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if currentRefresh, ok := authsession.ReadRefreshToken(r); ok {
-		currentAccess, _ := authsession.ReadAccessToken(r)
-		_ = h.Session.Logout(r.Context(), currentRefresh, currentAccess)
+	currentRefresh, hasCurrentRefresh := authsession.ReadRefreshToken(r)
+	currentAccess, hasCurrentAccess := authsession.ReadAccessToken(r)
+	if hasCurrentRefresh || hasCurrentAccess {
+		if err := h.Session.Logout(r.Context(), currentRefresh, currentAccess); err != nil {
+			h.renderInternalError(w, r)
+			return
+		}
 	}
 	authsession.ClearSessionCookies(w)
 	cookiePolicy := h.sessionCookiePolicy()
@@ -576,10 +588,11 @@ func (h *UIHandler) finishInvitationOAuth(
 	}
 
 	input := auth.LoginInput{
-		Provider:        domain.ProviderGoogle,
-		Email:           preview.Invitation.Email,
-		OAuthID:         oauthID,
-		InvitationToken: token,
+		Provider:              domain.ProviderGoogle,
+		Email:                 preview.Invitation.Email,
+		OAuthID:               oauthID,
+		ProviderEmailVerified: emailVerified,
+		InvitationToken:       token,
 	}
 
 	user, err := h.Auth.Login(r.Context(), input)
@@ -680,7 +693,7 @@ func (h *UIHandler) renderInvitationError(w http.ResponseWriter, r *http.Request
 }
 
 func normalizeEmailForDisplay(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
+	return identity.CanonicalEmail(email)
 }
 
 func invitationAuthReturnTo(returnTo string) (path string, token string, ok bool) {

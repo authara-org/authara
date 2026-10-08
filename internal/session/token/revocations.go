@@ -2,10 +2,9 @@ package token
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/cache"
@@ -25,12 +24,19 @@ func NewAccessTokenRevocationsWithTTL(cache cache.Cache, ttl func() time.Duratio
 	return &AccessTokenRevocations{cache: cache, ttlProvider: ttl}
 }
 
-func (r *AccessTokenRevocations) RevokeToken(ctx context.Context, accessToken string, ttl time.Duration) error {
+func (r *AccessTokenRevocations) RevokeToken(ctx context.Context, claims *AccessClaims, ttl time.Duration) error {
 	if r == nil || r.cache == nil || ttl <= 0 {
 		return nil
 	}
-	sum := sha256.Sum256([]byte(accessToken))
-	return r.cache.Set(ctx, cache.RevokedAccessTokenKey(hex.EncodeToString(sum[:])), []byte("1"), ttl)
+
+	tokenIdentifier, err := accessTokenIdentifier(claims)
+	if err != nil {
+		return err
+	}
+	if err := r.cache.Set(ctx, cache.RevokedAccessTokenKey(tokenIdentifier), []byte("1"), ttl); err != nil {
+		return fmt.Errorf("%w: revoke access token: %w", ErrRevocationStoreUnavailable, err)
+	}
+	return nil
 }
 
 func (r *AccessTokenRevocations) RevokeSession(ctx context.Context, sessionID uuid.UUID, revokedAt time.Time) error {
@@ -56,7 +62,7 @@ func (r *AccessTokenRevocations) RevokeMembership(
 
 func (r *AccessTokenRevocations) Check(
 	ctx context.Context,
-	accessToken string,
+	_ string,
 	claims *AccessClaims,
 ) error {
 	if r == nil || r.cache == nil {
@@ -65,19 +71,26 @@ func (r *AccessTokenRevocations) Check(
 	if claims == nil || claims.IssuedAt == nil {
 		return ErrInvalidClaims
 	}
+	tokenIdentifier, err := accessTokenIdentifier(claims)
+	if err != nil {
+		return err
+	}
 
-	sum := sha256.Sum256([]byte(accessToken))
 	values, err := r.cache.GetMany(ctx,
-		cache.RevokedAccessTokenKey(hex.EncodeToString(sum[:])),
+		cache.RevokedAccessTokenKey(tokenIdentifier),
 		cache.RevokedAccessTokenSessionKey(claims.SessionID.String()),
 		cache.RevokedAccessTokenUserKey(claims.Subject),
 		cache.RevokedAccessTokenMembershipKey(claims.Subject, claims.OrgID.String()),
 	)
 	if err != nil {
-		return fmt.Errorf("check access token revocation: %w", err)
+		return fmt.Errorf("%w: check access token revocation: %w", ErrRevocationStoreUnavailable, err)
 	}
 	if len(values) != 4 {
-		return fmt.Errorf("check access token revocation: expected 4 values, got %d", len(values))
+		return fmt.Errorf(
+			"%w: check access token revocation: expected 4 values, got %d",
+			ErrRevocationStoreUnavailable,
+			len(values),
+		)
 	}
 	if values[0] != nil {
 		return ErrRevokedToken
@@ -90,7 +103,11 @@ func (r *AccessTokenRevocations) Check(
 		}
 		revokedAt, err := strconv.ParseInt(string(value), 10, 64)
 		if err != nil {
-			return fmt.Errorf("check access token revocation: invalid cutoff: %w", err)
+			return fmt.Errorf(
+				"%w: check access token revocation: invalid cutoff: %w",
+				ErrRevocationStoreUnavailable,
+				err,
+			)
 		}
 		if issuedAt <= revokedAt {
 			return ErrRevokedToken
@@ -99,10 +116,40 @@ func (r *AccessTokenRevocations) Check(
 	return nil
 }
 
+func accessTokenIdentifier(claims *AccessClaims) (string, error) {
+	if claims == nil {
+		return "", ErrInvalidClaims
+	}
+	if claims.ID != "" {
+		id, err := uuid.Parse(claims.ID)
+		if err != nil {
+			return "", ErrInvalidClaims
+		}
+		return id.String(), nil
+	}
+	if claims.SessionID == uuid.Nil || claims.OrgID == uuid.Nil || claims.Subject == "" || claims.IssuedAt == nil {
+		return "", ErrInvalidClaims
+	}
+
+	// Tokens created before jti support are deterministic within these public
+	// claims. Keep them revocable during a rolling v0.x upgrade without storing
+	// any bearer-token material in the cache.
+	return strings.Join([]string{
+		"legacy",
+		claims.SessionID.String(),
+		claims.Subject,
+		claims.OrgID.String(),
+		strconv.FormatInt(claims.IssuedAt.Time.Unix(), 10),
+		strings.Join(claims.Audience, ","),
+	}, ":"), nil
+}
+
 func (r *AccessTokenRevocations) revokeScope(ctx context.Context, key string, revokedAt time.Time) error {
 	if r == nil || r.cache == nil {
 		return nil
 	}
-	value := []byte(strconv.FormatInt(revokedAt.UnixNano(), 10))
-	return r.cache.Set(ctx, key, value, r.ttlProvider())
+	if err := r.cache.SetMaxInt64(ctx, key, revokedAt.UnixNano(), r.ttlProvider()); err != nil {
+		return fmt.Errorf("%w: write access-token revocation: %w", ErrRevocationStoreUnavailable, err)
+	}
+	return nil
 }

@@ -13,6 +13,8 @@ import (
 
 var ErrMissingEmailRecipient = errors.New("email recipient is missing")
 
+const DefaultDeliveryWindow = 72 * time.Hour
+
 type JobCreator interface {
 	CreateEmailJob(context.Context, domain.EmailJob) (domain.EmailJob, error)
 }
@@ -43,13 +45,15 @@ func Enqueue(
 	if err != nil {
 		return fmt.Errorf("marshal email template data: %w", err)
 	}
+	deliveryDeadline := now.Add(DefaultDeliveryWindow)
 	_, err = store.CreateEmailJob(ctx, domain.EmailJob{
-		ToEmail:       toEmail,
-		Template:      template,
-		TemplateData:  templateData,
-		Status:        domain.EmailJobStatusPending,
-		AttemptCount:  0,
-		NextAttemptAt: now,
+		ToEmail:            toEmail,
+		Template:           template,
+		TemplateData:       templateData,
+		Status:             domain.EmailJobStatusPending,
+		AttemptCount:       0,
+		NextAttemptAt:      now,
+		DeliveryDeadlineAt: deliveryDeadline,
 	})
 	return err
 }

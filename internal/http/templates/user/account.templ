@@ -3,7 +3,6 @@ package user
 import (
 	"github.com/authara-org/authara/internal/http/templates"
 	"github.com/authara-org/authara/internal/http/templates/auth"
-	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 	"github.com/google/uuid"
@@ -18,6 +17,10 @@ type AccountConfig struct {
 	CurrentSessionID uuid.UUID
 	AuthProviders    []viewmodel.AuthProvider
 	Passkeys         []viewmodel.Passkey
+	SessionsCursor   string
+	SessionsNext     string
+	PasskeysCursor   string
+	PasskeysNext     string
 }
 
 templ Account(cfg AccountConfig) {
@@ -39,9 +42,15 @@ templ Account(cfg AccountConfig) {
 							}
 							@CollapsibleSection(true) {
 								@SessionSection(cfg.Sessions, cfg.CurrentSessionID)
+								if cfg.SessionsNext != "" {
+									@AccountCollectionNext("More sessions", accountPageHref(cfg.SessionsNext, cfg.PasskeysCursor))
+								}
 							}
 							@CollapsibleSection(false) {
 								@LinkedProvidersSection(cfg.AuthProviders, cfg.Passkeys, cfg.GoogleClientID)
+								if cfg.PasskeysNext != "" {
+									@AccountCollectionNext("More passkeys", accountPageHref(cfg.SessionsCursor, cfg.PasskeysNext))
+								}
 							}
 						</div>
 					</div>
@@ -52,8 +61,16 @@ templ Account(cfg AccountConfig) {
 			@DeleteAccountConfirmForm()
 			@RemovePasswordConfirmForm()
 			@RemoveGoogleConfirmForm()
+			@RemoveAppleConfirmForm()
+			@AccountPasswordDialog()
 		</div>
 	}
+}
+
+templ AccountCollectionNext(label string, href string) {
+	<div class="mt-4 flex justify-end">
+		<a class="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400" href={ templ.SafeURL(href) }>{ label }</a>
+	</div>
 }
 
 templ CollapsibleSection(bordered bool) {
@@ -62,20 +79,20 @@ templ CollapsibleSection(bordered bool) {
 		:class="open ? 'h-auto sm:h-auto' : 'h-16 sm:h-22'"
 		class={ sectionClass(bordered) + " overflow-hidden h-16 sm:h-22" }
 	>
-		@button.Button(button.ButtonConfig{
-			Type:      button.RegularButton,
-			Color:     button.Custom,
-			AriaLabel: "Toggle section",
-			Class:     " !absolute top-5 right-4 !h-6 !w-6 !border-0 !rounded-none !p-0 text-grey-600 hover:text-grey-900 dark:text-grey-400 dark:hover:text-grey-100 sm:top-8 sm:right-8",
-			OnClick:   "open = !open",
-		}) {
+		<button
+			type="button"
+			aria-label="Toggle section"
+			:aria-expanded="open.toString()"
+			@click="open = !open"
+			class="absolute inset-x-0 top-0 z-10 h-16 cursor-pointer rounded-none transition-colors hover:bg-grey-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:hover:bg-grey-800/40 sm:h-22"
+		>
 			<span
 				:class="open ? 'rotate-180' : ''"
-				class="block transition-transform duration-300 ease-in-out stroke-2"
+				class="absolute right-4 top-5 block h-6 w-6 text-grey-600 transition-transform duration-300 ease-in-out stroke-2 dark:text-grey-400 sm:right-8 sm:top-8"
 			>
 				@icons.ChevronDown()
 			</span>
-		}
+		</button>
 		{ children... }
 	</div>
 }

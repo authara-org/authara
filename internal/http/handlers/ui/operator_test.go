@@ -915,6 +915,15 @@ func (s *operatorEmailTemplateStore) ListEmailTemplateVersions(_ context.Context
 	return out, nil
 }
 
+func (s *operatorEmailTemplateStore) ListEmailTemplateVersionsPage(ctx context.Context, key domain.EmailTemplate, limit, offset int) ([]domain.EmailTemplateVersion, error) {
+	versions, err := s.ListEmailTemplateVersions(ctx, key)
+	if err != nil || offset >= len(versions) {
+		return nil, err
+	}
+	end := min(offset+limit, len(versions))
+	return versions[offset:end], nil
+}
+
 func (s *operatorEmailTemplateStore) UpsertEmailTemplateOverride(_ context.Context, override domain.EmailTemplateOverride, expectedRevision int64) (domain.EmailTemplateOverride, error) {
 	current, exists := s.overrides[override.Template]
 	if (!exists && expectedRevision != 0) || (exists && current.Revision != expectedRevision) {

@@ -1,12 +1,35 @@
-# Database Connection Pooling
+# Database Connection
+
+Authara Core and the migrations image use the same PostgreSQL TLS settings.
+
+## TLS
+
+`POSTGRESQL_SSL_MODE` controls encryption and certificate verification:
+
+- `disable` uses plaintext and is the default for local development.
+- `require` requires encryption; use a verification mode when server identity
+  must be checked.
+- `verify-ca` verifies that the certificate was issued by a trusted CA.
+- `verify-full` also verifies that the certificate matches the database host
+  name and is recommended for production.
+
+When the database uses a private CA, set
+`POSTGRESQL_SSL_ROOT_CERT=/certs/postgresql-ca.pem` and mount that PEM file at
+the same path in both containers. Publicly trusted certificates can use the
+system CA bundle without setting a custom path.
+
+```env
+POSTGRESQL_SSL_MODE=verify-full
+POSTGRESQL_SSL_ROOT_CERT=/certs/postgresql-ca.pem
+```
+
+## Connection pooling
 
 Authara uses a connection pool to manage PostgreSQL connections efficiently.
 
 Correct configuration of the connection pool is **critical for performance, scalability, and system stability**.
 
 ---
-
-## Overview
 
 Each Authara instance maintains its own pool of database connections.
 

@@ -3,7 +3,6 @@ ifneq (,$(wildcard .env))
 	export
 endif
 
-POSTGRESQL_SCHEMA ?= authara
 export EMAIL
 
 DOCKER_COMPOSE_FILE = docker-compose.dev.yaml
@@ -19,7 +18,6 @@ MAILPIT_SERVICE    = mailpit
 TEST_DB_NAME       ?= authara_test
 TEST_DB_HOST       ?= postgres
 TEST_DB_PORT       ?= 5432
-TEST_DB_SCHEMA     ?= authara
 TEST_DB_TIMEZONE   ?= UTC
 TEST_DB_LOG_SQL    ?= false
 
@@ -37,12 +35,17 @@ check-generated: generate
 
 dev:
 	@if command -v tmux >/dev/null 2>&1; then \
-		echo "Starting dev environment with tmux..."; \
-		tmux new-session -d -s authara -c '$(CURDIR)' \
-			'$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE_DEV) up' \; \
-			split-window -h -c '$(CURDIR)/frontend' \
-			'npm run dev:tailwind' \; \
-		attach; \
+		if tmux has-session -t authara 2>/dev/null; then \
+			echo "Attaching to existing authara dev session..."; \
+			tmux attach -t authara; \
+		else \
+			echo "Starting dev environment with tmux..."; \
+			tmux new-session -d -s authara -c '$(CURDIR)' \
+				'$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE_DEV) up' \; \
+				split-window -h -c '$(CURDIR)/frontend' \
+				'npm run dev:tailwind' \; \
+				attach; \
+		fi; \
 	else \
 		echo ""; \
 		echo "tmux not found."; \
@@ -75,7 +78,7 @@ migrate-up:
 db-clean:
 	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
 	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
-	-Atc "SELECT 'TRUNCATE TABLE $(POSTGRESQL_SCHEMA).' || string_agg(quote_ident(tablename), ', ') || ' RESTART IDENTITY CASCADE;' FROM pg_tables WHERE schemaname = '$(POSTGRESQL_SCHEMA)'" \
+	-Atc "SELECT 'TRUNCATE TABLE authara.' || string_agg(quote_ident(tablename), ', ') || ' RESTART IDENTITY CASCADE;' FROM pg_tables WHERE schemaname = 'authara'" \
 	| $(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
 	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE)
 
@@ -85,12 +88,12 @@ ifndef TABLE
 endif
 	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
 	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
-	-c "TRUNCATE TABLE $(POSTGRESQL_SCHEMA).$(TABLE) RESTART IDENTITY CASCADE;"
+	-c "TRUNCATE TABLE authara.$(TABLE) RESTART IDENTITY CASCADE;"
 
 db-reset:
 	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
 	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
-	-c "DROP SCHEMA IF EXISTS $(POSTGRESQL_SCHEMA) CASCADE; \
+	-c "DROP SCHEMA IF EXISTS authara CASCADE; \
 	    DROP SCHEMA IF EXISTS public CASCADE; \
 	    CREATE SCHEMA public;"
 	$(MAKE) migrate-up
@@ -148,7 +151,6 @@ test-run:
 		-e POSTGRESQL_DATABASE=$(TEST_DB_NAME) \
 		-e POSTGRESQL_USERNAME=$(POSTGRESQL_USERNAME) \
 		-e POSTGRESQL_PASSWORD=$(POSTGRESQL_PASSWORD) \
-		-e POSTGRESQL_SCHEMA=$(TEST_DB_SCHEMA) \
 		-e POSTGRESQL_TIMEZONE=$(TEST_DB_TIMEZONE) \
 		-e POSTGRESQL_LOG_SQL=$(TEST_DB_LOG_SQL) \
 		-e AUTHARA_TEST_MAILPIT_HTTP_URL=http://mailpit:8025 \
@@ -173,7 +175,6 @@ test-coverage: test-up test-db-create test-migrate
 		-e POSTGRESQL_DATABASE=$(TEST_DB_NAME) \
 		-e POSTGRESQL_USERNAME=$(POSTGRESQL_USERNAME) \
 		-e POSTGRESQL_PASSWORD=$(POSTGRESQL_PASSWORD) \
-		-e POSTGRESQL_SCHEMA=$(TEST_DB_SCHEMA) \
 		-e POSTGRESQL_TIMEZONE=$(TEST_DB_TIMEZONE) \
 		-e POSTGRESQL_LOG_SQL=$(TEST_DB_LOG_SQL) \
 		$(AUTHARA_SERVICE) \
@@ -187,7 +188,6 @@ test-coverage-profile: test-up test-db-create test-migrate
 		-e POSTGRESQL_DATABASE=$(TEST_DB_NAME) \
 		-e POSTGRESQL_USERNAME=$(POSTGRESQL_USERNAME) \
 		-e POSTGRESQL_PASSWORD=$(POSTGRESQL_PASSWORD) \
-		-e POSTGRESQL_SCHEMA=$(TEST_DB_SCHEMA) \
 		-e POSTGRESQL_TIMEZONE=$(TEST_DB_TIMEZONE) \
 		-e POSTGRESQL_LOG_SQL=$(TEST_DB_LOG_SQL) \
 		$(AUTHARA_SERVICE) \

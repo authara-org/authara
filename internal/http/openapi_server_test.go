@@ -27,6 +27,8 @@ func TestOpenAPIServerBridgeValidatesSignupResponse(t *testing.T) {
 		RedirectIfAuthenticated:              pass,
 		RequireAppAccessAuthWithRefresh:      pass,
 		RequireAppAccessAuthAPI:              pass,
+		RequireRecentAuthenticationUI:        pass,
+		RequireRecentAuthenticationAPI:       pass,
 		RequireAdminAccessAuthWithRefresh:    pass,
 		RequireAdminAccessAuthAPI:            pass,
 		RequireOperatorAccessAuthWithRefresh: pass,

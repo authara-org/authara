@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"fmt"
 	adminsvc "github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/modal"
@@ -116,9 +117,35 @@ templ UserDetail(detail adminsvc.UserDetail, features FeatureFlags) {
 			</section>
 			<section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
 				@authProviders(detail.AuthProviders)
-				@passkeys(detail.Passkeys)
+				<div class="space-y-3">
+					@passkeys(detail.Passkeys)
+					if detail.PasskeysPrevious() || detail.PasskeysNext {
+						<nav class="flex items-center justify-between" aria-label="Passkey pages">
+							if detail.PasskeysPrevious() {
+								<a class="text-sm font-medium text-blue-600 hover:underline" href={ templ.URL(fmt.Sprintf("/auth/admin/users/%s?passkeys_page=%d&passkeys_size=%d&sessions_page=%d&sessions_size=%d", detail.User.ID, detail.PasskeyPage-1, detail.PasskeySize, detail.SessionPage, detail.SessionSize)) }>Previous passkeys</a>
+							} else {
+								<span></span>
+							}
+							if detail.PasskeysNext {
+								<a class="text-sm font-medium text-blue-600 hover:underline" href={ templ.URL(fmt.Sprintf("/auth/admin/users/%s?passkeys_page=%d&passkeys_size=%d&sessions_page=%d&sessions_size=%d", detail.User.ID, detail.PasskeyPage+1, detail.PasskeySize, detail.SessionPage, detail.SessionSize)) }>Next passkeys</a>
+							}
+						</nav>
+					}
+				</div>
 			</section>
-			@sessions(detail.User.ID, detail.Sessions)
+				@sessions(detail.User.ID, detail.Sessions)
+				if detail.SessionsPrevious() || detail.SessionsNext {
+					<nav class="flex items-center justify-between" aria-label="Session history pages">
+						if detail.SessionsPrevious() {
+							<a class="text-sm font-medium text-blue-600 hover:underline" href={ templ.URL(fmt.Sprintf("/auth/admin/users/%s?sessions_page=%d&sessions_size=%d&passkeys_page=%d&passkeys_size=%d", detail.User.ID, detail.SessionPage-1, detail.SessionSize, detail.PasskeyPage, detail.PasskeySize)) }>Previous sessions</a>
+						} else {
+							<span></span>
+						}
+						if detail.SessionsNext {
+							<a class="text-sm font-medium text-blue-600 hover:underline" href={ templ.URL(fmt.Sprintf("/auth/admin/users/%s?sessions_page=%d&sessions_size=%d&passkeys_page=%d&passkeys_size=%d", detail.User.ID, detail.SessionPage+1, detail.SessionSize, detail.PasskeyPage, detail.PasskeySize)) }>Next sessions</a>
+						}
+					</nav>
+				}
 		</div>
 	}
 }
@@ -159,6 +186,9 @@ templ passkeys(passkeys []adminsvc.PasskeySummary) {
 				<div class="text-sm text-grey-600 dark:text-grey-400">Created { formatTime(passkey.CreatedAt) }</div>
 				<div class="text-sm text-grey-600 dark:text-grey-400">Last used { formatTimePtr(passkey.LastUsedAt) }</div>
 				<div class="mt-2 flex flex-wrap gap-2">
+					if passkey.RestrictedAt != nil {
+						@badge("Restricted", "red")
+					}
 					if passkey.CloneWarning {
 						@badge("Clone warning", "red")
 					}

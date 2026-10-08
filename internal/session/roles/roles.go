@@ -9,15 +9,11 @@ type Role string
 
 const (
 	AutharaAdmin    Role = "authara:admin"
-	AutharaAuditor  Role = "authara:auditor"
-	AutharaMonitor  Role = "authara:monitor"
 	AutharaOperator Role = "authara:operator"
 )
 
 const (
 	DBAdminRoleName    = "admin"
-	DBAuditorRoleName  = "auditor"
-	DBMonitorRoleName  = "monitor"
 	DBOperatorRoleName = "operator"
 )
 
@@ -37,14 +33,6 @@ func (r *Roles) add(role Role) {
 
 func (r *Roles) AddAdmin() {
 	r.add(AutharaAdmin)
-}
-
-func (r *Roles) AddAuditor() {
-	r.add(AutharaAuditor)
-}
-
-func (r *Roles) AddMonitor() {
-	r.add(AutharaMonitor)
 }
 
 func (r *Roles) AddOperator() {
@@ -68,24 +56,8 @@ func (r Roles) IsAdmin() bool {
 	return r.Has(AutharaAdmin)
 }
 
-func (r Roles) IsAuditor() bool {
-	return r.Has(AutharaAuditor)
-}
-
-func (r Roles) IsMonitor() bool {
-	return r.Has(AutharaMonitor)
-}
-
 func (r Roles) IsOperator() bool {
 	return r.Has(AutharaOperator)
-}
-
-func (r Roles) CanAccessAdmin() bool {
-	return r.HasAny(
-		AutharaAdmin,
-		AutharaAuditor,
-		AutharaMonitor,
-	)
 }
 
 func FromClaims(claims []Role) (Roles, error) {
@@ -108,10 +80,6 @@ func FromDBRoleNames(names []string) (Roles, error) {
 		switch name {
 		case DBAdminRoleName:
 			r.AddAdmin()
-		case DBAuditorRoleName:
-			r.AddAuditor()
-		case DBMonitorRoleName:
-			r.AddMonitor()
 		case DBOperatorRoleName:
 			r.AddOperator()
 		default:
@@ -124,7 +92,7 @@ func FromDBRoleNames(names []string) (Roles, error) {
 
 func validate(role Role) error {
 	switch role {
-	case AutharaAdmin, AutharaAuditor, AutharaMonitor, AutharaOperator:
+	case AutharaAdmin, AutharaOperator:
 		return nil
 	default:
 		return fmt.Errorf("invalid role: %s", role)

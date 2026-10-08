@@ -11,6 +11,7 @@ type Provider string
 const (
 	ProviderPassword Provider = "password"
 	ProviderGoogle   Provider = "google"
+	ProviderApple    Provider = "apple"
 )
 
 type AuthProvider struct {

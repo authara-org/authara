@@ -23,6 +23,10 @@ func (n *Noop) Set(ctx context.Context, key string, value []byte, ttl time.Durat
 	return nil
 }
 
+func (n *Noop) SetMaxInt64(ctx context.Context, key string, value int64, ttl time.Duration) error {
+	return nil
+}
+
 func (n *Noop) Delete(ctx context.Context, key string) error {
 	return nil
 }

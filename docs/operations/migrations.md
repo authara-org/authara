@@ -58,10 +58,15 @@ Example:
 ```bash
 docker run --rm \
   --env-file .env \
-  ghcr.io/authara-org/authara-migrations:latest
+  ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20} \
+  up -env=default -config=/migrations/dbconfig.yaml
 ```
 
 This applies all pending migrations and exits.
+
+Use the migrations image listed in the Core release notes. The attached
+`authara-images.env` contains the same version and immutable image reference for
+deployment tooling.
 
 ---
 
@@ -77,7 +82,18 @@ POSTGRESQL_PORT=5432
 POSTGRESQL_DATABASE=authara
 POSTGRESQL_USERNAME=authara
 POSTGRESQL_PASSWORD=authara
+POSTGRESQL_SSL_MODE=disable
 ```
+
+For TLS-enabled PostgreSQL, use the same values as Core:
+
+```env
+POSTGRESQL_SSL_MODE=verify-full
+POSTGRESQL_SSL_ROOT_CERT=/certs/postgresql-ca.pem
+```
+
+Mount a private CA file at that path in the migrations container. See the
+database connection documentation for all supported verification modes.
 
 These variables may be provided through:
 
@@ -175,3 +191,27 @@ matching Core binary. With no override rows, effective behavior remains the
 same as the existing environment configuration and built-in defaults. The new
 column remains null on pre-v24 challenge rows so their resend delay continues
 to follow the effective policy, as it did before the value was persisted.
+
+## Session-bound email-change upgrade
+
+Schema version 25 binds pending email changes to the session that initiated
+them. Applying migration 025 cancels existing email-change challenges because
+they cannot be safely attributed to an initiating session.
+
+## Durable email-delivery upgrade
+
+Schema version 26 adds delivery deadlines, terminal failure metadata, and an
+index for reclaiming expired email-processing leases. Existing challenge email
+jobs inherit their challenge expiry; other existing jobs receive a deadline 72
+hours after their original creation time. Apply migration 026 before deploying
+the matching Core binary.
+
+## Singleton cleanup upgrade
+
+Schema version 34 adds the shared cleanup lease. Schema version 35 adds the
+supporting partial indexes with concurrent PostgreSQL index builds so existing
+table writes remain available during the migration. Apply both migrations
+before deploying the matching Core binary. Because migration 035 is
+non-transactional, it drops its own known index names before rebuilding them;
+this makes an interrupted run safe to retry even if PostgreSQL left an invalid
+concurrent index behind.

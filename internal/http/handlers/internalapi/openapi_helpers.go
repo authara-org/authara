@@ -52,7 +52,8 @@ func organizationError(err error) (response.ErrorCode, string) {
 	case errors.Is(err, store.ErrUserNotFound):
 		return codeUserNotFound, "User not found"
 	case errors.Is(err, store.ErrInvalidOrganizationName),
-		errors.Is(err, organization.ErrInvalidOrganizationRole):
+		errors.Is(err, organization.ErrInvalidOrganizationRole),
+		errors.Is(err, organization.ErrInvalidListPage):
 		return response.CodeInvalidRequest, "Invalid organization request"
 	case errors.Is(err, organization.ErrOrganizationOperationForbidden),
 		errors.Is(err, organization.ErrOrganizationInviteForbidden):
@@ -66,6 +67,21 @@ func organizationError(err error) (response.ErrorCode, string) {
 	default:
 		return response.CodeInternalError, "Internal server error"
 	}
+}
+
+func organizationListOptions(cursor *string, limit *int) organization.ListOptions {
+	options := organization.ListOptions{Limit: limit}
+	if cursor != nil {
+		options.Cursor = *cursor
+	}
+	return options
+}
+
+func optionalCursor(cursor string) *string {
+	if cursor == "" {
+		return nil
+	}
+	return &cursor
 }
 
 func toContractOrganization(org domain.Organization) contract.Organization {

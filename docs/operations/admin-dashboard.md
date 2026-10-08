@@ -14,6 +14,20 @@ Admin pages require an authenticated admin-audience session and the `admin` plat
 
 State-changing admin actions use `POST` routes and require the normal Authara CSRF token. Browser form submissions include the token as `csrf_token`.
 
+Authara intentionally supports only the `admin` and `operator` platform roles.
+The dormant `auditor` and `monitor` roles were removed in schema version 33;
+the migration also removes any assignments that were created manually.
+
+| Route family | Admin | Operator | Other users |
+| --- | --- | --- | --- |
+| All `GET` and `POST` routes under `/auth/admin` | Allowed | Denied | Denied |
+| All `GET` and `POST` routes under `/auth/operator` | Denied | Allowed | Denied |
+
+The internal `/auth/api/v1/admin` group follows the same exact-admin rule. It
+currently contains no registered operations. Internal service-to-service routes
+under `/auth/internal/v1` use their separate internal API token instead of a
+platform role.
+
 ## Bootstrap The First Admin
 
 Create a user through the normal signup or user provisioning flow, then grant the built-in `admin` platform role:
@@ -35,7 +49,8 @@ The dashboard supports:
 - granting and removing the admin role
 - revoking one session or all active sessions for a user
 - allowlist list, live search, pagination, add, and remove
-- recent failed email jobs and risky challenges
+- queued or failed email jobs and risky challenges
+- durable security events for suspicious passkey sign-counter behavior and the applied policy response
 - recent admin audit events
 
 Allowlist management is available only when
@@ -54,15 +69,16 @@ Technical identifiers are minimized in the UI:
 - session IDs are shortened in tables and full IDs are used only in form routes
 - user agents are summarized, with full user agent strings behind an explicit technical-details disclosure
 - passkey credential IDs, public keys, password hashes, refresh token hashes, verification code hashes, OAuth tokens, and raw provider identifiers are not rendered
+- security events show only shortened internal subject/session IDs and allowlisted outcomes, reasons, methods, or policy responses; submitted identities, authenticator IDs, and counter values are not stored in the event
 - passkey transports are shown only under technical details
 
 The audit log is for security and accountability, not casual monitoring. The default audit table shows timestamps, actions, shortened actor/target user IDs, and masked emails. Personal data and metadata are behind a disclosure. Audit events are personal data; choose retention based on your legal and security requirements.
 
 `AUTHARA_ADMIN_AUDIT_RETENTION_DAYS` controls admin audit retention. The default
-is `180` days and must be greater than zero. Authara runs a cleanup worker that
-removes older admin audit events. If the environment variable is absent, an
-operator can change the retention at runtime and the next cleanup run uses the
-new cutoff.
+is `180` days and must be greater than zero. The shared cleanup leader removes
+older events at the startup-only `AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL`, which
+defaults to `24h`. If the retention environment variable is absent, an operator
+can change it at runtime and the next cleanup run uses the new cutoff.
 
 ## Security Notes
 
@@ -79,3 +95,4 @@ Authara protects against common admin lockout and stale-access mistakes:
 - password hashes, refresh token hashes, verification code hashes, raw passkey public keys, and OAuth tokens are not rendered in admin templates
 
 Run migrations before using the dashboard. The admin audit table is introduced in schema version `11`.
+Persistent passkey restrictions require schema version `29`. Core security events require schema version `30`.

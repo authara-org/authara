@@ -23,10 +23,10 @@ func NewNoopSender(cfg NoopSenderConfig) *NoopSender {
 	}
 }
 
-func (s *NoopSender) Send(ctx context.Context, to string, msg Message) error {
+func (s *NoopSender) Send(ctx context.Context, _ string, msg Message) error {
+	// Recipients and rendered content may contain account PII or credentials.
 	s.logger.InfoContext(ctx, "email noop send",
-		"to", to,
-		"subject", msg.Subject,
+		"has_subject", msg.Subject != "",
 		"has_text", msg.Text != "",
 		"has_html", msg.HTML != "",
 	)

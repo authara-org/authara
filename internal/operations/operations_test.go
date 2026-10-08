@@ -1,4 +1,4 @@
-package main
+package operations
 
 import (
 	"bytes"
@@ -137,6 +137,9 @@ func TestExecuteOperationalCommandRevokesRoleAndSessions(t *testing.T) {
 	}
 	if fakeStore.revokedSessionsFor != user.ID {
 		t.Fatalf("sessions revoked for %s, want %s", fakeStore.revokedSessionsFor, user.ID)
+	}
+	if !fakeStore.userLocked {
+		t.Fatal("user was not locked before role and session revocation")
 	}
 	if fakeRevocations.userID != user.ID || !fakeRevocations.revokedAt.Equal(now) {
 		t.Fatalf("access revocation = (%s, %s), want (%s, %s)", fakeRevocations.userID, fakeRevocations.revokedAt, user.ID, now)
@@ -280,6 +283,7 @@ type fakeOperationalStore struct {
 	removedRole           string
 	hasRole               bool
 	roleLocked            bool
+	userLocked            bool
 	activeRoleUsers       int
 	revokedSessionsFor    uuid.UUID
 	allowedEmail          string
@@ -288,6 +292,11 @@ type fakeOperationalStore struct {
 }
 
 func (f *fakeOperationalStore) GetUserByEmail(_ context.Context, _ string) (domain.User, error) {
+	return f.user, f.getUserErr
+}
+
+func (f *fakeOperationalStore) GetUserByIDForUpdate(_ context.Context, _ uuid.UUID) (domain.User, error) {
+	f.userLocked = true
 	return f.user, f.getUserErr
 }
 

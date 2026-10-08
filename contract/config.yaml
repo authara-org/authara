@@ -12,22 +12,30 @@ settings_metadata:
   POSTGRESQL_DATABASE: {control: env, reload: startup, sensitive: false, group: database}
   POSTGRESQL_USERNAME: {control: env, reload: startup, sensitive: true, group: database}
   POSTGRESQL_PASSWORD: {control: env, reload: startup, sensitive: true, group: database}
-  POSTGRESQL_SCHEMA: {control: env, reload: startup, sensitive: false, group: database}
   POSTGRESQL_TIMEZONE: {control: env, reload: startup, sensitive: false, group: database}
   POSTGRESQL_LOG_SQL: {control: env, reload: startup, sensitive: false, group: database}
+  POSTGRESQL_SSL_MODE: {control: env, reload: startup, sensitive: false, group: database}
+  POSTGRESQL_SSL_ROOT_CERT: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_DB_MAX_OPEN_CONNS: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_DB_MAX_IDLE_CONNS: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_DB_CONN_MAX_LIFETIME: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_DB_CONN_MAX_IDLE_TIME: {control: env, reload: startup, sensitive: false, group: database}
   AUTHARA_CACHE_PROVIDER: {control: env, reload: startup, sensitive: false, group: cache}
+  AUTHARA_ACCESS_TOKEN_REVOCATION_MODE: {control: env, reload: startup, sensitive: false, group: cache}
   AUTHARA_REDIS_HOST: {control: env, reload: startup, sensitive: false, group: cache}
   AUTHARA_REDIS_PORT: {control: env, reload: startup, sensitive: false, group: cache}
   AUTHARA_REDIS_PASSWORD: {control: env, reload: startup, sensitive: true, group: cache}
   AUTHARA_REDIS_DB: {control: env, reload: startup, sensitive: false, group: cache}
   PUBLIC_URL: {control: env, reload: startup, sensitive: false, group: public_url}
+  AUTHARA_APP_NAME: {control: hybrid, reload: dynamic, sensitive: false, group: branding}
   AUTHARA_DEFAULT_RETURN_TO: {control: hybrid, reload: dynamic, sensitive: false, group: public_url}
   AUTHARA_TRUST_PROXY_HEADERS: {control: env, reload: startup, sensitive: false, group: public_url}
+  AUTHARA_TRUSTED_PROXY_CIDRS: {control: env, reload: startup, sensitive: false, group: public_url}
   AUTHARA_USERNAME_LOGIN_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
+  AUTHARA_EMAIL_VERIFICATION_REQUIRED: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
+  AUTHARA_PASSKEY_CLONE_RESPONSE: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
+  AUTHARA_PASSKEY_CLONE_NOTIFY_USER: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
+  AUTHARA_PASSWORD_MIN_LENGTH: {control: env, reload: startup, sensitive: false, group: authentication}
   AUTHARA_JWT_ISSUER: {control: env, reload: startup, sensitive: false, group: tokens}
   AUTHARA_JWT_ACTIVE_KEY_ID: {control: env, reload: startup, sensitive: false, group: tokens}
   AUTHARA_JWT_KEYS: {control: env, reload: startup, sensitive: true, group: tokens}
@@ -35,12 +43,21 @@ settings_metadata:
   AUTHARA_SESSION_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_REFRESH_TOKEN_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
+  AUTHARA_RECENT_AUTHENTICATION_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
+  AUTHARA_RECENT_AUTHENTICATION_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
+  AUTHARA_SESSION_CLEANUP_INTERVAL: {control: env, reload: startup, sensitive: false, group: sessions}
   AUTHARA_ORG_MODE: {control: env, reload: startup, sensitive: false, group: organizations}
   AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
   AUTHARA_ORGANIZATION_INVITATION_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
   AUTHARA_INTERNAL_API_TOKEN: {control: env, reload: startup, sensitive: true, group: internal_api}
   AUTHARA_OAUTH_PROVIDERS: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_GOOGLE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_OAUTH_APPLE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_OAUTH_APPLE_TEAM_ID: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_OAUTH_APPLE_KEY_ID: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64: {control: env, reload: startup, sensitive: true, group: oauth}
+  AUTHARA_OAUTH_APPLE_TOKEN_ACTIVE_KEY_ID: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_OAUTH_APPLE_TOKEN_KEYS: {control: env, reload: startup, sensitive: true, group: oauth}
   AUTHARA_RATE_LIMIT_LOGIN_IP_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
   AUTHARA_RATE_LIMIT_LOGIN_IP_WINDOW: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
   AUTHARA_RATE_LIMIT_LOGIN_EMAIL_LIMIT: {control: hybrid, reload: dynamic, sensitive: false, group: rate_limits}
@@ -75,6 +92,11 @@ settings_metadata:
   AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE: {control: hybrid, reload: dynamic, sensitive: false, group: webhooks}
   AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: access_policy}
   AUTHARA_ADMIN_AUDIT_RETENTION_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
+  AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL: {control: env, reload: startup, sensitive: false, group: retention}
+  AUTHARA_OPERATOR_AUDIT_RETENTION_DAYS: {control: env, reload: startup, sensitive: false, group: retention}
+  AUTHARA_SECURITY_EVENT_ENABLED_EVENTS: {control: env, reload: startup, sensitive: false, group: security_events}
+  AUTHARA_SECURITY_EVENT_RETENTION_DAYS: {control: env, reload: startup, sensitive: false, group: retention}
+  AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL: {control: env, reload: startup, sensitive: false, group: retention}
   AUTHARA_CHALLENGE_ENABLED: {control: env, reload: startup, sensitive: false, group: challenges}
   AUTHARA_CHALLENGE_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
   AUTHARA_CHALLENGE_VERIFICATION_CODE_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
@@ -92,8 +114,12 @@ settings_metadata:
   AUTHARA_EMAIL_WORKER_COUNT: {control: env, reload: startup, sensitive: false, group: email}
   AUTHARA_EMAIL_WORKER_POLL_INTERVAL: {control: env, reload: startup, sensitive: false, group: email}
   AUTHARA_EMAIL_JOB_MAX_ATTEMPTS: {control: hybrid, reload: dynamic, sensitive: false, group: email}
+  AUTHARA_EMAIL_PROCESSING_STALE_AFTER: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_STALE_REAPER_INTERVAL: {control: env, reload: startup, sensitive: false, group: email}
+  AUTHARA_EMAIL_MAINTENANCE_BATCH_SIZE: {control: env, reload: startup, sensitive: false, group: email}
   AUTHARA_EMAIL_CLEANUP_SENT_AFTER: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
   AUTHARA_EMAIL_CLEANUP_FAILED_AFTER: {control: hybrid, reload: dynamic, sensitive: false, group: retention}
+  AUTHARA_EMAIL_CLEANUP_INTERVAL: {control: env, reload: startup, sensitive: false, group: retention}
 
 # Operator-only settings live in purpose-built database tables rather than as
 # environment variables: email template contents and per-template delivery.
@@ -155,12 +181,6 @@ variables:
     required: true
     type: string
 
-  - name: POSTGRESQL_SCHEMA
-    stability: stable
-    required: false
-    type: string
-    default: authara
-
   - name: POSTGRESQL_TIMEZONE
     stability: stable
     required: false
@@ -172,6 +192,18 @@ variables:
     required: false
     type: bool
     default: false
+
+  - name: POSTGRESQL_SSL_MODE
+    stability: stable
+    required: false
+    type: enum
+    default: disable
+    allowed_values: [disable, require, verify-ca, verify-full]
+
+  - name: POSTGRESQL_SSL_ROOT_CERT
+    stability: stable
+    required: false
+    type: string
 
   - name: AUTHARA_DB_MAX_OPEN_CONNS
     stability: stable
@@ -211,6 +243,16 @@ variables:
       - noop
       - redis
 
+  - name: AUTHARA_ACCESS_TOKEN_REVOCATION_MODE
+    stability: stable
+    required: false
+    type: enum
+    description: Immediate mode checks Redis and fails closed. Expiry mode accepts the documented residual risk and caps access-token TTL at 10 minutes.
+    allowed_values:
+      - immediate
+      - expiry
+    notes: Inferred as immediate with Redis and as expiry for dev/noop. Production/noop must set expiry explicitly.
+
   - name: AUTHARA_REDIS_HOST
     stability: stable
     required: false
@@ -248,6 +290,13 @@ variables:
     type: url
     notes: Must not include /auth
 
+  - name: AUTHARA_APP_NAME
+    stability: stable
+    required: false
+    type: string
+    default: Authara
+    notes: Application name shown on hosted sign-in and account-creation pages. Operator-editable when unset in the environment.
+
   - name: AUTHARA_DEFAULT_RETURN_TO
     stability: stable
     required: false
@@ -260,7 +309,13 @@ variables:
     required: false
     type: bool
     default: false
-    notes: Enables trusted X-Forwarded-For/X-Real-IP parsing when Authara is behind a proxy that strips client-supplied forwarded headers.
+    notes: Enables X-Forwarded-For/X-Real-IP parsing only for transport peers in AUTHARA_TRUSTED_PROXY_CIDRS. Without a valid CIDR, Core warns and ignores forwarded headers.
+
+  - name: AUTHARA_TRUSTED_PROXY_CIDRS
+    stability: stable
+    required: false
+    type: string
+    notes: Comma-separated IPv4/IPv6 networks whose transport peers may supply X-Forwarded-For or X-Real-IP. Broad networks are accepted with a security warning.
 
   # ------------------------------------------------------------
   # Authentication
@@ -272,6 +327,38 @@ variables:
     type: bool
     default: false
     description: Allows password login with a username in addition to an email address.
+
+  - name: AUTHARA_EMAIL_VERIFICATION_REQUIRED
+    stability: stable
+    required: false
+    type: bool
+    default: false
+    description: Requires users to verify their current email before receiving normal authenticated access.
+    notes: Enabling this applies immediately to existing unverified accounts and requires configured email delivery.
+
+  - name: AUTHARA_PASSKEY_CLONE_RESPONSE
+    stability: stable
+    required: false
+    type: enum
+    default: alert
+    allowed_values: [alert, restrict, restrict_and_revoke]
+    description: Controls whether a newly detected passkey sign-counter anomaly only alerts, also restricts that passkey, or additionally revokes all sessions.
+
+  - name: AUTHARA_PASSKEY_CLONE_NOTIFY_USER
+    stability: stable
+    required: false
+    type: bool
+    default: true
+    description: Queues a generic security email when a new passkey sign-counter anomaly is detected.
+
+  - name: AUTHARA_PASSWORD_MIN_LENGTH
+    stability: stable
+    required: false
+    type: int
+    default: 8
+    minimum: 8
+    maximum: 128
+    description: Minimum Unicode-character length for newly created passwords; no composition rules are imposed.
 
   # ------------------------------------------------------------
   # JWT / Tokens
@@ -298,6 +385,8 @@ variables:
     required: false
     type: int
     default: 10
+    minimum: 1
+    maximum: 1440
 
   - name: AUTHARA_SESSION_TTL_DAYS
     stability: stable
@@ -321,6 +410,27 @@ variables:
       - off
       - always
       - duration
+
+  - name: AUTHARA_RECENT_AUTHENTICATION_ENABLED
+    stability: stable
+    required: false
+    type: bool
+    default: true
+    description: Requires a fresh password, passkey, or linked-provider proof before sensitive account and administrative mutations. Disable only when possession of an active session is sufficient for the deployment's security model.
+
+  - name: AUTHARA_RECENT_AUTHENTICATION_WINDOW
+    stability: stable
+    required: false
+    type: duration
+    default: 10m
+    description: Maximum age of password, passkey, or linked-provider proof accepted for sensitive account and administrative mutations; must be between 1m and 1h.
+
+  - name: AUTHARA_SESSION_CLEANUP_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 5m
+    description: How often the cleanup leader removes expired and revoked session data.
 
   - name: AUTHARA_ORG_MODE
     stability: stable
@@ -350,7 +460,7 @@ variables:
     stability: stable
     required: false
     type: string
-    notes: Required for calls to /auth/internal/v1 routes. If empty, internal routes reject requests.
+    notes: Must be at least 24 characters in production. If empty in development, internal routes reject requests.
 
   # ------------------------------------------------------------
   # OAuth
@@ -362,6 +472,7 @@ variables:
     type: csv
     allowed_values:
       - google
+      - apple
 
   - name: AUTHARA_OAUTH_GOOGLE_CLIENT_ID
     stability: stable
@@ -370,6 +481,54 @@ variables:
     required_if:
       variable: AUTHARA_OAUTH_PROVIDERS
       contains: google
+
+  - name: AUTHARA_OAUTH_APPLE_CLIENT_ID
+    stability: stable
+    required: false
+    type: string
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: apple
+
+  - name: AUTHARA_OAUTH_APPLE_TEAM_ID
+    stability: stable
+    required: false
+    type: string
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: apple
+
+  - name: AUTHARA_OAUTH_APPLE_KEY_ID
+    stability: stable
+    required: false
+    type: string
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: apple
+
+  - name: AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64
+    stability: stable
+    required: false
+    type: string
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: apple
+
+  - name: AUTHARA_OAUTH_APPLE_TOKEN_ACTIVE_KEY_ID
+    stability: stable
+    required: false
+    type: string
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: apple
+
+  - name: AUTHARA_OAUTH_APPLE_TOKEN_KEYS
+    stability: stable
+    required: false
+    type: map
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: apple
 
   # ------------------------------------------------------------
   # Rate Limiting (Login)
@@ -616,7 +775,7 @@ variables:
     default: false
 
   # ------------------------------------------------------------
-  # Admin
+  # Audit retention
   # ------------------------------------------------------------
 
   - name: AUTHARA_ADMIN_AUDIT_RETENTION_DAYS
@@ -625,6 +784,44 @@ variables:
     type: int
     default: 180
     notes: Delete admin audit events after this many days. Must be greater than 0.
+
+  - name: AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 24h
+    notes: How often the cleanup leader applies admin audit retention.
+
+  - name: AUTHARA_OPERATOR_AUDIT_RETENTION_DAYS
+    stability: stable
+    required: false
+    type: int
+    default: 180
+    notes: Delete operator audit events after this many days. Must be greater than 0.
+
+  # ------------------------------------------------------------
+  # Security events
+  # ------------------------------------------------------------
+
+  - name: AUTHARA_SECURITY_EVENT_ENABLED_EVENTS
+    stability: stable
+    required: false
+    type: csv
+    notes: Exact event names to persist. Unset uses the standard set; use none to disable all or all to include routine refresh and logout events.
+
+  - name: AUTHARA_SECURITY_EVENT_RETENTION_DAYS
+    stability: stable
+    required: false
+    type: int
+    default: 180
+    notes: Delete core security events after this many days. Must be greater than 0.
+
+  - name: AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 24h
+    notes: How often the cleanup leader applies security-event retention.
 
   # ------------------------------------------------------------
   # Challenge / Verification
@@ -635,6 +832,7 @@ variables:
     required: false
     type: bool
     default: false
+    notes: Controls signup and email-change verification. Password recovery and email delivery remain available independently.
 
   - name: AUTHARA_CHALLENGE_TTL
     stability: stable
@@ -679,6 +877,7 @@ variables:
     allowed_values:
       - noop
       - smtp
+    notes: SMTP is required in production because password recovery routes are always enabled. Noop is a development sink and does not deliver mail.
 
   - name: AUTHARA_EMAIL_FROM
     stability: stable
@@ -740,7 +939,26 @@ variables:
     stability: stable
     required: false
     type: int
-    default: 10
+    default: 100
+
+  - name: AUTHARA_EMAIL_PROCESSING_STALE_AFTER
+    stability: stable
+    required: false
+    type: duration
+    default: 2m
+    notes: Must be greater than AUTHARA_EMAIL_SMTP_TIMEOUT
+
+  - name: AUTHARA_EMAIL_STALE_REAPER_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 1m
+
+  - name: AUTHARA_EMAIL_MAINTENANCE_BATCH_SIZE
+    stability: stable
+    required: false
+    type: int
+    default: 1000
 
   # ------------------------------------------------------------
   # Email Cleanup
@@ -759,3 +977,10 @@ variables:
     type: duration
     default: 2160h
     notes: Delete failed emails after duration (90 days)
+
+  - name: AUTHARA_EMAIL_CLEANUP_INTERVAL
+    stability: stable
+    required: false
+    type: duration
+    default: 1h
+    notes: How often the cleanup leader applies email and challenge retention.

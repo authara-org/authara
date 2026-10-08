@@ -68,12 +68,13 @@ an operator can change them without restarting Core:
 
 | Area | Settings | Runtime effect |
 | --- | --- | --- |
+| Branding | `AUTHARA_APP_NAME` | Subsequently rendered hosted sign-in and account-creation pages use the new application name. |
 | Redirects | `AUTHARA_DEFAULT_RETURN_TO` | Subsequent requests without an explicit `return_to` use the new safe relative path. |
-| Authentication | `AUTHARA_USERNAME_LOGIN_ENABLED` | Subsequent hosted and API password-login requests accept or reject usernames. Email login remains available. |
-| Tokens and sessions | `AUTHARA_ACCESS_TOKEN_TTL_MINUTES`, `AUTHARA_SESSION_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL` | New tokens and sessions use the new lifetimes. Existing artifacts keep their stored expiry; rotation policy applies on the next refresh. |
+| Authentication | `AUTHARA_USERNAME_LOGIN_ENABLED`, `AUTHARA_EMAIL_VERIFICATION_REQUIRED`, `AUTHARA_PASSKEY_CLONE_RESPONSE`, `AUTHARA_PASSKEY_CLONE_NOTIFY_USER` | Subsequent password-login requests apply username policy. Requiring verification immediately revokes unverified sessions and directs browser users to verify or replace their address; it is rejected unless challenge and email delivery are configured. Newly detected passkey sign-counter anomalies use the selected alert/restrict/session-revocation response and notification setting. |
+| Tokens and sessions | `AUTHARA_ACCESS_TOKEN_TTL_MINUTES`, `AUTHARA_SESSION_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL`, `AUTHARA_RECENT_AUTHENTICATION_ENABLED`, `AUTHARA_RECENT_AUTHENTICATION_WINDOW` | New tokens and sessions use the new lifetimes. Access-token lifetime is limited to 24 hours so revocation markers cover tokens issued before a reduction. Existing artifacts keep their stored expiry; rotation policy applies on the next refresh. Recent-authentication enforcement and its freshness window apply immediately to sensitive requests. |
 | Organizations | `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED`, `AUTHARA_ORGANIZATION_INVITATION_TTL` | Public organization routes change immediately. Newly created or resent invitations use the new lifetime. |
 | Access policy | `AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED` | Subsequent signup, login, session, and admin allowlist requests use the new enforcement state. |
-| Admin retention | `AUTHARA_ADMIN_AUDIT_RETENTION_DAYS` | The next cleanup run uses the new cutoff. Lowering retention can delete older audit events. |
+| Admin audit retention | `AUTHARA_ADMIN_AUDIT_RETENTION_DAYS` | The next cleanup run uses the new cutoff. Lowering retention can delete older audit events. |
 | Email queue | `AUTHARA_EMAIL_JOB_MAX_ATTEMPTS`, `AUTHARA_EMAIL_CLEANUP_SENT_AFTER`, `AUTHARA_EMAIL_CLEANUP_FAILED_AFTER` | The next delivery failure or cleanup run uses the new policy, including for existing jobs. |
 | Webhooks | `AUTHARA_WEBHOOK_ENABLED_EVENTS`, `AUTHARA_WEBHOOK_TIMEOUT`, `AUTHARA_WEBHOOK_MAX_DELIVERY_ATTEMPTS`, `AUTHARA_WEBHOOK_PROCESSING_STALE_AFTER`, `AUTHARA_WEBHOOK_DELIVERED_RETENTION`, `AUTHARA_WEBHOOK_FAILED_RETENTION`, `AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE` | Event filtering changes before enqueue; deliveries and maintenance read the policy again for each operation. |
 
@@ -88,6 +89,11 @@ override cannot introduce a newly invalid mix, while legacy unsafe dormant rows
 remain clearable for recovery. Runtime consumers read typed snapshots rather
 than parsing strings or inspecting the effective source.
 
+`AUTHARA_RECENT_AUTHENTICATION_ENABLED` defaults to `true`. Setting it to
+`false` makes possession of an active session sufficient for sensitive account
+and administrative mutations. This removes protection against a stolen or
+unattended long-lived session and should be an explicit deployment decision.
+
 ## Dynamic challenge policy
 
 The first runtime policy group contains:
@@ -101,8 +107,8 @@ The first runtime policy group contains:
 | `AUTHARA_CHALLENGE_MIN_RESEND_INTERVAL` | 0s–15m | New challenges |
 
 `AUTHARA_CHALLENGE_ENABLED` remains environment-only and startup-only because
-it currently controls middleware, rendered authentication flows, and email
-worker startup.
+it controls middleware and rendered authentication flows. Password recovery
+and email worker startup are independent of this setting.
 
 Each request reads one immutable challenge-policy snapshot at the beginning of
 the operation. New challenges persist their expiry, attempt limit, resend
@@ -148,11 +154,34 @@ Polling is also reconciliation: there is no notification that can be lost,
 and a temporarily failed query is retried on the next interval. Reads on hot
 paths only load an atomic in-memory snapshot and never query PostgreSQL.
 
-Invalid values, unknown keys, attempts to replace locked settings, and stale
-revisions are rejected without persistence or publication. The only locked
-state an operator can mutate is removal of an existing dormant override. Startup
-fails clearly if a stored override is unknown, malformed, outside operator
+Invalid values for known settings, attempts to replace locked settings, and
+stale revisions are rejected without persistence or publication. The only
+locked state an operator can mutate is removal of an existing dormant override.
+Startup fails clearly if a known stored override is malformed, outside operator
 safety bounds, or makes the effective typed policy invalid.
+
+An override whose key is unknown to a replica is preserved in PostgreSQL and
+ignored by that replica. The replica logs the key and revision, but never the
+value, and continues to start and reconcile normally. This permits N and N-1
+replicas to coexist while a rolling deployment is in progress. Known keys
+continue to receive their complete type, range, editability, and related-policy
+validation; only interpretation of an unknown key is deferred to a version
+whose catalog defines it.
+
+## Mixed-version rollout and rollback
+
+A setting introduced by N is not fleet-wide while N-1 replicas remain. N
+replicas apply its persisted override, while N-1 replicas preserve and ignore
+it and continue using their previous behavior. Operators must not enable a new
+setting during the mixed-version window when that difference would make N-1
+behavior unsafe or incompatible. Drain N-1 first, then enable the setting.
+
+Before rolling back from N, clear overrides for new settings whose behavior is
+not safe to ignore. If rollback occurs first, N-1 remains healthy and preserves
+those overrides, but cannot display, apply, edit, or clear them through its
+older operator UI. Reinstalling N makes the preserved overrides effective
+again. Recovery without an N replica requires a deliberate database operation
+and should be reserved for emergencies.
 
 ## Backup and rollback
 
@@ -164,9 +193,10 @@ authara.runtime_setting_overrides
 authara.operator_audit_events
 ```
 
-The normal rollback path is to clear an override in the operator page. A
-deployment environment value can enforce an emergency value on every replica
-after restart while preserving the dormant override for later review.
+The normal rollback path is to clear an override in the operator page before
+downgrading past the version that introduced its key. A deployment environment
+value can enforce an emergency value on every replica after restart while
+preserving the dormant override for later review.
 
 ## Startup-only boundary
 

@@ -94,7 +94,10 @@ func (h *UIHandler) AdminUserDetailPage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	detail, err := h.Admin.GetUserDetail(r.Context(), actor, userID)
+	detail, err := h.Admin.GetUserDetail(r.Context(), actor, userID, adminsvc.UserDetailPages{
+		Sessions: namedPageFromRequest(r, "sessions", 25),
+		Passkeys: namedPageFromRequest(r, "passkeys", 25),
+	})
 	if err != nil {
 		if errors.Is(err, store.ErrUserNotFound) {
 			h.renderNotFound(w, r)
@@ -235,6 +238,16 @@ func (h *UIHandler) AdminAuditPage(w http.ResponseWriter, r *http.Request) {
 	h.Render(w, r, http.StatusOK, adminview.Audit(events, h.adminFeatures()))
 }
 
+func (h *UIHandler) AdminSecurityEventsPage(w http.ResponseWriter, r *http.Request) {
+	events, err := h.Admin.ListSecurityEvents(r.Context(), pageFromRequest(r, 50))
+	if err != nil {
+		h.renderInternalError(w, r)
+		return
+	}
+
+	h.Render(w, r, http.StatusOK, adminview.SecurityEvents(events, h.adminFeatures()))
+}
+
 func (h *UIHandler) mutateUser(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -256,7 +269,7 @@ func (h *UIHandler) mutateUser(
 
 func (h *UIHandler) renderUserMutationResult(w http.ResponseWriter, r *http.Request, actor adminsvc.Actor, userID uuid.UUID, success string, err error) {
 	if err != nil {
-		detail, detailErr := h.Admin.GetUserDetail(r.Context(), actor, userID)
+		detail, detailErr := h.Admin.GetUserDetail(r.Context(), actor, userID, defaultUserDetailPages())
 		if detailErr != nil {
 			h.renderRequestError(w, r, http.StatusBadRequest, adminErrorMessage(err))
 			return
@@ -273,7 +286,7 @@ func (h *UIHandler) renderUserMutationResult(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	detail, err := h.Admin.GetUserDetail(r.Context(), actor, userID)
+	detail, err := h.Admin.GetUserDetail(r.Context(), actor, userID, defaultUserDetailPages())
 	if err != nil {
 		h.renderInternalError(w, r)
 		return
@@ -381,6 +394,22 @@ func pageFromRequest(r *http.Request, defaultSize int) adminsvc.Page {
 		size = defaultSize
 	}
 	return adminsvc.Page{Page: page, Size: size}
+}
+
+func namedPageFromRequest(r *http.Request, name string, defaultSize int) adminsvc.Page {
+	page, _ := strconv.Atoi(r.URL.Query().Get(name + "_page"))
+	size, _ := strconv.Atoi(r.URL.Query().Get(name + "_size"))
+	if size <= 0 {
+		size = defaultSize
+	}
+	return adminsvc.Page{Page: page, Size: size}
+}
+
+func defaultUserDetailPages() adminsvc.UserDetailPages {
+	return adminsvc.UserDetailPages{
+		Sessions: adminsvc.Page{Page: 1, Size: 25},
+		Passkeys: adminsvc.Page{Page: 1, Size: 25},
+	}
 }
 
 func adminErrorMessage(err error) string {

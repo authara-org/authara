@@ -12,15 +12,21 @@ Authara Core and its SDKs are versioned independently. The OpenAPI contract in
 3. Release Please calculates the next version and creates or updates its release
    pull request. The release pull request automatically merges after its own
    required checks pass.
-4. Release Please creates the version commit, tag, changelog, and GitHub release.
-   Do not create or commit any of these manually.
-5. A Core release tag deploys the image and dispatches the immutable tag,
-   commit, and release type to the Go and browser SDK repositories.
-6. Each SDK regenerates from that exact Core tag, tests the result, and opens an
+4. Release Please creates the version commit, changelog, release tag, and draft
+   GitHub release. Do not create or commit any of these manually.
+5. A Core release tag checks whether the migrations image inputs changed since
+   the latest migrations release. If they did, CD publishes the next `0.X.0`
+   migrations image and release; otherwise it keeps the current migrations
+   version.
+6. CD deploys Core, attaches `authara-images.env`, adds the compatible image
+   tags and digests to the release notes, and publishes the completed release.
+7. Core CD dispatches the immutable tag, commit, and release type to the Go and
+   browser SDK repositories.
+8. Each SDK regenerates from that exact Core tag, tests the result, and opens an
    update pull request when its generated output changed.
-7. SDK generated-update and release pull requests automatically merge after
+9. SDK generated-update and release pull requests automatically merge after
    their required checks pass. Each changed SDK is tagged with its own version.
-8. Browser releases are published to npm from the Release Please workflow.
+10. Browser releases are published to npm from the Release Please workflow.
 
 Merging a releasable change pull request is therefore the release decision. No
 second manual merge, version edit, or tag command is required. A `docs:`,
@@ -46,6 +52,15 @@ workflow in that SDK repository. They do not require a Core release.
 
 Core and SDK version numbers do not need to match. SDK generation provenance is
 recorded in each SDK repository's `.codegen/manifest.json`.
+
+Migrations are versioned independently. Each automatic migrations release bumps
+the minor version and resets the patch version (`0.1.20` → `0.2.0`). A Core
+release without migrations image changes reuses the previous migrations release.
+
+Core releases remain drafts until CD has built both compatible image references,
+attached their machine-readable metadata, and added the same pairing to the
+release notes. If CD fails, fix and rerun it; do not publish the incomplete draft
+manually.
 
 ## Repository settings
 

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/a-h/templ"
+	"github.com/authara-org/authara/internal/http/handlers/meta"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	openapicontract "github.com/authara-org/authara/internal/http/openapi"
@@ -58,6 +60,49 @@ func TestMetricsRouteIsRegistered(t *testing.T) {
 	}
 }
 
+func TestHealthRoutesAreRegistered(t *testing.T) {
+	readiness := meta.NewReadinessWithChecker(false, successfulReadinessChecker{})
+	router := newContractTestRouterWithReadiness(readiness)
+	for path, wantStatus := range map[string]int{
+		"/auth/live":   http.StatusOK,
+		"/auth/ready":  http.StatusServiceUnavailable,
+		"/auth/health": http.StatusServiceUnavailable,
+	} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+
+		router.ServeHTTP(response, request)
+
+		if response.Code != wantStatus {
+			t.Errorf("GET %s status = %d, want %d", path, response.Code, wantStatus)
+		}
+	}
+
+	readiness.Set(true)
+	for _, path := range []string{"/auth/ready", "/auth/health"} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Errorf("ready GET %s status = %d, want %d", path, response.Code, http.StatusOK)
+		}
+	}
+}
+
+func TestReadinessRoutesFailClosedWithoutConfiguration(t *testing.T) {
+	router := newContractTestRouterWithReadiness(nil)
+	for _, path := range []string{"/auth/ready", "/auth/health"} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusServiceUnavailable {
+			t.Errorf("GET %s status = %d, want %d", path, response.Code, http.StatusServiceUnavailable)
+		}
+	}
+}
+
+type successfulReadinessChecker struct{}
+
+func (successfulReadinessChecker) Check(context.Context) error { return nil }
+
 func TestMetricsRouteIsNotRegisteredWhenObservabilityIsDisabled(t *testing.T) {
 	router := newContractTestRouterWithObservability(nil)
 	response := httptest.NewRecorder()
@@ -95,6 +140,14 @@ func newContractTestRouter() chi.Router {
 }
 
 func newContractTestRouterWithObservability(metrics *observability.Service) chi.Router {
+	return newContractTestRouterWithDependencies(metrics, nil)
+}
+
+func newContractTestRouterWithReadiness(readiness *meta.Readiness) chi.Router {
+	return newContractTestRouterWithDependencies(observability.New("test"), readiness)
+}
+
+func newContractTestRouterWithDependencies(metrics *observability.Service, readiness *meta.Readiness) chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	pass := func(next http.Handler) http.Handler { return next }
@@ -109,6 +162,7 @@ func newContractTestRouterWithObservability(metrics *observability.Service) chi.
 		Dev:                      true,
 		Logger:                   logger,
 		Observability:            metrics,
+		Readiness:                readiness,
 		Handlers:                 newTestHandlers(logger, renderer),
 		disableOpenAPIValidation: true,
 	}
@@ -117,6 +171,8 @@ func newContractTestRouterWithObservability(metrics *observability.Service) chi.
 		RedirectIfAuthenticated:              pass,
 		RequireAppAccessAuthWithRefresh:      pass,
 		RequireAppAccessAuthAPI:              pass,
+		RequireRecentAuthenticationUI:        pass,
+		RequireRecentAuthenticationAPI:       pass,
 		RequireAdminAccessAuthWithRefresh:    pass,
 		RequireAdminAccessAuthAPI:            pass,
 		RequireOperatorAccessAuthWithRefresh: pass,

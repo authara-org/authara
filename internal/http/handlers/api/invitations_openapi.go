@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	identitypkg "github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
@@ -86,8 +87,8 @@ func (h *APIHandler) LoginAndAcceptInvitation(ctx context.Context, request contr
 		return loginAndAcceptInvitationError(code, message), nil
 	}
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), preview.Invitation.Email)
-	if err != nil || !allowed {
-		return loginAndAcceptInvitationError(response.CodeRateLimited, "Too many attempts. Please try again later."), nil
+	if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		return loginAndAcceptInvitationError(code, message), nil
 	}
 	user, err := h.Auth.Login(ctx, auth.LoginInput{
 		Provider:        domain.ProviderPassword,
@@ -111,7 +112,7 @@ func (h *APIHandler) LoginAndAcceptInvitation(ctx context.Context, request contr
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	body, header, code, message, ok := h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience)
+	body, header, code, message, ok := h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience, domain.AuthenticationMethodPassword)
 	if !ok {
 		return loginAndAcceptInvitationError(code, message), nil
 	}
@@ -134,21 +135,22 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 	if !ok {
 		return authenticateAndAcceptInvitationWithGoogleError(code, message), nil
 	}
-	if normalizeEmail(identity.Email) != normalizeEmail(preview.Invitation.Email) {
+	if identitypkg.CanonicalEmail(identity.Email) != identitypkg.CanonicalEmail(preview.Invitation.Email) {
 		return authenticateAndAcceptInvitationWithGoogleError(codeInvitationEmailMismatch, "This invitation is for a different account."), nil
 	}
 	exists, err := h.Auth.UserExistsByEmail(ctx, preview.Invitation.Email)
 	if err != nil {
-		return authenticateAndAcceptInvitationWithGoogleError(response.CodeInternalError, "Invitation login error."), nil
+		return authenticateAndAcceptInvitationWithGoogleError(response.CodeInternalError, "Invitation sign-in error."), nil
 	}
 	if (request.Body.Flow == contract.Signup && exists) || (request.Body.Flow == contract.Login && !exists) {
 		return authenticateAndAcceptInvitationWithGoogleError(codeInvitationFlowMismatch, "Invitation signup or login flow does not match the account."), nil
 	}
 	user, err := h.Auth.Login(ctx, auth.LoginInput{
-		Provider:        domain.ProviderGoogle,
-		Email:           preview.Invitation.Email,
-		OAuthID:         identity.OAuthID,
-		InvitationToken: request.Body.Token,
+		Provider:              domain.ProviderGoogle,
+		Email:                 preview.Invitation.Email,
+		OAuthID:               identity.OAuthID,
+		ProviderEmailVerified: identity.EmailVerified,
+		InvitationToken:       request.Body.Token,
 	})
 	if errors.Is(err, auth.ErrAccountExistsMustLink) {
 		link, code, message, ok := h.startAccountRecoveryLink(ctx, identity)
@@ -180,7 +182,7 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	body, sessionHeaders, code, message, ok := h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience)
+	body, sessionHeaders, code, message, ok := h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience, domain.AuthenticationMethodGoogle)
 	if !ok {
 		return authenticateAndAcceptInvitationWithGoogleError(code, message), nil
 	}
@@ -236,8 +238,8 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithPassword(ctx context.Context
 		email = *link.ProviderEmail
 	}
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), email)
-	if err != nil || !allowed {
-		return completeAccountRecoveryLinkWithPasswordError(response.CodeRateLimited, "Too many attempts. Please try again later."), nil
+	if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		return completeAccountRecoveryLinkWithPasswordError(code, message), nil
 	}
 	user, err = h.Auth.CompleteAccountRecoveryProviderLinkWithPassword(ctx, request.LinkID, request.Body.Password, time.Now().UTC())
 	if err != nil {
@@ -248,7 +250,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithPassword(ctx context.Context
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience)
+	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience, domain.AuthenticationMethodPassword)
 	if !ok {
 		return completeAccountRecoveryLinkWithPasswordError(code, message), nil
 	}
@@ -286,12 +288,67 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithGoogle(ctx context.Context, 
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience)
+	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience, domain.AuthenticationMethodGoogle)
 	if !ok {
 		return completeAccountRecoveryLinkWithGoogleError(code, message), nil
 	}
 	copyHeaders(header, nonceHeader)
 	return contract.CompleteAccountRecoveryLinkWithGoogle200HeadersResponse{Header: header, Body: body}, nil
+}
+
+func (h *APIHandler) CompleteAccountRecoveryLinkWithApple(ctx context.Context, request contract.CompleteAccountRecoveryLinkWithAppleRequestObject) (contract.CompleteAccountRecoveryLinkWithAppleResponseObject, error) {
+	r, ok := contractRequest(ctx)
+	if !ok {
+		return completeAccountRecoveryLinkWithAppleError(response.CodeInternalError, "API contract error."), nil
+	}
+	if request.Body == nil {
+		return completeAccountRecoveryLinkWithAppleError(response.CodeInvalidRequest, "Invalid JSON body."), nil
+	}
+	_, targetUser, code, message, ok := h.recoveryLinkAndUser(ctx, request.LinkID)
+	if !ok {
+		return completeAccountRecoveryLinkWithAppleError(code, message), nil
+	}
+	invitationToken := optionalString(request.Body.InvitationToken)
+	if invitationToken != "" {
+		if code, message, ok := h.validateRecoveryInvitation(ctx, invitationToken, targetUser.Email); !ok {
+			return completeAccountRecoveryLinkWithAppleError(code, message), nil
+		}
+	}
+	result, appleHeader, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State)
+	if !ok {
+		if code == response.CodeUnauthorized {
+			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidAssertion); err != nil {
+				return appleRecoveryErrorWithHeaders(response.CodeInternalError, "Account recovery error.", appleHeader), nil
+			}
+		}
+		return appleRecoveryErrorWithHeaders(code, message, appleHeader), nil
+	}
+	user, err := h.Auth.CompleteAccountRecoveryProviderLinkWithProviderProof(
+		ctx, request.LinkID, domain.ProviderApple, result.Identity.OAuthID, time.Now().UTC(),
+	)
+	if err != nil {
+		h.discardAppleAuthorization(ctx, result.RefreshToken)
+		code, message := recoveryError(err)
+		return appleRecoveryErrorWithHeaders(code, message, appleHeader), nil
+	}
+	if result.RefreshToken != "" {
+		if err := h.Auth.SaveAppleCredential(ctx, user.ID, result.RefreshToken); err != nil {
+			h.discardAppleAuthorization(ctx, result.RefreshToken)
+			if h.Logger != nil {
+				h.Logger.Error("could not refresh Apple credential after account proof", "user_id", user.ID, "err", err)
+			}
+		}
+	}
+	audience := token.AudienceApp
+	if request.Params.Audience != nil {
+		audience = token.Audience(*request.Params.Audience)
+	}
+	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience, domain.AuthenticationMethodApple)
+	if !ok {
+		return appleRecoveryErrorWithHeaders(code, message, appleHeader), nil
+	}
+	copyHeaders(header, appleHeader)
+	return contract.CompleteAccountRecoveryLinkWithApple200HeadersResponse{Header: header, Body: body}, nil
 }
 
 func (h *APIHandler) pendingInvitation(ctx context.Context, rawToken string) (organization.InvitationPreview, response.ErrorCode, string, bool) {
@@ -336,6 +393,10 @@ func (h *APIHandler) startAccountRecoveryLink(ctx context.Context, identity *goo
 			if h.Google != nil {
 				proofs = append(proofs, contract.AccountRecoveryLinkProofMethodsGoogle)
 			}
+		case domain.ProviderApple:
+			if h.Apple != nil {
+				proofs = append(proofs, contract.AccountRecoveryLinkProofMethodsApple)
+			}
 		}
 	}
 	return contract.AccountRecoveryLink{LinkId: link.ID, ProofMethods: proofs}, "", "", true
@@ -362,15 +423,15 @@ func (h *APIHandler) validateRecoveryInvitation(ctx context.Context, rawToken st
 	if !ok {
 		return code, message, false
 	}
-	if normalizeEmail(preview.Invitation.Email) != normalizeEmail(email) {
+	if identitypkg.CanonicalEmail(preview.Invitation.Email) != identitypkg.CanonicalEmail(email) {
 		return codeInvitationEmailMismatch, "This invitation is for a different account.", false
 	}
 	return "", "", true
 }
 
-func (h *APIHandler) finishRecoverySession(ctx context.Context, r *http.Request, user domain.User, rawToken string, audience token.Audience) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
+func (h *APIHandler) finishRecoverySession(ctx context.Context, r *http.Request, user domain.User, rawToken string, audience token.Audience, method domain.AuthenticationMethod) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
 	if rawToken == "" {
-		return h.contractSession(ctx, r, user, audience)
+		return h.contractSession(ctx, r, user, audience, method)
 	}
 	result, err := h.Organizations.AcceptInvitation(ctx, organization.AcceptInvitationInput{
 		RawToken: rawToken,
@@ -381,12 +442,12 @@ func (h *APIHandler) finishRecoverySession(ctx context.Context, r *http.Request,
 		code, message := invitationError(err)
 		return contract.AuthSession{}, nil, code, message, false
 	}
-	return h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience)
+	return h.contractInvitationSession(ctx, r, user, result.Organization.ID, audience, method)
 }
 
-func (h *APIHandler) contractInvitationSession(ctx context.Context, r *http.Request, user domain.User, organizationID contract.OrganizationID, audience token.Audience) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
+func (h *APIHandler) contractInvitationSession(ctx context.Context, r *http.Request, user domain.User, organizationID contract.OrganizationID, audience token.Audience, method domain.AuthenticationMethod) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
 	now := time.Now().UTC()
-	accessToken, _, err := h.Session.CreateSession(ctx, user.ID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
+	accessToken, _, err := h.Session.CreateSession(ctx, user.ID, audience, method, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		code, message := invitationSessionError(err)
 		return contract.AuthSession{}, nil, code, message, false
@@ -477,7 +538,7 @@ func invitationOrGoogleError(err error) (response.ErrorCode, string) {
 	if code == response.CodeForbidden {
 		return code, "Google login is not allowed for this account."
 	}
-	return code, "Google invitation login error."
+	return code, "Google invitation sign-in error."
 }
 
 func recoveryError(err error) (response.ErrorCode, string) {
@@ -510,10 +571,6 @@ func invitationSessionError(err error) (response.ErrorCode, string) {
 	default:
 		return response.CodeUnauthorized, "Unauthorized."
 	}
-}
-
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func optionalString(value *string) string {

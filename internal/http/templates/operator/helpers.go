@@ -21,6 +21,9 @@ type EmailTemplateEditorModel struct {
 	ActiveVersion  int64
 	ViewingVersion int64
 	Versions       []domain.EmailTemplateVersion
+	HistoryPage    int
+	HistorySize    int
+	HistoryHasNext bool
 
 	SubjectTemplate string
 	TextTemplate    string

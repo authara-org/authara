@@ -14,10 +14,10 @@ var runtimeDefinitions = func() []Definition {
 	definitions = append(definitions, []Definition{
 		{
 			Key: KeyChallengeEnabled, Name: "Challenge flows enabled",
-			Description: "Controls whether signup, password-reset, and email-change verification flows are available.",
+			Description: "Controls whether signup and email-change verification flows are available. Password reset remains available independently.",
 			Environment: "AUTHARA_CHALLENGE_ENABLED", Control: ControlEnvironment, Reload: ReloadStartup,
 			Group: "Challenge", Type: TypeBool, DefaultValue: "false", HasDefault: true, defaultValue: false,
-			Impact: "Startup-only because this setting changes routes, rendered flows, and worker startup.",
+			Impact: "Startup-only because this setting changes routes and rendered flows.",
 		},
 		{
 			Key: KeyChallengeTTL, Name: "Challenge lifetime",
@@ -67,6 +67,14 @@ var runtimeDefinitions = func() []Definition {
 func generalPolicyDefinitions() []Definition {
 	return []Definition{
 		{
+			Key: KeyUIAppName, Name: "Application name",
+			Description: "Name displayed on the hosted sign-in and account-creation pages.",
+			Environment: "AUTHARA_APP_NAME", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Branding", Type: TypeString, DefaultValue: DefaultAppName, HasDefault: true,
+			Minimum: "1 character", Maximum: "80 characters", defaultValue: DefaultAppName,
+			Impact: "Applies immediately to subsequently rendered hosted authentication pages.",
+		},
+		{
 			Key: KeyUIDefaultReturnTo, Name: "Default return path",
 			Description: "Safe relative path used after authentication when no return_to value is supplied.",
 			Environment: "AUTHARA_DEFAULT_RETURN_TO", Control: ControlHybrid, Reload: ReloadDynamic,
@@ -81,11 +89,34 @@ func generalPolicyDefinitions() []Definition {
 			Impact: "Applies to subsequent hosted and API password-login requests.",
 		},
 		{
+			Key: KeyAuthenticationEmailVerificationRequired, Name: "Verified email required",
+			Description: "Requires users to verify their current email before receiving normal authenticated access.",
+			Environment: "AUTHARA_EMAIL_VERIFICATION_REQUIRED", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Authentication", Type: TypeBool, DefaultValue: "false", HasDefault: true, defaultValue: false,
+			Impact: "Applies immediately. Existing unverified sessions are revoked and redirected to the email-verification flow.",
+		},
+		{
+			Key: KeyAuthenticationPasskeyCloneResponse, Name: "Passkey clone response",
+			Description: "Action taken when an authenticator sign counter indicates possible credential cloning.",
+			Environment: "AUTHARA_PASSKEY_CLONE_RESPONSE", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Authentication", Type: TypeEnum, DefaultValue: PasskeyCloneResponseAlert, HasDefault: true,
+			Allowed:      []string{PasskeyCloneResponseAlert, PasskeyCloneResponseRestrict, PasskeyCloneResponseRestrictAndRevoke},
+			defaultValue: PasskeyCloneResponseAlert,
+			Impact:       "Applies to newly detected passkey clone warnings.",
+		},
+		{
+			Key: KeyAuthenticationPasskeyCloneNotifyUser, Name: "Passkey clone user notification",
+			Description: "Queues a generic security email when a new passkey clone warning is detected.",
+			Environment: "AUTHARA_PASSKEY_CLONE_NOTIFY_USER", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Authentication", Type: TypeBool, DefaultValue: "true", HasDefault: true, defaultValue: true,
+			Impact: "Applies to newly detected passkey clone warnings.",
+		},
+		{
 			Key: KeyTokenAccessTTL, Name: "Access-token lifetime",
 			Description: "Lifetime assigned to newly issued access tokens.",
 			Environment: "AUTHARA_ACCESS_TOKEN_TTL_MINUTES", Control: ControlHybrid, Reload: ReloadDynamic,
-			Group: "Tokens", Type: TypeInt, DefaultValue: "10", HasDefault: true, Minimum: "1", Maximum: "1440",
-			defaultValue: 10, minInt: intPointer(1), maxInt: intPointer(1440),
+			Group: "Tokens", Type: TypeInt, DefaultValue: "10", HasDefault: true, Minimum: "1", Maximum: strconv.Itoa(int(MaxAccessTokenTTL / time.Minute)),
+			defaultValue: 10, minInt: intPointer(1), maxInt: intPointer(int(MaxAccessTokenTTL / time.Minute)),
 			Impact: "Applies to newly issued access tokens; existing tokens keep their expiry.",
 		},
 		{
@@ -110,6 +141,21 @@ func generalPolicyDefinitions() []Definition {
 			Environment: "AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL", Control: ControlHybrid, Reload: ReloadDynamic,
 			Group: "Sessions", Type: TypeString, DefaultValue: "24h", HasDefault: true, defaultValue: "24h",
 			Impact: "Applies the next time a refresh token is used.",
+		},
+		{
+			Key: KeySessionRecentAuthenticationEnabled, Name: "Recent authentication required",
+			Description: "Requires a fresh password, passkey, or federated proof before sensitive account and administrative mutations.",
+			Environment: "AUTHARA_RECENT_AUTHENTICATION_ENABLED", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Sessions", Type: TypeBool, DefaultValue: "true", HasDefault: true, defaultValue: true,
+			Impact: "Applies immediately. Disabling it allows any active session to perform sensitive mutations without step-up authentication.",
+		},
+		{
+			Key: KeySessionRecentAuthenticationWindow, Name: "Recent authentication window",
+			Description: "Maximum age of password, passkey, or federated proof for sensitive account mutations.",
+			Environment: "AUTHARA_RECENT_AUTHENTICATION_WINDOW", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Sessions", Type: TypeDuration, DefaultValue: "10m", HasDefault: true, Minimum: "1m", Maximum: "1h",
+			defaultValue: defaultRecentAuthenticationWindow, minDuration: durationPointer(minimumRecentAuthenticationWindow), maxDuration: durationPointer(maximumRecentAuthenticationWindow),
+			Impact: "Applies immediately to subsequent sensitive requests; shortening it can make existing sessions stale.",
 		},
 		{
 			Key: KeyOrganizationPublicManagementEnabled, Name: "Public organization management",
@@ -145,8 +191,8 @@ func generalPolicyDefinitions() []Definition {
 			Key: KeyEmailJobMaxAttempts, Name: "Email delivery attempts",
 			Description: "Maximum attempts before an email job is marked failed.",
 			Environment: "AUTHARA_EMAIL_JOB_MAX_ATTEMPTS", Control: ControlHybrid, Reload: ReloadDynamic,
-			Group: "Email", Type: TypeInt, DefaultValue: "10", HasDefault: true, Minimum: "1", Maximum: "100",
-			defaultValue: 10, minInt: intPointer(1), maxInt: intPointer(100),
+			Group: "Email", Type: TypeInt, DefaultValue: "100", HasDefault: true, Minimum: "1", Maximum: "100",
+			defaultValue: 100, minInt: intPointer(1), maxInt: intPointer(100),
 			Impact: "Applies when the next failed delivery attempt is evaluated, including existing jobs.",
 		},
 		{

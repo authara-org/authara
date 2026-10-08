@@ -441,32 +441,7 @@ func loadLiveOrganizations(ctx context.Context, incoming *http.Request, userID s
 }
 
 func internalJSON(ctx context.Context, method, path string, body any, wantStatus int, out any) error {
-	token := strings.TrimSpace(os.Getenv("AUTHARA_INTERNAL_API_TOKEN"))
-	if token == "" {
-		return fmt.Errorf("AUTHARA_INTERNAL_API_TOKEN missing")
-	}
-
-	var reader *bytes.Reader
-	if body == nil {
-		reader = bytes.NewReader(nil)
-	} else {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return err
-		}
-		reader = bytes.NewReader(data)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, autharaBaseURL()+path, reader)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := internalResponse(ctx, method, path, body)
 	if err != nil {
 		return err
 	}
@@ -479,6 +454,35 @@ func internalJSON(ctx context.Context, method, path string, body any, wantStatus
 		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func internalResponse(ctx context.Context, method, path string, body any) (*http.Response, error) {
+	token := strings.TrimSpace(os.Getenv("AUTHARA_INTERNAL_API_TOKEN"))
+	if token == "" {
+		return nil, fmt.Errorf("AUTHARA_INTERNAL_API_TOKEN missing")
+	}
+
+	var reader *bytes.Reader
+	if body == nil {
+		reader = bytes.NewReader(nil)
+	} else {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		reader = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, autharaBaseURL()+path, reader)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	return http.DefaultClient.Do(req)
 }
 
 func autharaResponseError(resp *http.Response, fallback string) error {

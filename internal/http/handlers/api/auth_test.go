@@ -210,6 +210,60 @@ func TestLoginWithPasswordRejectsUsernameWhenDisabled(t *testing.T) {
 	assertErrorMessage(t, rr.Body.Bytes(), "Please provide a valid email address.")
 }
 
+func TestLoginWithPasswordUnknownIdentifiersConsumeRateLimitBuckets(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		attempt := func(t *testing.T, h *APIHandler, remoteAddr, identifier string) int {
+			t.Helper()
+			req := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/login", `{"identifier":"`+identifier+`","password":"wrong-password"}`)
+			req.RemoteAddr = remoteAddr
+			rr := httptest.NewRecorder()
+			resp, err := h.LoginWithPassword(contractCtx(ctx, req), contract.LoginWithPasswordRequestObject{
+				Body: passwordLoginRequest(identifier, "wrong-password"),
+			})
+			if err != nil {
+				t.Fatalf("LoginWithPassword failed: %v", err)
+			}
+			writeContractResponse(t, rr, resp)
+			return rr.Code
+		}
+
+		t.Run("IP", func(t *testing.T) {
+			h := &APIHandler{
+				Auth: auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx}),
+				Limiter: ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{
+					LoginIPLimit:    1,
+					LoginEmailLimit: 10,
+				}),
+			}
+			if got := attempt(t, h, "192.0.2.10:1000", "unknown-ip-a@example.com"); got != http.StatusUnauthorized {
+				t.Fatalf("first status = %d, want %d", got, http.StatusUnauthorized)
+			}
+			if got := attempt(t, h, "192.0.2.10:2000", "unknown-ip-b@example.com"); got != http.StatusTooManyRequests {
+				t.Fatalf("second status = %d, want %d", got, http.StatusTooManyRequests)
+			}
+		})
+
+		t.Run("identifier", func(t *testing.T) {
+			h := &APIHandler{
+				Auth: auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx}),
+				Limiter: ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{
+					LoginIPLimit:    10,
+					LoginEmailLimit: 1,
+				}),
+			}
+			const identifier = "unknown-identifier@example.com"
+			if got := attempt(t, h, "192.0.2.20:1000", identifier); got != http.StatusUnauthorized {
+				t.Fatalf("first status = %d, want %d", got, http.StatusUnauthorized)
+			}
+			if got := attempt(t, h, "192.0.2.21:1000", identifier); got != http.StatusTooManyRequests {
+				t.Fatalf("second status = %d, want %d", got, http.StatusTooManyRequests)
+			}
+		})
+	})
+}
+
 func TestSignupWithInvitationCodeJoinsOrganization(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

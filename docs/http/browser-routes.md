@@ -33,8 +33,8 @@ The login page allows users to authenticate using:
 
 ### Query Parameters
 
-| Parameter | Description |
-|----------|-------------|
+| Parameter   | Description                                                           |
+| ----------- | --------------------------------------------------------------------- |
 | `return_to` | Path the user should be redirected to after successful authentication |
 
 Example:
@@ -110,7 +110,7 @@ When using HTML forms, the CSRF token may also be submitted as a **hidden form f
 Example:
 
 ```html
-<input type="hidden" name="csrf_token" value="...">
+<input type="hidden" name="csrf_token" value="..." />
 ```
 
 See the [CSRF documentation](../api/cookies.md) for details.
@@ -137,10 +137,13 @@ If OAuth providers are configured, the login page may offer buttons for external
 Example providers:
 
 - Google
+- Apple
 - GitHub (future)
 - Microsoft (future)
 
-The OAuth flow is handled entirely by Authara.
+Provider identity validation and account selection are handled by Authara. The
+hosted UI uses each provider's official browser SDK to obtain a credential or
+single-use authorization code.
 
 After successful authentication with the provider, the user is redirected back to Authara and a session is created.
 

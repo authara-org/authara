@@ -3,6 +3,9 @@ package config
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/sethvargo/go-envconfig"
 )
@@ -21,9 +24,11 @@ type Config struct {
 	Webhook        Webhook
 	AccessPolicy   AccessPolicy
 	Admin          Admin
+	OperatorAudit  OperatorAudit
 	InternalAPI    InternalAPI
 	Organization   Organization
 	Authentication Authentication
+	SecurityEvents SecurityEvents
 	Challenge      Challenge
 	Email          Email
 }
@@ -71,10 +76,19 @@ func Load() (*Config, error) {
 	if err := cfg.Admin.validate(); err != nil {
 		return nil, err
 	}
+	if err := cfg.OperatorAudit.validate(); err != nil {
+		return nil, err
+	}
 	if err := cfg.InternalAPI.validate(); err != nil {
 		return nil, err
 	}
 	if err := cfg.Organization.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Authentication.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.SecurityEvents.validate(); err != nil {
 		return nil, err
 	}
 	if err := cfg.Challenge.validate(); err != nil {
@@ -95,6 +109,9 @@ func Load() (*Config, error) {
 	if err := cfg.Token.parse(); err != nil {
 		return nil, err
 	}
+	if err := cfg.OAuth.parse(); err != nil {
+		return nil, err
+	}
 	if err := cfg.Session.parse(); err != nil {
 		return nil, err
 	}
@@ -105,6 +122,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.Organization.parse(); err != nil {
+		return nil, err
+	}
+	if err := cfg.SecurityEvents.parse(); err != nil {
 		return nil, err
 	}
 	if err := cfg.Email.parse(); err != nil {
@@ -119,6 +139,9 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) validate() error {
+	if c.OAuth.providerEnabled("apple") && c.Values.AppEnv == "prod" && !strings.HasPrefix(strings.ToLower(c.Values.PublicURL), "https://") {
+		return fmt.Errorf("PUBLIC_URL must use https when Apple sign-in is enabled in production")
+	}
 	if c.Token.AccessTokenTTL >= c.Session.RefreshTokenTTL {
 		return fmt.Errorf(
 			"invalid token configuration: access token TTL (%s) "+
@@ -128,10 +151,18 @@ func (c *Config) validate() error {
 		)
 	}
 
-	if c.Challenge.Enabled &&
-		c.Email.Provider == "noop" &&
-		c.Values.AppEnv == "prod" {
-		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must not be noop when AUTHARA_CHALLENGE_ENABLED=true in production")
+	if err := c.validateAccessTokenRevocation(); err != nil {
+		return err
+	}
+
+	if c.Values.AppEnv == "prod" && !c.Email.IsDeliverable() {
+		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must be smtp in production because password recovery routes are enabled")
+	}
+	if c.Authentication.EmailVerificationRequired && !c.Email.IsDeliverable() {
+		return fmt.Errorf("AUTHARA_EMAIL_PROVIDER must be configured when AUTHARA_EMAIL_VERIFICATION_REQUIRED is true")
+	}
+	if c.Authentication.EmailVerificationRequired && !c.Challenge.Enabled {
+		return fmt.Errorf("AUTHARA_CHALLENGE_ENABLED must be true when AUTHARA_EMAIL_VERIFICATION_REQUIRED is true")
 	}
 
 	if c.Values.AppEnv == "prod" && c.DB.LogSQL {
@@ -145,6 +176,63 @@ func (c *Config) validate() error {
 	if c.Values.AppEnv == "prod" && c.Webhook.Enabled() {
 		if len(c.Webhook.Secret) < 32 {
 			return fmt.Errorf("AUTHARA_WEBHOOK_SECRET must be at least 32 characters when APP_ENV=prod")
+		}
+	}
+
+	if c.Values.AppEnv == "prod" {
+		internalAPIToken := strings.TrimSpace(c.InternalAPI.Token)
+		if utf8.RuneCountInString(internalAPIToken) < 24 {
+			return fmt.Errorf("AUTHARA_INTERNAL_API_TOKEN must be at least 24 characters when APP_ENV=prod")
+		}
+		if internalAPIToken != c.InternalAPI.Token {
+			return fmt.Errorf("AUTHARA_INTERNAL_API_TOKEN must not contain leading or trailing whitespace")
+		}
+	}
+
+	return nil
+}
+
+func (c *Config) validateAccessTokenRevocation() error {
+	if c.Token.AccessTokenTTL > MaxAccessTokenTTL {
+		return fmt.Errorf(
+			"AUTHARA_ACCESS_TOKEN_TTL_MINUTES must be at most %d",
+			int(MaxAccessTokenTTL/time.Minute),
+		)
+	}
+
+	mode := c.Cache.AccessTokenRevocationMode
+	if mode == "" {
+		switch {
+		case c.Cache.Provider == "redis":
+			mode = AccessTokenRevocationModeImmediate
+		case c.Values.AppEnv == "dev" && c.Cache.Provider == "noop":
+			mode = AccessTokenRevocationModeExpiry
+		default:
+			return fmt.Errorf(
+				"AUTHARA_ACCESS_TOKEN_REVOCATION_MODE must be set to expiry when APP_ENV=prod and AUTHARA_CACHE_PROVIDER=noop",
+			)
+		}
+		c.Cache.AccessTokenRevocationMode = mode
+	}
+
+	switch mode {
+	case AccessTokenRevocationModeImmediate:
+		if c.Cache.Provider != "redis" {
+			return fmt.Errorf(
+				"AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=immediate requires AUTHARA_CACHE_PROVIDER=redis",
+			)
+		}
+	case AccessTokenRevocationModeExpiry:
+		if c.Cache.Provider != "noop" {
+			return fmt.Errorf(
+				"AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=expiry requires AUTHARA_CACHE_PROVIDER=noop",
+			)
+		}
+		if c.Token.AccessTokenTTL > ExpiryOnlyMaxAccessTokenTTL {
+			return fmt.Errorf(
+				"AUTHARA_ACCESS_TOKEN_TTL_MINUTES must be at most %d when AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=expiry",
+				int(ExpiryOnlyMaxAccessTokenTTL/time.Minute),
+			)
 		}
 	}
 

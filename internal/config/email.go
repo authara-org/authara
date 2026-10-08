@@ -18,11 +18,22 @@ type Email struct {
 	SMTPTLS      bool          `env:"AUTHARA_EMAIL_SMTP_TLS,default=true"`
 	SMTPTimeout  time.Duration `env:"AUTHARA_EMAIL_SMTP_TIMEOUT,default=10s"`
 
-	WorkerCount        int           `env:"AUTHARA_EMAIL_WORKER_COUNT,default=2"`
-	WorkerPollInterval time.Duration `env:"AUTHARA_EMAIL_WORKER_POLL_INTERVAL,default=2s"`
-	JobMaxAttempts     int           `env:"AUTHARA_EMAIL_JOB_MAX_ATTEMPTS,default=10"`
-	CleanupSentAfter   time.Duration `env:"AUTHARA_EMAIL_CLEANUP_SENT_AFTER,default=720h"`    // 30d
-	CleanupFailedAfter time.Duration `env:"AUTHARA_EMAIL_CLEANUP_FAILED_AFTER,default=2160h"` // 90d
+	WorkerCount          int           `env:"AUTHARA_EMAIL_WORKER_COUNT,default=2"`
+	WorkerPollInterval   time.Duration `env:"AUTHARA_EMAIL_WORKER_POLL_INTERVAL,default=2s"`
+	JobMaxAttempts       int           `env:"AUTHARA_EMAIL_JOB_MAX_ATTEMPTS,default=100"`
+	ProcessingStaleAfter time.Duration `env:"AUTHARA_EMAIL_PROCESSING_STALE_AFTER,default=2m"`
+	StaleReaperInterval  time.Duration `env:"AUTHARA_EMAIL_STALE_REAPER_INTERVAL,default=1m"`
+	MaintenanceBatchSize int           `env:"AUTHARA_EMAIL_MAINTENANCE_BATCH_SIZE,default=1000"`
+	CleanupSentAfter     time.Duration `env:"AUTHARA_EMAIL_CLEANUP_SENT_AFTER,default=720h"`    // 30d
+	CleanupFailedAfter   time.Duration `env:"AUTHARA_EMAIL_CLEANUP_FAILED_AFTER,default=2160h"` // 90d
+	CleanupInterval      time.Duration `env:"AUTHARA_EMAIL_CLEANUP_INTERVAL,default=1h"`
+}
+
+// IsDeliverable reports whether the configured provider can deliver email to
+// recipients. The noop provider is a development sink and is not suitable for
+// user-facing flows such as password recovery.
+func (e Email) IsDeliverable() bool {
+	return strings.EqualFold(strings.TrimSpace(e.Provider), "smtp")
 }
 
 func (e *Email) validate() error {
@@ -48,6 +59,9 @@ func (e *Email) validate() error {
 		if e.SMTPHost == "" {
 			return fmt.Errorf("AUTHARA_EMAIL_SMTP_HOST must not be empty when AUTHARA_EMAIL_PROVIDER=smtp")
 		}
+		if (strings.TrimSpace(e.SMTPUsername) == "") != (e.SMTPPassword == "") {
+			return fmt.Errorf("AUTHARA_EMAIL_SMTP_USERNAME and AUTHARA_EMAIL_SMTP_PASSWORD must be configured together")
+		}
 		if e.SMTPPort <= 0 || e.SMTPPort > 65535 {
 			return fmt.Errorf("invalid AUTHARA_EMAIL_SMTP_PORT %d", e.SMTPPort)
 		}
@@ -65,11 +79,23 @@ func (e *Email) validate() error {
 	if e.JobMaxAttempts <= 0 {
 		return fmt.Errorf("AUTHARA_EMAIL_JOB_MAX_ATTEMPTS must be > 0")
 	}
+	if e.ProcessingStaleAfter <= e.SMTPTimeout {
+		return fmt.Errorf("AUTHARA_EMAIL_PROCESSING_STALE_AFTER must be greater than AUTHARA_EMAIL_SMTP_TIMEOUT")
+	}
+	if e.StaleReaperInterval <= 0 {
+		return fmt.Errorf("AUTHARA_EMAIL_STALE_REAPER_INTERVAL must be > 0")
+	}
+	if e.MaintenanceBatchSize <= 0 || e.MaintenanceBatchSize > 10000 {
+		return fmt.Errorf("AUTHARA_EMAIL_MAINTENANCE_BATCH_SIZE must be between 1 and 10000")
+	}
 	if e.CleanupSentAfter <= 0 {
 		return fmt.Errorf("AUTHARA_EMAIL_CLEANUP_SENT_AFTER must be > 0")
 	}
 	if e.CleanupFailedAfter <= 0 {
 		return fmt.Errorf("AUTHARA_EMAIL_CLEANUP_FAILED_AFTER must be > 0")
+	}
+	if e.CleanupInterval <= 0 {
+		return fmt.Errorf("AUTHARA_EMAIL_CLEANUP_INTERVAL must be > 0")
 	}
 
 	return nil

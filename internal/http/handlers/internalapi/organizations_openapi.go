@@ -3,6 +3,7 @@ package internalapi
 import (
 	"context"
 
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
@@ -22,18 +23,44 @@ func (h *Handler) UpdatePublicOrganization(ctx context.Context, request contract
 }
 
 func (h *Handler) ListPublicOrganizationMembers(ctx context.Context, request contract.ListPublicOrganizationMembersRequestObject) (contract.ListPublicOrganizationMembersResponseObject, error) {
-	return h.listOrganizationMembers(ctx, request.OrganizationID), nil
+	return h.listOrganizationMembers(ctx, request.OrganizationID, organizationListOptions(request.Params.Cursor, request.Params.Limit)), nil
 }
 
 func (h *Handler) GetPublicOrganizationMember(ctx context.Context, request contract.GetPublicOrganizationMemberRequestObject) (contract.GetPublicOrganizationMemberResponseObject, error) {
 	return h.getOrganizationMember(ctx, request.OrganizationID, request.UserID), nil
 }
 
+func (h *Handler) UpdatePublicOrganizationMember(ctx context.Context, request contract.UpdatePublicOrganizationMemberRequestObject) (contract.UpdatePublicOrganizationMemberResponseObject, error) {
+	if request.Body == nil {
+		return updatePublicOrganizationMemberError(response.CodeInvalidRequest, "Invalid request body"), nil
+	}
+	actorUserID, code, message, ok := h.contractAuthorizePublicOrganization(ctx, request.OrganizationID, true)
+	if !ok {
+		return updatePublicOrganizationMemberError(code, message), nil
+	}
+	_, err := h.Organizations.UpdateOrganizationMember(ctx, organization.UpdateOrganizationMemberInput{
+		OrganizationID: request.OrganizationID,
+		UserID:         request.UserID,
+		ActorUserID:    actorUserID,
+		Role:           domain.OrganizationRole(request.Body.Role),
+	})
+	if err != nil {
+		code, message := publicOrganizationMemberUpdateError(err)
+		return updatePublicOrganizationMemberError(code, message), nil
+	}
+	member, err := h.Organizations.GetOrganizationMember(ctx, request.OrganizationID, request.UserID)
+	if err != nil {
+		code, message := organizationError(err)
+		return updatePublicOrganizationMemberError(code, message), nil
+	}
+	return contract.UpdatePublicOrganizationMember200JSONResponse(contract.OrganizationMemberEnvelope{Member: toContractOrganizationMember(member)}), nil
+}
+
 func (h *Handler) ListPublicUserMemberships(ctx context.Context, request contract.ListPublicUserMembershipsRequestObject) (contract.ListPublicUserMembershipsResponseObject, error) {
 	if currentUserID, publicRequest := httpctx.UserID(ctx); publicRequest && currentUserID != request.UserID {
 		return listPublicUserMembershipsError(response.CodeForbidden, "Organization operation forbidden"), nil
 	}
-	return h.listUserMemberships(ctx, request.UserID), nil
+	return h.listUserMemberships(ctx, request.UserID, organizationListOptions(request.Params.Cursor, request.Params.Limit)), nil
 }
 
 func (h *Handler) CreateInternalOrganization(ctx context.Context, request contract.CreateInternalOrganizationRequestObject) (contract.CreateInternalOrganizationResponseObject, error) {
@@ -82,7 +109,7 @@ func (h *Handler) updateOrganization(ctx context.Context, organizationID openapi
 	return contract.UpdatePublicOrganization200JSONResponse(contract.OrganizationEnvelope{Organization: toContractOrganization(org)})
 }
 
-func (h *Handler) listOrganizationMembers(ctx context.Context, organizationID openapi_types.UUID) contract.ListPublicOrganizationMembersResponseObject {
+func (h *Handler) listOrganizationMembers(ctx context.Context, organizationID openapi_types.UUID, options organization.ListOptions) contract.ListPublicOrganizationMembersResponseObject {
 	publicUserID, code, message, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, false)
 	if !ok {
 		return listPublicOrganizationMembersError(code, message)
@@ -90,16 +117,16 @@ func (h *Handler) listOrganizationMembers(ctx context.Context, organizationID op
 	if publicUserID != (openapi_types.UUID{}) && !h.Organizations.Mode().HasVisibleOrganizations() {
 		return listPublicOrganizationMembersError(response.CodeForbidden, "Organization members are not visible")
 	}
-	members, err := h.Organizations.ListOrganizationMembers(ctx, organizationID)
+	page, err := h.Organizations.ListOrganizationMembersPage(ctx, organizationID, options)
 	if err != nil {
 		code, message := organizationError(err)
 		return listPublicOrganizationMembersError(code, message)
 	}
-	outMembers := make([]contract.OrganizationMember, 0, len(members))
-	for _, member := range members {
+	outMembers := make([]contract.OrganizationMember, 0, len(page.Items))
+	for _, member := range page.Items {
 		outMembers = append(outMembers, toContractOrganizationMember(member))
 	}
-	return contract.ListPublicOrganizationMembers200JSONResponse(contract.OrganizationMembers{Members: outMembers})
+	return contract.ListPublicOrganizationMembers200JSONResponse(contract.OrganizationMembers{Members: outMembers, NextCursor: optionalCursor(page.NextCursor)})
 }
 
 func (h *Handler) getOrganizationMember(ctx context.Context, organizationID, userID openapi_types.UUID) contract.GetPublicOrganizationMemberResponseObject {
@@ -118,18 +145,18 @@ func (h *Handler) getOrganizationMember(ctx context.Context, organizationID, use
 	return contract.GetPublicOrganizationMember200JSONResponse(contract.OrganizationMemberEnvelope{Member: toContractOrganizationMember(member)})
 }
 
-func (h *Handler) listUserMemberships(ctx context.Context, userID openapi_types.UUID) contract.ListPublicUserMembershipsResponseObject {
-	memberships, err := h.Organizations.ListUserMemberships(ctx, userID)
+func (h *Handler) listUserMemberships(ctx context.Context, userID openapi_types.UUID, options organization.ListOptions) contract.ListPublicUserMembershipsResponseObject {
+	page, err := h.Organizations.ListUserMembershipsPage(ctx, userID, options)
 	if err != nil {
 		code, message := organizationError(err)
 		return listPublicUserMembershipsError(code, message)
 	}
-	out := make([]contract.MembershipWithOrganization, 0, len(memberships))
-	for _, membership := range memberships {
+	out := make([]contract.MembershipWithOrganization, 0, len(page.Items))
+	for _, membership := range page.Items {
 		out = append(out, contract.MembershipWithOrganization{
 			Organization: toContractOrganization(membership.Organization),
 			Membership:   toContractMembership(membership.Membership),
 		})
 	}
-	return contract.ListPublicUserMemberships200JSONResponse(contract.UserMemberships{Memberships: out})
+	return contract.ListPublicUserMemberships200JSONResponse(contract.UserMemberships{Memberships: out, NextCursor: optionalCursor(page.NextCursor)})
 }

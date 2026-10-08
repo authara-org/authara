@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"net/url"
+
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/templates"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
@@ -76,7 +78,7 @@ templ InvitationAccept(
 			}
 			if showSignupForm {
 				@InvitationSignupForm(invitedEmail, token)
-				@OAuthProviders("Create account", oauthProviders)
+				@OAuthProviders("Create account", oauthProviders, invitationAppleReturnTo(token))
 			}
 			for _, action := range actions {
 				if action.LogoutReturn != "" {
@@ -100,7 +102,7 @@ templ InvitationSignup(organizationName string, invitedEmail string, token strin
 			@CardHeader()
 			@HeaderSection("Create an account to join "+organizationName, "Use the invited email address to join this organization.")
 			@InvitationSignupForm(invitedEmail, token)
-			@OAuthProviders("Create account", oauthProviders)
+			@OAuthProviders("Create account", oauthProviders, invitationAppleReturnTo(token))
 		}
 	}
 }
@@ -144,18 +146,12 @@ templ InvitationSignupForm(invitedEmail string, token string) {
 				Attrs: templ.Attributes{
 					":type":     "show ? 'text' : 'password'",
 					"x-model":   "password",
-					"minlength": "8",
-					":class": `{
-						'border-grey-100 dark:border-grey-800': password.length === 0,
-						'border-red-500': password.length > 0 && password.length < 8,
-						'border-green-500': password.length >= 8
-					}`,
 				},
 			})
 			@passwordToggleButton()
 		</div>
-		<p class="text-xs text-grey-600 dark:text-grey-400 mt-1.5" x-show="password.length<8">
-			Password must be at least 8 characters long.
+		<p class="text-xs text-grey-600 dark:text-grey-400 mt-1.5">
+			Use a long passphrase that is unique to this account.
 		</p>
 		<div x-data="{ show: false }" class="relative mt-4">
 			@form.Input(form.InputConfig{
@@ -194,11 +190,15 @@ templ InvitationLogin(organizationName string, invitedEmail string, token string
 	@templates.PartialRender() {
 		@AuthLayout() {
 			@CardHeader()
-			@HeaderSection("Log in to join "+organizationName, "Use the account for the invited email address.")
+			@HeaderSection("Sign in to join "+organizationName, "Use the account for the invited email address.")
 			@InvitationLoginForm(invitedEmail, token)
-			@OAuthProviders("Login", oauthProviders)
+			@OAuthProviders("Sign in", oauthProviders, invitationAppleReturnTo(token))
 		}
 	}
+}
+
+func invitationAppleReturnTo(token string) string {
+	return "/auth/invitations/accept?token=" + url.QueryEscape(token)
 }
 
 templ InvitationLoginForm(invitedEmail string, token string) {
@@ -244,7 +244,7 @@ templ InvitationLoginForm(invitedEmail string, token string) {
 			@passwordToggleButton()
 		</div>
 		@button.Button(button.ButtonConfig{
-			Label: "Login and join",
+			Label: "Sign in and join",
 			Icon:  icons.Login(),
 		})
 	</form>

@@ -22,21 +22,26 @@ type EnvironmentVariable struct {
 }
 
 var sensitiveEnvironmentVariables = map[string]struct{}{
-	"POSTGRESQL_USERNAME":         {},
-	"POSTGRESQL_PASSWORD":         {},
-	"AUTHARA_REDIS_PASSWORD":      {},
-	"AUTHARA_JWT_KEYS":            {},
-	"AUTHARA_INTERNAL_API_TOKEN":  {},
-	"AUTHARA_WEBHOOK_SECRET":      {},
-	"AUTHARA_EMAIL_SMTP_USERNAME": {},
-	"AUTHARA_EMAIL_SMTP_PASSWORD": {},
+	"POSTGRESQL_USERNAME":                    {},
+	"POSTGRESQL_PASSWORD":                    {},
+	"AUTHARA_REDIS_PASSWORD":                 {},
+	"AUTHARA_JWT_KEYS":                       {},
+	"AUTHARA_INTERNAL_API_TOKEN":             {},
+	"AUTHARA_WEBHOOK_SECRET":                 {},
+	"AUTHARA_EMAIL_SMTP_USERNAME":            {},
+	"AUTHARA_EMAIL_SMTP_PASSWORD":            {},
+	"AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64": {},
+	"AUTHARA_OAUTH_APPLE_TOKEN_KEYS":         {},
 }
 
 var environmentVariableTypeOverrides = map[string]string{
-	"APP_ENV":                "enum",
-	"AUTHARA_CACHE_PROVIDER": "enum",
-	"AUTHARA_ORG_MODE":       "enum",
-	"AUTHARA_EMAIL_PROVIDER": "enum",
+	"APP_ENV":                              "enum",
+	"POSTGRESQL_SSL_MODE":                  "enum",
+	"AUTHARA_CACHE_PROVIDER":               "enum",
+	"AUTHARA_ACCESS_TOKEN_REVOCATION_MODE": "enum",
+	"AUTHARA_ORG_MODE":                     "enum",
+	"AUTHARA_PASSKEY_CLONE_RESPONSE":       "enum",
+	"AUTHARA_EMAIL_PROVIDER":               "enum",
 }
 
 // EnvironmentVariables returns every environment variable in declaration
@@ -101,6 +106,9 @@ func environmentGroup(configSection, variableName string) string {
 	case "Logging", "Observability":
 		return "Runtime"
 	case "UI":
+		if variableName == "AUTHARA_APP_NAME" {
+			return "Branding"
+		}
 		return "Public URL"
 	case "DB":
 		return "Database"
@@ -116,8 +124,13 @@ func environmentGroup(configSection, variableName string) string {
 		return "Webhooks"
 	case "AccessPolicy":
 		return "Access policy"
-	case "Admin":
+	case "Admin", "OperatorAudit":
 		return "Retention"
+	case "SecurityEvents":
+		if strings.Contains(variableName, "RETENTION") || strings.Contains(variableName, "CLEANUP") {
+			return "Retention"
+		}
+		return "Security events"
 	case "InternalAPI":
 		return "Internal API"
 	case "Organization":

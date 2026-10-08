@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -27,7 +26,7 @@ func (s *Service) RecentFailures(ctx context.Context, page Page) (RecentFailures
 	page = normalizePage(page, 25)
 	offset := (page.Page - 1) * page.Size
 
-	jobs, err := s.store.ListRecentFailedEmailJobs(ctx, page.Size, offset)
+	jobs, err := s.store.ListActiveOrFailedEmailJobs(ctx, page.Size, offset)
 	if err != nil {
 		return RecentFailures{}, err
 	}
@@ -59,45 +58,26 @@ func (s *Service) ListAuditEvents(ctx context.Context, page Page) (AuditEventPag
 	return AuditEventPage{Events: events, Page: page.Page, Size: page.Size, HasNext: hasNext}, nil
 }
 
-func (s *Service) CleanupExpiredAuditEvents(ctx context.Context, now time.Time) (int64, error) {
-	retention := s.policy.CurrentAdmin().AuditRetention
-	if retention <= 0 {
-		return 0, nil
+func (s *Service) ListSecurityEvents(ctx context.Context, page Page) (SecurityEventPage, error) {
+	page = normalizePage(page, 50)
+	events, err := s.securityEvents.Query(ctx, store.SecurityEventFilter{Limit: page.Size + 1, Offset: (page.Page - 1) * page.Size})
+	if err != nil {
+		return SecurityEventPage{}, err
 	}
-	return s.store.DeleteAdminAuditEventsBefore(ctx, now.Add(-retention))
+	hasNext := len(events) > page.Size
+	if hasNext {
+		events = events[:page.Size]
+	}
+	return SecurityEventPage{Events: events, Page: page.Page, Size: page.Size, HasNext: hasNext}, nil
 }
 
-func (s *Service) StartAuditCleanupWorker(ctx context.Context, logger *slog.Logger, interval time.Duration) {
-	if interval <= 0 || s.policy.CurrentAdmin().AuditRetention <= 0 {
-		return
+func (s *Service) CleanupExpiredAuditEventsBatch(ctx context.Context, now time.Time, batchSize int) (int64, bool, error) {
+	retention := s.policy.CurrentAdmin().AuditRetention
+	if retention <= 0 {
+		return 0, false, nil
 	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	ticker := time.NewTicker(interval)
-	go func() {
-		defer ticker.Stop()
-		logger.Info("starting admin audit cleanup worker", "interval", interval.String())
-		for {
-			select {
-			case <-ctx.Done():
-				logger.Info("stopping admin audit cleanup worker")
-				return
-			case now := <-ticker.C:
-				cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				deleted, err := s.CleanupExpiredAuditEvents(cleanupCtx, now.UTC())
-				cancel()
-				if err != nil {
-					logger.Error("admin audit cleanup failed", "err", err)
-					continue
-				}
-				if deleted > 0 {
-					logger.Info("admin audit events cleaned up", "deleted", deleted)
-				}
-			}
-		}
-	}()
+	deleted, err := s.store.DeleteAdminAuditEventsBefore(ctx, now.Add(-retention), batchSize)
+	return deleted, deleted == int64(batchSize), err
 }
 
 func (s *Service) audit(

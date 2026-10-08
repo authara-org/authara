@@ -19,6 +19,7 @@ templ AdminShell(active string, features FeatureFlags) {
 		}
 		tabs = append(tabs,
 			workspace.Tab{Href: "/auth/admin/failures", Label: "Failures", Active: active == "failures"},
+			workspace.Tab{Href: "/auth/admin/security-events", Label: "Security events", Active: active == "security-events"},
 			workspace.Tab{Href: "/auth/admin/audit", Label: "Audit log", Active: active == "audit"},
 		)
 	}}
@@ -30,7 +31,7 @@ templ AdminShell(active string, features FeatureFlags) {
 			Tabs:        tabs,
 			ContentID:   "admin-content",
 			AccountHref: "/auth/account?return_to=/auth/admin",
-			ViewportHeight: active == "audit",
+			ViewportHeight: active == "audit" || active == "security-events",
 		}) {
 			{ children... }
 		}

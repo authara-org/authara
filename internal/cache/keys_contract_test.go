@@ -28,7 +28,7 @@ func TestAccessTokenRevocationKeysMatchContract(t *testing.T) {
 	}
 
 	replacer := strings.NewReplacer(
-		"{token_sha256}", "token-hash",
+		"{token_identifier}", "token-id",
 		"{session_id}", "session-id",
 		"{user_id}", "user-id",
 		"{organization_id}", "organization-id",
@@ -40,7 +40,7 @@ func TestAccessTokenRevocationKeysMatchContract(t *testing.T) {
 		Membership: replacer.Replace(templates.Membership),
 	}
 	got := revocationKeyContract{
-		Token:      RevokedAccessTokenKey("token-hash"),
+		Token:      RevokedAccessTokenKey("token-id"),
 		Session:    RevokedAccessTokenSessionKey("session-id"),
 		User:       RevokedAccessTokenUserKey("user-id"),
 		Membership: RevokedAccessTokenMembershipKey("user-id", "organization-id"),

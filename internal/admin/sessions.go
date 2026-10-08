@@ -3,23 +3,31 @@ package admin
 import (
 	"context"
 
+	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
 )
 
 func (s *Service) RevokeUserSession(ctx context.Context, actor Actor, userID, sessionID uuid.UUID, meta RequestMeta) error {
-	now := s.now()
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		user, err := s.store.GetUserByID(txCtx, userID)
+		user, err := s.store.GetUserByIDForUpdate(txCtx, userID)
 		if err != nil {
+			return err
+		}
+		session, err := s.store.GetSessionByID(txCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		if session.UserID != userID {
+			return store.ErrSessionNotFound
+		}
+		now := s.now()
+		if err := s.accessTokenRevocations.RevokeSession(txCtx, sessionID, now); err != nil {
 			return err
 		}
 		if err := s.store.RevokeSessionByIDAndUserID(txCtx, sessionID, userID, now); err != nil {
 			return err
 		}
 		if err := s.store.DeleteRefreshTokensBySession(txCtx, sessionID); err != nil {
-			return err
-		}
-		if err := s.accessTokenRevocations.RevokeSession(txCtx, sessionID, now); err != nil {
 			return err
 		}
 		return s.audit(txCtx, actor, ActionUserSessionRevoked, &userID, user.Email, map[string]any{
@@ -33,10 +41,13 @@ func (s *Service) RevokeAllUserSessions(ctx context.Context, actor Actor, userID
 		return ErrSelfRevokeSessions
 	}
 
-	now := s.now()
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		user, err := s.store.GetUserByID(txCtx, userID)
+		user, err := s.store.GetUserByIDForUpdate(txCtx, userID)
 		if err != nil {
+			return err
+		}
+		now := s.now()
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		revoked, err := s.store.RevokeAllActiveSessionsForUser(txCtx, userID, now)
@@ -44,9 +55,6 @@ func (s *Service) RevokeAllUserSessions(ctx context.Context, actor Actor, userID
 			return err
 		}
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
-			return err
-		}
-		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		return s.audit(txCtx, actor, ActionUserSessionsRevoked, &userID, user.Email, map[string]any{

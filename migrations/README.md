@@ -39,11 +39,25 @@ The migration image:
 
 You must provide database connection details via environment variables, for example:
 
+```env
 POSTGRESQL_HOST=localhost  
 POSTGRESQL_PORT=5432  
 POSTGRESQL_DATABASE=authara  
 POSTGRESQL_USERNAME=authara  
 POSTGRESQL_PASSWORD=secret  
+POSTGRESQL_SSL_MODE=disable
+```
+
+For a TLS connection with full verification, use:
+
+```env
+POSTGRESQL_SSL_MODE=verify-full
+POSTGRESQL_SSL_ROOT_CERT=/certs/postgresql-ca.pem
+```
+
+Mount a private CA certificate at that path in both the migrations and Core
+containers. `POSTGRESQL_SSL_ROOT_CERT` is optional when the certificate uses a
+publicly trusted CA.
 
 ### Apply migrations
 

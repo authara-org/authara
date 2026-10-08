@@ -54,21 +54,32 @@ services:
       POSTGRES_DB: authara
       POSTGRES_USER: authara
       POSTGRES_PASSWORD: authara
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authara -d authara"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
 
   app:
     image: nginx:alpine
 
   authara-migrations:
-    image: ghcr.io/authara-org/authara-migrations:latest
+    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
     env_file:
       - .env
+    environment:
+      POSTGRESQL_HOST: postgres
+    command: ["up", "-env=default", "-config=/migrations/dbconfig.yaml"]
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   authara:
-    image: ghcr.io/authara-org/authara-core:latest
+    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
     env_file:
       - .env
+    environment:
+      POSTGRESQL_HOST: postgres
     depends_on:
       authara-migrations:
         condition: service_completed_successfully
@@ -82,11 +93,22 @@ services:
       AUTHARA_UPSTREAM: authara:8080
       APP_UPSTREAM: app:80
     depends_on:
-      - authara
-      - app
+      authara:
+        condition: service_healthy
+      app:
+        condition: service_started
 ```
 
+Each Core release lists its compatible image tags and immutable digests in the
+release notes. The attached `authara-images.env` contains the same pairing for
+deployment tooling.
+
 This example shows the network shape only.
+
+The Core image's readiness health check gates the gateway's initial startup.
+Docker Compose does not remove an already-running Core container from routing if
+it later becomes unhealthy; deployments that need dynamic traffic removal
+should use an orchestrator with readiness probes.
 
 Application-specific configuration is intentionally omitted.
 
@@ -152,6 +174,41 @@ A typical local stack uses:
 Quick local setup is described in:
 
 - [Quickstart](../quickstart.md)
+
+---
+
+# Build-context policy
+
+Docker build contexts use default-deny `.dockerignore` allowlists. Local
+environment files, Git metadata, dependency trees, generated output, coverage,
+caches, and editor files must not be sent to a builder. The Core production
+image also uses explicit `COPY` instructions so only its source inputs enter
+the builder stage.
+
+CI adds forbidden-path sentinels, audits every context, builds every image from
+a clean checkout, and inspects the final Core image. Baselines and enforced
+limits measured on 2026-10-03 were:
+
+| Context | Size | Limit |
+| --- | ---: | ---: |
+| Core root | 5064 KiB | 8192 KiB |
+| Migrations | 160 KiB | 512 KiB |
+| SSR integration | 104 KiB | 512 KiB |
+| SPA integration | 180 KiB | 1024 KiB |
+
+Reproduce the measurements from the repository root after setting up Docker
+Buildx:
+
+```sh
+scripts/check-docker-context.sh . root 8192
+scripts/check-docker-context.sh ./migrations migrations 512
+scripts/check-docker-context.sh ./integrations/ssr-app ssr-app 512
+scripts/check-docker-context.sh ./integrations/spa-app spa-app 1024
+```
+
+When a build needs a new source file, explicitly add that file to the relevant
+allowlist and Dockerfile rather than widening the context to the whole working
+tree.
 
 ---
 

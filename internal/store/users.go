@@ -2,34 +2,32 @@ package store
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store/model"
 	"github.com/google/uuid"
 )
 
-func NormalizeUsername(u string) string {
-	return strings.ToLower(strings.TrimSpace(u))
-}
-
 func toDomainUser(m model.User) domain.User {
 	return domain.User{
-		ID:         m.ID,
-		CreatedAt:  m.CreatedAt,
-		UpdatedAt:  m.UpdatedAt,
-		DisabledAt: m.DisabledAt,
-		Username:   m.Username,
-		Email:      m.Email,
+		ID:              m.ID,
+		CreatedAt:       m.CreatedAt,
+		UpdatedAt:       m.UpdatedAt,
+		DisabledAt:      m.DisabledAt,
+		Username:        m.Username,
+		Email:           m.Email,
+		EmailVerifiedAt: m.EmailVerifiedAt,
 	}
 }
 
 func toModelUser(d domain.User) model.User {
 	return model.User{
 		Username:           d.Username,
-		UsernameNormalized: NormalizeUsername(d.Username),
-		Email:              d.Email,
+		UsernameNormalized: identity.CanonicalUsername(d.Username),
+		Email:              identity.CanonicalEmail(d.Email),
+		EmailVerifiedAt:    d.EmailVerifiedAt,
 		DisabledAt:         d.DisabledAt,
 	}
 }
@@ -41,7 +39,8 @@ const userColumns = `
 	disabled_at,
 	username,
 	username_normalized,
-	email
+	email,
+	email_verified_at
 `
 
 func scanUser(row rowScanner, m *model.User) error {
@@ -53,20 +52,21 @@ func scanUser(row rowScanner, m *model.User) error {
 		&m.Username,
 		&m.UsernameNormalized,
 		&m.Email,
+		&m.EmailVerifiedAt,
 	)
 }
 
 func (s *Store) CreateUser(ctx context.Context, user domain.User) (domain.User, error) {
 	m := toModelUser(user)
-	m.UsernameNormalized = NormalizeUsername(user.Username)
 
 	if err := scanUser(s.queryRow(ctx, `
-		INSERT INTO users (username, username_normalized, email, disabled_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (username, username_normalized, email, email_verified_at, disabled_at)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING `+userColumns,
 		m.Username,
 		m.UsernameNormalized,
 		m.Email,
+		m.EmailVerifiedAt,
 		m.DisabledAt,
 	), &m); err != nil {
 		return domain.User{}, err
@@ -113,7 +113,7 @@ func (s *Store) LockUserForKeyShare(ctx context.Context, userID uuid.UUID) error
 	return mapNoRows(err, ErrUserNotFound)
 }
 
-func (s *Store) LockUserForAuthMethodMutation(ctx context.Context, userID uuid.UUID) error {
+func (s *Store) LockUserForUpdate(ctx context.Context, userID uuid.UUID) error {
 	var lockedID uuid.UUID
 	err := s.queryRow(ctx, `
 		SELECT id
@@ -124,10 +124,14 @@ func (s *Store) LockUserForAuthMethodMutation(ctx context.Context, userID uuid.U
 	return mapNoRows(err, ErrUserNotFound)
 }
 
+func (s *Store) LockUserForAuthMethodMutation(ctx context.Context, userID uuid.UUID) error {
+	return s.LockUserForUpdate(ctx, userID)
+}
+
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, error) {
 	var m model.User
 
-	email = normalizeEmail(email)
+	email = identity.CanonicalEmail(email)
 
 	err := scanUser(s.queryRow(ctx, `SELECT `+userColumns+` FROM users WHERE email = $1`, email), &m)
 	if err != nil {
@@ -140,24 +144,14 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, 
 func (s *Store) GetUserByEmailOrUsername(ctx context.Context, query string) (domain.User, error) {
 	var m model.User
 
-	email := normalizeEmail(query)
-	username := NormalizeUsername(query)
-	usernameExact := strings.TrimSpace(query)
+	email := identity.CanonicalEmail(query)
+	username := identity.CanonicalUsername(query)
 
 	err := scanUser(s.queryRow(ctx, `
 		SELECT `+userColumns+`
 		FROM users
 		WHERE email = $1 OR username_normalized = $2
-		ORDER BY
-			CASE
-				WHEN email = $1 THEN 0
-				WHEN username = $3 THEN 1
-				WHEN username_normalized = $2 THEN 2
-				ELSE 3
-			END,
-			created_at DESC
-		LIMIT 1
-	`, email, username, usernameExact), &m)
+	`, email, username), &m)
 	if err != nil {
 		return domain.User{}, mapNoRows(err, ErrUserNotFound)
 	}
@@ -168,7 +162,7 @@ func (s *Store) GetUserByEmailOrUsername(ctx context.Context, query string) (dom
 func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
 	var exists bool
 
-	email = normalizeEmail(email)
+	email = identity.CanonicalEmail(email)
 
 	if err := s.queryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`, email).Scan(&exists); err != nil {
 		return false, err
@@ -263,7 +257,7 @@ func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username s
 		SET username = $1,
 		    username_normalized = $2
 		WHERE id = $3
-	`, username, NormalizeUsername(username), userID)
+	`, username, identity.CanonicalUsername(username), userID)
 	if err != nil {
 		return err
 	}
@@ -279,13 +273,29 @@ func (s *Store) UpdateUsername(ctx context.Context, userID uuid.UUID, username s
 	return nil
 }
 
+func (s *Store) MarkUserEmailVerified(ctx context.Context, userID uuid.UUID, email string, verifiedAt time.Time) (bool, error) {
+	res, err := s.exec(ctx, `
+		UPDATE users
+		SET email_verified_at = $1
+		WHERE id = $2 AND email = $3
+	`, verifiedAt, userID, identity.CanonicalEmail(email))
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected == 1, nil
+}
+
 func (s *Store) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 	_, err := s.exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
 	return err
 }
 
 func (s *Store) DeleteUserEmailReferences(ctx context.Context, userID uuid.UUID, email string) error {
-	email = normalizeEmail(email)
+	email = identity.CanonicalEmail(email)
 	if email == "" {
 		return nil
 	}
@@ -309,8 +319,4 @@ func (s *Store) DeleteUserEmailReferences(ctx context.Context, userID uuid.UUID,
 		}
 	}
 	return nil
-}
-
-func normalizeEmail(e string) string {
-	return strings.ToLower(strings.TrimSpace(e))
 }

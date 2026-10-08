@@ -25,6 +25,11 @@ type Page struct {
 	Size int
 }
 
+type UserDetailPages struct {
+	Sessions Page
+	Passkeys Page
+}
+
 type DashboardStats struct {
 	TotalUsers         int
 	SignupsLast24Hours int
@@ -66,6 +71,7 @@ type PasskeySummary struct {
 	CreatedAt      time.Time
 	LastUsedAt     *time.Time
 	CloneWarning   bool
+	RestrictedAt   *time.Time
 	BackupEligible bool
 	BackupState    bool
 	DeviceLabel    string
@@ -100,8 +106,17 @@ type UserDetail struct {
 	AuthProviders []AuthProviderSummary
 	Passkeys      []PasskeySummary
 	Sessions      []SessionSummary
+	SessionPage   int
+	SessionSize   int
+	SessionsNext  bool
+	PasskeyPage   int
+	PasskeySize   int
+	PasskeysNext  bool
 	Actions       UserDetailActions
 }
+
+func (d UserDetail) SessionsPrevious() bool { return d.SessionPage > 1 }
+func (d UserDetail) PasskeysPrevious() bool { return d.PasskeyPage > 1 }
 
 type AllowedEmailPage struct {
 	Emails  []domain.AllowedEmail
@@ -129,6 +144,13 @@ type RecentFailures struct {
 
 type AuditEventPage struct {
 	Events  []domain.AdminAuditEvent
+	Page    int
+	Size    int
+	HasNext bool
+}
+
+type SecurityEventPage struct {
+	Events  []domain.SecurityEvent
 	Page    int
 	Size    int
 	HasNext bool

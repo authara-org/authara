@@ -59,6 +59,45 @@ func TestRemoveInternalOrganizationMember(t *testing.T) {
 	})
 }
 
+func TestUpdateInternalOrganizationMember(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "api-role-owner@example.com", Username: "api-role-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		member, err := tdb.Store.CreateUser(ctx, domain.User{Email: "api-role-member@example.com", Username: "api-role-member"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "API Role", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{OrganizationID: org.ID, UserID: member.ID, Role: domain.OrganizationRoleMember}); err != nil {
+			t.Fatal(err)
+		}
+
+		handler := New(nil, organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti}), false)
+		resp, err := handler.UpdateInternalOrganizationMember(ctx, contract.UpdateInternalOrganizationMemberRequestObject{
+			OrganizationID: org.ID,
+			UserID:         member.ID,
+			Body: &contract.InternalUpdateOrganizationMemberRequest{
+				ActorUserId: owner.ID,
+				Role:        contract.OrganizationMemberRoleAdmin,
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rr := httptest.NewRecorder()
+		writeContractResponse(t, rr, resp)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+		}
+	})
+}
+
 func TestDeleteInternalOrganizationReturnsLifecycleConflict(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {

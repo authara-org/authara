@@ -59,6 +59,7 @@ func (s *Service) VerifySignupChallenge(
 		code,
 		verifier,
 		now,
+		nil,
 		func(txCtx context.Context, challenge domain.Challenge) error {
 			var err error
 			action, err = s.store.GetPendingSignupActionByChallengeID(txCtx, challenge.ID)

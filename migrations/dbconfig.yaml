@@ -1,6 +1,6 @@
 default:
   dialect: postgres
-  datasource: host=${POSTGRESQL_HOST} port=${POSTGRESQL_PORT} dbname=${POSTGRESQL_DATABASE} user=${POSTGRESQL_USERNAME} password=${POSTGRESQL_PASSWORD} sslmode=disable
+  datasource: host=${POSTGRESQL_HOST} port=${POSTGRESQL_PORT} dbname=${POSTGRESQL_DATABASE} user=${POSTGRESQL_USERNAME} password=${POSTGRESQL_PASSWORD} sslmode=${POSTGRESQL_SSL_MODE} sslrootcert=${POSTGRESQL_SSL_ROOT_CERT}
   schema: public
   dir: .
   table: authara_schema_migrations

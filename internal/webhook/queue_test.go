@@ -155,13 +155,13 @@ func TestWorkerReapsStaleProcessingEvents(t *testing.T) {
 	}
 
 	reaped, err := worker.reapStale(context.Background(), claimAt.Add(worker.cfg.ProcessingStaleAfter-time.Millisecond))
-	if err != nil || reaped != 0 {
-		t.Fatalf("early ReapStale = (%d, %v), want (0, nil)", reaped, err)
+	if err != nil || reaped.Total() != 0 {
+		t.Fatalf("early ReapStale = (%+v, %v), want (0, nil)", reaped, err)
 	}
 
 	reaped, err = worker.reapStale(context.Background(), claimAt.Add(worker.cfg.ProcessingStaleAfter))
-	if err != nil || reaped != 1 {
-		t.Fatalf("ReapStale = (%d, %v), want (1, nil)", reaped, err)
+	if err != nil || reaped.Total() != 1 {
+		t.Fatalf("ReapStale = (%+v, %v), want (1, nil)", reaped, err)
 	}
 	stored := getWebhookEvent(t, tdb, event.ID)
 	if stored.Status != domain.WebhookEventStatusPending || stored.ProcessingStartedAt != nil {
@@ -206,12 +206,12 @@ func TestWorkerCleanupAppliesTerminalEventRetention(t *testing.T) {
 
 	worker := NewWorker(tdb.Store, nil, nil, testWorkerConfig())
 	updatedAt := getWebhookEvent(t, tdb, deliveredEvent.ID).UpdatedAt
-	deleted, err := worker.cleanup(context.Background(), updatedAt.Add(worker.cfg.DeliveredRetention-time.Second))
+	deleted, _, err := worker.CleanupExpiredEventsBatch(context.Background(), updatedAt.Add(worker.cfg.DeliveredRetention-time.Second))
 	if err != nil || deleted != 0 {
 		t.Fatalf("early cleanup = (%d, %v), want (0, nil)", deleted, err)
 	}
 
-	deleted, err = worker.cleanup(context.Background(), updatedAt.Add(worker.cfg.FailedRetention+time.Second))
+	deleted, _, err = worker.CleanupExpiredEventsBatch(context.Background(), updatedAt.Add(worker.cfg.FailedRetention+time.Second))
 	if err != nil || deleted != 2 {
 		t.Fatalf("cleanup = (%d, %v), want (2, nil)", deleted, err)
 	}
@@ -249,7 +249,6 @@ func testWorkerConfig() WorkerConfig {
 		StaleReaperInterval:  time.Minute,
 		DeliveredRetention:   24 * time.Hour,
 		FailedRetention:      30 * 24 * time.Hour,
-		CleanupInterval:      time.Hour,
 		MaintenanceBatchSize: 1000,
 	}
 }

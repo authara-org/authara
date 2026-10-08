@@ -10,7 +10,7 @@ import (
 )
 
 func toDomainSession(m model.Session) domain.Session {
-	return domain.Session{
+	out := domain.Session{
 		ID:                   m.ID,
 		UserID:               m.UserID,
 		ActiveOrganizationID: m.ActiveOrganizationID,
@@ -18,26 +18,37 @@ func toDomainSession(m model.Session) domain.Session {
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,
 
-		ExpiresAt: m.ExpiresAt,
-		RevokedAt: m.RevokedAt,
+		ExpiresAt:       m.ExpiresAt,
+		RevokedAt:       m.RevokedAt,
+		AuthenticatedAt: m.AuthenticatedAt,
 
 		UserAgent: m.UserAgent,
 	}
+	if m.AuthenticationMethod != nil {
+		out.AuthenticationMethod = domain.AuthenticationMethod(*m.AuthenticationMethod)
+	}
+	return out
 }
 
 func toModelSession(d domain.Session) model.Session {
-	return model.Session{
+	m := model.Session{
 		UserID:               d.UserID,
 		ActiveOrganizationID: d.ActiveOrganizationID,
 
 		CreatedAt: d.CreatedAt,
 		UpdatedAt: d.UpdatedAt,
 
-		ExpiresAt: d.ExpiresAt,
-		RevokedAt: d.RevokedAt,
+		ExpiresAt:       d.ExpiresAt,
+		RevokedAt:       d.RevokedAt,
+		AuthenticatedAt: d.AuthenticatedAt,
 
 		UserAgent: d.UserAgent,
 	}
+	if d.AuthenticationMethod != "" {
+		method := string(d.AuthenticationMethod)
+		m.AuthenticationMethod = &method
+	}
+	return m
 }
 
 func toDomainRefreshToken(m model.RefreshToken) domain.RefreshToken {
@@ -75,6 +86,8 @@ const sessionColumns = `
 	active_organization_id,
 	expires_at,
 	revoked_at,
+	authenticated_at,
+	authentication_method,
 	user_agent
 `
 
@@ -87,6 +100,8 @@ func scanSession(row rowScanner, m *model.Session) error {
 		&m.ActiveOrganizationID,
 		&m.ExpiresAt,
 		&m.RevokedAt,
+		&m.AuthenticatedAt,
+		&m.AuthenticationMethod,
 		&m.UserAgent,
 	)
 }
@@ -117,18 +132,45 @@ func (s *Store) CreateSession(ctx context.Context, session domain.Session) (doma
 	m := toModelSession(session)
 
 	if err := scanSession(s.queryRow(ctx, `
-		INSERT INTO sessions (user_id, active_organization_id, expires_at, revoked_at, user_agent)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO sessions (user_id, active_organization_id, expires_at, revoked_at, authenticated_at, authentication_method, user_agent)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+sessionColumns,
 		m.UserID,
 		m.ActiveOrganizationID,
 		m.ExpiresAt,
 		m.RevokedAt,
+		m.AuthenticatedAt,
+		m.AuthenticationMethod,
 		m.UserAgent,
 	), &m); err != nil {
 		return domain.Session{}, err
 	}
 	return toDomainSession(m), nil
+}
+
+func (s *Store) UpdateSessionAuthentication(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	method domain.AuthenticationMethod,
+	authenticatedAt time.Time,
+) error {
+	res, err := s.exec(ctx, `
+		UPDATE sessions
+		SET authenticated_at = $1, authentication_method = $2
+		WHERE id = $3 AND user_id = $4 AND revoked_at IS NULL AND expires_at > $1
+	`, authenticatedAt, string(method), sessionID, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
 }
 
 func (s *Store) GetSessionByID(ctx context.Context, sessionID uuid.UUID) (domain.Session, error) {
@@ -210,9 +252,22 @@ func (s *Store) CreateRefreshToken(ctx context.Context, token domain.RefreshToke
 }
 
 func (s *Store) GetRefreshTokenByHash(ctx context.Context, hash string) (domain.RefreshToken, error) {
+	return s.getRefreshTokenByHash(ctx, hash, false)
+}
+
+func (s *Store) GetRefreshTokenByHashForUpdate(ctx context.Context, hash string) (domain.RefreshToken, error) {
+	return s.getRefreshTokenByHash(ctx, hash, true)
+}
+
+func (s *Store) getRefreshTokenByHash(ctx context.Context, hash string, forUpdate bool) (domain.RefreshToken, error) {
 	var m model.RefreshToken
 
-	err := scanRefreshToken(s.queryRow(ctx, `SELECT `+refreshTokenColumns+` FROM refresh_tokens WHERE token_hash = $1`, hash), &m)
+	query := `SELECT ` + refreshTokenColumns + ` FROM refresh_tokens WHERE token_hash = $1`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+
+	err := scanRefreshToken(s.queryRow(ctx, query, hash), &m)
 	if err != nil {
 		return domain.RefreshToken{}, mapNoRows(err, ErrRefreshTokenNotFound)
 	}
@@ -254,33 +309,88 @@ func (s *Store) DeleteSessionsByOrganization(ctx context.Context, organizationID
 	return err
 }
 
-func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time) error {
-	_, err := s.exec(ctx, `DELETE FROM refresh_tokens WHERE expires_at < $1`, now)
+func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time, batchSize int) (int64, error) {
+	// Consumed rows are replay-detection tombstones. Keep them until the
+	// parent session family expires or is revoked; deleting that session
+	// removes the family through the refresh_tokens ON DELETE CASCADE.
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM refresh_tokens
+			WHERE expires_at < $1 AND consumed_at IS NULL
+			ORDER BY expires_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM refresh_tokens AS token
+		USING oldest
+		WHERE token.id = oldest.id
+	`, now, batchSize)
 	if err != nil {
-		return err
+		return 0, err
 	}
-
-	_, err = s.exec(ctx, `DELETE FROM refresh_tokens WHERE consumed_at IS NOT NULL`)
-	return err
+	return result.RowsAffected()
 }
 
-func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error {
-	_, err := s.exec(ctx, `DELETE FROM sessions WHERE expires_at < $1`, now)
+func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM sessions
+			WHERE expires_at < $1
+			ORDER BY expires_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM sessions AS session
+		USING oldest
+		WHERE session.id = oldest.id
+	`, now, batchSize)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	return result.RowsAffected()
+}
 
-	_, err = s.exec(ctx, `DELETE FROM sessions WHERE revoked_at IS NOT NULL`)
-	return err
+func (s *Store) DeleteRevokedSessions(ctx context.Context, batchSize int) (int64, error) {
+	result, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM sessions
+			WHERE revoked_at IS NOT NULL
+			ORDER BY revoked_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $1
+		)
+		DELETE FROM sessions AS session
+		USING oldest
+		WHERE session.id = oldest.id
+	`, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 func (s *Store) ListActiveSessionsByUserID(ctx context.Context, userID uuid.UUID, now time.Time) ([]domain.Session, error) {
+	return s.ListActiveSessionsPageByUserID(ctx, userID, now, nil, 0)
+}
+
+func (s *Store) ListActiveSessionsPageByUserID(ctx context.Context, userID uuid.UUID, now time.Time, cursor *ListCursor, limit int) ([]domain.Session, error) {
+	var cursorCreatedAt any
+	var cursorID any
+	if cursor != nil {
+		cursorCreatedAt = cursor.CreatedAt
+		cursorID = cursor.ID
+	}
 	rows, err := s.queryRows(ctx, `
 		SELECT `+sessionColumns+`
 		FROM sessions
 		WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > $2
-		ORDER BY created_at DESC
-	`, userID, now)
+		  AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4))
+		ORDER BY created_at DESC, id DESC
+		LIMIT NULLIF($5, 0)
+	`, userID, now, cursorCreatedAt, cursorID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -328,14 +438,50 @@ func (s *Store) ListSessionsByUserID(ctx context.Context, userID uuid.UUID) ([]d
 	return out, nil
 }
 
-func (s *Store) GetActiveSessionByID(ctx context.Context, sessionID uuid.UUID, now time.Time) (domain.Session, error) {
-	var m model.Session
-
-	err := scanSession(s.queryRow(ctx, `
+func (s *Store) ListSessionsPageByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]domain.Session, error) {
+	rows, err := s.queryRows(ctx, `
 		SELECT `+sessionColumns+`
 		FROM sessions
+		WHERE user_id = $1
+		ORDER BY created_at DESC, id DESC
+		LIMIT $2 OFFSET $3
+	`, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]domain.Session, 0)
+	for rows.Next() {
+		var row model.Session
+		if err := scanSession(rows, &row); err != nil {
+			return nil, err
+		}
+		out = append(out, toDomainSession(row))
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetActiveSessionByID(ctx context.Context, sessionID uuid.UUID, now time.Time) (domain.Session, error) {
+	return s.getActiveSessionByID(ctx, sessionID, now, false)
+}
+
+func (s *Store) GetActiveSessionByIDForUpdate(ctx context.Context, sessionID uuid.UUID, now time.Time) (domain.Session, error) {
+	return s.getActiveSessionByID(ctx, sessionID, now, true)
+}
+
+func (s *Store) getActiveSessionByID(ctx context.Context, sessionID uuid.UUID, now time.Time, forUpdate bool) (domain.Session, error) {
+	var m model.Session
+
+	query := `
+		SELECT ` + sessionColumns + `
+		FROM sessions
 		WHERE id = $1 AND revoked_at IS NULL AND expires_at > $2
-	`, sessionID, now), &m)
+	`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+
+	err := scanSession(s.queryRow(ctx, query, sessionID, now), &m)
 	if err != nil {
 		return domain.Session{}, mapNoRows(err, ErrSessionNotFound)
 	}

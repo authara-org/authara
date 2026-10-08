@@ -22,7 +22,9 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
@@ -36,8 +38,14 @@ func (h *UIHandler) AccountGet(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(httpctx.WithFlash(r.Context(), msg))
 	}
 
-	accountCfg, err := h.accountConfig(ctx)
+	sessionOptions := session.ListOptions{Cursor: r.URL.Query().Get("sessions_cursor")}
+	passkeyOptions := passkey.ListOptions{Cursor: r.URL.Query().Get("passkeys_cursor")}
+	accountCfg, err := h.accountConfig(ctx, sessionOptions, passkeyOptions)
 	if err != nil {
+		if errors.Is(err, session.ErrInvalidListPage) || errors.Is(err, passkey.ErrInvalidListPage) {
+			h.renderRequestError(w, r, http.StatusBadRequest, "Invalid pagination cursor.")
+			return
+		}
 		session.ClearSessionCookies(w)
 		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/account"), http.StatusSeeOther)
 		return
@@ -68,11 +76,15 @@ func (h *UIHandler) AddPasswordPage(w http.ResponseWriter, r *http.Request) {
 
 	ctx = httpctx.WithEmail(ctx, user.Email)
 
+	component := templ.Component(authview.AddPassword())
+	if r.URL.Query().Get("modal") == "1" && httpctx.IsHTMX(ctx) {
+		component = authview.AddPasswordDialog()
+	}
 	_ = h.Render(
 		w,
 		r.WithContext(ctx),
 		http.StatusOK,
-		authview.AddPassword(),
+		component,
 	)
 }
 
@@ -93,11 +105,15 @@ func (h *UIHandler) ChangePasswordPage(w http.ResponseWriter, r *http.Request) {
 
 	ctx = httpctx.WithEmail(ctx, user.Email)
 
+	component := templ.Component(authview.ChangePassword())
+	if r.URL.Query().Get("modal") == "1" && httpctx.IsHTMX(ctx) {
+		component = authview.ChangePasswordDialog()
+	}
 	_ = h.Render(
 		w,
 		r.WithContext(ctx),
 		http.StatusOK,
-		authview.ChangePassword(),
+		component,
 	)
 }
 
@@ -193,6 +209,11 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 		h.renderUnauthorized(w, r)
 		return
 	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		h.renderUnauthorized(w, r)
+		return
+	}
 
 	user, err := h.Auth.GetUser(ctx, userID)
 	if err != nil {
@@ -211,8 +232,7 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	newEmail := strings.TrimSpace(r.FormValue("new_email"))
-	newEmail = strings.ToLower(newEmail)
+	newEmail := identity.CanonicalEmail(r.FormValue("new_email"))
 
 	if !validation.IsValidEmail(newEmail) {
 		htmx.ReSwap(w, "none")
@@ -272,9 +292,10 @@ func (h *UIHandler) EmailChangeRequestPost(w http.ResponseWriter, r *http.Reques
 		challengeID, err = h.Challenge.CreateEmailChangeChallenge(
 			ctx,
 			challenge.CreateEmailChangeChallengeInput{
-				UserID:   user.ID,
-				OldEmail: user.Email,
-				NewEmail: newEmail,
+				UserID:              user.ID,
+				InitiatingSessionID: sessionID,
+				OldEmail:            user.Email,
+				NewEmail:            newEmail,
 			},
 			time.Now().UTC(),
 		)
@@ -308,10 +329,21 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 ) {
 	ctx := r.Context()
 
-	result, err := h.Challenge.VerifyEmailChangeChallenge(
+	userID, userOK := httpctx.UserID(ctx)
+	sessionID, sessionOK := httpctx.SessionID(ctx)
+	if !userOK || !sessionOK {
+		h.renderUnauthorized(w, r)
+		return
+	}
+
+	err := h.Challenge.CompleteEmailChangeChallenge(
 		ctx,
-		challengeID,
-		code,
+		challenge.CompleteEmailChangeChallengeInput{
+			ChallengeID: challengeID,
+			UserID:      userID,
+			SessionID:   sessionID,
+			Code:        code,
+		},
 		h.Verification,
 		time.Now().UTC(),
 	)
@@ -326,18 +358,7 @@ func (h *UIHandler) verifyEmailChangeChallengePost(
 		return
 	}
 
-	if err := h.Challenge.ExecuteEmailChange(ctx, result.Action, time.Now().UTC()); err != nil {
-		h.renderVerifyChallengeError(
-			w,
-			r,
-			VerifyChallengeActionEmailChange,
-			challengeIDStr,
-			"Could not change email. Please try again.",
-		)
-		return
-	}
-
-	accountCfg, err := h.accountConfig(ctx)
+	accountCfg, err := h.accountConfig(ctx, session.ListOptions{}, passkey.ListOptions{})
 	if err != nil {
 		session.ClearSessionCookies(w)
 		redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", "/auth/account"), http.StatusSeeOther)
@@ -389,7 +410,7 @@ func (h *UIHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	redirect.Redirect(w, r, "/auth/successful-deletion", http.StatusSeeOther)
 }
 
-func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, error) {
+func (h *UIHandler) accountConfig(ctx context.Context, sessionOptions session.ListOptions, passkeyOptions passkey.ListOptions) (userview.AccountConfig, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return userview.AccountConfig{}, errors.New("missing user id")
@@ -402,10 +423,11 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 
 	currentSessionID, _ := httpctx.SessionID(ctx)
 
-	sessions, err := h.Session.ListUserSessions(ctx, userID, currentSessionID, time.Now().UTC())
+	sessionPage, err := h.Session.ListUserSessionsPage(ctx, userID, time.Now().UTC(), sessionOptions)
 	if err != nil {
 		return userview.AccountConfig{}, err
 	}
+	sessions := sessionPage.Items
 
 	providers, err := h.Auth.ListUserAuthProviders(ctx, userID)
 	if err != nil {
@@ -413,11 +435,15 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 	}
 
 	var passkeys []domain.Passkey
+	var passkeysNextCursor string
 	if h.Passkeys != nil {
-		passkeys, err = h.Passkeys.ListUserPasskeys(ctx, userID)
+		page, pageErr := h.Passkeys.ListUserPasskeysPage(ctx, userID, passkeyOptions)
+		err = pageErr
 		if err != nil {
 			return userview.AccountConfig{}, err
 		}
+		passkeys = page.Items
+		passkeysNextCursor = page.NextCursor
 	}
 
 	totalAuthMethods := len(providers) + len(passkeys)
@@ -429,9 +455,13 @@ func (h *UIHandler) accountConfig(ctx context.Context) (userview.AccountConfig, 
 		OperatorAccess:   platformRoles.IsOperator(),
 		GoogleClientID:   h.Google.ClientID,
 		Sessions:         toSessionViewModels(sessions, currentSessionID),
+		SessionsCursor:   sessionOptions.Cursor,
+		SessionsNext:     sessionPage.NextCursor,
 		CurrentSessionID: currentSessionID,
 		AuthProviders:    viewmodel.AuthProvidersFromDomain(providers, h.OAuthProviders.Providers),
 		Passkeys:         viewmodel.PasskeysFromDomain(passkeys, totalAuthMethods),
+		PasskeysCursor:   passkeyOptions.Cursor,
+		PasskeysNext:     passkeysNextCursor,
 	}, nil
 }
 
@@ -444,6 +474,12 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		_ = h.Render(w, r, http.StatusUnauthorized, toast.ToastMessage(toast.Error, "Unauthorized."))
 		return
 	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		htmx.ReSwap(w, "none")
+		_ = h.Render(w, r, http.StatusUnauthorized, toast.ToastMessage(toast.Error, "Unauthorized."))
+		return
+	}
 
 	if err := r.ParseForm(); err != nil {
 		htmx.ReSwap(w, "none")
@@ -451,15 +487,9 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentPassword := strings.TrimSpace(r.FormValue("current_password"))
-	newPassword := strings.TrimSpace(r.FormValue("new_password"))
-	confirmPassword := strings.TrimSpace(r.FormValue("confirm_password"))
-
-	if !validation.IsValidPassword(newPassword) {
-		htmx.ReSwap(w, "none")
-		_ = h.Render(w, r, http.StatusUnprocessableEntity, toast.ToastMessage(toast.Error, "Please provide a valid new password."))
-		return
-	}
+	currentPassword := r.FormValue("current_password")
+	newPassword := r.FormValue("new_password")
+	confirmPassword := r.FormValue("confirm_password")
 
 	if newPassword != confirmPassword {
 		htmx.ReSwap(w, "none")
@@ -467,15 +497,20 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newPasswordHash, err := auth.Hash(newPassword)
+	newPasswordHash, err := h.Auth.HashPassword(ctx, newPassword)
 	if err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			htmx.ReSwap(w, "none")
+			_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, message))
+			return
+		}
 		h.Logger.Error("hash password failed", "err", err)
 		htmx.ReSwap(w, "none")
 		_ = h.Render(w, r, http.StatusInternalServerError, toast.ToastMessage(toast.Error, "Something went wrong."))
 		return
 	}
 
-	if err := h.Auth.ChangePassword(ctx, userID, currentPassword, newPasswordHash); err != nil {
+	if err := h.Auth.ChangePassword(ctx, userID, sessionID, currentPassword, newPasswordHash); err != nil {
 		htmx.ReSwap(w, "none")
 
 		msg := "Could not change password."
@@ -495,10 +530,13 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, msg))
 		return
 	}
-
-	cfg, err := h.accountConfig(ctx)
+	cfg, err := h.accountConfig(ctx, session.ListOptions{}, passkey.ListOptions{})
 	if err != nil {
 		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not load account.")
+		return
+	}
+	if isAccountPasswordDialogSubmission(r) {
+		renderAccountPasswordDialogSuccess(h.Render, w, r, cfg, "Password updated. Other sessions revoked.")
 		return
 	}
 
@@ -510,8 +548,36 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		"/auth/account",
 		templ.Join(
 			userview.Account(cfg),
-			toast.ToastMessage(toast.Success, "Password updated."),
+			toast.ToastMessage(toast.Success, "Password updated. Other sessions revoked."),
 		),
+	)
+}
+
+func isAccountPasswordDialogSubmission(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true" && r.FormValue("modal") == "1"
+}
+
+func renderAccountPasswordDialogSuccess(
+	renderer render.Renderer,
+	w http.ResponseWriter,
+	r *http.Request,
+	cfg userview.AccountConfig,
+	message string,
+) {
+	w.Header().Set("X-Authara-Close-Password-Dialog", "true")
+	_ = render.WithHTMX(
+		renderer,
+		w,
+		r,
+		http.StatusOK,
+		templ.Join(
+			userview.LinkedProvidersSection(cfg.AuthProviders, cfg.Passkeys, cfg.GoogleClientID),
+			toast.ToastMessage(toast.Success, message),
+		),
+		render.HTMXRenderConfig{
+			Target: "#linked-providers-section",
+			Swap:   "outerHTML",
+		},
 	)
 }
 
@@ -519,6 +585,8 @@ func parseProvider(s string) (domain.Provider, error) {
 	switch s {
 	case "google":
 		return domain.ProviderGoogle, nil
+	case "apple":
+		return domain.ProviderApple, nil
 	case "password":
 		return domain.ProviderPassword, nil
 	default:

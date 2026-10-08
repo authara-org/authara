@@ -130,12 +130,17 @@ func (s *Store) GetEmailTemplateVersion(ctx context.Context, key domain.EmailTem
 }
 
 func (s *Store) ListEmailTemplateVersions(ctx context.Context, key domain.EmailTemplate) ([]domain.EmailTemplateVersion, error) {
+	return s.ListEmailTemplateVersionsPage(ctx, key, 0, 0)
+}
+
+func (s *Store) ListEmailTemplateVersionsPage(ctx context.Context, key domain.EmailTemplate, limit, offset int) ([]domain.EmailTemplateVersion, error) {
 	rows, err := s.queryRows(ctx, `
 		SELECT `+emailTemplateVersionColumns+`
 		FROM email_template_versions
 		WHERE template_key = $1
 		ORDER BY version DESC
-	`, string(key))
+		LIMIT NULLIF($2, 0) OFFSET $3
+	`, string(key), limit, offset)
 	if err != nil {
 		return nil, err
 	}

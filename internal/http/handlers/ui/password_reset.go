@@ -1,12 +1,11 @@
 package ui
 
 import (
+	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
@@ -15,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
@@ -44,31 +44,43 @@ func (h *UIHandler) PasswordResetRequestPost(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if !validation.IsValidEmail(form.Email) || !validation.IsValidPassword(form.NewPassword) {
+	if !validation.IsValidEmail(form.Email) {
 		h.renderFormError(
 			w,
 			r,
 			http.StatusUnprocessableEntity,
-			"Please provide a valid email and password.",
+			"Please provide a valid email address.",
 			authview.PasswordResetForm(),
 		)
+		return
+	}
+	if err := h.Auth.ValidatePassword(ctx, form.NewPassword); err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderFormError(w, r, status, message, authview.PasswordResetForm())
+			return
+		}
+		h.renderInternalError(w, r)
 		return
 	}
 
 	allowed, err := h.Limiter.AllowPasswordResetAttempt(ctx, httputil.ClientIP(r), form.Email)
-	if err != nil || !allowed {
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many reset attempts. Please try again later."); !ok {
 		h.renderFormError(
 			w,
 			r,
-			http.StatusTooManyRequests,
-			"Too many reset attempts. Please try again later.",
+			status,
+			message,
 			authview.PasswordResetForm(),
 		)
 		return
 	}
 
-	passwordHash, err := auth.Hash(form.NewPassword)
+	passwordHash, err := h.Auth.HashPassword(ctx, form.NewPassword)
 	if err != nil {
+		if status, message, ok := h.passwordPolicyError(err); ok {
+			h.renderFormError(w, r, status, message, authview.PasswordResetForm())
+			return
+		}
 		h.renderInternalError(w, r)
 		return
 	}
@@ -144,8 +156,7 @@ func (h *UIHandler) parsePasswordResetForm(r *http.Request) (*passwordResetFormI
 		return nil, err
 	}
 
-	email := strings.TrimSpace(r.FormValue("email"))
-	email = strings.ToLower(email)
+	email := identity.CanonicalEmail(r.FormValue("email"))
 
 	return &passwordResetFormInput{
 		Email:       email,
@@ -162,7 +173,7 @@ func (h *UIHandler) verifyPasswordResetChallengePost(
 ) {
 	ctx := r.Context()
 
-	result, err := h.Challenge.VerifyPasswordResetChallenge(
+	err := h.Challenge.CompletePasswordResetChallenge(
 		ctx,
 		challengeID,
 		code,
@@ -170,23 +181,16 @@ func (h *UIHandler) verifyPasswordResetChallengePost(
 		time.Now().UTC(),
 	)
 	if err != nil {
+		message := h.verifyChallengeErrorMessage(err)
+		if errors.Is(err, challenge.ErrPasswordResetUnavailable) {
+			message = "Password reset is no longer available for this request. Start again or sign in with your configured provider or passkey."
+		}
 		h.renderVerifyChallengeError(
 			w,
 			r,
 			VerifyChallengeActionPasswordReset,
 			challengeIDStr,
-			h.verifyChallengeErrorMessage(err),
-		)
-		return
-	}
-
-	if err := h.Challenge.ExecutePasswordReset(ctx, result.Action, time.Now().UTC()); err != nil {
-		h.renderVerifyChallengeError(
-			w,
-			r,
-			VerifyChallengeActionPasswordReset,
-			challengeIDStr,
-			"Could not reset password. Please try again.",
+			message,
 		)
 		return
 	}
@@ -194,8 +198,8 @@ func (h *UIHandler) verifyPasswordResetChallengePost(
 	session.ClearSessionCookies(w)
 
 	c := templ.Join(
-		authview.Login(h.OAuthProviders.Providers, h.usernameLoginEnabled()),
-		toast.ToastMessage(toast.Success, "Your password has been reset. Please log in again."),
+		authview.Login(h.OAuthProviders.Providers, h.usernameLoginEnabled(), h.appName()),
+		toast.ToastMessage(toast.Success, "Your password has been reset. Please sign in again."),
 	)
 
 	_ = render.IntoBody(

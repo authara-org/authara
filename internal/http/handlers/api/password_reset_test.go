@@ -37,7 +37,7 @@ func TestPasswordResetChallengeWorksWhenOptionalChallengesDisabled(t *testing.T)
 		if err != nil {
 			t.Fatalf("create user: %v", err)
 		}
-		if _, _, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, "reset-test", time.Now().UTC(), ""); err != nil {
+		if _, _, err := h.Session.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "reset-test", time.Now().UTC(), ""); err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
 
@@ -55,6 +55,9 @@ func TestPasswordResetChallengeWorksWhenOptionalChallengesDisabled(t *testing.T)
 		writeContractResponse(t, startRR, startResp)
 		if startRR.Code != http.StatusAccepted {
 			t.Fatalf("expected start status %d, got %d body=%s", http.StatusAccepted, startRR.Code, startRR.Body.String())
+		}
+		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordResetCode); got != 1 {
+			t.Fatalf("password-reset email jobs = %d, want 1", got)
 		}
 
 		challengeID := decodePasswordResetChallengeID(t, startRR.Body.Bytes())
@@ -130,6 +133,86 @@ func TestPasswordResetChallengeUnknownEmailIsOpaque(t *testing.T) {
 		}
 		if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
 			t.Fatalf("expected no pending reset, got %v", err)
+		}
+	})
+}
+
+func TestPasswordResetChallengeCannotOutlivePasswordProviderGeneration(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		h := newAPIChallengeTestHandler(t, tdb)
+		oldHash, err := auth.Hash("old-password123")
+		if err != nil {
+			t.Fatalf("Hash old password failed: %v", err)
+		}
+		user, err := h.Auth.Signup(ctx, auth.SignupInput{
+			Provider:     domain.ProviderPassword,
+			Email:        "provider-generation-reset@example.com",
+			PasswordHash: oldHash,
+		})
+		if err != nil {
+			t.Fatalf("create user: %v", err)
+		}
+		googleID := "provider-generation-google"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID:         user.ID,
+			Provider:       domain.ProviderGoogle,
+			ProviderUserID: &googleID,
+		}); err != nil {
+			t.Fatalf("CreateAuthProvider failed: %v", err)
+		}
+
+		startReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/password-reset/challenges", `{"email":"provider-generation-reset@example.com","new_password":"reset-password123"}`)
+		startRR := httptest.NewRecorder()
+		startResp, err := h.StartPasswordResetChallenge(contractCtx(ctx, startReq), contract.StartPasswordResetChallengeRequestObject{
+			Body: &contract.PasswordResetRequest{
+				Email:       openapi_types.Email(user.Email),
+				NewPassword: "reset-password123",
+			},
+		})
+		if err != nil {
+			t.Fatalf("StartPasswordResetChallenge failed: %v", err)
+		}
+		writeContractResponse(t, startRR, startResp)
+		challengeID := decodePasswordResetChallengeID(t, startRR.Body.Bytes())
+		row, err := tdb.Store.GetChallengeByID(ctx, challengeID)
+		if err != nil {
+			t.Fatalf("GetChallengeByID failed: %v", err)
+		}
+		code, err := h.Verification.GenerateCode(ctx, row, time.Now().UTC())
+		if err != nil {
+			t.Fatalf("GenerateCode failed: %v", err)
+		}
+
+		if err := h.Auth.UnlinkAuthProvider(ctx, user.ID, domain.ProviderPassword); err != nil {
+			t.Fatalf("UnlinkAuthProvider failed: %v", err)
+		}
+		replacementHash, err := auth.Hash("replacement-password123")
+		if err != nil {
+			t.Fatalf("Hash replacement password failed: %v", err)
+		}
+		if err := h.Auth.AddPassword(ctx, user.ID, replacementHash); err != nil {
+			t.Fatalf("AddPassword failed: %v", err)
+		}
+		if _, err := tdb.Store.GetPendingPasswordResetByChallengeID(ctx, challengeID); !errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+			t.Fatalf("provider replacement left the old reset pending: %v", err)
+		}
+
+		verifyReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/password-reset/challenges/verify", "")
+		verifyRR := httptest.NewRecorder()
+		verifyResp, err := h.VerifyPasswordResetChallenge(contractCtx(ctx, verifyReq), contract.VerifyPasswordResetChallengeRequestObject{
+			Body: &contract.PasswordResetChallengeVerification{ChallengeId: challengeID, Code: code},
+		})
+		if err != nil {
+			t.Fatalf("VerifyPasswordResetChallenge failed: %v", err)
+		}
+		writeContractResponse(t, verifyRR, verifyResp)
+		if verifyRR.Code != http.StatusBadRequest {
+			t.Fatalf("old reset status = %d, want %d body=%s", verifyRR.Code, http.StatusBadRequest, verifyRR.Body.String())
+		}
+		if _, err := h.Auth.Login(ctx, auth.LoginInput{Provider: domain.ProviderPassword, Email: user.Email, Password: "replacement-password123"}); err != nil {
+			t.Fatalf("replacement password login failed: %v", err)
 		}
 	})
 }

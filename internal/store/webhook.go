@@ -222,8 +222,9 @@ func (s *Store) ReapStaleWebhookEvents(
 	nextAttemptAt time.Time,
 	maxAttempts int,
 	batchSize int,
-) (int64, error) {
-	result, err := s.exec(ctx, `
+) (ReapResult, error) {
+	var result ReapResult
+	err := s.queryRow(ctx, `
 		WITH stale AS (
 			SELECT id
 			FROM webhook_events
@@ -231,7 +232,7 @@ func (s *Store) ReapStaleWebhookEvents(
 			ORDER BY processing_started_at ASC, id ASC
 			FOR UPDATE SKIP LOCKED
 			LIMIT $2
-		)
+		), updated AS (
 		UPDATE webhook_events AS event
 		SET status = CASE
 				WHEN event.attempt_count >= $3 THEN 'failed'
@@ -245,17 +246,23 @@ func (s *Store) ReapStaleWebhookEvents(
 		    last_error = $5
 		FROM stale
 		WHERE event.id = stale.id
+		RETURNING event.status
+		)
+		SELECT
+			count(*) FILTER (WHERE status = 'pending'),
+			count(*) FILTER (WHERE status = 'failed')
+		FROM updated
 	`,
 		staleBefore,
 		batchSize,
 		maxAttempts,
 		nextAttemptAt,
 		"processing lease expired",
-	)
+	).Scan(&result.Retried, &result.Failed)
 	if err != nil {
-		return 0, err
+		return ReapResult{}, err
 	}
-	return result.RowsAffected()
+	return result, nil
 }
 
 func (s *Store) DeleteExpiredWebhookEvents(

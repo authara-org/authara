@@ -64,7 +64,7 @@ func TestAccessTokenService_GenerateAndParse_AppAudience(t *testing.T) {
 
 	var rs roles.Roles
 	rs.AddAdmin()
-	rs.AddMonitor()
+	rs.AddOperator()
 
 	tokenString, err := svc.Generate(userID, sessionID, organizationID, "owner", AudienceApp, rs, now)
 	if err != nil {
@@ -78,6 +78,9 @@ func TestAccessTokenService_GenerateAndParse_AppAudience(t *testing.T) {
 
 	if claims.Subject != userID.String() {
 		t.Fatalf("expected subject %q, got %q", userID.String(), claims.Subject)
+	}
+	if _, err := uuid.Parse(claims.ID); err != nil {
+		t.Fatalf("expected UUID token ID, got %q", claims.ID)
 	}
 
 	if claims.SessionID != sessionID {
@@ -103,6 +106,24 @@ func TestAccessTokenService_GenerateAndParse_AppAudience(t *testing.T) {
 	}
 }
 
+func TestAccessTokenService_EmailVerificationClaim(t *testing.T) {
+	svc := newTestAccessTokenService(t, 10*time.Minute)
+	now := time.Now().UTC()
+	tokenString, err := svc.GenerateWithEmailVerification(
+		uuid.New(), uuid.New(), uuid.New(), "owner", AudienceApp, roles.Roles{}, true, now,
+	)
+	if err != nil {
+		t.Fatalf("GenerateWithEmailVerification failed: %v", err)
+	}
+	claims, err := svc.Parse(tokenString, AudienceApp, now)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if !claims.EmailVerified {
+		t.Fatal("email_verified claim is false")
+	}
+}
+
 func TestAccessTokenService_GenerateAndParse_AdminAudience(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestAccessTokenService(t, 10*time.Minute)
@@ -111,7 +132,7 @@ func TestAccessTokenService_GenerateAndParse_AdminAudience(t *testing.T) {
 	sessionID := uuid.New()
 
 	var rs roles.Roles
-	rs.AddAuditor()
+	rs.AddAdmin()
 
 	tokenString, err := svc.Generate(userID, sessionID, uuid.New(), "owner", AudienceAdmin, rs, now)
 	if err != nil {

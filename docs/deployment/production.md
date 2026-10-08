@@ -63,6 +63,19 @@ PUBLIC_URL=https://example.com
 
 ---
 
+# HTTP caching
+
+Authara Core marks dynamic responses with `Cache-Control: no-store`. Reverse
+proxies, gateways, CDNs and load balancers must preserve this header and must
+not force-cache `/auth/*` responses.
+
+The exception is `/auth/static/*`: production asset filenames contain a content
+fingerprint and Authara serves them with
+`Cache-Control: public, max-age=31536000, immutable`. Proxies may retain that
+long-lived policy for those assets.
+
+---
+
 # HTTPS
 
 Production deployments should always use **HTTPS**.
@@ -75,6 +88,32 @@ TLS is usually terminated by:
 - a reverse proxy
 - Authara Gateway (depending on configuration)
 - ingress infrastructure
+
+Authara warns, but does not refuse startup, when a production `PUBLIC_URL` does
+not use HTTPS. This preserves operator control for private and unusual
+deployments while making the transport risk visible in startup logs.
+
+## Trusted reverse proxies
+
+Forwarded client addresses affect authentication rate limits, audit data, and
+security notifications. Enable them only for the networks that connect to Core
+directly:
+
+```env
+AUTHARA_TRUST_PROXY_HEADERS=true
+AUTHARA_TRUSTED_PROXY_CIDRS=10.20.0.0/16,fd00:20::/64
+```
+
+Core ignores `X-Forwarded-For` and `X-Real-IP` from any transport peer outside
+those networks. For a chain of trusted proxies, it walks `X-Forwarded-For` from
+right to left and uses the first untrusted hop. A valid, single `X-Real-IP` is
+the fallback when `X-Forwarded-For` is absent or malformed. `True-Client-IP`
+and the RFC `Forwarded` header are not used.
+
+If proxy trust is enabled without any valid CIDR, Core starts with a warning
+and ignores forwarded headers. A trust-all CIDR such as `0.0.0.0/0` is honored
+but produces a security warning because direct access to Core would make client
+addresses spoofable.
 
 ---
 
@@ -155,12 +194,61 @@ In multi-instance deployments, operators should consider:
 
 Some features, such as the default in-memory rate limiter, are instance-local.
 
-Set `AUTHARA_CACHE_PROVIDER=redis` to share rate limits and access-token
-revocations across instances.
+Use the same access-token revocation mode on every replica. The recommended
+production profile is `AUTHARA_CACHE_PROVIDER=redis` with
+`AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=immediate`; it shares rate limits and
+rejects revoked access tokens across instances. A deliberately minimal
+deployment may use `AUTHARA_CACHE_PROVIDER=noop` with the explicitly required
+`AUTHARA_ACCESS_TOKEN_REVOCATION_MODE=expiry`, which permits issued access
+tokens to remain usable for at most 10 minutes after logout or an authorization
+change. Do not mix these profiles during a rolling deployment.
 
 Runtime-setting writes take effect immediately on the accepting Core replica.
 Other replicas reconcile the PostgreSQL revision every two seconds. Plan for
 that bounded delay during concurrent rollouts and policy changes.
+
+One replica at a time holds the PostgreSQL-backed `cleanup` lease and runs all
+retention cleanup schedules. Followers continue serving traffic and retry
+leadership without failing health checks. Graceful shutdown releases leadership
+immediately; after a crash or partition another replica takes over after the
+30-second lease expires. Cleanup passes are fenced by the lease generation,
+limited to one deterministic delete category per database batch, and stop after
+a bounded time. A pass that reaches its row or time budget yields to other due
+jobs and resumes after a five-second cooldown.
+
+Cleanup intervals are startup-only environment settings. Configure the same
+values on every replica: `AUTHARA_SESSION_CLEANUP_INTERVAL`,
+`AUTHARA_EMAIL_CLEANUP_INTERVAL`, `AUTHARA_WEBHOOK_CLEANUP_INTERVAL`,
+`AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL`, and
+`AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL`. A newly elected leader runs each
+cleanup once immediately and then follows those intervals. During a rolling
+upgrade, singleton behavior is guaranteed only after replicas running the old
+unleased workers have drained.
+
+Operator audit cleanup uses a fixed 24-hour schedule. Configure its startup-only
+retention with `AUTHARA_OPERATOR_AUDIT_RETENTION_DAYS`, which defaults to `180`.
+
+## Process shutdown and restart behavior
+
+Authara treats `SIGTERM` and `SIGINT` as normal termination requests. It first
+marks `/auth/ready` and its compatibility alias `/auth/health` unavailable and
+stops accepting new HTTP and background work, then drains HTTP requests, email
+and webhook deliveries, runtime-setting reconciliation, and maintenance work
+under one shared 10-second deadline. `/auth/live` remains independent of
+external dependencies and should be used only as a liveness probe; readiness
+includes bounded PostgreSQL, required-schema, and configured-Redis checks.
+
+A clean signal-driven shutdown exits with status `0`. Listener failures,
+unexpected server or worker termination, shutdown timeouts, and resource-close
+failures exit non-zero. Normal `http.ErrServerClosed` completion is not an
+error. A second termination signal during the drain uses the operating system's
+default behavior and can force the process to exit.
+
+Configure the deployment platform's termination grace period above 10 seconds
+so Authara can consume its full drain budget and still leave time for the
+container runtime to observe the exit. In-flight durable email and webhook jobs
+that cannot settle before the deadline remain protected by their processing
+leases and are recovered by the stale-job reapers.
 
 ---
 

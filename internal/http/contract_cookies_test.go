@@ -6,6 +6,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/authara-org/authara/internal/http/kit/applestate"
 	"github.com/authara-org/authara/internal/http/kit/csrf"
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	openapicontract "github.com/authara-org/authara/internal/http/openapi"
@@ -107,6 +108,12 @@ func TestStableCookiesFromContract(t *testing.T) {
 				req := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
 				if _, err := oauthstate.EnsureNonce(rr, req); err != nil {
 					t.Fatalf("EnsureNonce returned error: %v", err)
+				}
+
+			case "authara_apple_oauth":
+				req := httptest.NewRequest(http.MethodGet, "/auth/api/v1/oauth/apple/options", nil)
+				if _, err := applestate.Create(rr, req); err != nil {
+					t.Fatalf("Create returned error: %v", err)
 				}
 
 			default:

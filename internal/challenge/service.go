@@ -7,6 +7,7 @@ import (
 
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -23,18 +24,22 @@ type Config struct {
 	MaxResends             int
 	MinResendInterval      time.Duration
 	Policy                 config.ChallengePolicyReader
+	AuthenticationPolicy   config.AuthenticationPolicyReader
 	AllowlistPolicy        config.AllowlistPolicyReader
 	WebhookPublisher       webhook.Publisher
 	AccessTokenRevocations *token.AccessTokenRevocations
+	SecurityEvents         securityevent.Recorder
 }
 
 type Service struct {
 	store                  *store.Store
 	tx                     *tx.Manager
 	policy                 config.ChallengePolicyReader
+	authenticationPolicy   config.AuthenticationPolicyReader
 	allowlistPolicy        config.AllowlistPolicyReader
 	webhookPublisher       webhook.Publisher
 	accessTokenRevocations *token.AccessTokenRevocations
+	securityEvents         securityevent.Recorder
 }
 
 func New(cfg Config) *Service {
@@ -57,14 +62,26 @@ func New(cfg Config) *Service {
 			return config.AllowlistPolicy{AllowlistEnabled: cfg.AllowlistEnabled}
 		})
 	}
+	authenticationPolicy := cfg.AuthenticationPolicy
+	if authenticationPolicy == nil {
+		authenticationPolicy = config.AuthenticationPolicyReaderFunc(func() config.AuthenticationPolicy {
+			return config.AuthenticationPolicy{}
+		})
+	}
+	securityEvents := cfg.SecurityEvents
+	if securityEvents == nil {
+		securityEvents = securityevent.NoopRecorder{}
+	}
 
 	return &Service{
 		store:                  cfg.Store,
 		tx:                     cfg.Tx,
 		policy:                 policy,
+		authenticationPolicy:   authenticationPolicy,
 		allowlistPolicy:        allowlistPolicy,
 		webhookPublisher:       pub,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
+		securityEvents:         securityEvents,
 	}
 }
 
@@ -138,7 +155,7 @@ func (s *Service) createChallenge(
 			return err
 		}
 
-		return s.enqueueChallengeEmail(txCtx, challenge.ID, email, template, now)
+		return s.enqueueChallengeEmail(txCtx, challenge.ID, email, template, now, challenge.ExpiresAt)
 	})
 	if err != nil {
 		return uuid.Nil, err
@@ -165,6 +182,13 @@ func (s *Service) ResendChallenge(
 			resultErr = err
 			return nil
 		}
+		if err := s.lockPendingActionForResend(txCtx, challenge); err != nil {
+			if errors.Is(err, ErrChallengeConsumed) {
+				resultErr = err
+				return nil
+			}
+			return err
+		}
 
 		ok, err := s.store.IncrementChallengeResendCount(txCtx, challengeID, now)
 		if err != nil {
@@ -180,12 +204,58 @@ func (s *Service) ResendChallenge(
 			return err
 		}
 
-		return s.enqueueChallengeEmail(txCtx, challengeID, challenge.Email, template, now)
+		return s.enqueueChallengeEmail(txCtx, challengeID, challenge.Email, template, now, challenge.ExpiresAt)
 	})
 	if err != nil {
 		return err
 	}
 	return resultErr
+}
+
+func (s *Service) lockPendingActionForResend(ctx context.Context, challenge domain.Challenge) error {
+	userID, guarded, err := s.pendingActionUserID(ctx, challenge)
+	if err != nil || !guarded {
+		return err
+	}
+	if _, err := s.store.GetUserByIDForUpdate(ctx, userID); err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			return ErrChallengeConsumed
+		}
+		return err
+	}
+	currentUserID, _, err := s.pendingActionUserID(ctx, challenge)
+	if err != nil {
+		return err
+	}
+	if currentUserID != userID {
+		return ErrChallengeConsumed
+	}
+	return nil
+}
+
+func (s *Service) pendingActionUserID(ctx context.Context, challenge domain.Challenge) (uuid.UUID, bool, error) {
+	switch challenge.Purpose {
+	case domain.ChallengePurposePasswordReset:
+		action, err := s.store.GetPendingPasswordResetByChallengeID(ctx, challenge.ID)
+		if errors.Is(err, store.ErrorPendingPasswordResetNotFound) {
+			return uuid.Nil, true, ErrChallengeConsumed
+		}
+		return action.UserID, true, err
+	case domain.ChallengePurposeEmailChange:
+		action, err := s.store.GetPendingEmailChangeByChallengeID(ctx, challenge.ID)
+		if errors.Is(err, store.ErrorPendingEmailChangeNotFound) {
+			return uuid.Nil, true, ErrChallengeConsumed
+		}
+		return action.UserID, true, err
+	case domain.ChallengePurposeEmailVerification:
+		action, err := s.store.GetEmailVerificationTransactionByChallengeID(ctx, challenge.ID)
+		if errors.Is(err, store.ErrEmailVerificationTransactionNotFound) {
+			return uuid.Nil, true, ErrChallengeConsumed
+		}
+		return action.UserID, true, err
+	default:
+		return uuid.Nil, false, nil
+	}
 }
 
 func (s *Service) verifyChallenge(
@@ -195,6 +265,7 @@ func (s *Service) verifyChallenge(
 	code string,
 	verifier *VerificationCodeService,
 	now time.Time,
+	beforeVerify func(context.Context, domain.Challenge) error,
 	afterVerify func(context.Context, domain.Challenge) error,
 ) (*domain.Challenge, error) {
 	var challenge domain.Challenge
@@ -214,6 +285,11 @@ func (s *Service) verifyChallenge(
 		if challenge.Purpose != purpose {
 			resultErr = ErrUnsupportedChallengePurpose
 			return nil
+		}
+		if beforeVerify != nil {
+			if err := beforeVerify(txCtx, challenge); err != nil {
+				return err
+			}
 		}
 
 		if err := verifier.VerifyCode(txCtx, challengeID, code, now); err != nil {
@@ -300,14 +376,16 @@ func (s *Service) enqueueChallengeEmail(
 	toEmail string,
 	template domain.EmailTemplate,
 	now time.Time,
+	deliveryDeadline time.Time,
 ) error {
 	_, err := s.store.CreateEmailJob(ctx, domain.EmailJob{
-		ChallengeID:   &challengeID,
-		ToEmail:       toEmail,
-		Template:      template,
-		Status:        domain.EmailJobStatusPending,
-		AttemptCount:  0,
-		NextAttemptAt: now,
+		ChallengeID:        &challengeID,
+		ToEmail:            toEmail,
+		Template:           template,
+		Status:             domain.EmailJobStatusPending,
+		AttemptCount:       0,
+		NextAttemptAt:      now,
+		DeliveryDeadlineAt: deliveryDeadline,
 	})
 	return err
 }
@@ -321,6 +399,8 @@ func (s *Service) emailTemplateForPurpose(
 	case domain.ChallengePurposePasswordReset:
 		return domain.EmailTemplatePasswordResetCode, nil
 	case domain.ChallengePurposeEmailChange:
+		return domain.EmailTemplateEmailChangeCode, nil
+	case domain.ChallengePurposeEmailVerification:
 		return domain.EmailTemplateEmailChangeCode, nil
 	default:
 		return "", ErrUnsupportedChallengePurpose

@@ -32,21 +32,32 @@ services:
       POSTGRES_DB: authara
       POSTGRES_USER: authara
       POSTGRES_PASSWORD: authara
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authara -d authara"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
 
   app:
     image: nginx:alpine
 
   authara-migrations:
-    image: ghcr.io/authara-org/authara-migrations:latest
+    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
     env_file:
       - .env
+    environment:
+      POSTGRESQL_HOST: postgres
+    command: ["up", "-env=default", "-config=/migrations/dbconfig.yaml"]
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   authara:
-    image: ghcr.io/authara-org/authara-core:latest
+    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
     env_file:
       - .env
+    environment:
+      POSTGRESQL_HOST: postgres
     depends_on:
       authara-migrations:
         condition: service_completed_successfully
@@ -60,9 +71,14 @@ services:
       AUTHARA_UPSTREAM: authara:8080
       APP_UPSTREAM: app:80
     depends_on:
-      - authara
-      - app
+      authara:
+        condition: service_healthy
+      app:
+        condition: service_started
 ```
+
+Each Core release lists the compatible image tags and immutable digests in its
+release notes and includes the same pairing as an `authara-images.env` asset.
 
 Create a `.env` file with your Authara configuration, then start the stack:
 

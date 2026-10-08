@@ -77,6 +77,11 @@ When disabled:
 - signup completes immediately
 - no email verification is required
 
+Password recovery remains available, and the email worker continues to process
+recovery and security notifications independently of this setting.
+Session-bound authentication challenges used for recent-authentication step-up
+also remain enabled; they do not send or verify email codes.
+
 This setting is environment-only and startup-only.
 
 ---

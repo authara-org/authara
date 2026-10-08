@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -124,6 +127,66 @@ func TestExplicitEmptyHybridEnvironmentValueOverridesAndLocksDormantOverride(t *
 	}
 	if _, err := service.Clear(ctx, KeyWebhookEnabledEvents, uuid.New(), 3); !errors.Is(err, ErrSettingLocked) {
 		t.Fatalf("Clear without a dormant override error = %v, want environment lock", err)
+	}
+}
+
+func TestRecentAuthenticationPolicySupportsLiveDisableResetAndEnvironmentLock(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	service, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: store, LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !service.CurrentSession().RecentAuthenticationEnabled {
+		t.Fatal("recent authentication must be enabled by default")
+	}
+
+	actor := uuid.New()
+	updated, err := service.Set(ctx, KeySessionRecentAuthenticationEnabled, "false", actor, 0)
+	if err != nil {
+		t.Fatalf("disable recent authentication: %v", err)
+	}
+	if service.CurrentSession().RecentAuthenticationEnabled || updated.EffectiveValue != "false" || updated.EffectiveSource != SourceOperator {
+		t.Fatalf("disabled policy/description = %+v / %+v", service.CurrentSession(), updated)
+	}
+
+	restarted, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: store, LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restarted.CurrentSession().RecentAuthenticationEnabled {
+		t.Fatal("persisted operator override was not restored")
+	}
+	reset, err := restarted.Clear(ctx, KeySessionRecentAuthenticationEnabled, actor, updated.Revision)
+	if err != nil {
+		t.Fatalf("reset recent authentication: %v", err)
+	}
+	if !restarted.CurrentSession().RecentAuthenticationEnabled || reset.EffectiveSource != SourceDefault {
+		t.Fatalf("reset policy/description = %+v / %+v", restarted.CurrentSession(), reset)
+	}
+
+	locked, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: newMemoryStore(),
+		LookupEnvironment: environment(map[string]string{
+			"AUTHARA_RECENT_AUTHENTICATION_ENABLED": "false",
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	description, err := locked.Describe(KeySessionRecentAuthenticationEnabled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if locked.CurrentSession().RecentAuthenticationEnabled || !description.Locked || description.EffectiveSource != SourceEnvironment {
+		t.Fatalf("environment policy/description = %+v / %+v", locked.CurrentSession(), description)
+	}
+	if _, err := locked.Set(ctx, KeySessionRecentAuthenticationEnabled, "true", actor, 0); !errors.Is(err, ErrSettingLocked) {
+		t.Fatalf("environment-locked mutation error = %v", err)
 	}
 }
 
@@ -294,12 +357,17 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 		}
 	}
 
+	set(KeyUIAppName, "Example App")
 	set(KeyUIDefaultReturnTo, "/dashboard")
 	set(KeyAuthenticationUsernameLoginEnabled, "true")
+	set(KeyAuthenticationPasskeyCloneResponse, PasskeyCloneResponseRestrictAndRevoke)
+	set(KeyAuthenticationPasskeyCloneNotifyUser, "false")
 	set(KeyTokenAccessTTL, "20")
 	set(KeySessionTTL, "90")
 	set(KeySessionRefreshTokenTTL, "30")
 	set(KeySessionRotation, "always")
+	set(KeySessionRecentAuthenticationEnabled, "false")
+	set(KeySessionRecentAuthenticationWindow, "15m")
 	set(KeyOrganizationPublicManagementEnabled, "true")
 	set(KeyOrganizationInvitationTTL, "48h")
 	set(KeyAccessPolicyAllowlistEnabled, "true")
@@ -315,17 +383,19 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	set(KeyWebhookFailedRetention, "96h")
 	set(KeyWebhookMaintenanceBatchSize, "250")
 
-	if got := service.CurrentUI().DefaultReturnTo; got != "/dashboard" {
-		t.Fatalf("default return path = %q", got)
+	ui := service.CurrentUI()
+	if ui.AppName != "Example App" || ui.DefaultReturnTo != "/dashboard" {
+		t.Fatalf("UI policy = %+v", ui)
 	}
-	if !service.CurrentAuthentication().UsernameLoginEnabled {
-		t.Fatal("username login policy was not updated")
+	authentication := service.CurrentAuthentication()
+	if !authentication.UsernameLoginEnabled || authentication.PasskeyCloneResponse != PasskeyCloneResponseRestrictAndRevoke || authentication.PasskeyCloneNotifyUser {
+		t.Fatalf("authentication policy = %+v", authentication)
 	}
 	if got := service.CurrentToken().AccessTokenTTL; got != 20*time.Minute {
 		t.Fatalf("access-token lifetime = %s", got)
 	}
 	session := service.CurrentSession()
-	if session.SessionTTL != 90*24*time.Hour || session.RefreshTokenTTL != 30*24*time.Hour || session.RefreshTokenRotation != -1 {
+	if session.SessionTTL != 90*24*time.Hour || session.RefreshTokenTTL != 30*24*time.Hour || session.RefreshTokenRotation != -1 || session.RecentAuthenticationEnabled || session.RecentAuthenticationWindow != 15*time.Minute {
 		t.Fatalf("session policy = %+v", session)
 	}
 	organization := service.CurrentOrganization()
@@ -352,6 +422,37 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	cookies := service.CurrentSessionCookies()
 	if cookies.AccessTokenTTL != 20*time.Minute || cookies.RefreshTokenTTL != 30*24*time.Hour {
 		t.Fatalf("session cookie policy = %+v", cookies)
+	}
+}
+
+func TestApplicationNameRuntimeSettingValidatesAndPublishes(t *testing.T) {
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{}, Store: newMemoryStore(), LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	description, err := service.Describe(KeyUIAppName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description.EffectiveValue != DefaultAppName || description.EffectiveSource != SourceDefault || description.Locked {
+		t.Fatalf("default application-name description = %+v", description)
+	}
+
+	updated, err := service.Set(context.Background(), KeyUIAppName, "  Example App  ", uuid.New(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.EffectiveValue != "Example App" || service.CurrentUI().AppName != "Example App" {
+		t.Fatalf("updated application name = %+v / %+v", updated, service.CurrentUI())
+	}
+
+	for _, value := range []string{"   ", strings.Repeat("a", maxAppNameRunes+1)} {
+		if _, err := service.Set(context.Background(), KeyUIAppName, value, uuid.New(), updated.Revision); !errors.Is(err, ErrInvalidValue) {
+			t.Fatalf("set application name %q error = %v, want ErrInvalidValue", value, err)
+		}
 	}
 }
 
@@ -383,10 +484,89 @@ func TestGeneralRuntimePoliciesRejectUnsafeCombinations(t *testing.T) {
 	}
 }
 
+func TestExpiryRevocationModeCapsDynamicAccessTokenTTL(t *testing.T) {
+	startup := &Config{Cache: Cache{AccessTokenRevocationMode: AccessTokenRevocationModeExpiry}}
+	store := newMemoryStore()
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: startup, Store: store, LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Set(context.Background(), KeyTokenAccessTTL, "10", uuid.New(), 0); err != nil {
+		t.Fatalf("set capped lifetime: %v", err)
+	}
+	if _, err := service.Set(context.Background(), KeyTokenAccessTTL, "11", uuid.New(), 1); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("set lifetime above cap error = %v, want ErrInvalidValue", err)
+	}
+	if got := service.CurrentToken().AccessTokenTTL; got != ExpiryOnlyMaxAccessTokenTTL {
+		t.Fatalf("access-token lifetime after rejected update = %s", got)
+	}
+
+	store.seed(KeyTokenAccessTTL, `11`, 2)
+	if err := service.Reconcile(context.Background()); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("reconcile lifetime above cap error = %v, want ErrInvalidValue", err)
+	}
+	if got := service.CurrentToken().AccessTokenTTL; got != ExpiryOnlyMaxAccessTokenTTL {
+		t.Fatalf("published lifetime after rejected reconcile = %s", got)
+	}
+}
+
+func TestImmediateRevocationModeKeepsLongDynamicAccessTokenTTL(t *testing.T) {
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{Cache: Cache{AccessTokenRevocationMode: AccessTokenRevocationModeImmediate}},
+		Store:   newMemoryStore(), LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Set(context.Background(), KeyTokenAccessTTL, "1440", uuid.New(), 0); err != nil {
+		t.Fatalf("set immediate-mode lifetime: %v", err)
+	}
+	if _, err := service.Set(context.Background(), KeyTokenAccessTTL, "1441", uuid.New(), 1); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("set lifetime above maximum error = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestImmediateRevocationModeRejectsEnvironmentAccessTokenTTLAboveMaximum(t *testing.T) {
+	_, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{Cache: Cache{AccessTokenRevocationMode: AccessTokenRevocationModeImmediate}},
+		Store:   newMemoryStore(),
+		LookupEnvironment: environment(map[string]string{
+			"AUTHARA_ACCESS_TOKEN_TTL_MINUTES": "1441",
+		}),
+	})
+	if !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("NewService error = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestExpiryRevocationModeRejectsUnsafeEnvironmentRemovalProjection(t *testing.T) {
+	store := newMemoryStore()
+	store.seed(KeyTokenAccessTTL, `11`, 1)
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{Cache: Cache{AccessTokenRevocationMode: AccessTokenRevocationModeExpiry}},
+		Store:   store,
+		LookupEnvironment: environment(map[string]string{
+			"AUTHARA_ACCESS_TOKEN_TTL_MINUTES": "10",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewService with safe effective environment value: %v", err)
+	}
+
+	_, err = service.Set(context.Background(), KeySessionTTL, "61", uuid.New(), 0)
+	if !errors.Is(err, ErrInvalidValue) || !strings.Contains(err.Error(), "after removing an environment override") {
+		t.Fatalf("Set error = %v, want unsafe environment-removal projection", err)
+	}
+}
+
 func TestRuntimePolicySelectionKeepsInfrastructureAndSchedulingAtStartup(t *testing.T) {
 	dynamic := []Key{
-		KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
-		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation,
+		KeyUIAppName, KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
+		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationEnabled, KeySessionRecentAuthenticationWindow,
 		KeyOrganizationPublicManagementEnabled, KeyOrganizationInvitationTTL,
 		KeyAccessPolicyAllowlistEnabled, KeyAdminAuditRetention,
 		KeyEmailJobMaxAttempts, KeyEmailCleanupSentAfter, KeyEmailCleanupFailedAfter,
@@ -674,7 +854,6 @@ func TestInvalidPersistedSettingsFailStartupWithoutPublishing(t *testing.T) {
 		key  Key
 		raw  string
 	}{
-		{name: "unknown", key: "unknown.key", raw: `true`},
 		{name: "wrong JSON type", key: KeyChallengeMaxAttempts, raw: `"five"`},
 		{name: "outside bounds", key: KeyChallengeMaxAttempts, raw: `100`},
 		{name: "environment only", key: KeyChallengeEnabled, raw: `true`},
@@ -687,6 +866,136 @@ func TestInvalidPersistedSettingsFailStartupWithoutPublishing(t *testing.T) {
 				t.Fatal("New succeeded with invalid persisted setting")
 			}
 		})
+	}
+}
+
+func TestUnknownPersistedSettingsArePreservedAcrossMixedVersionOperations(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	const futureKey Key = "authentication.future_policy"
+	const futureValue = "strict-future-value"
+	store.seed(futureKey, `"`+futureValue+`"`, 1)
+
+	var logs bytes.Buffer
+	service, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: store, LookupEnvironment: environment(nil),
+		Logger: slog.New(slog.NewTextHandler(&logs, nil)),
+	})
+	if err != nil {
+		t.Fatalf("start older replica with future setting: %v", err)
+	}
+	if got := service.Current().MaxAttempts; got != 5 {
+		t.Fatalf("older replica policy = %+v", service.Current())
+	}
+	if len(service.current.Load().unsupportedOverrides) != 1 {
+		t.Fatalf("unsupported overrides = %+v", service.current.Load().unsupportedOverrides)
+	}
+	if output := logs.String(); !strings.Contains(output, "unsupported runtime setting preserved and ignored") ||
+		!strings.Contains(output, string(futureKey)) || !strings.Contains(output, "revision=1") {
+		t.Fatalf("unknown-setting warning = %q", output)
+	} else if strings.Contains(output, futureValue) {
+		t.Fatalf("unknown-setting warning exposed value: %q", output)
+	}
+
+	if _, err := service.Set(ctx, KeyChallengeMaxAttempts, "8", uuid.New(), 0); err != nil {
+		t.Fatalf("mutate known setting from older replica: %v", err)
+	}
+	if len(service.current.Load().unsupportedOverrides) != 1 {
+		t.Fatalf("local mutation discarded unsupported-setting observability: %+v", service.current.Load().unsupportedOverrides)
+	}
+	state, err := store.LoadRuntimeSettings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Overrides) != 2 {
+		t.Fatalf("stored overrides = %+v", state.Overrides)
+	}
+	var preserved PersistedOverride
+	for _, override := range state.Overrides {
+		if override.Key == futureKey {
+			preserved = override
+		}
+	}
+	if preserved.Key != futureKey || string(preserved.Value) != `"`+futureValue+`"` || preserved.Revision != 1 {
+		t.Fatalf("future override was changed: %+v", preserved)
+	}
+
+	newer, err := NewService(ctx, ServiceOptions{Startup: &Config{}, Store: store, LookupEnvironment: environment(nil)})
+	if err != nil {
+		t.Fatalf("start newer replica baseline: %v", err)
+	}
+	definition := Definition{
+		Key: futureKey, Name: "Future policy", Control: ControlOperator, Reload: ReloadDynamic,
+		Type: TypeString, HasDefault: true, DefaultValue: "legacy", defaultValue: "legacy",
+	}
+	newer.definitions = append(newer.definitions, definition)
+	newer.definitionByKey[futureKey] = definition
+	newer.defaultValues[futureKey] = "legacy"
+	if err := newer.reloadLocked(ctx, true); err != nil {
+		t.Fatalf("reload preserved setting with newer catalog: %v", err)
+	}
+	description, err := newer.Describe(futureKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description.EffectiveSource != SourceOperator || description.EffectiveValue != futureValue || description.Revision != 1 {
+		t.Fatalf("restored future setting = %+v", description)
+	}
+}
+
+func TestReconcileIgnoresNewUnknownSettingAndKeepsKnownValidationStrict(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	service, err := NewService(ctx, ServiceOptions{Startup: &Config{}, Store: store, LookupEnvironment: environment(nil)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store.seed("future.setting", `{"mode":"strict"}`, 1)
+	if err := service.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile future setting: %v", err)
+	}
+	if service.current.Load().revision != 1 || len(service.current.Load().unsupportedOverrides) != 1 {
+		t.Fatalf("reconciled snapshot = %+v", service.current.Load())
+	}
+
+	store.seed(KeyChallengeMaxAttempts, `100`, 2)
+	if err := service.Reconcile(ctx); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("known invalid setting error = %v, want ErrInvalidValue", err)
+	}
+	if service.current.Load().revision != 1 {
+		t.Fatalf("invalid known setting published revision %d", service.current.Load().revision)
+	}
+}
+
+func TestRuntimeSettingsMetricsTrackRevisionAndReconciliation(t *testing.T) {
+	ctx := context.Background()
+	store := &reconcileFailStore{memoryStore: newMemoryStore()}
+	metrics := &runtimeSettingsMetricsStub{}
+	service, err := NewService(ctx, ServiceOptions{
+		Startup: &Config{}, Store: store, LookupEnvironment: environment(nil), Metrics: metrics,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metrics.revisions) != 1 || metrics.revisions[0] != 0 {
+		t.Fatalf("initial revision observations = %v, want [0]", metrics.revisions)
+	}
+
+	if err := service.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	store.seed(KeyChallengeMaxAttempts, `7`, 1)
+	if err := service.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	store.fail = true
+	if err := service.Reconcile(ctx); err == nil {
+		t.Fatal("failed reconciliation returned nil")
+	}
+
+	if got := metrics.reconciliations; len(got) != 3 || got[0] != "unchanged:0" || got[1] != "applied:1" || got[2] != "failed:1" {
+		t.Fatalf("reconciliation observations = %v", got)
 	}
 }
 
@@ -759,6 +1068,16 @@ func TestReconciliationRepairsAnotherReplicaAndPersistsAcrossReconstruction(t *t
 		}
 	}
 	cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second)
+	defer shutdownCancel()
+	if err := second.ShutdownReconciler(shutdownCtx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-second.ReconcilerDone():
+	default:
+		t.Fatal("reconciler shutdown returned before the goroutine stopped")
+	}
 
 	restarted, err := NewService(ctx, ServiceOptions{Startup: &Config{}, Store: store, LookupEnvironment: environment(nil)})
 	if err != nil {
@@ -959,10 +1278,35 @@ type memoryStore struct {
 	audits    []json.RawMessage
 }
 
+type runtimeSettingsMetricsStub struct {
+	revisions       []int64
+	reconciliations []string
+}
+
+func (m *runtimeSettingsMetricsStub) SetRuntimeSettingsRevision(revision int64) {
+	m.revisions = append(m.revisions, revision)
+}
+
+func (m *runtimeSettingsMetricsStub) ObserveRuntimeSettingsReconciliation(result string, _ time.Duration, revision int64) {
+	m.reconciliations = append(m.reconciliations, result+":"+strconv.FormatInt(revision, 10))
+}
+
 type postMutationLoadFailStore struct {
 	*memoryStore
 	loads             int
 	mutationSucceeded bool
+}
+
+type reconcileFailStore struct {
+	*memoryStore
+	fail bool
+}
+
+func (s *reconcileFailStore) LoadRuntimeSettings(ctx context.Context) (PersistedState, error) {
+	if s.fail {
+		return PersistedState{}, errors.New("load failed")
+	}
+	return s.memoryStore.LoadRuntimeSettings(ctx)
 }
 
 type conflictOnMutationStore struct {

@@ -66,8 +66,10 @@ services:
       AUTHARA_UPSTREAM: authara:8080
       APP_UPSTREAM: app-router:80
     depends_on:
-      - authara
-      - app-router
+      authara:
+        condition: service_healthy
+      app-router:
+        condition: service_started
 
   app-router:
     image: nginx:1.29-alpine
@@ -90,6 +92,11 @@ services:
       AUTHARA_EMAIL_SMTP_HOST: mailpit
       AUTHARA_EMAIL_SMTP_PORT: 1025
       AUTHARA_EMAIL_SMTP_TLS: "false"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/auth/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     depends_on:
       backend-migrations:
         condition: service_completed_successfully

@@ -6,8 +6,12 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+
+concurrency:
+  group: core-cd
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -47,6 +51,42 @@ jobs:
           echo "Core ${GITHUB_REF_NAME}: ${bump} release since ${previous_tag:-no previous tag}"
           echo "bump=$bump" >> "$GITHUB_OUTPUT"
 
+      - name: Detect migration artifact changes
+        id: migrations
+        run: |
+          previous_tag="$(git tag --list 'migrations-v*' --sort=-version:refname | head -n 1)"
+          if test -z "$previous_tag"; then
+            echo "No previous migrations release found."
+            exit 1
+          fi
+
+          current_version="${previous_tag#migrations-}"
+          required_version="$(sed -nE 's/^const RequiredSchemaVersion = ([0-9]+)$/\1/p' internal/store/schema/version.go)"
+          latest_file="$(find migrations -maxdepth 1 -type f -name '[0-9][0-9][0-9]-*.sql' | sort | tail -n 1)"
+          latest_version="$(basename "$latest_file" | cut -d- -f1)"
+          if (( 10#$latest_version != required_version )); then
+            echo "Latest migration is $latest_version but Core requires schema version $required_version."
+            exit 1
+          fi
+
+          migration_changes="$(git diff --name-only "$previous_tag" "$GITHUB_SHA" -- migrations/Dockerfile migrations/dbconfig.yaml 'migrations/[0-9][0-9][0-9]-*.sql')"
+          if test -z "$migration_changes"; then
+            echo "No migration changes since $previous_tag."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "version=$current_version" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          minor="$(cut -d. -f2 <<< "${current_version#v}")"
+          next_version="v0.$((minor + 1)).0"
+
+          echo "Migration changes since $previous_tag:"
+          echo "$migration_changes"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
+          echo "version=$next_version" >> "$GITHUB_OUTPUT"
+          echo "tag=migrations-$next_version" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
@@ -60,7 +100,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build and push migrations image
+        id: migrations-image
+        if: steps.migrations.outputs.publish == 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ./migrations
+          file: migrations/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/authara-org/authara-migrations:${{ steps.migrations.outputs.version }}
+            ghcr.io/authara-org/authara-migrations:latest
+
+      - name: Create migrations release
+        if: steps.migrations.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MIGRATIONS_TAG: ${{ steps.migrations.outputs.tag }}
+          MIGRATIONS_VERSION: ${{ steps.migrations.outputs.version }}
+          PREVIOUS_TAG: ${{ steps.migrations.outputs.previous_tag }}
+        run: |
+          notes="$RUNNER_TEMP/migrations-release-notes.md"
+          printf 'Migrations for Authara Core `%s`:\n\n' "$GITHUB_REF_NAME" > "$notes"
+          git diff --name-only "$PREVIOUS_TAG" "$GITHUB_SHA" -- migrations/Dockerfile migrations/dbconfig.yaml 'migrations/[0-9][0-9][0-9]-*.sql' |
+            while IFS= read -r migration; do
+              printf -- '- `%s`\n' "$migration"
+            done >> "$notes"
+          printf '\nImage: `ghcr.io/authara-org/authara-migrations:%s`\n' "$MIGRATIONS_VERSION" >> "$notes"
+
+          gh release create "$MIGRATIONS_TAG" \
+            --target "$GITHUB_SHA" \
+            --title "$MIGRATIONS_TAG" \
+            --notes-file "$notes" \
+            --latest=false
+
       - name: Build and push multi-arch image
+        id: core-image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
@@ -72,6 +148,56 @@ jobs:
             ghcr.io/authara-org/authara-core:latest
           build-args: |
             VERSION=${{ github.ref_name }}
+
+      - name: Record compatibility and publish Core release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MIGRATIONS_VERSION: ${{ steps.migrations.outputs.version }}
+          MIGRATIONS_DIGEST: ${{ steps.migrations-image.outputs.digest }}
+          CORE_DIGEST: ${{ steps.core-image.outputs.digest }}
+        run: |
+          if test "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" != "true"; then
+            echo "Core release $GITHUB_REF_NAME must be a draft before CD attaches its metadata."
+            exit 1
+          fi
+
+          if test -z "$MIGRATIONS_DIGEST"; then
+            MIGRATIONS_DIGEST="$(
+              docker buildx imagetools inspect \
+                --format '{{json .Manifest}}' \
+                "ghcr.io/authara-org/authara-migrations:$MIGRATIONS_VERSION" |
+                jq -r .digest
+            )"
+          fi
+
+          case "$CORE_DIGEST" in sha256:*) ;; *) echo "Invalid Core image digest: $CORE_DIGEST"; exit 1 ;; esac
+          case "$MIGRATIONS_DIGEST" in sha256:*) ;; *) echo "Invalid migrations image digest: $MIGRATIONS_DIGEST"; exit 1 ;; esac
+
+          core_tag="ghcr.io/authara-org/authara-core:$GITHUB_REF_NAME"
+          core_image="ghcr.io/authara-org/authara-core@$CORE_DIGEST"
+          migrations_tag="ghcr.io/authara-org/authara-migrations:$MIGRATIONS_VERSION"
+          migrations_image="ghcr.io/authara-org/authara-migrations@$MIGRATIONS_DIGEST"
+
+          metadata="$RUNNER_TEMP/authara-images.env"
+          printf 'AUTHARA_CORE_VERSION=%s\n' "$GITHUB_REF_NAME" > "$metadata"
+          printf 'AUTHARA_CORE_IMAGE=%s\n' "$core_image" >> "$metadata"
+          printf 'AUTHARA_MIGRATIONS_VERSION=%s\n' "$MIGRATIONS_VERSION" >> "$metadata"
+          printf 'AUTHARA_MIGRATIONS_IMAGE=%s\n' "$migrations_image" >> "$metadata"
+          gh release upload "$GITHUB_REF_NAME" "$metadata" --clobber
+
+          existing_notes="$RUNNER_TEMP/core-release-existing-notes.md"
+          notes="$RUNNER_TEMP/core-release-notes.md"
+          gh release view "$GITHUB_REF_NAME" --json body --jq .body > "$existing_notes"
+          sed '/^<!-- authara-compatible-images -->$/,$d' "$existing_notes" > "$notes"
+          printf '\n<!-- authara-compatible-images -->\n' >> "$notes"
+          printf '## Compatible container images\n\n' >> "$notes"
+          printf -- '- Core: `%s` (`%s`)\n' "$core_tag" "$core_image" >> "$notes"
+          printf -- '- Migrations: `%s` (`%s`)\n' "$migrations_tag" "$migrations_image" >> "$notes"
+
+          gh release edit "$GITHUB_REF_NAME" \
+            --notes-file "$notes" \
+            --draft=false \
+            --latest
 
   notify-sdks:
     runs-on: ubuntu-latest

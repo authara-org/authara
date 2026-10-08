@@ -17,6 +17,10 @@ These endpoints are primarily intended for:
 Authara also provides hosted HTML flows under `/auth`; applications that own
 their authentication UI can use the JSON endpoints documented here.
 
+Authara currently provides no headless admin or operator API. `/auth/admin/*`
+and `/auth/operator/*` are unstable, server-rendered browser interfaces and
+must not be used as automation contracts.
+
 Internal server-to-server endpoints are available under:
 
 ```
@@ -119,12 +123,101 @@ cookies set by these endpoints; the returned access and refresh tokens can
 then be stored by the client.
 
 If the Google email belongs to an existing account that has not linked Google,
-the endpoint returns `409 account_link_required`. The user must sign in using
-an existing method and link Google from the account page; Authara never links
-accounts based only on a matching email address.
+the endpoint returns `409 account_link_required`. Continue with the account
+collision recovery flow below; Authara never links accounts based only on a
+matching email address.
 
 Errors: `400 invalid_request`, `401 unauthorized`, `403 forbidden`,
 `404 not_found`, `409 account_link_required`, or `500 internal_error`.
+
+---
+
+## Log in with Apple
+
+Apple login must be enabled with `AUTHARA_OAUTH_PROVIDERS=apple`. First obtain
+the Services ID, redirect URI, and one-time state and nonce:
+
+```text
+GET /auth/api/v1/oauth/apple/options
+```
+
+Initialize Apple's browser SDK with the returned values, the `email` scope,
+and `usePopup: true`. Send the resulting single-use code and returned state to:
+
+```text
+POST /auth/api/v1/oauth/apple?audience=app
+X-CSRF-Token: <csrf-token>
+Content-Type: application/json
+```
+
+```json
+{
+  "code": "<apple-authorization-code>",
+  "state": "<apple-state>"
+}
+```
+
+Authara exchanges the code server-side and validates Apple's signature,
+issuer, audience, expiry, nonce, subject, and verified email before creating a
+session. Browser applications must not generate Apple's client-secret JWT or
+trust identity claims locally.
+
+If the Apple email belongs to an existing account that has not linked that
+Apple subject, the endpoint returns `409 account_link_required`. Sign in with
+an existing method and link Apple from the account page.
+
+Errors match Google login: `400 invalid_request`, `401 unauthorized`,
+`403 forbidden`, `404 not_found`, `409 account_link_required`, or
+`500 internal_error`.
+
+---
+
+## Recover an external-provider account collision
+
+When a verified Google identity has the same email as an existing account,
+create a short-lived pending link using a nonce-bound Google credential:
+
+```text
+POST /auth/api/v1/provider-links/recovery/google
+X-CSRF-Token: <csrf-token>
+Content-Type: application/json
+```
+
+```json
+{
+  "credential": "<google-id-token>",
+  "nonce": "<nonce>"
+}
+```
+
+The `202 Accepted` response identifies the pending link and only the existing
+account methods that are available as proof:
+
+```json
+{
+  "link_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+  "proof_methods": ["password", "apple"]
+}
+```
+
+Complete exactly one proof through the matching endpoint:
+
+```text
+POST /auth/api/v1/provider-links/recovery/{linkID}/password?audience=app
+POST /auth/api/v1/provider-links/recovery/{linkID}/google?audience=app
+POST /auth/api/v1/provider-links/recovery/{linkID}/apple?audience=app
+```
+
+Password proof accepts `{ "password": "..." }`. Google proof accepts a fresh
+`credential` and `nonce` from the Google options flow. Apple proof accepts a
+fresh authorization `code` and `state` from the Apple options flow. Successful
+completion consumes the pending link, links the attempted Google identity to
+the existing user, returns an authenticated session, and sets the session
+cookies.
+
+Pending links expire after ten minutes and are single-use. Invalid or expired
+links return `400 invalid_request` or `409 provider_link_expired`; an identity
+that does not belong to the existing account returns `401 unauthorized`.
 
 ---
 
@@ -254,9 +347,15 @@ POST /auth/api/v1/password-reset/challenges
 }
 ```
 
-Returns `202 Accepted` with a `challenge_id`. The response is identical when
-the email does not belong to an account, preventing account enumeration. This
-endpoint remains available when optional challenge-based signup is disabled.
+Returns `202 Accepted` with a `challenge_id`. Password reset rotates an existing
+password; it never adds password authentication to a passwordless account. The
+response is identical when the email is unknown or the account only uses OAuth
+or passkeys, preventing account and sign-in-method enumeration. No reset code is
+sent in those cases. A passwordless user must sign in with an existing provider
+or passkey and add a password from account settings. If all configured methods
+are unavailable, recovery requires the deployment operator's account-recovery
+process. This endpoint remains available when optional challenge-based signup
+is disabled.
 
 Errors: `400 invalid_request`, `403 forbidden`, `429 rate_limited`, or
 `500 internal_error`.
@@ -276,9 +375,12 @@ POST /auth/api/v1/password-reset/challenges/verify
 }
 ```
 
-Returns `204 No Content`. The password is changed and all existing sessions
-for the account are revoked. The user must log in with the new password. This
-endpoint remains available when optional challenge-based signup is disabled.
+Returns `204 No Content`. The existing password is changed and all existing
+sessions for the account are revoked. The user must log in with the new
+password. Verification, password mutation, session revocation, notification
+queueing, and challenge consumption complete as one database transaction, so a
+failed mutation does not consume a valid code. This endpoint remains available
+when optional challenge-based signup is disabled.
 
 Errors: `400 invalid_request`, `403 forbidden`, `429 rate_limited`, or
 `500 internal_error`.
@@ -356,6 +458,8 @@ The finish endpoint may return `400 invalid_request`, `401 unauthorized`,
 ## Register a passkey
 
 Both registration endpoints require an authenticated app session.
+They also require recent authentication and return
+`428 recent_authentication_required` when the session proof is stale.
 
 ```text
 POST /auth/api/v1/passkeys/register/options
@@ -382,10 +486,66 @@ POST /auth/api/v1/passkeys/register/finish
 `name` and `platform_hint` are optional. Success returns `204 No Content`.
 
 Both endpoints require the access and CSRF cookies. The options endpoint may
-return `401 unauthorized`, `403 forbidden`, or `500 internal_error`.
+return `401 unauthorized`, `403 forbidden`,
+`428 recent_authentication_required`, or `500 internal_error`.
 The finish endpoint may return `400 invalid_request`, `401 unauthorized`,
 `403 forbidden`, `409 passkey_already_exists`,
-`422 passkey_registration_invalid`, or `500 internal_error`.
+`422 passkey_registration_invalid`, `428 recent_authentication_required`, or
+`500 internal_error`.
+
+## Reauthenticate a session
+
+Sensitive account and organization mutations require a fresh proof. An
+authenticated client first receives `428 recent_authentication_required` from
+the attempted mutation. The response contains a five-minute, single-use
+challenge bound to the current user and session:
+
+```json
+{
+  "error": {
+    "code": "recent_authentication_required",
+    "message": "Recent authentication is required."
+  },
+  "authentication_challenge": {
+    "id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+    "expires_at": "2026-09-22T12:05:00Z"
+  },
+  "reauthenticate_url": "/auth/reauthenticate?authentication_challenge_id=49f7a8b7-5f13-4ab0-9991-e924566a08ba"
+}
+```
+
+Complete that challenge through one of these CSRF-protected flows:
+
+```text
+POST /auth/api/v1/reauthenticate/password
+POST /auth/api/v1/reauthenticate/google
+POST /auth/api/v1/reauthenticate/passkeys/options
+POST /auth/api/v1/reauthenticate/passkeys/finish
+```
+
+Password reauthentication accepts:
+
+```json
+{
+  "authentication_challenge_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+  "password": "..."
+}
+```
+
+Google accepts the same nonce-bound credential fields as Google login plus
+`authentication_challenge_id`, and the identity must already be linked to the
+current user. Passkey options accepts `{ "authentication_challenge_id": "..." }`;
+passkey finish accepts both that ID and the WebAuthn `challenge_id` returned by
+the options endpoint.
+
+Successful completion returns `204 No Content`. The client must then retry the
+original sensitive mutation once. Hosted Authara UI flows do this
+automatically while keeping the original request only in browser memory. API
+clients remain responsible for the retry. Refresh-token use does not extend
+the freshness window. Expired, consumed, or session-mismatched challenges
+return `409 invalid_authentication_challenge`.
+Password and passkey proof attempts are rate limited and may return
+`429 rate_limited`.
 
 ---
 
@@ -427,18 +587,45 @@ Example:
 
 ### Errors
 
-| Status | Code |
-|------|------|
-| 401 | unauthorized |
+| Status | Code         |
+| ------ | ------------ |
+| 401    | unauthorized |
 
 See [Errors](errors.md) for error definitions.
 
 ---
 
+## Get current account
+
+```text
+GET /auth/api/v1/account
+```
+
+Returns the authenticated user, authentication methods, active sessions, and
+passkeys. Sessions and passkeys are independently cursor-paginated: use
+`sessions_limit` and `sessions_cursor` for sessions, and `passkeys_limit` and
+`passkeys_cursor` for passkeys. Each limit defaults to 50 and must be from 1
+through 100. Continue with `sessions_next_cursor` or `passkeys_next_cursor`.
+Sessions are ordered by creation time and UUID descending; passkeys are ordered
+by creation time and UUID ascending. Invalid, cross-user, or cross-collection
+cursors return `400 invalid_request`.
+
+The hosted `/auth/account` page applies the same bounds and exposes links for
+additional sessions and passkeys.
+
+Compatibility: all pagination query parameters are optional, existing response
+arrays keep their names and element shapes, and the next-cursor fields are
+optional. Existing clients therefore receive the first 50 items without a
+request change and can adopt continuation cursors incrementally.
+
+---
+
 ## Set current user password
 
-Creates or replaces the authenticated user's password. The user ID is taken
-from the access token; clients cannot supply one.
+Creates the authenticated user's password only when the account does not
+already have one. The user ID is taken from the access token; clients cannot
+supply one. Use `PUT /auth/api/v1/account/password` to change an existing
+password.
 
 ```text
 PUT /auth/api/v1/users/password
@@ -453,7 +640,8 @@ Content-Type: application/json
 
 Requires the access and CSRF cookies. Returns `204 No Content` and revokes all
 existing sessions and refresh tokens. Errors: `400 invalid_request`,
-`401 unauthorized`, `403 forbidden`, or `500 internal_error`.
+`401 unauthorized`, `403 forbidden`, `409 password_already_exists`, or
+`500 internal_error`.
 
 ---
 
@@ -485,9 +673,9 @@ See [Cookies](cookies.md) for details.
 
 ### Query Parameters
 
-| Parameter | Required | Description |
-|------|------|------|
-| `audience` | yes | Requested token audience |
+| Parameter  | Required | Description              |
+| ---------- | -------- | ------------------------ |
+| `audience` | yes      | Requested token audience |
 
 Example:
 
@@ -510,11 +698,11 @@ New session cookies are issued:
 
 ### Errors
 
-| Status | Code |
-|------|------|
-| 401 | unauthorized |
-| 400 | invalid_request |
-| 500 | internal_error |
+| Status | Code            |
+| ------ | --------------- |
+| 401    | unauthorized    |
+| 400    | invalid_request |
+| 500    | internal_error  |
 
 See [Errors](errors.md).
 
@@ -548,11 +736,11 @@ POST /auth/api/v1/tokens/refresh
 
 ### Errors
 
-| Status | Code |
-|------|------|
-| 401 | unauthorized |
-| 400 | invalid_request |
-| 500 | internal_error |
+| Status | Code            |
+| ------ | --------------- |
+| 401    | unauthorized    |
+| 400    | invalid_request |
+| 500    | internal_error  |
 
 See [Errors](errors.md).
 
@@ -576,15 +764,33 @@ Available routes:
 
 ```text
 GET   /auth/api/v1/capabilities
+GET   /auth/api/v1/organizations
+GET   /auth/api/v1/organizations/current/members
 GET   /auth/api/v1/organizations/{organizationID}
 PATCH /auth/api/v1/organizations/{organizationID}
 GET   /auth/api/v1/organizations/{organizationID}/members
 GET   /auth/api/v1/organizations/{organizationID}/members/{userID}
+PATCH /auth/api/v1/organizations/{organizationID}/members/{userID}
 GET   /auth/api/v1/organizations/{organizationID}/invitations
 GET   /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}
 POST  /auth/api/v1/organizations/{organizationID}/invitations/{invitationID}/revoke
 GET   /auth/api/v1/users/{userID}/memberships
 ```
+
+The current-user organization, member, membership, and invitation collection
+routes use cursor pagination. Pass an optional `limit` from 1 through 100
+(default 50) and the opaque `cursor` returned as `next_cursor` by the preceding
+response. Results
+are ordered deterministically by creation time and UUID. `next_cursor` is
+omitted on the final page. A malformed cursor, a cursor from another
+collection or tenant, or an out-of-range limit returns `400 invalid_request`.
+
+`GET /auth/api/v1/organizations/current/members` uses the same pagination
+parameters and response behavior.
+
+Hosted administrator user details independently paginate session history and
+passkeys. The operator email-template editor also bounds version history to 25
+entries per page (maximum 100).
 
 The capabilities route remains available to authenticated clients when direct
 management is disabled and reports
@@ -595,6 +801,9 @@ In `single` mode, `allows_organization_leave` is `true` because a departure can
 be approved by the application backend, while `allows_org_switching` remains
 `false`: the user may never hold two memberships and cannot switch between
 simultaneously available organizations.
+
+Owners and admins can set a non-owner member's role to `admin` or `member`.
+Ownership is singular and changes only through the ownership-transfer endpoint.
 
 ---
 
@@ -648,6 +857,23 @@ last member or sole owner. Sessions currently using the removed organization
 and their refresh tokens are deleted; access tokens for that user and
 organization are revoked. The operation emits
 `organization.membership.deleted`.
+
+## Update an organization member role
+
+```text
+PATCH /auth/internal/v1/organizations/{organization_id}/members/{user_id}
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
+```json
+{
+  "actor_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1",
+  "role": "admin"
+}
+```
+
+Owners and admins can assign `admin` or `member`; admins cannot modify the
+owner. Use ownership transfer to change the organization's sole owner.
 
 ## Transfer organization ownership
 
@@ -778,16 +1004,16 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
 
 ### Errors
 
-| Status | Code |
-|------|------|
-| 401 | unauthorized |
-| 403 | actor_not_member |
-| 403 | actor_not_allowed |
-| 404 | organization_not_found |
-| 409 | already_member |
-| 409 | invitation_already_pending |
-| 400 | invalid_request |
-| 500 | internal_error |
+| Status | Code                       |
+| ------ | -------------------------- |
+| 401    | unauthorized               |
+| 403    | actor_not_member           |
+| 403    | actor_not_allowed          |
+| 404    | organization_not_found     |
+| 409    | already_member             |
+| 409    | invitation_already_pending |
+| 400    | invalid_request            |
+| 500    | internal_error             |
 
 ---
 

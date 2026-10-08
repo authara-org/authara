@@ -1,0 +1,69 @@
+package auth
+
+import (
+	"github.com/authara-org/authara/internal/http/templates"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/form"
+)
+
+templ EmailVerification(currentEmail, targetEmail, challengeID string) {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@CardHeader()
+			@HeaderSection("Verify your email", "Verify your current address or replace it with an address you can access. Your normal session will resume after verification.")
+			@EmailVerificationEmailForm(currentEmail, targetEmail)
+			if challengeID != "" {
+				<div class="mt-8 border-t border-grey-100 dark:border-grey-800 pt-6">
+					<p class="text-sm text-grey-700 dark:text-grey-300 mb-4">Enter the 6-digit code sent to <strong>{ targetEmail }</strong>.</p>
+					@EmailVerificationCodeForm(challengeID)
+				</div>
+			}
+		}
+	}
+}
+
+templ EmailVerificationEmailForm(currentEmail, targetEmail string) {
+	<form method="post" action="/auth/verify-email" class="space-y-4">
+		@csrf.CSRFInput()
+		<label for="verification-email" class="text-grey-800 dark:text-grey-200">
+			<div class="pb-1.5">Email address</div>
+		</label>
+		@form.Input(form.InputConfig{
+			ID:           "verification-email",
+			Type:         form.Email,
+			Name:         "email",
+			Value:        verificationEmailValue(currentEmail, targetEmail),
+			Autocomplete: "email",
+			Required:     true,
+		})
+		<p class="text-sm text-grey-600 dark:text-grey-400">You can replace a temporary or inaccessible address before verifying.</p>
+		@button.Button(button.ButtonConfig{Label: "Send verification code"})
+	</form>
+}
+
+templ EmailVerificationCodeForm(challengeID string) {
+	<form method="post" action="/auth/verify-email/complete" autocomplete="one-time-code" class="space-y-4">
+		@csrf.CSRFInput()
+		@form.Input(form.InputConfig{Type: form.Hidden, Name: "challenge_id", Value: challengeID})
+		<label for="verification-code" class="text-grey-800 dark:text-grey-200">
+			<div class="pb-1.5">Verification code</div>
+		</label>
+		@form.Input(form.InputConfig{
+			ID:           "verification-code",
+			Type:         form.Text,
+			Name:         "code",
+			Autocomplete: "one-time-code",
+			Required:     true,
+			Attrs: templ.Attributes{"inputmode": "numeric", "pattern": "[0-9]{6}", "maxlength": "6"},
+		})
+		@button.Button(button.ButtonConfig{Label: "Verify and continue"})
+	</form>
+}
+
+func verificationEmailValue(currentEmail, targetEmail string) string {
+	if targetEmail != "" {
+		return targetEmail
+	}
+	return currentEmail
+}

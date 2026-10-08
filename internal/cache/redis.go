@@ -22,9 +22,10 @@ type Redis struct {
 
 func NewRedis(cfg RedisConfig) (*Redis, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Password: cfg.Password,
-		DB:       cfg.DB,
+		Addr:                  fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Password:              cfg.Password,
+		DB:                    cfg.DB,
+		ContextTimeoutEnabled: true,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -38,6 +39,13 @@ func NewRedis(cfg RedisConfig) (*Redis, error) {
 	}
 
 	return &Redis{client: client}, nil
+}
+
+func (r *Redis) Ping(ctx context.Context) error {
+	if err := r.client.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("ping redis: %w", err)
+	}
+	return nil
 }
 
 func (r *Redis) Get(ctx context.Context, key string) ([]byte, error) {
@@ -74,6 +82,19 @@ func (r *Redis) GetMany(ctx context.Context, keys ...string) ([][]byte, error) {
 func (r *Redis) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	if err := r.client.Set(ctx, key, value, ttl).Err(); err != nil {
 		return fmt.Errorf("set %q: %w", key, err)
+	}
+	return nil
+}
+
+func (r *Redis) SetMaxInt64(ctx context.Context, key string, value int64, ttl time.Duration) error {
+	if err := setMaxInt64Script.Run(
+		ctx,
+		r.client,
+		[]string{key},
+		value,
+		ttl.Milliseconds(),
+	).Err(); err != nil {
+		return fmt.Errorf("set max %q: %w", key, err)
 	}
 	return nil
 }
@@ -125,4 +146,38 @@ if count == 1 then
 end
 local ttl = redis.call("PTTL", KEYS[1])
 return {count, ttl}
+`)
+
+// Compare decimal strings instead of Lua numbers because Unix nanoseconds are
+// larger than Lua's exact integer range. The script also preserves the longer
+// remaining TTL when an older cutoff arrives late.
+var setMaxInt64Script = redis.NewScript(`
+local candidate = ARGV[1]
+local requested_ttl = tonumber(ARGV[2])
+local current = redis.call("GET", KEYS[1])
+
+if current then
+	if not string.match(current, "^%d+$") then
+		return redis.error_reply("existing value is not a non-negative decimal integer")
+	end
+	local current_ttl = redis.call("PTTL", KEYS[1])
+	local current_is_greater = string.len(current) > string.len(candidate) or
+		(string.len(current) == string.len(candidate) and current >= candidate)
+	if current_is_greater then
+		if current_ttl >= 0 and current_ttl < requested_ttl then
+			redis.call("PEXPIRE", KEYS[1], requested_ttl)
+		end
+		return 0
+	end
+	if current_ttl == -1 then
+		redis.call("SET", KEYS[1], candidate)
+		return 1
+	end
+	if current_ttl > requested_ttl then
+		requested_ttl = current_ttl
+	end
+end
+
+redis.call("SET", KEYS[1], candidate, "PX", requested_ttl)
+return 1
 `)

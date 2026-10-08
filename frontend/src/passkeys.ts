@@ -1,3 +1,9 @@
+import {
+  notifyRecentAuthenticationComplete,
+  requestRecentAuthentication,
+} from "./recentAuthentication";
+import { showToast } from "./toast";
+
 type PasskeyOptionsResponse = {
   challenge_id: string;
   options: {
@@ -16,8 +22,6 @@ type PasskeyFinishResponse = {
 type PasskeyRegistrationFinishResponse = PasskeyFinishResponse & {
   linkedProvidersHTML?: string;
 };
-
-type ToastKind = "success" | "info" | "error";
 
 let conditionalLoginAbortController: AbortController | null = null;
 
@@ -148,7 +152,11 @@ async function responseErrorMessage(
   return fallback;
 }
 
-async function postJSON<T>(url: string, body?: unknown): Promise<T> {
+async function postJSON<T>(
+  url: string,
+  body?: unknown,
+  allowRecentAuthenticationRetry = true,
+): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
     credentials: "include",
@@ -160,6 +168,13 @@ async function postJSON<T>(url: string, body?: unknown): Promise<T> {
   });
 
   if (!res.ok) {
+    if (res.status === 428) {
+      const data = (await res.json()) as { reauthenticate_url?: string };
+      if (allowRecentAuthenticationRetry && data.reauthenticate_url) {
+        await requestRecentAuthentication(data.reauthenticate_url);
+        return postJSON<T>(url, body, false);
+      }
+    }
     throw new Error(await responseErrorMessage(res, "Passkey request failed."));
   }
 
@@ -169,6 +184,7 @@ async function postJSON<T>(url: string, body?: unknown): Promise<T> {
 async function postRegistrationFinish(
   body: unknown,
   responseMode: "json" | "linked-providers-section",
+  allowRecentAuthenticationRetry = true,
 ): Promise<PasskeyRegistrationFinishResponse> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -187,6 +203,13 @@ async function postRegistrationFinish(
   });
 
   if (!res.ok) {
+    if (res.status === 428) {
+      const data = (await res.json()) as { reauthenticate_url?: string };
+      if (allowRecentAuthenticationRetry && data.reauthenticate_url) {
+        await requestRecentAuthentication(data.reauthenticate_url);
+        return postRegistrationFinish(body, responseMode, false);
+      }
+    }
     throw new Error(await responseErrorMessage(res, "Could not add passkey."));
   }
 
@@ -195,41 +218,6 @@ async function postRegistrationFinish(
   }
 
   return (await res.json()) as PasskeyFinishResponse;
-}
-
-function removeToast(toast: HTMLElement): void {
-  if (toast.dataset.removing === "true") return;
-  toast.dataset.removing = "true";
-  toast.classList.remove("toast-enter");
-  toast.classList.add("toast-exit");
-  toast.addEventListener("animationend", () => toast.remove(), { once: true });
-}
-
-function showToast(kind: ToastKind, message: string): void {
-  const container = document.querySelector<HTMLElement>("#toast-container");
-  const template = document.querySelector<HTMLTemplateElement>(
-    `#toast-template-${kind}`,
-  );
-  const templateRoot = template?.content.firstElementChild;
-
-  if (!container || !(templateRoot instanceof HTMLElement)) {
-    // The root layout should always provide the toast templates. Keep a visible fallback for partial pages.
-    window.alert(message);
-    return;
-  }
-
-  const toast = templateRoot.cloneNode(true) as HTMLElement;
-  const messageEl = toast.querySelector<HTMLElement>("[data-toast-message]");
-  if (messageEl) {
-    messageEl.textContent = message;
-  }
-
-  toast
-    .querySelector<HTMLButtonElement>("[data-toast-close]")
-    ?.addEventListener("click", () => removeToast(toast));
-
-  window.setTimeout(() => removeToast(toast), 5000);
-  container.prepend(toast);
 }
 
 function showPasskeyError(message: string): void {
@@ -415,6 +403,57 @@ async function loginWithPasskey(button: HTMLButtonElement): Promise<void> {
   }
 }
 
+async function reauthenticateWithPasskey(
+  button: HTMLButtonElement,
+): Promise<void> {
+  const wasDisabled = button.disabled;
+  button.disabled = true;
+  try {
+    if (!window.PublicKeyCredential || !navigator.credentials?.get) {
+      showPasskeyError("Passkeys are not supported by this browser.");
+      return;
+    }
+    const returnTo = button.dataset.returnTo || "/auth/account";
+    const authenticationChallengeId =
+      button.dataset.authenticationChallengeId || "";
+    if (!authenticationChallengeId) {
+      showPasskeyError("Authentication challenge is missing.");
+      return;
+    }
+    const data = await postJSON<PasskeyOptionsResponse>(
+      `/auth/reauthenticate/passkeys/options?return_to=${encodeURIComponent(returnTo)}`,
+      { authentication_challenge_id: authenticationChallengeId },
+    );
+    const credential = (await navigator.credentials.get({
+      publicKey: normalizeRequestOptions(
+        data.options.publicKey as PublicKeyCredentialRequestOptions,
+      ),
+    })) as PublicKeyCredential | null;
+    if (!credential) return;
+    const finish = await postJSON<PasskeyFinishResponse>(
+      `/auth/reauthenticate/passkeys/finish?return_to=${encodeURIComponent(returnTo)}`,
+      {
+        authentication_challenge_id: authenticationChallengeId,
+        challenge_id: data.challenge_id,
+        credential: serializeAuthenticationCredential(credential),
+        return_to: returnTo,
+      },
+    );
+    if (notifyRecentAuthenticationComplete()) return;
+    window.location.href = finish.return_to || returnTo;
+  } catch (err) {
+    showPasskeyError(
+      passkeyErrorMessage(
+        err,
+        "Passkey authentication failed.",
+        "Passkey authentication was cancelled.",
+      ),
+    );
+  } finally {
+    button.disabled = wasDisabled;
+  }
+}
+
 function conditionalLoginRoot(root: ParentNode): HTMLElement | null {
   if (
     root instanceof HTMLElement &&
@@ -540,6 +579,17 @@ export function initPasskeys(root: ParentNode = document): void {
       if (button.dataset.passkeyBound === "true") return;
       button.dataset.passkeyBound = "true";
       button.addEventListener("click", () => void loginWithPasskey(button));
+    });
+
+  root
+    .querySelectorAll<HTMLButtonElement>("[data-passkey-reauthenticate]")
+    .forEach((button) => {
+      if (button.dataset.passkeyBound === "true") return;
+      button.dataset.passkeyBound = "true";
+      button.addEventListener(
+        "click",
+        () => void reauthenticateWithPasskey(button),
+      );
     });
 
   void initConditionalPasskeyLogin(root);

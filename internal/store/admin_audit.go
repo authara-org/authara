@@ -144,8 +144,20 @@ func (s *Store) ListAdminAuditEvents(ctx context.Context, filter AdminAuditEvent
 	return out, nil
 }
 
-func (s *Store) DeleteAdminAuditEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
-	res, err := s.exec(ctx, `DELETE FROM admin_audit_events WHERE created_at < $1`, cutoff)
+func (s *Store) DeleteAdminAuditEventsBefore(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+	res, err := s.exec(ctx, `
+		WITH oldest AS (
+			SELECT id
+			FROM admin_audit_events
+			WHERE created_at < $1
+			ORDER BY created_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $2
+		)
+		DELETE FROM admin_audit_events AS event
+		USING oldest
+		WHERE event.id = oldest.id
+	`, cutoff, batchSize)
 	if err != nil {
 		return 0, err
 	}

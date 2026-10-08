@@ -14,7 +14,7 @@ templ VerifyChallenge(challengeID string, action string, header string) {
 	@templates.PartialRender() {
 		@auth.AuthLayout() {
 			@auth.CardHeader()
-			@auth.HeaderSection(header, "Enter the 6-digit code we sent to your email address.")
+			@auth.HeaderSection(header, verifyChallengeInstructions(action))
 			@VerifyChallengeForm(challengeID, action, false)
 			<div class="text-center mt-6">
 				<form
@@ -94,4 +94,11 @@ func codeInputClass(incorrect bool) string {
 		return base + " border-red-700"
 	}
 	return base + " border-grey-100 dark:border-grey-800"
+}
+
+func verifyChallengeInstructions(action string) string {
+	if action == "password-reset" {
+		return "If this account has a password, enter the 6-digit code sent to its email address. If you use Google or a passkey, return to sign-in and use that method instead."
+	}
+	return "Enter the 6-digit code we sent to your email address."
 }

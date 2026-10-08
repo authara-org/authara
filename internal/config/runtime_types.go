@@ -13,15 +13,21 @@ import (
 type Key = configruntime.Key
 
 const (
+	KeyUIAppName         Key = "ui.app_name"
 	KeyUIDefaultReturnTo Key = "ui.default_return_to"
 
-	KeyAuthenticationUsernameLoginEnabled Key = "authentication.username_login_enabled"
+	KeyAuthenticationUsernameLoginEnabled      Key = "authentication.username_login_enabled"
+	KeyAuthenticationEmailVerificationRequired Key = "authentication.email_verification_required"
+	KeyAuthenticationPasskeyCloneResponse      Key = "authentication.passkey_clone_response"
+	KeyAuthenticationPasskeyCloneNotifyUser    Key = "authentication.passkey_clone_notify_user"
 
 	KeyTokenAccessTTL Key = "token.access_ttl"
 
-	KeySessionTTL             Key = "session.ttl"
-	KeySessionRefreshTokenTTL Key = "session.refresh_token_ttl"
-	KeySessionRotation        Key = "session.refresh_token_rotation"
+	KeySessionTTL                         Key = "session.ttl"
+	KeySessionRefreshTokenTTL             Key = "session.refresh_token_ttl"
+	KeySessionRotation                    Key = "session.refresh_token_rotation"
+	KeySessionRecentAuthenticationEnabled Key = "session.recent_authentication_enabled"
+	KeySessionRecentAuthenticationWindow  Key = "session.recent_authentication_window"
 
 	KeyOrganizationPublicManagementEnabled Key = "organization.public_management_enabled"
 	KeyOrganizationInvitationTTL           Key = "organization.invitation_ttl"
@@ -138,6 +144,7 @@ type StaticChallengePolicy struct {
 func (s StaticChallengePolicy) CurrentChallenge() ChallengePolicy { return s.Policy }
 
 type UIPolicy struct {
+	AppName         string
 	DefaultReturnTo string
 }
 
@@ -150,7 +157,10 @@ type UIPolicyReaderFunc func() UIPolicy
 func (f UIPolicyReaderFunc) CurrentUI() UIPolicy { return f() }
 
 type AuthenticationPolicy struct {
-	UsernameLoginEnabled bool
+	UsernameLoginEnabled      bool
+	EmailVerificationRequired bool
+	PasskeyCloneResponse      string
+	PasskeyCloneNotifyUser    bool
 }
 
 type AuthenticationPolicyReader interface {
@@ -174,9 +184,11 @@ type TokenPolicyReaderFunc func() TokenPolicy
 func (f TokenPolicyReaderFunc) CurrentToken() TokenPolicy { return f() }
 
 type SessionPolicy struct {
-	SessionTTL           time.Duration
-	RefreshTokenTTL      time.Duration
-	RefreshTokenRotation time.Duration
+	SessionTTL                  time.Duration
+	RefreshTokenTTL             time.Duration
+	RefreshTokenRotation        time.Duration
+	RecentAuthenticationEnabled bool
+	RecentAuthenticationWindow  time.Duration
 }
 
 type SessionPolicyReader interface {

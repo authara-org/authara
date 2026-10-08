@@ -20,6 +20,7 @@ type Passkey struct {
 	AAGUID            *uuid.UUID
 	SignCount         int64
 	CloneWarning      bool
+	RestrictedAt      *time.Time
 	Name              string
 	LastUsedAt        *time.Time
 
@@ -38,6 +39,7 @@ type WebAuthnChallenge struct {
 	CreatedAt time.Time
 
 	UserID      *uuid.UUID
+	SessionID   *uuid.UUID
 	Purpose     string
 	Challenge   string
 	SessionData []byte

@@ -88,6 +88,30 @@ func TestRuntimeSettingsPrioritizesGroupsWithLiveValues(t *testing.T) {
 	}
 }
 
+func TestRuntimeSettingsRenderBooleanSettingsAsEnabledDisabledSelect(t *testing.T) {
+	html := renderOperatorComponent(t, RuntimeSettingRow(config.Description{
+		Definition: config.Definition{
+			Key: config.KeySessionRecentAuthenticationEnabled, Name: "Recent authentication required",
+			Environment: "AUTHARA_RECENT_AUTHENTICATION_ENABLED", Reload: config.ReloadDynamic,
+			Group: "Sessions", Type: config.TypeBool,
+		},
+		EffectiveValue: "false", EffectiveSource: config.SourceOperator, Revision: 4,
+	}, "false", ""))
+
+	for _, want := range []string{
+		`name="value"`, `value="true"`, `Enabled (true)`,
+		`value="false" selected`, `Disabled (false)`,
+		`action="/auth/operator/settings/session.recent_authentication_enabled"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("boolean runtime setting does not contain %q: %s", want, html)
+		}
+	}
+	if strings.Contains(html, `<input id="runtime-setting-session.recent_authentication_enabled"`) {
+		t.Fatal("boolean runtime setting rendered a free-text input")
+	}
+}
+
 func TestRuntimeSettingsRenderGroupsStatesMutabilityAndHideSecrets(t *testing.T) {
 	html := renderOperatorComponent(t, Settings(SettingsPageModel{Settings: []config.Description{
 		{

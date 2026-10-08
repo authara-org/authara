@@ -10,10 +10,14 @@ import (
 func getCurrentAccountError(code response.ErrorCode, message string) contract.GetCurrentAccountResponseObject {
 	spec := mustRouteError(GetCurrentAccountErrors, code)
 	body := apiErrorBody(spec.Code, message)
-	if spec.Status == http.StatusUnauthorized {
-		return contract.GetCurrentAccount401JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.GetCurrentAccount400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.GetCurrentAccount401JSONResponse(body)
+	default:
+		return contract.GetCurrentAccount500JSONResponse(body)
 	}
-	return contract.GetCurrentAccount500JSONResponse(body)
 }
 
 func changeCurrentUsernameError(code response.ErrorCode, message string) contract.ChangeCurrentUsernameResponseObject {
@@ -113,6 +117,25 @@ func linkCurrentUserGoogleError(code response.ErrorCode, message string) contrac
 		return contract.LinkCurrentUserGoogle409JSONResponse(body)
 	default:
 		return contract.LinkCurrentUserGoogle500JSONResponse(body)
+	}
+}
+
+func linkCurrentUserAppleError(code response.ErrorCode, message string) contract.LinkCurrentUserAppleResponseObject {
+	spec := mustRouteError(LinkCurrentUserAppleErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.LinkCurrentUserApple400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.LinkCurrentUserApple401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.LinkCurrentUserApple403JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.LinkCurrentUserApple404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.LinkCurrentUserApple409JSONResponse(body)
+	default:
+		return contract.LinkCurrentUserApple500JSONResponse(body)
 	}
 }
 

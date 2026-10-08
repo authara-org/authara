@@ -110,6 +110,9 @@ Unless explicitly stated otherwise, documented public behavior is considered **S
 - `POST /auth/login`
 - `GET /auth/signup`
 - `POST /auth/signup`
+- `GET /auth/verify-email`
+- `POST /auth/verify-email`
+- `POST /auth/verify-email/complete`
 
 ### Session actions
 
@@ -187,6 +190,8 @@ Field names must not change or be removed.
 - `forbidden`
 - `invalid_request`
 - `not_found`
+- `recent_authentication_required`
+- `invalid_authentication_challenge`
 - `internal_error`
 
 ---
@@ -202,11 +207,108 @@ Stable behaviors include:
 
 Security-relevant guarantees must not be weakened.
 
-## 8.1 Access-token revocation contract
+## 8.1 Recent-authentication contract
 
-Core and server-side SDK middleware share the Redis key templates in
-`contract/access-token-revocations.json`. An incompatible change is breaking
-unless a compatible rollout supports both formats.
+Sensitive authenticated mutations may return HTTP `428` with
+`recent_authentication_required` when the current session's last password,
+passkey, or federated proof is older than the configured window. Token refresh
+and organization switching do not update that proof time.
+
+Recent-authentication enforcement is enabled by default. It can be disabled
+dynamically with `AUTHARA_RECENT_AUTHENTICATION_ENABLED` or its operator
+override. When disabled, protected routes still require the otherwise valid
+session, authorization, and CSRF checks, but do not issue a step-up challenge.
+
+The `428` response includes a short-lived `authentication_challenge` bound to
+the current user and session. Clients complete that challenge through one of
+the reauthentication endpoints and then retry the original mutation. A
+challenge is single-use; expired, consumed, or session-mismatched challenges
+return HTTP `409` with `invalid_authentication_challenge`.
+
+Application backends can apply the same policy before a sensitive server-side
+operation by calling `POST /auth/api/v1/reauthenticate/check` with the user's
+session and CSRF proof. It returns `204` when the policy is satisfied or the
+same `428` challenge envelope when step-up is required.
+
+## 8.2 Access-token revocation contract
+
+Core exposes two startup-selected revocation guarantees. `immediate` requires
+Redis, checks revocation state on every protected request, and fails closed
+when that state cannot be read. Access-token lifetime is capped at 24 hours so
+revocation markers can cover tokens issued before a runtime policy reduction.
+`expiry` requires the noop provider and further caps the access-token lifetime
+at 10 minutes; logout and authorization changes stop
+refresh immediately, but an already-issued access token can remain usable
+until its expiry. Production/noop deployments must select `expiry` explicitly.
+Every replica must use the same mode.
+
+Core and server-side SDK middleware in immediate mode share the Redis key
+templates in `contract/access-token-revocations.json`. An incompatible change
+is breaking unless a compatible rollout supports both formats.
+
+## 8.3 Email-verification contract
+
+Users persist the time at which their current email address was verified.
+Changing the address clears that proof unless the replacement is completed by
+an email challenge or a verified federated identity for the same address.
+Public user representations and access tokens expose the boolean
+`email_verified`; user responses also expose `email_verified_at` when present.
+Challenge-disabled signup and admin-created accounts start unverified.
+Challenge-backed signup starts verified, and a federated provider marks the
+current address verified only when the provider asserts that exact address as
+verified.
+
+`AUTHARA_EMAIL_VERIFICATION_REQUIRED` defaults to `false`. When enabled, it
+applies immediately to existing accounts: an authenticated request carrying an
+unverified identity revokes the backing session, records immediate access-token
+revocation when Redis revocation is configured, and sends browser users to
+`/auth/verify-email`. The verification flow can confirm the existing address or
+atomically replace and confirm it, then issues a new session. Password recovery
+for an unverified address is opaque and does not send a usable reset code while
+the policy is enabled.
+
+## 8.4 Passkey clone-warning contract
+
+A newly detected passkey sign-counter anomaly creates a durable security event.
+`AUTHARA_PASSKEY_CLONE_RESPONSE` selects `alert`, `restrict`, or
+`restrict_and_revoke`; the latter two deny the current authentication and
+persistently restrict the passkey, while the last option also revokes all user
+sessions using the access-token guarantees in section 8.2.
+`AUTHARA_PASSKEY_CLONE_NOTIFY_USER` controls a generic user notice
+that never includes credential IDs, public keys, authenticator IDs, or counter
+values. Authenticators that legitimately keep both counters at zero do not
+trigger this response.
+
+## 8.5 Password recovery contract
+
+Password reset rotates an existing password provider. It does not add password
+authentication to an OAuth-only or passkey-only account. Unknown and
+passwordless accounts receive the same public accepted response as eligible
+accounts, without a usable reset code, to prevent account and authentication
+method enumeration.
+
+A passwordless user must authenticate with an existing provider or passkey
+before adding a password. Reset completion revalidates the user, current email,
+and existing password provider before atomically changing the password,
+revoking sessions, invalidating pending resets, queueing the security
+notification, and consuming the challenge.
+
+Authenticated password additions, changes, replacements, and removals
+invalidate outstanding password-reset requests so an older code cannot gain
+authority over a newly created or changed credential.
+
+An authenticated password change preserves the initiating session and
+atomically revokes every other session family, deletes its refresh tokens, and
+invalidates outstanding password-reset requests. When a shared revocation
+mode is `immediate`, already-issued access tokens for those sessions are also
+rejected immediately. In `expiry` mode, they remain usable only until the
+capped access-token expiry.
+
+## 8.6 Platform roles
+
+Authara exposes two platform roles: `authara:admin` and `authara:operator`.
+Admin-audience sessions require the admin role, and operator-audience sessions
+require the operator role. Neither role implies the other.
 
 ---
 

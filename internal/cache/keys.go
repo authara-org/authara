@@ -10,8 +10,8 @@ func RateLimitKey(kind, scope, value string) string {
 	return fmt.Sprintf("authara:ratelimit:%s:%s:%s", kind, scope, value)
 }
 
-func RevokedAccessTokenKey(tokenHash string) string {
-	return fmt.Sprintf("authara:access-token:revoked:token:%s", tokenHash)
+func RevokedAccessTokenKey(tokenIdentifier string) string {
+	return fmt.Sprintf("authara:access-token:revoked:token:%s", tokenIdentifier)
 }
 
 func RevokedAccessTokenSessionKey(sessionID string) string {

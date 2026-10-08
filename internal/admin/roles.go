@@ -32,13 +32,12 @@ func (s *Service) RevokeAdmin(ctx context.Context, actor Actor, userID uuid.UUID
 		return ErrSelfRevokeAdmin
 	}
 
-	now := s.now()
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.LockPlatformRoleByName(txCtx, roles.DBAdminRoleName); err != nil {
 			return err
 		}
 
-		user, err := s.store.GetUserByID(txCtx, userID)
+		user, err := s.store.GetUserByIDForUpdate(txCtx, userID)
 		if err != nil {
 			return err
 		}
@@ -56,6 +55,10 @@ func (s *Service) RevokeAdmin(ctx context.Context, actor Actor, userID uuid.UUID
 			}
 		}
 
+		now := s.now()
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
+			return err
+		}
 		if err := s.store.RemoveUserPlatformRoleByName(txCtx, userID, roles.DBAdminRoleName); err != nil {
 			return err
 		}
@@ -63,9 +66,6 @@ func (s *Service) RevokeAdmin(ctx context.Context, actor Actor, userID uuid.UUID
 			return err
 		}
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
-			return err
-		}
-		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		if err := s.audit(txCtx, actor, ActionUserAdminRevoked, &userID, user.Email, map[string]any{}, meta); err != nil {

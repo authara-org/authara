@@ -18,7 +18,9 @@ func (s *Service) SearchUser(ctx context.Context, query string) (UserSummary, er
 	return s.userSummary(ctx, user)
 }
 
-func (s *Service) GetUserDetail(ctx context.Context, actor Actor, userID uuid.UUID) (UserDetail, error) {
+func (s *Service) GetUserDetail(ctx context.Context, actor Actor, userID uuid.UUID, pages UserDetailPages) (UserDetail, error) {
+	sessionPage := normalizePage(pages.Sessions, 25)
+	passkeyPage := normalizePage(pages.Passkeys, 25)
 	user, err := s.store.GetUserByID(ctx, userID)
 	if err != nil {
 		return UserDetail{}, err
@@ -32,11 +34,11 @@ func (s *Service) GetUserDetail(ctx context.Context, actor Actor, userID uuid.UU
 	if err != nil {
 		return UserDetail{}, err
 	}
-	passkeys, err := s.store.ListPasskeysByUserID(ctx, userID)
+	passkeys, err := s.store.ListPasskeysByUserIDOffsetPage(ctx, userID, passkeyPage.Size+1, (passkeyPage.Page-1)*passkeyPage.Size)
 	if err != nil {
 		return UserDetail{}, err
 	}
-	sessions, err := s.store.ListSessionsByUserID(ctx, userID)
+	sessions, err := s.store.ListSessionsPageByUserID(ctx, userID, sessionPage.Size+1, (sessionPage.Page-1)*sessionPage.Size)
 	if err != nil {
 		return UserDetail{}, err
 	}
@@ -45,12 +47,26 @@ func (s *Service) GetUserDetail(ctx context.Context, actor Actor, userID uuid.UU
 		return UserDetail{}, err
 	}
 
+	hasNext := len(sessions) > sessionPage.Size
+	if hasNext {
+		sessions = sessions[:sessionPage.Size]
+	}
+	passkeysNext := len(passkeys) > passkeyPage.Size
+	if passkeysNext {
+		passkeys = passkeys[:passkeyPage.Size]
+	}
 	now := s.now()
 	return UserDetail{
 		User:          summary,
 		AuthProviders: summarizeAuthProviders(providers),
 		Passkeys:      summarizePasskeys(passkeys),
 		Sessions:      summarizeSessions(sessions, now),
+		SessionPage:   sessionPage.Page,
+		SessionSize:   sessionPage.Size,
+		SessionsNext:  hasNext,
+		PasskeyPage:   passkeyPage.Page,
+		PasskeySize:   passkeyPage.Size,
+		PasskeysNext:  passkeysNext,
 		Actions:       actions,
 	}, nil
 }
@@ -60,13 +76,12 @@ func (s *Service) DisableUser(ctx context.Context, actor Actor, userID uuid.UUID
 		return ErrSelfDisable
 	}
 
-	now := s.now()
 	if err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.LockPlatformRoleByName(txCtx, roles.DBAdminRoleName); err != nil {
 			return err
 		}
 
-		user, err := s.store.GetUserByID(txCtx, userID)
+		user, err := s.store.GetUserByIDForUpdate(txCtx, userID)
 		if err != nil {
 			return err
 		}
@@ -85,6 +100,10 @@ func (s *Service) DisableUser(ctx context.Context, actor Actor, userID uuid.UUID
 			}
 		}
 
+		now := s.now()
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
+			return err
+		}
 		if err := s.store.DisableUser(txCtx, userID, now); err != nil {
 			return err
 		}
@@ -92,9 +111,6 @@ func (s *Service) DisableUser(ctx context.Context, actor Actor, userID uuid.UUID
 			return err
 		}
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
-			return err
-		}
-		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		if err := s.audit(txCtx, actor, ActionUserDisabled, &userID, user.Email, map[string]any{}, meta); err != nil {

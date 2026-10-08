@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"context"
+	"strings"
+
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
@@ -8,7 +11,7 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 )
 
-templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider) {
+templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider, appleReturnTo string) {
 	if len(oauthProviders) != 0 {
 		<div class="relative flex justify-center my-5">
 			<p class="bg-white dark:bg-grey-900 text-sm px-4 z-2 text-grey-700 dark:text-grey-300">
@@ -16,11 +19,13 @@ templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider) {
 			</p>
 			<div class="absolute w-full top-1/2 -translate-y-1/2 left-0 h-0.5 bg-grey-200 dark:bg-grey-800 z-1"></div>
 		</div>
-		<div class="flex flex-col gap-2">
+		<div class="flex flex-col gap-3">
 			for _, p := range oauthProviders {
 				switch p.Name {
 					case "google":
 						@GoogleSignin(action, p.ClientID, viewmodel.AuthProviderFlowLogin, "")
+					case "apple":
+						@AppleSignin(action, viewmodel.AuthProviderFlowLogin, "", "", appleReturnTo)
 				}
 			}
 		</div>
@@ -30,13 +35,13 @@ templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider) {
 templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFlow, linkID string) {
 	<script src="https://accounts.google.com/gsi/client" async></script>
 	@button.Button(button.ButtonConfig{
-		Type:    button.RegularButton,
-		Color:   button.Custom,
-		Class:   " relative !h-12 !w-full !rounded-xl !border-2 border-gray-100 !px-4 !py-0 text-gray-700 overflow-hidden bg-white hover:bg-gray-50 dark:border-grey-800 dark:bg-grey-900 dark:text-white dark:hover:bg-grey-800",
+		Type:  button.RegularButton,
+		Color: button.Custom,
+		Class: " relative !h-[42px] !w-full !rounded-xl !border !border-grey-400 !px-3.5 !py-0 text-base text-grey-800 overflow-hidden bg-white hover:bg-grey-50 hover:border-grey-500 dark:!border-transparent dark:bg-white dark:text-grey-800 dark:hover:!border-transparent dark:hover:bg-grey-50",
 		Attrs: templ.Attributes{
 			"id":               "google-signin-btn",
 			"data-provider":    "google",
-			"data-google-flow": flow,
+			"data-google-flow": string(flow),
 			"data-link-id":     linkID,
 			"data-return-to":   httpctx.ReturnToOrDefault(ctx),
 		},
@@ -50,11 +55,11 @@ templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFl
 		></div>
 		<img
 			src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-			class="h-4.5 w-4.5"
+			class="h-4 w-4"
 			alt="Google logo"
 		/>
-		<span>{ action } with Google</span>
-		<div class="opacity-[0.00001%] absolute left-0">
+		<span>{ googleButtonLabel(action) }</span>
+		<div class="absolute inset-0 overflow-hidden opacity-[0.00001%]">
 			<div
 				class="g_id_signin"
 				data-type="standard"
@@ -63,31 +68,64 @@ templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFl
 				data-text="sign_in_with"
 				data-shape="rectangular"
 				data-logo_alignment="left"
-			></div>
-		</div>
-		<div class="opacity-[0.00001%] absolute right-0">
-			<div
-				class="g_id_signin"
-				data-type="standard"
-				data-size="large"
-				data-theme="outline"
-				data-text="sign_in_with"
-				data-shape="rectangular"
-				data-logo_alignment="left"
+				data-width="400"
 			></div>
 		</div>
 	}
 }
 
-templ AppleSignin(action string) {
-	// <div id="appleid-signin" class="h-10" data-color="black" data-border="true" data-type="sign-in"></div>
-	// <script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>
-	@button.Button(button.ButtonConfig{
-		Type:  button.RegularButton,
-		Color: button.Custom,
-		Class: " !h-12 !rounded-xl !border-2 !border-black bg-black !px-6 text-base text-white",
-	}) {
-		@icons.AppleLogoMediumWhite()
-		{ action } with Apple
+templ AppleSignin(action string, flow viewmodel.AuthProviderFlow, authenticationChallengeID string, linkID string, returnTo string) {
+	<div
+		class="authara-apple-signin w-full"
+		data-apple-flow={ string(flow) }
+		data-return-to={ appleReturnDestination(ctx, returnTo) }
+		data-authentication-challenge-id={ authenticationChallengeID }
+		data-link-id={ linkID }
+	>
+		<button
+			type="button"
+			data-apple-button
+			disabled
+			aria-disabled="true"
+			class="relative h-[42px] w-full cursor-pointer overflow-hidden rounded-xl border-0 bg-black px-3.5 py-0 text-base text-white transition-[background-color,opacity] hover:bg-grey-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-wait dark:bg-white dark:text-grey-800 dark:hover:bg-grey-50 dark:focus-visible:ring-offset-grey-900"
+		>
+			<span class="flex h-full items-center justify-center gap-2">
+				<span class="flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden="true">
+					@icons.AppleLogoBlack()
+				</span>
+				<span>{ appleButtonLabel(action) }</span>
+			</span>
+		</button>
+	</div>
+}
+
+func appleReturnDestination(ctx context.Context, override string) string {
+	if override != "" {
+		return override
+	}
+	return httpctx.ReturnToOrDefault(ctx)
+}
+
+func googleButtonLabel(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "login", "signin", "sign in":
+		return "Sign in with Google"
+	case "create account", "signup", "sign up":
+		return "Sign up with Google"
+	default:
+		return action + " with Google"
+	}
+}
+
+func appleButtonLabel(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "login", "sign in":
+		return "Sign in with Apple"
+	case "create account", "sign up", "signup":
+		return "Sign up with Apple"
+	case "link":
+		return "Link Apple"
+	default:
+		return "Continue with Apple"
 	}
 }

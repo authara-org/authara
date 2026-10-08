@@ -16,6 +16,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	emailpkg "github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/webhook"
 	"github.com/google/uuid"
@@ -339,6 +340,26 @@ func (s *Service) ListInvitations(ctx context.Context, organizationID uuid.UUID)
 	return s.store.ListOrganizationInvitationsByOrganizationID(ctx, organizationID)
 }
 
+func (s *Service) ListInvitationsPage(ctx context.Context, organizationID uuid.UUID, options ListOptions) (Page[domain.OrganizationInvitation], error) {
+	if !s.mode.AllowsInvitations() {
+		return Page[domain.OrganizationInvitation]{}, ErrOrganizationInviteForbidden
+	}
+	if _, err := s.store.GetOrganizationByID(ctx, organizationID); err != nil {
+		return Page[domain.OrganizationInvitation]{}, err
+	}
+	cursor, limit, err := decodeListOptions(options, invitationsCursorKind, organizationID)
+	if err != nil {
+		return Page[domain.OrganizationInvitation]{}, err
+	}
+	items, err := s.store.ListOrganizationInvitationsPage(ctx, organizationID, cursor, limit+1)
+	if err != nil {
+		return Page[domain.OrganizationInvitation]{}, err
+	}
+	return finishPage(items, limit, invitationsCursorKind, organizationID, func(item domain.OrganizationInvitation) (time.Time, uuid.UUID) {
+		return item.CreatedAt, item.ID
+	})
+}
+
 func (s *Service) InvitationByOrganizationAndID(ctx context.Context, organizationID uuid.UUID, invitationID uuid.UUID) (InvitationPreview, error) {
 	preview, err := s.InvitationByID(ctx, invitationID)
 	if err != nil {
@@ -626,7 +647,7 @@ func (s *Service) ensureInvitationTargetNotMember(ctx context.Context, organizat
 }
 
 func normalizeInvitationEmail(raw string) (string, error) {
-	email := strings.ToLower(strings.TrimSpace(raw))
+	email := identity.CanonicalEmail(raw)
 	if email == "" {
 		return "", ErrInvalidOrganizationInvitationEmail
 	}
@@ -692,11 +713,12 @@ func (s *Service) enqueueInvitationEmail(ctx context.Context, invitation domain.
 	}
 
 	_, err = s.store.CreateEmailJob(ctx, domain.EmailJob{
-		ToEmail:       invitation.Email,
-		Template:      domain.EmailTemplateOrganizationInvite,
-		TemplateData:  data,
-		Status:        domain.EmailJobStatusPending,
-		NextAttemptAt: now,
+		ToEmail:            invitation.Email,
+		Template:           domain.EmailTemplateOrganizationInvite,
+		TemplateData:       data,
+		Status:             domain.EmailJobStatusPending,
+		NextAttemptAt:      now,
+		DeliveryDeadlineAt: invitation.ExpiresAt,
 	})
 	return err
 }

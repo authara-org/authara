@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
 )
@@ -15,7 +16,7 @@ func (s *Service) ListAllowedEmails(ctx context.Context, query string, page Page
 	}
 
 	page = normalizePage(page, 25)
-	query = normalizeEmail(query)
+	query = identity.CanonicalEmail(query)
 	if query != "" && len(query) < 3 {
 		return AllowedEmailPage{
 			Query:   query,
@@ -47,7 +48,7 @@ func (s *Service) AddAllowedEmail(ctx context.Context, actor Actor, email string
 		return err
 	}
 
-	email = normalizeEmail(email)
+	email = identity.CanonicalEmail(email)
 	if email == "" {
 		return ErrInvalidEmail
 	}
@@ -69,20 +70,20 @@ func (s *Service) RemoveAllowedEmail(ctx context.Context, actor Actor, allowedEm
 	}
 
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		actorEmail := normalizeEmail(actor.Email)
+		actorEmail := identity.CanonicalEmail(actor.Email)
 		if actorEmail == "" {
 			user, err := s.store.GetUserByID(txCtx, actor.UserID)
 			if err != nil {
 				return err
 			}
-			actorEmail = normalizeEmail(user.Email)
+			actorEmail = identity.CanonicalEmail(user.Email)
 		}
 
 		allowedEmail, err := s.store.GetAllowedEmailByID(txCtx, allowedEmailID)
 		if err != nil {
 			return err
 		}
-		if normalizeEmail(allowedEmail.Email) == actorEmail {
+		if identity.CanonicalEmail(allowedEmail.Email) == actorEmail {
 			return ErrSelfRemoveAllowedEmail
 		}
 

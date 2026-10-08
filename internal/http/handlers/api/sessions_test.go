@@ -34,7 +34,7 @@ func TestRefreshPostSetsCookiesOnly(t *testing.T) {
 		}
 
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
-		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
+		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -84,7 +84,7 @@ func TestTokenRefreshPostReturnsTokensFromBody(t *testing.T) {
 		}
 
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
-		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
+		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -118,6 +118,52 @@ func TestTokenRefreshPostReturnsTokensFromBody(t *testing.T) {
 	})
 }
 
+func TestTokenRefreshReuseReturnsUnauthorized(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Now().Add(-time.Minute)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "api-token-reuse@example.com",
+			Username: "api-token-reuse",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+
+		sessionService := newAPIHandlerTestSessionServiceWithRotation(t, tdb, -time.Nanosecond)
+		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "")
+		if err != nil {
+			t.Fatalf("CreateSession failed: %v", err)
+		}
+		h := &APIHandler{Session: sessionService, AccessTTL: time.Minute, RefreshTTL: time.Hour}
+		audience := contract.TokenRefreshRequestAudience(token.AudienceApp)
+
+		refresh := func() int {
+			req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/tokens/refresh", nil).WithContext(ctx)
+			resp, err := h.RefreshTokens(contractCtx(ctx, req), contract.RefreshTokensRequestObject{
+				Body: &contract.TokenRefreshRequest{RefreshToken: refreshToken, Audience: &audience},
+			})
+			if err != nil {
+				t.Fatalf("RefreshTokens failed: %v", err)
+			}
+			rr := httptest.NewRecorder()
+			writeContractResponse(t, rr, resp)
+			return rr.Code
+		}
+
+		if status := refresh(); status != http.StatusOK {
+			t.Fatalf("initial refresh status = %d, want %d", status, http.StatusOK)
+		}
+		if status := refresh(); status != http.StatusUnauthorized {
+			t.Fatalf("reuse refresh status = %d, want %d", status, http.StatusUnauthorized)
+		}
+	})
+}
+
 func TestRefreshPostDisabledUserReturnsUnauthorized(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -135,7 +181,7 @@ func TestRefreshPostDisabledUserReturnsUnauthorized(t *testing.T) {
 		}
 
 		sessionService := newAPIHandlerTestSessionService(t, tdb)
-		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, "test-agent", now, "")
+		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "")
 		if err != nil {
 			t.Fatalf("CreateSession failed: %v", err)
 		}
@@ -170,6 +216,10 @@ func TestRefreshPostDisabledUserReturnsUnauthorized(t *testing.T) {
 }
 
 func newAPIHandlerTestSessionService(t *testing.T, tdb *testutil.TestDB) *session.Service {
+	return newAPIHandlerTestSessionServiceWithRotation(t, tdb, 0)
+}
+
+func newAPIHandlerTestSessionServiceWithRotation(t *testing.T, tdb *testutil.TestDB, refreshTokenRotation time.Duration) *session.Service {
 	t.Helper()
 
 	keySet, err := token.NewKeySet("test-key", map[string][]byte{
@@ -188,9 +238,10 @@ func newAPIHandlerTestSessionService(t *testing.T, tdb *testutil.TestDB) *sessio
 			"authara-test",
 			time.Minute,
 		),
-		SessionTTL:      time.Hour,
-		RefreshTokenTTL: time.Hour,
-		Organizations:   organization.New(organization.Config{Store: tdb.Store, Tx: txManager}),
+		SessionTTL:           time.Hour,
+		RefreshTokenTTL:      time.Hour,
+		RefreshTokenRotation: refreshTokenRotation,
+		Organizations:        organization.New(organization.Config{Store: tdb.Store, Tx: txManager}),
 	})
 }
 

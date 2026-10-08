@@ -3,7 +3,8 @@ FROM node:24-alpine AS dev
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY . .
+COPY index.html vite.config.js ./
+COPY src ./src
 
 CMD ["npm", "run", "dev"]
 

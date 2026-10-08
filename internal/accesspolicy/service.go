@@ -2,9 +2,9 @@ package accesspolicy
 
 import (
 	"context"
-	"strings"
 
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/store"
 )
 
@@ -41,7 +41,7 @@ func (s *Service) IsEmailAllowed(ctx context.Context, email string) (bool, error
 		return true, nil
 	}
 
-	email = normalize(email)
+	email = identity.CanonicalEmail(email)
 
 	return s.store.IsEmailAllowed(ctx, email)
 }
@@ -51,14 +51,10 @@ func (s *Service) AllowEmail(ctx context.Context, email string) error {
 		return nil
 	}
 
-	email = normalize(email)
+	email = identity.CanonicalEmail(email)
 	if email == "" {
 		return nil
 	}
 
 	return s.store.EnsureAllowedEmail(ctx, email)
-}
-
-func normalize(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }

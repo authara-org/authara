@@ -8,6 +8,7 @@ import (
 	"time"
 
 	adminsvc "github.com/authara-org/authara/internal/admin"
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/google/uuid"
 )
 
@@ -35,6 +36,34 @@ func stringPtr(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func formatEmailQueueAge(job domain.EmailJob) string {
+	age := emailQueueAge(job, time.Now())
+	if age < 0 {
+		age = 0
+	}
+	if age < time.Minute {
+		return age.Round(time.Second).String()
+	}
+	return age.Round(time.Minute).String()
+}
+
+func emailQueueAge(job domain.EmailJob, now time.Time) time.Duration {
+	endedAt := now
+	if job.FailedAt != nil {
+		endedAt = *job.FailedAt
+	} else if job.SentAt != nil {
+		endedAt = *job.SentAt
+	}
+	return max(endedAt.Sub(job.CreatedAt), 0)
+}
+
+func formatEmailNextAttempt(job domain.EmailJob) string {
+	if job.Status != domain.EmailJobStatusPending {
+		return "—"
+	}
+	return formatTime(job.NextAttemptAt)
 }
 
 func uuidPtrString(value *uuid.UUID) string {

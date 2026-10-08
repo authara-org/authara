@@ -5,7 +5,13 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
+)
+
+const (
+	hasBr = 1 << iota
+	hasGz
 )
 
 // PrecompressedFileServer serves foo.br / foo.gz if present and accepted.
@@ -32,7 +38,7 @@ func PrecompressedFileServer(fs http.FileSystem, dev bool) http.Handler {
 		})
 	}
 
-	// bitset: 1 = br available, 2 = gz available
+	// bitset: hasBr = br available, hasGz = gz available
 	index := buildPrecompressedIndex(fs)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -55,19 +61,26 @@ func PrecompressedFileServer(fs http.FileSystem, dev bool) http.Handler {
 			return
 		}
 
-		ae := r.Header.Get("Accept-Encoding")
-		tryBr := strings.Contains(ae, "br")
-		tryGz := strings.Contains(ae, "gzip")
-
-		setCacheHeaders(w)
-
 		flags := index[name]
-
-		if tryBr && (flags&1) != 0 {
-			serveEncoded(w, r, fs, name+".br", name, "br")
+		if flags == 0 {
+			setCacheHeaders(w)
+			http.FileServer(fs).ServeHTTP(w, r)
 			return
 		}
-		if tryGz && (flags&2) != 0 {
+		addVary(w.Header(), "Accept-Encoding")
+
+		encoding, acceptable := negotiateEncoding(r.Header.Values("Accept-Encoding"), flags)
+		if !acceptable {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		setCacheHeaders(w)
+
+		switch encoding {
+		case "br":
+			serveEncoded(w, r, fs, name+".br", name, "br")
+			return
+		case "gzip":
 			serveEncoded(w, r, fs, name+".gz", name, "gzip")
 			return
 		}
@@ -81,11 +94,6 @@ func staticNotFound(w http.ResponseWriter) {
 }
 
 func buildPrecompressedIndex(fs http.FileSystem) map[string]uint8 {
-	const (
-		hasBr = 1
-		hasGz = 2
-	)
-
 	idx := make(map[string]uint8, 256)
 
 	var walk func(dir string)
@@ -134,13 +142,182 @@ func serveEncoded(w http.ResponseWriter, r *http.Request, fs http.FileSystem, en
 	}
 
 	w.Header().Set("Content-Encoding", encoding)
-	w.Header().Add("Vary", "Accept-Encoding")
 
 	// Important: serve the encoded file body, but URL path stays original.
 	rr := r.Clone(r.Context())
 	rr.URL.Path = "/" + encodedName
 
 	http.FileServer(fs).ServeHTTP(w, rr)
+}
+
+// negotiateEncoding returns the preferred available representation. An empty
+// encoding means the identity representation. The boolean is false only when
+// the client explicitly rejects every available representation.
+func negotiateEncoding(headerValues []string, flags uint8) (string, bool) {
+	preferences := parseAcceptEncoding(headerValues)
+	if !preferences.present {
+		// An absent field permits any coding, but retaining identity preserves the
+		// server's existing behavior and avoids surprising older clients.
+		return "", true
+	}
+
+	type candidate struct {
+		name      string
+		available bool
+	}
+
+	// For equal qualities, retain the server's existing br-before-gzip order.
+	candidates := []candidate{
+		{name: "br", available: flags&hasBr != 0},
+		{name: "gzip", available: flags&hasGz != 0},
+	}
+
+	bestQuality := -1
+	bestEncoding := ""
+	for _, candidate := range candidates {
+		if !candidate.available {
+			continue
+		}
+
+		quality := preferences.quality(candidate.name)
+		if quality > bestQuality {
+			bestQuality = quality
+			bestEncoding = candidate.name
+		}
+	}
+
+	identityQuality, identityExplicit := preferences.explicit["identity"]
+	if identityExplicit && identityQuality > bestQuality {
+		return "", identityQuality > 0
+	}
+	if bestQuality > 0 {
+		return bestEncoding, true
+	}
+	return "", preferences.identityAcceptable()
+}
+
+type encodingPreferences struct {
+	present  bool
+	explicit map[string]int
+	wildcard *int
+}
+
+func parseAcceptEncoding(headerValues []string) encodingPreferences {
+	preferences := encodingPreferences{
+		present:  headerValues != nil,
+		explicit: make(map[string]int),
+	}
+
+	for _, headerValue := range headerValues {
+		for member := range strings.SplitSeq(headerValue, ",") {
+			parts := strings.Split(member, ";")
+			coding := normalizeEncoding(strings.TrimSpace(parts[0]))
+			if coding == "" || len(parts) > 2 {
+				continue
+			}
+
+			quality := 1000
+			if len(parts) == 2 {
+				name, value, ok := strings.Cut(strings.TrimSpace(parts[1]), "=")
+				if !ok || !strings.EqualFold(strings.TrimSpace(name), "q") {
+					continue
+				}
+
+				quality, ok = parseQuality(strings.TrimSpace(value))
+				if !ok {
+					continue
+				}
+			}
+
+			if coding == "*" {
+				setLowestQuality(&preferences.wildcard, quality)
+				continue
+			}
+			if previous, ok := preferences.explicit[coding]; !ok || quality < previous {
+				// Repeated contradictory entries are resolved conservatively so an
+				// explicit q=0 can never be bypassed by another occurrence.
+				preferences.explicit[coding] = quality
+			}
+		}
+	}
+
+	return preferences
+}
+
+func (p encodingPreferences) quality(coding string) int {
+	if quality, ok := p.explicit[coding]; ok {
+		return quality
+	}
+	if p.wildcard != nil {
+		return *p.wildcard
+	}
+	return 0
+}
+
+func (p encodingPreferences) identityAcceptable() bool {
+	if quality, ok := p.explicit["identity"]; ok {
+		return quality > 0
+	}
+	// Identity is acceptable by default. A zero-quality wildcard excludes it
+	// only when no more specific identity preference was supplied.
+	return p.wildcard == nil || *p.wildcard > 0
+}
+
+func normalizeEncoding(coding string) string {
+	coding = strings.ToLower(coding)
+	if coding == "x-gzip" {
+		return "gzip"
+	}
+	return coding
+}
+
+func parseQuality(value string) (int, bool) {
+	whole, fraction, hasFraction := strings.Cut(value, ".")
+	if hasFraction && len(fraction) > 3 {
+		return 0, false
+	}
+	for _, digit := range fraction {
+		if digit < '0' || digit > '9' {
+			return 0, false
+		}
+	}
+
+	switch whole {
+	case "0":
+		if !hasFraction {
+			return 0, true
+		}
+		for len(fraction) < 3 {
+			fraction += "0"
+		}
+		quality, err := strconv.Atoi(fraction)
+		return quality, err == nil
+	case "1":
+		if !hasFraction || strings.Trim(fraction, "0") == "" {
+			return 1000, true
+		}
+	}
+
+	return 0, false
+}
+
+func setLowestQuality(current **int, quality int) {
+	if *current != nil && **current <= quality {
+		return
+	}
+	value := quality
+	*current = &value
+}
+
+func addVary(header http.Header, field string) {
+	for _, value := range header.Values("Vary") {
+		for member := range strings.SplitSeq(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(member), field) {
+				return
+			}
+		}
+	}
+	header.Add("Vary", field)
 }
 
 func setCacheHeaders(w http.ResponseWriter) {

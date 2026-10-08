@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/response"
@@ -24,8 +25,8 @@ func (h *APIHandler) BeginPasskeyAuthentication(ctx context.Context, _ contract.
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return beginPasskeyAuthenticationError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			return beginPasskeyAuthenticationError(code, message), nil
 		}
 	}
 	optionsJSON, _, err := h.Passkeys.BeginLogin(ctx)
@@ -49,8 +50,8 @@ func (h *APIHandler) FinishPasskeyAuthentication(ctx context.Context, request co
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowPasskeyLoginFinishAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return finishPasskeyAuthenticationError(responseCodeRateLimited(), "Too many attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+			return finishPasskeyAuthenticationError(code, message), nil
 		}
 	}
 	if request.Body == nil {
@@ -64,14 +65,17 @@ func (h *APIHandler) FinishPasskeyAuthentication(ctx context.Context, request co
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	user, err := h.Passkeys.FinishLogin(ctx, request.Body.ChallengeId, credential, time.Now().UTC())
+	result, err := h.Passkeys.FinishLogin(ctx, request.Body.ChallengeId, credential, time.Now().UTC())
 	if errors.Is(err, passkey.ErrPasskeyAuthenticationInvalid) {
 		return finishPasskeyAuthenticationError(responseCodeUnauthorized(), "Passkey sign-in failed."), nil
 	}
 	if err != nil {
 		return finishPasskeyAuthenticationError(responseCodeInternalError(), "Passkey error."), nil
 	}
-	body, header, code, message, ok := h.contractSession(ctx, r, user, audience)
+	if !result.Decision.AllowSession {
+		return finishPasskeyAuthenticationError(responseCodeUnauthorized(), "Passkey sign-in failed."), nil
+	}
+	body, header, code, message, ok := h.contractSession(ctx, r, result.User, audience, domain.AuthenticationMethodPasskey, result.PasskeyID)
 	if !ok {
 		return finishPasskeyAuthenticationError(code, message), nil
 	}

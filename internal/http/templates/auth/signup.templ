@@ -11,11 +11,11 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 )
 
-templ Signup(oauthProviders []oauth.OAuthProvider) {
+templ Signup(oauthProviders []oauth.OAuthProvider, appName string) {
 	@templates.PartialRender() {
 		@AuthLayout() {
 			@CardHeader()
-			@HeaderSection("Create an account", "Join to get unlimited access.")
+			@HeaderSection("Create account for "+appName, "")
 			<div x-data="{open:false}">
 				@button.Button(button.ButtonConfig{
 					Label:   "Sign up with Email",
@@ -30,7 +30,7 @@ templ Signup(oauthProviders []oauth.OAuthProvider) {
 				})
 				@SignupForm()
 			</div>
-			@OAuthProviders("Signup", oauthProviders)
+			@OAuthProviders("Signup", oauthProviders, "")
 			<div class="text-center mt-6">
 				<p class="text-grey-800 dark:text-grey-200">
 					Already have an account?
@@ -41,7 +41,7 @@ templ Signup(oauthProviders []oauth.OAuthProvider) {
 						hx-replace-url="true"
 						class="cursor-pointer underline text-blue-800 dark:text-blue-400"
 					>
-						Login here
+						Sign in here
 					</a>
 				</p>
 			</div>
@@ -89,21 +89,12 @@ templ SignupForm() {
 				Attrs: templ.Attributes{
 					":type":     "show ? 'text' : 'password'",
 					"x-model":   "password",
-					"minlength": "8",
-					":class": `{
-						'border-grey-100 dark:border-grey-800': password.length === 0,
-						'border-red-500': password.length > 0 && password.length < 8,
-						'border-green-500': password.length >= 8
-					}`,
 				},
 			})
 			@passwordToggleButton()
 		</div>
-		<p
-			class="text-xs text-grey-600 dark:text-grey-400 mt-1.5"
-			x-show="password.length<8"
-		>
-			Password must be at least 8 characters long.
+		<p class="text-xs text-grey-600 dark:text-grey-400 mt-1.5">
+			Use a long passphrase that is unique to this account.
 		</p>
 		<div x-data="{ show: false }" class="relative mt-4">
 			@form.Input(form.InputConfig{

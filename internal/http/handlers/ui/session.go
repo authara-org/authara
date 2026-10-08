@@ -23,10 +23,13 @@ import (
 func (h *UIHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	refreshToken, exists := session.ReadRefreshToken(r)
-	if exists {
-		accessToken, _ := session.ReadAccessToken(r)
-		_ = h.Session.Logout(ctx, refreshToken, accessToken)
+	refreshToken, hasRefreshToken := session.ReadRefreshToken(r)
+	accessToken, hasAccessToken := session.ReadAccessToken(r)
+	if hasRefreshToken || hasAccessToken {
+		if err := h.Session.Logout(ctx, refreshToken, accessToken); err != nil {
+			h.renderInternalError(w, r)
+			return
+		}
 	}
 
 	session.ClearSessionCookies(w)
@@ -139,7 +142,7 @@ func (h *UIHandler) RevokeSessionPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessions, err := h.Session.ListUserSessions(ctx, userID, currentSessionID, time.Now().UTC())
+	page, err := h.Session.ListUserSessionsPage(ctx, userID, time.Now().UTC(), session.ListOptions{})
 	if err != nil {
 		htmx.ReSwap(w, "none")
 		h.Logger.Error("list user sessions failed", "err", err)
@@ -158,7 +161,7 @@ func (h *UIHandler) RevokeSessionPost(w http.ResponseWriter, r *http.Request) {
 		http.StatusOK,
 		templ.Join(toast.ToastMessage(
 			toast.Success, "Session revoked."),
-			userview.SessionSection(toSessionViewModels(sessions, currentSessionID), currentSessionID),
+			userview.SessionSection(toSessionViewModels(page.Items, currentSessionID), currentSessionID),
 		),
 	)
 }
@@ -213,7 +216,7 @@ func (h *UIHandler) RevokeOtherSessionsPost(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	sessions, err := h.Session.ListUserSessions(ctx, userID, currentSessionID, time.Now().UTC())
+	page, err := h.Session.ListUserSessionsPage(ctx, userID, time.Now().UTC(), session.ListOptions{})
 	if err != nil {
 		htmx.ReSwap(w, "none")
 		h.Logger.Error("list user sessions failed", "err", err)
@@ -232,7 +235,7 @@ func (h *UIHandler) RevokeOtherSessionsPost(w http.ResponseWriter, r *http.Reque
 		http.StatusOK,
 		templ.Join(toast.ToastMessage(
 			toast.Success, "All other sessions revoked."),
-			userview.SessionSection(toSessionViewModels(sessions, currentSessionID), currentSessionID),
+			userview.SessionSection(toSessionViewModels(page.Items, currentSessionID), currentSessionID),
 		),
 	)
 }

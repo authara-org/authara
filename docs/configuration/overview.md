@@ -46,7 +46,12 @@ POSTGRESQL_HOST
 POSTGRESQL_DATABASE
 POSTGRESQL_USERNAME
 POSTGRESQL_PASSWORD
+POSTGRESQL_SSL_MODE
+POSTGRESQL_SSL_ROOT_CERT
 ```
+
+Core and the migrations image use the same TLS values. See
+`configuration/database-connection.md`.
 
 ---
 
@@ -84,14 +89,26 @@ PUBLIC_URL
 
 ### Authentication
 
-Controls optional authentication behavior. Username login is disabled by
-default; email login remains available in either mode.
+Controls optional authentication behavior and the policy applied when a
+password is created or replaced. Username login is disabled by default; email
+login remains available in either mode. Passwords are measured in Unicode
+characters and allow passphrases without composition rules. A minimum of 15 is
+recommended for production.
 
 Example:
 
 ```
 AUTHARA_USERNAME_LOGIN_ENABLED
+AUTHARA_EMAIL_VERIFICATION_REQUIRED
+AUTHARA_PASSKEY_CLONE_RESPONSE
+AUTHARA_PASSKEY_CLONE_NOTIFY_USER
+AUTHARA_PASSWORD_MIN_LENGTH
 ```
+
+`AUTHARA_EMAIL_VERIFICATION_REQUIRED` defaults to `false`. Enabling it requires
+challenge delivery and a configured email provider. Existing unverified users
+are signed out on their next authenticated request and routed through the email
+verification page, where they may replace and verify an obsolete address.
 
 ---
 
@@ -105,6 +122,10 @@ Examples:
 AUTHARA_ACCESS_TOKEN_TTL_MINUTES
 AUTHARA_SESSION_TTL_DAYS
 AUTHARA_REFRESH_TOKEN_TTL_DAYS
+AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL
+AUTHARA_RECENT_AUTHENTICATION_ENABLED
+AUTHARA_RECENT_AUTHENTICATION_WINDOW
+AUTHARA_SESSION_CLEANUP_INTERVAL
 ```
 
 ---
@@ -117,6 +138,7 @@ Controls organization mode, invitation expiry, and the server-to-server token fo
 Changing it after users or organizations exist is currently unsupported.
 
 Modes:
+
 - `personal`: direct signup creates a hidden personal org; invitations are disabled.
 - `single`: direct signup creates one team org; invite signup joins the invited org.
 - `multi`: direct signup creates a personal org; invite signup also joins the invited org.
@@ -164,13 +186,20 @@ Examples:
 ```
 AUTHARA_OAUTH_PROVIDERS
 AUTHARA_OAUTH_GOOGLE_CLIENT_ID
+AUTHARA_OAUTH_APPLE_CLIENT_ID
+AUTHARA_OAUTH_APPLE_TEAM_ID
+AUTHARA_OAUTH_APPLE_KEY_ID
+AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64
+AUTHARA_OAUTH_APPLE_TOKEN_ACTIVE_KEY_ID
+AUTHARA_OAUTH_APPLE_TOKEN_KEYS
 ```
 
 ---
 
 ### Challenge & verification
 
-Controls email verification and challenge flows.
+Controls email-code verification flows. Authentication challenges for
+sensitive mutations are governed by the recent-authentication window instead.
 
 See: [Challenge](challenge.md)
 
@@ -226,6 +255,7 @@ Examples:
 ```
 AUTHARA_EMAIL_CLEANUP_SENT_AFTER
 AUTHARA_EMAIL_CLEANUP_FAILED_AFTER
+AUTHARA_EMAIL_CLEANUP_INTERVAL
 ```
 
 ---
@@ -289,14 +319,30 @@ AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED
 
 ---
 
-### Admin audit
+### Audit retention
 
-Controls retention for admin audit events.
+Controls retention for admin and operator audit events.
 
 Examples:
 
 ```
 AUTHARA_ADMIN_AUDIT_RETENTION_DAYS
+AUTHARA_ADMIN_AUDIT_CLEANUP_INTERVAL
+AUTHARA_OPERATOR_AUDIT_RETENTION_DAYS
+```
+
+---
+
+### Security events
+
+Controls which authentication and credential events are persisted and how long they are retained.
+
+Examples:
+
+```
+AUTHARA_SECURITY_EVENT_ENABLED_EVENTS
+AUTHARA_SECURITY_EVENT_RETENTION_DAYS
+AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL
 ```
 
 ---

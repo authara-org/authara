@@ -3,47 +3,50 @@ import { createRoot } from "react-dom/client";
 
 import {
   APIError,
+  completeAccountRecoveryLinkWithApple,
+  completeAccountRecoveryLinkWithGoogle,
+  completeAccountRecoveryLinkWithPassword,
   createOrganization,
+  deleteOrganization,
+  getAccount,
   getGoogleOptions,
   inviteMember,
+  isRecentAuthenticationRequired,
   loadDashboard,
   login,
-  loginWithGoogle,
+  loginWithApple,
+  loginWithGoogleOrStartRecovery,
   logout,
   refreshSession,
+  removeOrganizationMember,
   resendSignupChallenge,
   resendInvitation,
   revokeInvitation,
   signupDirect,
   startSignupChallenge,
   switchOrganization,
+  transferOrganizationOwnership,
   updateOrganization,
   verifySignupChallenge,
 } from "./api.js";
+import {
+  AccountPage,
+  ConfirmDialog,
+  ReauthenticationDialog,
+} from "./account.jsx";
+import { loadGoogleIdentity } from "./google.js";
+import { authorizeWithApple } from "./apple.js";
+import { AppleCredentialButton } from "./apple-button.jsx";
+import { authenticateWithPasskey } from "./passkeys.js";
 import "./styles.css";
 
 const privatePath = "/spa/private";
-const returnTo = encodeURIComponent(privatePath);
-const googleIdentityURL = "https://accounts.google.com/gsi/client";
+const accountPath = "/spa/account";
 
-let googleIdentityPromise;
-
-function loadGoogleIdentity() {
-  if (window.google?.accounts?.id) return Promise.resolve(window.google);
-  if (googleIdentityPromise) return googleIdentityPromise;
-
-  googleIdentityPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = googleIdentityURL;
-    script.async = true;
-    script.onload = () =>
-      window.google?.accounts?.id
-        ? resolve(window.google)
-        : reject(new Error("Google login did not initialize."));
-    script.onerror = () => reject(new Error("Could not load Google login."));
-    document.head.append(script);
-  });
-  return googleIdentityPromise;
+function currentRoute() {
+  return window.location.pathname.startsWith(accountPath)
+    ? "account"
+    : "dashboard";
 }
 
 function formatDate(value) {
@@ -56,7 +59,7 @@ function formatDate(value) {
       }).format(date);
 }
 
-function GoogleLogin({ busy, onAuthenticated, setBusy, setError }) {
+function GoogleCredentialButton({ busy, onCredential, setBusy, setError }) {
   const buttonRef = useRef(null);
   const [visible, setVisible] = useState(false);
 
@@ -76,10 +79,9 @@ function GoogleLogin({ busy, onAuthenticated, setBusy, setError }) {
             setBusy(true);
             setError("");
             try {
-              await loginWithGoogle(credential, options.nonce);
-              await onAuthenticated();
+              await onCredential(credential, options.nonce);
             } catch (error) {
-              setError(error.message || "Google login failed.");
+              setError(error.message || "Google sign-in failed.");
             } finally {
               setBusy(false);
             }
@@ -96,14 +98,14 @@ function GoogleLogin({ busy, onAuthenticated, setBusy, setError }) {
       })
       .catch((error) => {
         if (active && (!(error instanceof APIError) || error.status !== 404)) {
-          setError(error.message || "Google login is unavailable.");
+          setError(error.message || "Google sign-in is unavailable.");
         }
       });
 
     return () => {
       active = false;
     };
-  }, [onAuthenticated, setBusy, setError]);
+  }, [onCredential, setBusy, setError]);
 
   return (
     <div
@@ -117,6 +119,152 @@ function GoogleLogin({ busy, onAuthenticated, setBusy, setError }) {
   );
 }
 
+function GoogleLogin({
+  busy,
+  onAuthenticated,
+  onRecoveryRequired,
+  setBusy,
+  setError,
+}) {
+  const authenticate = useCallback(
+    async (credential, nonce) => {
+      const result = await loginWithGoogleOrStartRecovery(credential, nonce);
+      if (result.recovery) {
+        onRecoveryRequired(result.recovery);
+        return;
+      }
+      await onAuthenticated();
+    },
+    [onAuthenticated, onRecoveryRequired],
+  );
+
+  return (
+    <GoogleCredentialButton
+      busy={busy}
+      onCredential={authenticate}
+      setBusy={setBusy}
+      setError={setError}
+    />
+  );
+}
+
+function AccountRecovery({
+  busy,
+  recovery,
+  onAuthenticated,
+  onCancel,
+  setBusy,
+  setError,
+}) {
+  const [password, setPassword] = useState("");
+  const methods = new Set(recovery.proof_methods || []);
+
+  async function complete(action) {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      await onAuthenticated();
+    } catch (error) {
+      setError(error.message || "Could not verify the existing account.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <p className="eyebrow">Account found</p>
+      <h1 id="auth-title">Confirm your existing account.</h1>
+      <p className="lede">
+        An account already uses this email. Sign in with one of its existing
+        methods to connect Google safely.
+      </p>
+
+      {methods.has("password") && (
+        <form
+          className="auth-form recovery-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void complete(() =>
+              completeAccountRecoveryLinkWithPassword(
+                recovery.link_id,
+                password,
+              ),
+            );
+          }}
+        >
+          <label htmlFor="recovery-password">
+            <span>Existing account password</span>
+            <input
+              id="recovery-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+              disabled={busy}
+            />
+          </label>
+          <button className="button primary" type="submit" disabled={busy}>
+            Continue with password
+          </button>
+        </form>
+      )}
+
+      {methods.has("google") && (
+        <GoogleCredentialButton
+          busy={busy}
+          setBusy={setBusy}
+          setError={setError}
+          onCredential={(credential, nonce) =>
+            completeAccountRecoveryLinkWithGoogle(
+              recovery.link_id,
+              credential,
+              nonce,
+            ).then(onAuthenticated)
+          }
+        />
+      )}
+
+      {methods.has("apple") && (
+        <AppleCredentialButton
+          disabled={busy}
+          type="continue"
+          onAction={async () => {
+            const authorization = await authorizeWithApple();
+            await complete(() =>
+              completeAccountRecoveryLinkWithApple(
+                recovery.link_id,
+                authorization.code,
+                authorization.state,
+              ),
+            );
+          }}
+          onError={setError}
+        />
+      )}
+
+      {methods.size === 0 && (
+        <p className="error" role="alert">
+          This account has no available sign-in method for recovery.
+        </p>
+      )}
+
+      <div className="auth-actions">
+        <button
+          className="text-button"
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+        >
+          Start over
+        </button>
+      </div>
+    </>
+  );
+}
+
 function AuthScreen({ onAuthenticated }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
@@ -127,6 +275,7 @@ function AuthScreen({ onAuthenticated }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [recovery, setRecovery] = useState(null);
 
   function selectMode(nextMode) {
     setMode(nextMode);
@@ -136,6 +285,7 @@ function AuthScreen({ onAuthenticated }) {
     setCode("");
     setNotice("");
     setError("");
+    setRecovery(null);
   }
 
   async function submit(event) {
@@ -198,6 +348,33 @@ function AuthScreen({ onAuthenticated }) {
 
   const verifying = mode === "verify";
 
+  if (recovery) {
+    return (
+      <main className="centered">
+        <section className="hero auth-card" aria-labelledby="auth-title">
+          <AccountRecovery
+            busy={busy}
+            recovery={recovery}
+            onAuthenticated={onAuthenticated}
+            onCancel={() => {
+              setRecovery(null);
+              setError("");
+            }}
+            setBusy={setBusy}
+            setError={setError}
+          />
+          <div className="auth-feedback" aria-live="polite">
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="centered">
       <section className="hero auth-card" aria-labelledby="auth-title">
@@ -226,7 +403,7 @@ function AuthScreen({ onAuthenticated }) {
               onClick={() => selectMode("login")}
               disabled={busy}
             >
-              Log in
+              Sign in
             </button>
             <button
               className={mode === "signup" ? "active" : ""}
@@ -323,7 +500,7 @@ function AuthScreen({ onAuthenticated }) {
               : verifying
                 ? "Verify and continue"
                 : mode === "login"
-                  ? "Log in"
+                  ? "Sign in"
                   : mode === "invite"
                     ? "Join organization"
                     : "Create account"}
@@ -331,12 +508,59 @@ function AuthScreen({ onAuthenticated }) {
         </form>
 
         {!verifying && (
-          <GoogleLogin
-            busy={busy}
-            onAuthenticated={onAuthenticated}
-            setBusy={setBusy}
-            setError={setError}
-          />
+          <>
+            {mode === "login" && (
+              <button
+                className="button secondary passkey-login"
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    await authenticateWithPasskey();
+                    await onAuthenticated();
+                  } catch (requestError) {
+                    setError(
+                      requestError.message || "Passkey sign-in failed.",
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Sign in with a passkey
+              </button>
+            )}
+            <GoogleLogin
+              busy={busy}
+              onAuthenticated={onAuthenticated}
+              onRecoveryRequired={setRecovery}
+              setBusy={setBusy}
+              setError={setError}
+            />
+            {mode !== "invite" && (
+              <AppleCredentialButton
+                disabled={busy}
+                type={mode === "signup" ? "sign-up" : "sign-in"}
+                onAction={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    const authorization = await authorizeWithApple();
+                    await loginWithApple(
+                      authorization.code,
+                      authorization.state,
+                    );
+                    await onAuthenticated();
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                onError={setError}
+              />
+            )}
+          </>
         )}
 
         {verifying && (
@@ -393,20 +617,27 @@ function ErrorView({ message, onRetry }) {
 function Dashboard({
   data,
   busy,
+  feedback,
   onRefresh,
   onSwitch,
   onCreateOrganization,
+  onDeleteOrganization,
   onUpdateOrganization,
   onInvite,
+  onRemoveMember,
+  onTransferOwnership,
   onRevokeInvitation,
   onResendInvitation,
+  onManageAccount,
   onLogout,
 }) {
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
   const [newOrganizationName, setNewOrganizationName] = useState("");
   const [organizationName, setOrganizationName] = useState(
     data.currentOrganization.name,
   );
+  const [confirmation, setConfirmation] = useState(null);
   const {
     user,
     organizations,
@@ -427,8 +658,19 @@ function Dashboard({
     capabilities.allows_public_organization_management &&
     capabilities.allows_user_created_team_orgs;
 
+  function confirm(config) {
+    setConfirmation({
+      ...config,
+      action: () => {
+        setConfirmation(null);
+        config.action();
+      },
+    });
+  }
+
   return (
-    <main className="shell">
+    <>
+      <main className="shell">
       <header className="topbar">
         <div>
           <p className="eyebrow">Private page</p>
@@ -454,8 +696,13 @@ function Dashboard({
         </div>
       </header>
 
-      <p className="status" aria-live="polite">
-        {busy || "All data below comes from Authara's browser APIs."}
+      <p
+        className={`status ${feedback?.kind === "error" ? "error" : ""}`}
+        aria-live="polite"
+      >
+        {busy ||
+          feedback?.message ||
+          "All data below comes from Authara's browser APIs."}
       </p>
 
       <div className="grid">
@@ -465,12 +712,13 @@ function Dashboard({
               <p className="eyebrow">Identity</p>
               <h2 id="profile-title">Your profile</h2>
             </div>
-            <a
+            <button
               className="text-link"
-              href={`/auth/account?return_to=${returnTo}`}
+              type="button"
+              onClick={onManageAccount}
             >
               Manage account
-            </a>
+            </button>
           </div>
           <dl className="details">
             <div>
@@ -504,30 +752,54 @@ function Dashboard({
           </p>
           <p className="mono subdued">{currentOrganization.id}</p>
           {canManageOrganization && (
-            <form
-              className="management-form accent-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void onUpdateOrganization(organizationName);
-              }}
-            >
-              <label htmlFor="organization-name">
-                <span>Organization name</span>
-                <input
-                  id="organization-name"
-                  value={organizationName}
-                  onChange={(event) => setOrganizationName(event.target.value)}
-                  required
-                />
-              </label>
-              <button
-                className="button secondary"
-                type="submit"
-                disabled={busy || organizationName === currentOrganization.name}
+            <>
+              <form
+                className="management-form accent-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void onUpdateOrganization(organizationName);
+                }}
               >
-                Update
-              </button>
-            </form>
+                <label htmlFor="organization-name">
+                  <span>Organization name</span>
+                  <input
+                    id="organization-name"
+                    value={organizationName}
+                    onChange={(event) =>
+                      setOrganizationName(event.target.value)
+                    }
+                    required
+                  />
+                </label>
+                <button
+                  className="button secondary"
+                  type="submit"
+                  disabled={
+                    busy || organizationName === currentOrganization.name
+                  }
+                >
+                  Update
+                </button>
+              </form>
+              {currentOrganization.role === "owner" &&
+                currentOrganization.kind !== "personal" && (
+                  <button
+                    className="text-button danger-link"
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      confirm({
+                        title: "Delete organization?",
+                        body: `Permanently delete ${currentOrganization.name}? Authara will reject this while other members remain.`,
+                        label: "Delete organization",
+                        action: onDeleteOrganization,
+                      })
+                    }
+                  >
+                    Delete organization
+                  </button>
+                )}
+            </>
           )}
         </section>
 
@@ -616,6 +888,7 @@ function Dashboard({
                     <th scope="col">Member</th>
                     <th scope="col">Role</th>
                     <th scope="col">Joined</th>
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -627,6 +900,68 @@ function Dashboard({
                       </td>
                       <td>{member.role}</td>
                       <td>{formatDate(member.created_at)}</td>
+                      <td>
+                        <div className="inline-actions">
+                          {currentOrganization.role === "owner" &&
+                            member.user_id !== user.id &&
+                            member.role !== "owner" && (
+                              <button
+                                className="button small secondary"
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  confirm({
+                                    title: "Transfer ownership?",
+                                    body: `Make ${member.email} the owner? You will become an admin.`,
+                                    label: "Transfer ownership",
+                                    action: () =>
+                                      onTransferOwnership(member.user_id),
+                                  })
+                                }
+                              >
+                                Make owner
+                              </button>
+                            )}
+                          {canManageOrganization &&
+                            member.user_id !== user.id && (
+                              <button
+                                className="button small quiet"
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  confirm({
+                                    title: "Remove member?",
+                                    body: `Remove ${member.email} from ${currentOrganization.name}?`,
+                                    label: "Remove member",
+                                    action: () =>
+                                      onRemoveMember(member.user_id),
+                                  })
+                                }
+                              >
+                                Remove
+                              </button>
+                            )}
+                          {member.user_id === user.id &&
+                            capabilities.allows_organization_leave &&
+                            currentOrganization.kind !== "personal" && (
+                              <button
+                                className="button small quiet"
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  confirm({
+                                    title: "Leave organization?",
+                                    body: `Leave ${currentOrganization.name}?`,
+                                    label: "Leave organization",
+                                    action: () => onRemoveMember(user.id),
+                                  })
+                                }
+                              >
+                                Leave
+                              </button>
+                            )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -648,7 +983,7 @@ function Dashboard({
               className="management-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                void onInvite(inviteEmail);
+                void onInvite(inviteEmail, inviteRole);
                 setInviteEmail("");
               }}
             >
@@ -662,6 +997,18 @@ function Dashboard({
                   placeholder="teammate@example.com"
                   required
                 />
+              </label>
+              <label htmlFor="invite-role">
+                <span>Role</span>
+                <select
+                  id="invite-role"
+                  value={inviteRole}
+                  onChange={(event) => setInviteRole(event.target.value)}
+                  disabled={busy}
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
               </label>
               <button className="button primary" type="submit" disabled={busy}>
                 Send invitation
@@ -730,18 +1077,31 @@ function Dashboard({
           )}
         </section>
       </div>
-    </main>
+      </main>
+      {confirmation && (
+        <ConfirmDialog
+          confirmation={confirmation}
+          busy={Boolean(busy)}
+          onClose={() => setConfirmation(null)}
+        />
+      )}
+    </>
   );
 }
 
 function App() {
+  const [route, setRoute] = useState(currentRoute);
   const [view, setView] = useState({ kind: "loading" });
   const [busy, setBusy] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [recentAuthentication, setRecentAuthentication] = useState(null);
 
-  const load = useCallback(async () => {
-    setBusy("Loading fresh Authara data…");
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setView({ kind: "loading" });
     try {
-      setView({ kind: "ready", data: await loadDashboard() });
+      const data =
+        route === "account" ? await getAccount() : await loadDashboard();
+      setView({ kind: "ready", route, data });
     } catch (error) {
       if (error instanceof APIError && error.status === 401) {
         setView({ kind: "signed-out" });
@@ -751,25 +1111,62 @@ function App() {
           message: error.message || "Unexpected error",
         });
       }
-    } finally {
-      setBusy("");
     }
-  }, []);
+  }, [route]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  async function run(label, action, reload = true) {
-    setBusy(label);
+  useEffect(() => {
+    const updateRoute = () => setRoute(currentRoute());
+    window.addEventListener("popstate", updateRoute);
+    return () => window.removeEventListener("popstate", updateRoute);
+  }, []);
+
+  function navigate(path) {
+    if (window.location.pathname !== path) window.history.pushState({}, "", path);
+    setFeedback(null);
+    setRoute(currentRoute());
+  }
+
+  async function execute(operation) {
+    setBusy(operation.label);
+    setFeedback(null);
     try {
-      await action();
-      if (reload) await load();
+      const result = await operation.action();
+      if (operation.reload !== false) await load({ silent: true });
+      operation.onSuccess?.(result);
+      if (operation.success) {
+        setFeedback({ kind: "success", message: operation.success });
+      }
     } catch (error) {
+      if (operation.sensitive && isRecentAuthenticationRequired(error)) {
+        let account = view.route === "account" ? view.data : null;
+        if (!account) {
+          try {
+            account = await getAccount();
+          } catch (accountError) {
+            setFeedback({
+              kind: "error",
+              message:
+                accountError.message ||
+                "Could not load authentication methods.",
+            });
+            return;
+          }
+        }
+        setRecentAuthentication({
+          challenge: error.authenticationChallenge,
+          operation,
+          account,
+        });
+        return;
+      }
       if (error instanceof APIError && error.status === 401) {
         setView({ kind: "signed-out" });
       } else {
-        setView({
+        setFeedback({
           kind: "error",
           message: error.message || "Unexpected error",
         });
@@ -777,6 +1174,33 @@ function App() {
     } finally {
       setBusy("");
     }
+  }
+
+  function run(label, action, success = "", onSuccess = null, reload = true) {
+    return execute({ label, action, success, onSuccess, reload });
+  }
+
+  function runSensitive(
+    label,
+    action,
+    success = "",
+    onSuccess = null,
+    reload = true,
+  ) {
+    return execute({
+      label,
+      action,
+      success,
+      onSuccess,
+      reload,
+      sensitive: true,
+    });
+  }
+
+  async function finishRecentAuthentication() {
+    const operation = recentAuthentication?.operation;
+    setRecentAuthentication(null);
+    if (operation) await execute(operation);
   }
 
   if (view.kind === "loading") {
@@ -787,42 +1211,96 @@ function App() {
     );
   }
   if (view.kind === "signed-out")
-    return <AuthScreen onAuthenticated={load} />;
+    return <AuthScreen onAuthenticated={() => load()} />;
   if (view.kind === "error")
-    return <ErrorView message={view.message} onRetry={load} />;
+    return <ErrorView message={view.message} onRetry={() => load()} />;
+
+  if (view.route === "account") {
+    return (
+      <>
+        <AccountPage
+          account={view.data}
+          busy={busy}
+          feedback={feedback}
+          onBack={() => navigate(privatePath)}
+          onRun={run}
+          onSensitive={runSensitive}
+          onAccountDeleted={() => setView({ kind: "signed-out" })}
+          onLogout={() =>
+            run(
+              "Logging out…",
+              async () => {
+                await logout();
+                setView({ kind: "signed-out" });
+              },
+              "",
+              null,
+              false,
+            )
+          }
+        />
+        {recentAuthentication && (
+          <ReauthenticationDialog
+            challenge={recentAuthentication.challenge}
+            account={view.data}
+            onCancel={() => setRecentAuthentication(null)}
+            onAuthenticated={finishRecentAuthentication}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
+    <>
     <Dashboard
       key={`${view.data.currentOrganization.id}:${view.data.currentOrganization.name}`}
       data={view.data}
       busy={busy}
+      feedback={feedback}
       onRefresh={() => run("Refreshing session…", refreshSession)}
       onSwitch={(id) =>
         run("Switching organization…", () => switchOrganization(id))
       }
       onCreateOrganization={(name) =>
-        run("Creating organization…", () => createOrganization(name))
+        runSensitive("Creating organization…", () => createOrganization(name))
+      }
+      onDeleteOrganization={() =>
+        runSensitive("Deleting organization…", () =>
+          deleteOrganization(view.data.currentOrganization.id),
+        )
       }
       onUpdateOrganization={(name) =>
-        run("Updating organization…", () =>
+        runSensitive("Updating organization…", () =>
           updateOrganization(view.data.currentOrganization.id, name),
         )
       }
-      onInvite={(email) =>
-        run("Sending invitation…", () =>
-          inviteMember(view.data.currentOrganization.id, email),
+      onInvite={(email, role) =>
+        runSensitive("Sending invitation…", () =>
+          inviteMember(view.data.currentOrganization.id, email, role),
+        )
+      }
+      onRemoveMember={(userID) =>
+        runSensitive("Removing member…", () =>
+          removeOrganizationMember(view.data.currentOrganization.id, userID),
+        )
+      }
+      onTransferOwnership={(userID) =>
+        runSensitive("Transferring ownership…", () =>
+          transferOrganizationOwnership(view.data.currentOrganization.id, userID),
         )
       }
       onRevokeInvitation={(id) =>
-        run("Revoking invitation…", () =>
+        runSensitive("Revoking invitation…", () =>
           revokeInvitation(view.data.currentOrganization.id, id),
         )
       }
       onResendInvitation={(id) =>
-        run("Resending invitation…", () =>
+        runSensitive("Resending invitation…", () =>
           resendInvitation(view.data.currentOrganization.id, id),
         )
       }
+      onManageAccount={() => navigate(accountPath)}
       onLogout={() =>
         run(
           "Logging out…",
@@ -830,10 +1308,21 @@ function App() {
             await logout();
             setView({ kind: "signed-out" });
           },
+          "",
+          null,
           false,
         )
       }
     />
+    {recentAuthentication && (
+      <ReauthenticationDialog
+        challenge={recentAuthentication.challenge}
+        account={recentAuthentication.account}
+        onCancel={() => setRecentAuthentication(null)}
+        onAuthenticated={finishRecentAuthentication}
+      />
+    )}
+    </>
   );
 }
 

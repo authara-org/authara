@@ -61,8 +61,8 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeVerifyAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return verifySignupChallengeError(responseCodeRateLimited(), "Too many verification attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many verification attempts. Please try again later."); !ok {
+			return verifySignupChallengeError(code, message), nil
 		}
 	}
 
@@ -74,10 +74,11 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 	now := time.Now().UTC()
 	_, err := h.Challenge.VerifySignupChallenge(ctx, request.Body.ChallengeId, strings.TrimSpace(request.Body.Code), h.Verification, now, func(txCtx context.Context, action domain.PendingSignupAction) error {
 		signup := auth.SignupInput{
-			Provider:     domain.ProviderPassword,
-			Username:     action.Username,
-			Email:        action.Email,
-			PasswordHash: action.PasswordHash,
+			Provider:        domain.ProviderPassword,
+			Username:        action.Username,
+			Email:           action.Email,
+			PasswordHash:    action.PasswordHash,
+			EmailVerifiedAt: &now,
 		}
 		if action.InvitationID != nil {
 			signup.InvitationID = *action.InvitationID
@@ -88,7 +89,7 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 			signupFailed = true
 			return err
 		}
-		accessToken, refreshToken, err = h.Session.CreateSession(txCtx, user.ID, token.AudienceApp, r.UserAgent(), now, httputil.ClientIPString(r))
+		accessToken, refreshToken, err = h.Session.CreateSession(txCtx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, r.UserAgent(), now, httputil.ClientIPString(r))
 		if err != nil {
 			sessionFailed = true
 		}
@@ -139,8 +140,8 @@ func (h *APIHandler) ResendChallenge(ctx context.Context, request contract.Resen
 	}
 	if h.Limiter != nil {
 		allowed, err := h.Limiter.AllowChallengeResendAttempt(ctx, httputil.ClientIP(r))
-		if err != nil || !allowed {
-			return resendChallengeError(responseCodeRateLimited(), "Too many resend attempts. Please try again later."), nil
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many resend attempts. Please try again later."); !ok {
+			return resendChallengeError(code, message), nil
 		}
 	}
 	err := h.Challenge.ResendChallenge(ctx, request.Body.ChallengeId, time.Now().UTC())

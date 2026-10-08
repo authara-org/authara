@@ -15,7 +15,7 @@ func Home(w http.ResponseWriter, r *http.Request) {
 		<html>
 			<body>
 				<h1>SSR App</h1>
-				<a href="/auth/login?return_to=/private">Login</a>
+				<a href="/auth/login?return_to=/private">Sign in</a>
 				<a href="/auth/signup?return_to=/private">Sign up</a>
 			</body>
 		</html>

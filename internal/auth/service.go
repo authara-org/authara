@@ -10,8 +10,10 @@ import (
 	"github.com/authara-org/authara/internal/accesspolicy"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/session/roles"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
@@ -29,6 +31,14 @@ type Config struct {
 	OAuthProviders         oauth.OAuthProviders
 	Organizations          *organization.Service
 	AccessTokenRevocations *token.AccessTokenRevocations
+	PasswordMinimumLength  int
+	SecurityEvents         securityevent.Recorder
+	AppleCredentials       AppleCredentialLifecycle
+}
+
+type AppleCredentialLifecycle interface {
+	Save(context.Context, uuid.UUID, string) error
+	PromoteProviderLink(context.Context, uuid.UUID, uuid.UUID) error
 }
 
 type Service struct {
@@ -40,6 +50,9 @@ type Service struct {
 	oauthProviders         oauth.OAuthProviders
 	organizations          *organization.Service
 	accessTokenRevocations *token.AccessTokenRevocations
+	passwordMinimumLength  int
+	securityEvents         securityevent.Recorder
+	appleCredentials       AppleCredentialLifecycle
 }
 
 type emailAllowPolicy interface {
@@ -55,6 +68,10 @@ func New(cfg Config) *Service {
 	if access == nil {
 		access = accesspolicy.NoopEmailAccessPolicy{}
 	}
+	securityEvents := cfg.SecurityEvents
+	if securityEvents == nil {
+		securityEvents = securityevent.NoopRecorder{}
+	}
 
 	return &Service{
 		store:                  cfg.Store,
@@ -65,6 +82,9 @@ func New(cfg Config) *Service {
 		oauthProviders:         cfg.OAuthProviders,
 		organizations:          cfg.Organizations,
 		accessTokenRevocations: cfg.AccessTokenRevocations,
+		passwordMinimumLength:  cfg.PasswordMinimumLength,
+		securityEvents:         securityEvents,
+		appleCredentials:       cfg.AppleCredentials,
 	}
 }
 
@@ -112,7 +132,7 @@ func (s *Service) UserExistsByEmail(ctx context.Context, email string) (bool, er
 }
 
 func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.LockPlatformRoleByName(txCtx, roles.DBAdminRoleName); err != nil {
 			return err
 		}
@@ -135,6 +155,10 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 				return ErrCannotDeleteLastAdmin
 			}
 		}
+		now := time.Now()
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
+			return err
+		}
 		organizations := s.organizations
 		if organizations == nil {
 			organizations = organization.New(organization.Config{
@@ -148,6 +172,9 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 		if err := organizations.PrepareUserDeletion(txCtx, userID); err != nil {
 			return err
 		}
+		if err := s.store.CreateAppleTokenRevocationForUser(txCtx, uuid.New(), userID); err != nil && !errors.Is(err, store.ErrorAuthProviderNotFound) {
+			return err
+		}
 
 		if err := s.store.DeleteUserEmailReferences(txCtx, userID, user.Email); err != nil {
 			return err
@@ -155,34 +182,126 @@ func (s *Service) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 		if err := s.store.DeleteUser(txCtx, userID); err != nil {
 			return err
 		}
-		now := time.Now()
-		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
-			return err
-		}
 		return s.publish(txCtx, webhook.NewUserDeleted(userID, now))
 	})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error) {
 	switch in.Provider {
 	case domain.ProviderPassword:
-		return s.loginWithPassword(ctx, in)
-
-	case domain.ProviderGoogle:
-		if err := s.ensureEmailAllowed(ctx, in.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
+		var user domain.User
+		var loginErr error
+		err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+			user, loginErr = s.loginWithPassword(txCtx, in)
+			if !errors.Is(loginErr, ErrInvalidCredentials) && !errors.Is(loginErr, ErrEmailNotAllowed) {
+				return loginErr
+			}
+			reason := domain.SecurityEventReasonInvalidCredentials
+			if errors.Is(loginErr, ErrEmailNotAllowed) {
+				reason = domain.SecurityEventReasonAccessPolicy
+			}
+			eventErr := s.securityEvents.AuthenticationLogin(txCtx, securityevent.Authentication{
+				Outcome:              domain.SecurityEventOutcomeDenied,
+				ReasonCode:           reason,
+				ActorType:            domain.SecurityEventActorAnonymous,
+				AuthenticationMethod: domain.AuthenticationMethodPassword,
+			})
+			return eventErr
+		})
+		if err != nil {
 			return domain.User{}, err
 		}
-		var user domain.User
-		err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-			var err error
-			user, err = s.loginWithExternalIdentity(txCtx, in)
-			return err
-		})
-		return user, err
+		return user, loginErr
+
+	case domain.ProviderGoogle, domain.ProviderApple:
+		return s.loginWithExternal(ctx, in, "")
 
 	default:
 		return domain.User{}, ErrUnsupportedProvider
 	}
+}
+
+// LoginWithApple commits the provider/account mutation and encrypted refresh
+// token together. A caller can therefore safely queue the newly issued token
+// for revocation whenever this method returns an error.
+func (s *Service) LoginWithApple(ctx context.Context, in LoginInput, refreshToken string) (domain.User, error) {
+	if in.Provider != domain.ProviderApple {
+		return domain.User{}, ErrUnsupportedProvider
+	}
+	if s.appleCredentials == nil {
+		return domain.User{}, errors.New("apple credential storage is unavailable")
+	}
+	return s.loginWithExternal(ctx, in, refreshToken)
+}
+
+func (s *Service) SaveAppleCredential(ctx context.Context, userID uuid.UUID, refreshToken string) error {
+	if s.appleCredentials == nil || refreshToken == "" {
+		return errors.New("apple credential storage is unavailable")
+	}
+	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		return s.appleCredentials.Save(txCtx, userID, refreshToken)
+	})
+}
+
+func (s *Service) loginWithExternal(ctx context.Context, in LoginInput, appleRefreshToken string) (domain.User, error) {
+	method := domain.AuthenticationMethodGoogle
+	if in.Provider == domain.ProviderApple {
+		method = domain.AuthenticationMethodApple
+	}
+	if err := s.ensureEmailAllowed(ctx, in.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
+		if errors.Is(err, ErrEmailNotAllowed) {
+			if eventErr := s.RecordLoginDenied(ctx, method, domain.SecurityEventReasonAccessPolicy); eventErr != nil {
+				return domain.User{}, eventErr
+			}
+		}
+		return domain.User{}, err
+	}
+	var user domain.User
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		var err error
+		user, err = s.loginWithExternalIdentity(txCtx, in)
+		if err != nil {
+			return err
+		}
+		if in.Provider == domain.ProviderApple {
+			if appleRefreshToken == "" || s.appleCredentials == nil {
+				return errors.New("apple credential storage is unavailable")
+			}
+			return s.appleCredentials.Save(txCtx, user.ID, appleRefreshToken)
+		}
+		return nil
+	})
+	if err != nil {
+		reason := ""
+		switch {
+		case errors.Is(err, ErrAccountExistsMustLink):
+			reason = domain.SecurityEventReasonAccountLinkRequired
+		case errors.Is(err, ErrProviderDisabled):
+			reason = domain.SecurityEventReasonProviderDisabled
+		}
+		if reason != "" {
+			if eventErr := s.RecordLoginDenied(ctx, method, reason); eventErr != nil {
+				return domain.User{}, eventErr
+			}
+		}
+	}
+	return user, err
+}
+
+// RecordLoginDenied records a credential assertion rejected before a user or
+// session can safely be resolved. Callers must not attach submitted identity
+// values to the event.
+func (s *Service) RecordLoginDenied(ctx context.Context, method domain.AuthenticationMethod, reason string) error {
+	return s.securityEvents.AuthenticationLogin(ctx, securityevent.Authentication{
+		Outcome:              domain.SecurityEventOutcomeDenied,
+		ReasonCode:           reason,
+		ActorType:            domain.SecurityEventActorAnonymous,
+		AuthenticationMethod: method,
+	})
 }
 
 func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, error) {
@@ -236,14 +355,18 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 
 	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		user = domain.User{
-			Email:    in.Email,
-			Username: in.Username,
+			Email:           in.Email,
+			EmailVerifiedAt: in.EmailVerifiedAt,
+			Username:        in.Username,
 		}
 
 		created, err := s.store.CreateUser(txCtx, user)
 		if err != nil {
 			if store.IsUniqueViolation(err, store.ConstraintUserEmail) {
 				return ErrUserAlreadyExists
+			}
+			if store.IsUniqueViolation(err, store.ConstraintUserUsername) {
+				return ErrUsernameTaken
 			}
 			return err
 		}
@@ -365,7 +488,7 @@ func (s *Service) requirePendingInvitationForEmail(ctx context.Context, email st
 		return err
 	}
 
-	if normalizeAuthEmail(preview.Invitation.Email) != normalizeAuthEmail(email) {
+	if identity.CanonicalEmail(preview.Invitation.Email) != identity.CanonicalEmail(email) {
 		return organization.ErrOrganizationInviteEmailMismatch
 	}
 
@@ -381,10 +504,6 @@ func (s *Service) requirePendingInvitationForEmail(ctx context.Context, email st
 	default:
 		return organization.ErrOrganizationInviteForbidden
 	}
-}
-
-func normalizeAuthEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func (s *Service) acceptSignupInvitation(ctx context.Context, invitationToken string, invitationID uuid.UUID, userID uuid.UUID) error {
@@ -414,24 +533,51 @@ func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (domain.
 	} else {
 		user, err = s.store.GetUserByEmail(ctx, in.Email)
 	}
-	if err != nil {
-		return domain.User{}, err
-	}
-	if err := s.ensureEmailAllowed(ctx, user.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
+	passwordHash := dummyPasswordHash
+	identityValid := false
+	var accessErr error
+
+	switch {
+	case err == nil:
+		// Admission can have an intentional side effect for invitation-based
+		// login, so evaluate it before verification but delay its result until
+		// after the password work.
+		accessErr = s.ensureEmailAllowed(ctx, user.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)})
+
+		authProvider, providerErr := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+		switch {
+		case providerErr == nil && authProvider.PasswordHash != nil && *authProvider.PasswordHash != "":
+			if _, _, _, decodeErr := decodeHash(*authProvider.PasswordHash); decodeErr == nil {
+				passwordHash = *authProvider.PasswordHash
+				identityValid = true
+			} else if s.logger != nil {
+				s.logger.Warn("invalid stored password hash", "user_id", user.ID, "error", decodeErr)
+			}
+		case errors.Is(providerErr, store.ErrorAuthProviderNotFound):
+			// Keep the dummy hash.
+		case providerErr != nil:
+			return domain.User{}, providerErr
+		}
+
+	case errors.Is(err, store.ErrUserNotFound):
+		// Keep the dummy hash.
+
+	default:
 		return domain.User{}, err
 	}
 
-	authProvider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+	verification, err := VerifyPasswordHash(in.Password, passwordHash)
 	if err != nil {
 		return domain.User{}, err
 	}
-
-	verified, err := Verify(in.Password, *authProvider.PasswordHash)
-	if err != nil {
-		return domain.User{}, err
-	}
-	if !verified {
+	if !identityValid || !verification.Valid {
 		return domain.User{}, ErrInvalidCredentials
+	}
+	if accessErr != nil {
+		return domain.User{}, accessErr
+	}
+	if err := s.upgradePasswordHashIfNeeded(ctx, user.ID, in.Password, passwordHash, verification); err != nil {
+		return domain.User{}, err
 	}
 
 	return user, nil
@@ -465,6 +611,16 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 		if err == nil {
 			// provider exists => just log in
 			user, err = s.store.GetUserByID(txCtx, providerRecord.UserID)
+			if err == nil && in.ProviderEmailVerified && user.EmailVerifiedAt == nil && strings.EqualFold(user.Email, in.Email) {
+				verifiedAt := time.Now().UTC()
+				updated, updateErr := s.store.MarkUserEmailVerified(txCtx, user.ID, user.Email, verifiedAt)
+				if updateErr != nil {
+					return updateErr
+				}
+				if updated {
+					user.EmailVerifiedAt = &verifiedAt
+				}
+			}
 			return err
 		}
 
@@ -490,8 +646,18 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 			Email:    in.Email,
 			Username: in.Username,
 		}
+		if in.ProviderEmailVerified {
+			verifiedAt := time.Now().UTC()
+			domainUser.EmailVerifiedAt = &verifiedAt
+		}
 		user, err = s.store.CreateUser(txCtx, domainUser)
 		if err != nil {
+			if store.IsUniqueViolation(err, store.ConstraintUserEmail) {
+				return ErrAccountExistsMustLink
+			}
+			if store.IsUniqueViolation(err, store.ConstraintUserUsername) {
+				return ErrUsernameTaken
+			}
 			return err
 		}
 		createdUser = true
@@ -634,6 +800,41 @@ func (s *Service) CompleteProviderLink(
 	providerEmailVerified bool,
 	now time.Time,
 ) error {
+	return s.completeProviderLink(ctx, linkID, userID, sessionID, provider, providerUserID, providerEmail, providerEmailVerified, "", now)
+}
+
+func (s *Service) CompleteAppleProviderLink(
+	ctx context.Context,
+	linkID uuid.UUID,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	providerUserID string,
+	providerEmail string,
+	providerEmailVerified bool,
+	refreshToken string,
+	now time.Time,
+) error {
+	if s.appleCredentials == nil || refreshToken == "" {
+		return errors.New("apple credential storage is unavailable")
+	}
+	return s.completeProviderLink(
+		ctx, linkID, userID, sessionID, domain.ProviderApple, providerUserID,
+		providerEmail, providerEmailVerified, refreshToken, now,
+	)
+}
+
+func (s *Service) completeProviderLink(
+	ctx context.Context,
+	linkID uuid.UUID,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	provider domain.Provider,
+	providerUserID string,
+	providerEmail string,
+	providerEmailVerified bool,
+	appleRefreshToken string,
+	now time.Time,
+) error {
 	if !s.IsProviderEnabled(provider) {
 		return ErrProviderDisabled
 	}
@@ -683,6 +884,17 @@ func (s *Service) CompleteProviderLink(
 		user, err := s.store.GetUserByID(txCtx, userID)
 		if err != nil {
 			return err
+		}
+		if err := s.markCurrentEmailVerified(txCtx, &user, providerEmail, now); err != nil {
+			return err
+		}
+		if provider == domain.ProviderApple {
+			if appleRefreshToken == "" || s.appleCredentials == nil {
+				return errors.New("apple credential storage is unavailable")
+			}
+			if err := s.appleCredentials.Save(txCtx, userID, appleRefreshToken); err != nil {
+				return err
+			}
 		}
 		return s.enqueueAuthMethodChanged(txCtx, user, provider, domain.EmailTemplateAuthMethodAdded, now)
 	})
@@ -756,6 +968,17 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithPassword(
 		}
 
 		if err := s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
+			return err
+		}
+		if link.Provider == domain.ProviderApple {
+			if s.appleCredentials == nil {
+				return errors.New("apple credential storage is unavailable")
+			}
+			if err := s.appleCredentials.PromoteProviderLink(txCtx, user.ID, link.ID); err != nil {
+				return err
+			}
+		}
+		if err := s.markCurrentEmailVerified(txCtx, &user, *link.ProviderEmail, now); err != nil {
 			return err
 		}
 		return s.enqueueAuthMethodChanged(txCtx, user, link.Provider, domain.EmailTemplateAuthMethodAdded, now)
@@ -838,7 +1061,23 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
 			if err := s.store.UpdateAuthProviderIdentity(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
 				return err
 			}
+			if err := s.securityEvents.CredentialProviderChanged(txCtx, securityevent.Credential{
+				UserID: user.ID, Provider: link.Provider,
+			}); err != nil {
+				return err
+			}
 		} else if err := s.linkExternalIdentityToUser(txCtx, user.ID, link.Provider, *link.ProviderUserID); err != nil {
+			return err
+		}
+		if link.Provider == domain.ProviderApple {
+			if s.appleCredentials == nil {
+				return errors.New("apple credential storage is unavailable")
+			}
+			if err := s.appleCredentials.PromoteProviderLink(txCtx, user.ID, link.ID); err != nil {
+				return err
+			}
+		}
+		if err := s.markCurrentEmailVerified(txCtx, &user, *link.ProviderEmail, now); err != nil {
 			return err
 		}
 		return s.enqueueAuthMethodChanged(txCtx, user, link.Provider, domain.EmailTemplateAuthMethodAdded, now)
@@ -848,6 +1087,20 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
 	}
 
 	return user, nil
+}
+
+func (s *Service) markCurrentEmailVerified(ctx context.Context, user *domain.User, providerEmail string, verifiedAt time.Time) error {
+	if user.EmailVerifiedAt != nil || !strings.EqualFold(user.Email, providerEmail) {
+		return nil
+	}
+	updated, err := s.store.MarkUserEmailVerified(ctx, user.ID, user.Email, verifiedAt)
+	if err != nil {
+		return err
+	}
+	if updated {
+		user.EmailVerifiedAt = &verifiedAt
+	}
+	return nil
 }
 
 func (s *Service) linkExternalIdentityToUser(
@@ -888,13 +1141,12 @@ func (s *Service) linkExternalIdentityToUser(
 		if err != nil {
 			return err
 		}
-
-		return nil
+		return s.securityEvents.CredentialProviderLinked(txCtx, securityevent.Credential{UserID: userID, Provider: provider})
 	})
 }
 
 func (s *Service) UnlinkAuthProvider(ctx context.Context, userID uuid.UUID, provider domain.Provider) error {
-	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {
 			return err
 		}
@@ -911,17 +1163,37 @@ func (s *Service) UnlinkAuthProvider(ctx context.Context, userID uuid.UUID, prov
 		if err != nil {
 			return err
 		}
+		if provider == domain.ProviderApple {
+			if err := s.store.CreateAppleTokenRevocationForUser(txCtx, uuid.New(), userID); err != nil && !errors.Is(err, store.ErrorAuthProviderNotFound) {
+				return err
+			}
+		}
 
 		if err := s.store.DeleteAuthProviderByMethodAndUserID(txCtx, provider, userID); err != nil {
 			return err
 		}
+		if provider == domain.ProviderPassword {
+			if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
+				return err
+			}
+		}
 
-		return s.enqueueAuthMethodChanged(txCtx, user, provider, domain.EmailTemplateAuthMethodRemoved, time.Now().UTC())
+		if err := s.enqueueAuthMethodChanged(txCtx, user, provider, domain.EmailTemplateAuthMethodRemoved, time.Now().UTC()); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialProviderRemoved(txCtx, securityevent.Credential{UserID: userID, Provider: provider})
 	})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Service) AddPassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {
+			return err
+		}
 		_, err := s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
 		if err == nil {
 			return ErrPasswordAlreadyExists
@@ -943,12 +1215,21 @@ func (s *Service) AddPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err != nil {
 			return err
 		}
-		return s.enqueueAuthMethodChanged(txCtx, user, domain.ProviderPassword, domain.EmailTemplateAuthMethodAdded, time.Now().UTC())
+		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
+			return err
+		}
+		if err := s.enqueueAuthMethodChanged(txCtx, user, domain.ProviderPassword, domain.EmailTemplateAuthMethodAdded, time.Now().UTC()); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialPasswordAdded(txCtx, securityevent.Credential{UserID: userID})
 	})
 }
 
-func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword string, newPasswordHash string) error {
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, currentPassword string, newPasswordHash string) error {
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.LockUserForAuthMethodMutation(txCtx, userID); err != nil {
+			return err
+		}
 		provider, err := s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
 		if err != nil {
 			return err
@@ -966,11 +1247,135 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 			return err
 		}
 		now := time.Now().UTC()
+		currentSession, err := s.store.GetActiveSessionByIDForUpdate(txCtx, sessionID, now)
+		if err != nil {
+			return err
+		}
+		if currentSession.UserID != userID {
+			return store.ErrSessionNotFound
+		}
+		sessions, err := s.store.ListActiveSessionsByUserID(txCtx, userID, now)
+		if err != nil {
+			return err
+		}
+		// Write access-token cutoffs before mutating the database. If a later
+		// cutoff or database operation fails, PostgreSQL rolls back while any
+		// successful cutoff remains as a conservative, fail-closed revocation.
+		for _, session := range sessions {
+			if session.ID == sessionID {
+				continue
+			}
+			if err := s.accessTokenRevocations.RevokeSession(txCtx, session.ID, now); err != nil {
+				return err
+			}
+		}
 		if err := s.store.UpdatePasswordHash(txCtx, userID, newPasswordHash); err != nil {
 			return err
 		}
-		return s.enqueuePasswordChanged(txCtx, user, now)
+		if err := s.store.RevokeOtherSessionsByUserID(txCtx, userID, sessionID, now); err != nil {
+			return err
+		}
+		if err := s.store.DeleteRefreshTokensForOtherSessions(txCtx, userID, sessionID); err != nil {
+			return err
+		}
+		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
+			return err
+		}
+		if err := s.store.UpdateSessionAuthentication(txCtx, userID, sessionID, domain.AuthenticationMethodPassword, now); err != nil {
+			return err
+		}
+		if err := s.enqueuePasswordChanged(txCtx, user, now); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialPasswordChanged(txCtx, securityevent.Credential{UserID: userID, SessionID: &sessionID})
 	})
+}
+
+func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, password string) error {
+	provider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, userID)
+	if err != nil || provider.PasswordHash == nil {
+		if errors.Is(err, store.ErrorAuthProviderNotFound) || provider.PasswordHash == nil {
+			return ErrInvalidCredentials
+		}
+		return err
+	}
+	ok, err := Verify(password, *provider.PasswordHash)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrInvalidCredentials
+	}
+	return nil
+}
+
+func (s *Service) upgradePasswordHashIfNeeded(
+	ctx context.Context,
+	userID uuid.UUID,
+	password string,
+	storedHash string,
+	verification PasswordHashVerification,
+) error {
+	for attempt := 0; attempt < 2; attempt++ {
+		if !verification.Valid {
+			return ErrInvalidCredentials
+		}
+		if !verification.NeedsRehash {
+			return nil
+		}
+
+		upgradedHash, err := hashPassword(password)
+		if err != nil {
+			return err
+		}
+		updated, err := s.store.CompareAndSwapPasswordHash(ctx, userID, storedHash, upgradedHash)
+		if err != nil {
+			return err
+		}
+		if updated {
+			return nil
+		}
+
+		provider, err := s.store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, userID)
+		if err != nil || provider.PasswordHash == nil {
+			if errors.Is(err, store.ErrorAuthProviderNotFound) || provider.PasswordHash == nil {
+				return ErrInvalidCredentials
+			}
+			return err
+		}
+		storedHash = *provider.PasswordHash
+		verification, err = VerifyPasswordHash(password, storedHash)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("invalid stored password hash", "user_id", userID, "error", err)
+			}
+			return ErrInvalidCredentials
+		}
+	}
+
+	return ErrInvalidCredentials
+}
+
+func (s *Service) VerifyExternalIdentity(
+	ctx context.Context,
+	userID uuid.UUID,
+	provider domain.Provider,
+	providerUserID string,
+) error {
+	if providerUserID == "" {
+		return ErrInvalidCredentials
+	}
+	linked, err := s.store.GetAuthProviderByProviderAndProviderUserID(ctx, provider, providerUserID)
+	if err != nil {
+		if errors.Is(err, store.ErrorAuthProviderNotFound) {
+			return ErrInvalidCredentials
+		}
+		return err
+	}
+	if linked.UserID != userID {
+		return ErrInvalidCredentials
+	}
+	return nil
 }
 
 func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHash string, now time.Time) error {
@@ -984,16 +1389,24 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		}
 
 		_, err = s.store.GetAuthProviderByMethodAndUserID(txCtx, domain.ProviderPassword, userID)
-		switch {
-		case err == nil:
-			err = s.store.UpdatePasswordHash(txCtx, userID, passwordHash)
-		case errors.Is(err, store.ErrorAuthProviderNotFound):
-			_, err = s.store.CreateAuthProvider(txCtx, domain.AuthProvider{
-				UserID:       userID,
-				Provider:     domain.ProviderPassword,
-				PasswordHash: &passwordHash,
-			})
+		if err == nil {
+			return ErrPasswordAlreadyExists
 		}
+		if !errors.Is(err, store.ErrorAuthProviderNotFound) {
+			return err
+		}
+		markerAt := time.Now().UTC()
+		if now.After(markerAt) {
+			markerAt = now
+		}
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, markerAt); err != nil {
+			return err
+		}
+		_, err = s.store.CreateAuthProvider(txCtx, domain.AuthProvider{
+			UserID:       userID,
+			Provider:     domain.ProviderPassword,
+			PasswordHash: &passwordHash,
+		})
 		if err != nil {
 			return err
 		}
@@ -1003,25 +1416,27 @@ func (s *Service) SetPassword(ctx context.Context, userID uuid.UUID, passwordHas
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
 			return err
 		}
-		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
-			return err
-		}
 		if err := s.store.DeletePendingPasswordResetsByUserID(txCtx, userID); err != nil {
 			return err
 		}
 		if err := s.enqueuePasswordChanged(txCtx, user, now); err != nil {
 			return err
 		}
-		return s.publish(txCtx, webhook.NewUserUpdated(userID, now))
+		if err := s.publish(txCtx, webhook.NewUserUpdated(userID, now)); err != nil {
+			return err
+		}
+		return s.securityEvents.CredentialPasswordAdded(txCtx, securityevent.Credential{UserID: userID})
 	})
 }
 
 func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
-	now := time.Now()
-
 	return s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-		user, err := s.store.GetUserByID(txCtx, userID)
+		user, err := s.store.GetUserByIDForUpdate(txCtx, userID)
 		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		if err := s.store.DisableUser(txCtx, userID, now); err != nil {
@@ -1031,9 +1446,6 @@ func (s *Service) DisableUser(ctx context.Context, userID uuid.UUID) error {
 			return err
 		}
 		if err := s.store.DeleteRefreshTokensByUserID(txCtx, userID); err != nil {
-			return err
-		}
-		if err := s.accessTokenRevocations.RevokeUser(txCtx, userID, now); err != nil {
 			return err
 		}
 		if err := email.Enqueue(txCtx, s.store, user.Email, domain.EmailTemplateAccountDisabled, email.TemplateData{

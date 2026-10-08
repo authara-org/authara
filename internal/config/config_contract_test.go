@@ -40,12 +40,18 @@ type codeEnvSpec struct {
 }
 
 var dynamicHybridSettings = map[string]struct{}{
+	"AUTHARA_APP_NAME":                               {},
 	"AUTHARA_DEFAULT_RETURN_TO":                      {},
 	"AUTHARA_USERNAME_LOGIN_ENABLED":                 {},
+	"AUTHARA_EMAIL_VERIFICATION_REQUIRED":            {},
+	"AUTHARA_PASSKEY_CLONE_RESPONSE":                 {},
+	"AUTHARA_PASSKEY_CLONE_NOTIFY_USER":              {},
 	"AUTHARA_ACCESS_TOKEN_TTL_MINUTES":               {},
 	"AUTHARA_SESSION_TTL_DAYS":                       {},
 	"AUTHARA_REFRESH_TOKEN_TTL_DAYS":                 {},
 	"AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL":        {},
+	"AUTHARA_RECENT_AUTHENTICATION_ENABLED":          {},
+	"AUTHARA_RECENT_AUTHENTICATION_WINDOW":           {},
 	"AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED": {},
 	"AUTHARA_ORGANIZATION_INVITATION_TTL":            {},
 	"AUTHARA_WEBHOOK_ENABLED_EVENTS":                 {},

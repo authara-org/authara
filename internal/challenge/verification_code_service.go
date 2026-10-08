@@ -18,6 +18,8 @@ import (
 	"github.com/google/uuid"
 )
 
+var ErrVerificationCodeSecretNotConfigured = errors.New("verification code secret is not configured")
+
 type VerificationCodeService struct {
 	store   *store.Store
 	policy  config.ChallengePolicyReader
@@ -48,7 +50,7 @@ func (s *VerificationCodeService) GenerateCode(
 	now time.Time,
 ) (string, error) {
 	if len(s.secrets) == 0 {
-		return "", errors.New("verification code secret is not configured")
+		return "", ErrVerificationCodeSecretNotConfigured
 	}
 	policy := s.policy.CurrentChallenge()
 
@@ -90,7 +92,7 @@ func (s *VerificationCodeService) VerifyCode(
 	}
 
 	if len(s.secrets) == 0 {
-		return errors.New("verification code secret is not configured")
+		return ErrVerificationCodeSecretNotConfigured
 	}
 
 	if !s.matchesVerificationCodeHash(code, row.CodeHash) {

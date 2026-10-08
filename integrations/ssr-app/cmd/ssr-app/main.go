@@ -39,6 +39,16 @@ func main() {
 
 	// --- Public routes ---
 	r.Get("/", handlers.Home)
+	r.Route("/spa/api/v1", func(r chi.Router) {
+		r.Use(handlers.RequireSPACSRF)
+		r.Post("/organizations", handlers.SPACreateOrganization)
+		r.Delete("/organizations/{organizationID}", handlers.SPADeleteOrganization)
+		r.Delete("/organizations/{organizationID}/members/{userID}", handlers.SPARemoveOrganizationMember)
+		r.Post("/organizations/{organizationID}/ownership-transfer", handlers.SPATransferOrganizationOwnership)
+		r.Post("/organizations/{organizationID}/invitations", handlers.SPACreateOrganizationInvitation)
+		r.Post("/organizations/{organizationID}/invitations/{invitationID}/resend", handlers.SPAResendOrganizationInvitation)
+		r.Delete("/account", handlers.SPADeleteCurrentUser)
+	})
 
 	// --- Protected routes ---
 	r.Group(func(r chi.Router) {

@@ -7,7 +7,6 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
-	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/store"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -39,31 +38,37 @@ func (h *APIHandler) GetCurrentUser(ctx context.Context, _ contract.GetCurrentUs
 		roles = append(roles, contract.CurrentUserRoles(role))
 	}
 	return contract.GetCurrentUser200JSONResponse(contract.CurrentUser{
-		Id:           user.ID,
-		Email:        openapi_types.Email(user.Email),
-		Username:     user.Username,
-		Disabled:     user.DisabledAt != nil,
-		CreatedAt:    user.CreatedAt,
-		Roles:        roles,
-		Organization: toContractOrganizationSummary(org, organizationRole),
+		Id:              user.ID,
+		Email:           openapi_types.Email(user.Email),
+		EmailVerified:   user.EmailVerifiedAt != nil,
+		EmailVerifiedAt: user.EmailVerifiedAt,
+		Username:        user.Username,
+		Disabled:        user.DisabledAt != nil,
+		CreatedAt:       user.CreatedAt,
+		Roles:           roles,
+		Organization:    toContractOrganizationSummary(org, organizationRole),
 	}), nil
 }
 
 func (h *APIHandler) SetCurrentUserPassword(ctx context.Context, request contract.SetCurrentUserPasswordRequestObject) (contract.SetCurrentUserPasswordResponseObject, error) {
-	if request.Body == nil || !validation.IsValidPassword(request.Body.Password) {
-		return setCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid password"), nil
+	if request.Body == nil {
+		return setCurrentUserPasswordError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
 	}
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return setCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized"), nil
 	}
 
-	passwordHash, err := auth.Hash(request.Body.Password)
+	passwordHash, err := h.Auth.HashPassword(ctx, request.Body.Password)
 	if err != nil {
-		return setCurrentUserPasswordError(responseCodeInternalError(), "Password error"), nil
+		code, message := h.passwordPolicyError(err)
+		return setCurrentUserPasswordError(code, message), nil
 	}
 	if err := h.Auth.SetPassword(ctx, userID, passwordHash, time.Now().UTC()); err != nil {
-		if errors.Is(err, store.ErrUserNotFound) {
+		switch {
+		case errors.Is(err, auth.ErrPasswordAlreadyExists):
+			return setCurrentUserPasswordError(codePasswordAlreadyExists, "A password is already set for this account."), nil
+		case errors.Is(err, store.ErrUserNotFound):
 			return setCurrentUserPasswordError(responseCodeUnauthorized(), "Unauthorized"), nil
 		}
 		return setCurrentUserPasswordError(responseCodeInternalError(), "Password error"), nil

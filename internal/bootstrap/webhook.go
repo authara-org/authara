@@ -45,7 +45,6 @@ func newWebhookWorker(
 			WorkerCount:         cfg.Webhook.WorkerCount,
 			PollInterval:        webhook.DeliveryPoll,
 			StaleReaperInterval: cfg.Webhook.StaleReaperInterval,
-			CleanupInterval:     cfg.Webhook.CleanupInterval,
 			Metrics:             metrics,
 			Policy: func() webhook.WorkerPolicy {
 				policy := cfg.CurrentWebhook()

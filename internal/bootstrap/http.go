@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"fmt"
+	"net/netip"
+	"strings"
 	"time"
 
 	cachepkg "github.com/authara-org/authara/internal/cache"
@@ -9,6 +11,7 @@ import (
 	httpserver "github.com/authara-org/authara/internal/http"
 	"github.com/authara-org/authara/internal/http/handlers/api"
 	"github.com/authara-org/authara/internal/http/handlers/internalapi"
+	"github.com/authara-org/authara/internal/http/handlers/meta"
 	"github.com/authara-org/authara/internal/http/handlers/ui"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
@@ -20,6 +23,11 @@ import (
 const assetsManifestPath = "./internal/http/static/manifest.json"
 
 func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
+	readinessChecker, err := newReadinessChecker(app)
+	if err != nil {
+		return nil, fmt.Errorf("configure readiness: %w", err)
+	}
+
 	authenticationPolicy := app.Config.CurrentAuthentication()
 	allowlistPolicy := app.Config.CurrentAllowlist()
 	cookiePolicy := app.Config.CurrentSessionCookies()
@@ -64,6 +72,12 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 			app.Config,
 			time.Now,
 		),
+		RequireAppVerifiedEmailUI:           httpmiddleware.RequireVerifiedEmailUI(app.Services.Challenge, app.Config, token.AudienceApp, time.Now),
+		RequireAppVerifiedEmailAPI:          httpmiddleware.RequireVerifiedEmailAPI(app.Services.Challenge, app.Config, token.AudienceApp, time.Now),
+		RequireAdminVerifiedEmailUI:         httpmiddleware.RequireVerifiedEmailUI(app.Services.Challenge, app.Config, token.AudienceAdmin, time.Now),
+		RequireOperatorVerifiedEmailUI:      httpmiddleware.RequireVerifiedEmailUI(app.Services.Challenge, app.Config, token.AudienceOperator, time.Now),
+		RequireRecentAuthenticationUI:       httpmiddleware.RequireRecentAuthenticationUI(app.Services.Session, time.Now),
+		RequireRecentAuthenticationAPI:      httpmiddleware.RequireRecentAuthenticationAPI(app.Services.Session, time.Now),
 		RequireInternalAPIAuth:              httpmiddleware.RequireInternalAPIAuth(app.Config.InternalAPI.Token),
 		RequirePublicOrganizationManagement: httpmiddleware.RequirePublicOrganizationManagementWithPolicy(app.Config),
 		RequireAdminRole:                    httpmiddleware.RequireAdmin,
@@ -84,43 +98,49 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 	renderer := render.New(assets, enabledFeatures.ChallengeEnabled)
 	authLimiter := newAuthLimiter(app)
 	googleClient := google.New(app.Config.OAuth.GoogleClientID)
+	apiHandler := api.New(
+		app.Services.Auth,
+		app.Services.Passkeys,
+		app.Services.Session,
+		app.Services.Organizations,
+		app.Services.Challenge,
+		app.Services.Verification,
+		authLimiter,
+		app.Logger,
+		googleClient,
+		app.Services.OAuthProviders,
+		app.Config,
+		enabledFeatures.ChallengeEnabled,
+		enabledFeatures.UsernameLoginEnabled,
+		cookiePolicy.AccessTokenTTL,
+		cookiePolicy.RefreshTokenTTL,
+	)
+	apiHandler.Apple = app.Services.Apple
+	apiHandler.AppleCredentials = app.Services.AppleCredentials
+	uiHandler := ui.New(
+		app.Services.Admin,
+		app.Services.Auth,
+		app.Services.Passkeys,
+		app.Services.Session,
+		app.Services.Organizations,
+		app.Services.Challenge,
+		enabledFeatures,
+		app.Services.Verification,
+		app.Services.EmailTemplates,
+		app.Config,
+		authLimiter,
+		app.Logger,
+		googleClient,
+		app.Services.OAuthProviders,
+		cookiePolicy.AccessTokenTTL,
+		cookiePolicy.RefreshTokenTTL,
+		renderer,
+	)
+	uiHandler.Apple = app.Services.Apple
+	uiHandler.AppleCredentials = app.Services.AppleCredentials
 	handlers := httpserver.Handlers{
-		UI: ui.New(
-			app.Services.Admin,
-			app.Services.Auth,
-			app.Services.Passkeys,
-			app.Services.Session,
-			app.Services.Organizations,
-			app.Services.Challenge,
-			enabledFeatures,
-			app.Services.Verification,
-			app.Services.EmailTemplates,
-			app.Config,
-			authLimiter,
-			app.Logger,
-			googleClient,
-			app.Services.OAuthProviders,
-			cookiePolicy.AccessTokenTTL,
-			cookiePolicy.RefreshTokenTTL,
-			renderer,
-		),
-		API: api.New(
-			app.Services.Auth,
-			app.Services.Passkeys,
-			app.Services.Session,
-			app.Services.Organizations,
-			app.Services.Challenge,
-			app.Services.Verification,
-			authLimiter,
-			app.Logger,
-			googleClient,
-			app.Services.OAuthProviders,
-			app.Config,
-			enabledFeatures.ChallengeEnabled,
-			enabledFeatures.UsernameLoginEnabled,
-			cookiePolicy.AccessTokenTTL,
-			cookiePolicy.RefreshTokenTTL,
-		),
+		UI:  uiHandler,
+		API: apiHandler,
 		InternalAPI: internalapi.NewWithPolicy(
 			app.Services.Auth,
 			app.Services.Organizations,
@@ -133,13 +153,48 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		Addr:              app.Config.Values.HttpAddr,
 		Dev:               app.Config.Values.AppEnv == "dev",
 		TrustProxyHeaders: app.Config.Values.TrustProxyHeaders,
+		TrustedProxyCIDRs: trustedProxyCIDRs(app),
 		Logger:            app.Logger,
 		Observability:     app.Observability,
 		OAuthProviders:    app.Services.OAuthProviders,
 		Handlers:          handlers,
+		Readiness:         meta.NewReadinessWithObserver(false, readinessChecker, app.Observability),
 	}, mw)
 
 	return server, nil
+}
+
+func trustedProxyCIDRs(app *App) []netip.Prefix {
+	raw := strings.TrimSpace(app.Config.Values.TrustedProxyCIDRsRaw)
+	if !app.Config.Values.TrustProxyHeaders {
+		if raw != "" {
+			app.Logger.Warn("trusted proxy CIDRs are configured but proxy header trust is disabled; forwarded headers will be ignored")
+		}
+		return nil
+	}
+
+	var prefixes []netip.Prefix
+	for _, value := range strings.Split(raw, ",") {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			app.Logger.Warn("invalid trusted proxy CIDR; entry will be ignored", "cidr", value)
+			continue
+		}
+		prefix = prefix.Masked()
+		prefixes = append(prefixes, prefix)
+		if prefix.Bits() == 0 {
+			app.Logger.Warn("trusted proxy CIDR permits every address; forwarded client IPs can be spoofed if Core is directly reachable", "cidr", prefix.String())
+		}
+	}
+
+	if len(prefixes) == 0 {
+		app.Logger.Warn("proxy header trust is enabled without a valid trusted proxy CIDR; forwarded headers will be ignored")
+	}
+	return prefixes
 }
 
 func newAuthLimiter(app *App) ratelimiter.AuthLimiter {

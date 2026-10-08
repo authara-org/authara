@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/identity"
 	"github.com/authara-org/authara/internal/session"
 )
 
@@ -32,7 +33,7 @@ func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		http.StatusOK,
-		authview.Login(h.OAuthProviders.Providers, h.usernameLoginEnabled()),
+		authview.Login(h.OAuthProviders.Providers, h.usernameLoginEnabled(), h.appName()),
 	)
 }
 
@@ -59,7 +60,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	input := auth.LoginInput{
 		Provider: domain.ProviderPassword,
-		Email:    strings.ToLower(identifier),
+		Email:    identity.CanonicalUsername(identifier),
 		Password: password,
 	}
 	invalidCredentialsMessage := "Invalid email or password."
@@ -73,10 +74,10 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip := httputil.ClientIP(r)
-	rateLimitIdentifier := strings.ToLower(identifier)
+	rateLimitIdentifier := identity.CanonicalUsername(identifier)
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, ip, rateLimitIdentifier)
-	if err != nil || !allowed {
-		h.renderFormError(w, r, http.StatusTooManyRequests, "Too many attempts. Please try again later.", authview.LoginForm(usernameLoginEnabled))
+	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
+		h.renderFormError(w, r, status, message, authview.LoginForm(usernameLoginEnabled))
 		return
 	}
 
@@ -91,7 +92,7 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()
 	now := time.Now()
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, ua, now, httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodPassword, ua, now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderFormError(w, r, http.StatusUnprocessableEntity, "This account is disabled.", authview.LoginForm(usernameLoginEnabled))
 		return

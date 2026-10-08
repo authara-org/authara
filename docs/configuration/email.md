@@ -20,7 +20,8 @@ The system is designed to be:
 
 - reliable
 - asynchronous
-- retry-safe
+- durable across worker restarts
+- at-least-once, with possible duplicate delivery
 
 ---
 
@@ -82,8 +83,16 @@ Workers continuously:
 Depending on the outcome:
 
 - `sent` → success
-- `failed` → retry scheduled
-- `permanent failure` → job stops retrying
+- transient failure → retry scheduled with capped exponential backoff and jitter
+- permanent failure → job stops retrying immediately
+- expired delivery deadline or exhausted attempt limit → job stops retrying
+
+Workers claim jobs with a processing lease and increment `attempt_count` before
+delivery. Every sent, retry, or failed transition must still own that lease. If
+a worker crashes, a reaper safely returns the expired lease to `pending` (or
+marks it failed when its delivery bounds have been reached). During shutdown,
+workers stop claiming new jobs and are given a bounded drain period for
+in-flight delivery.
 
 ---
 
@@ -96,8 +105,13 @@ AUTHARA_EMAIL_PROVIDER=noop
 ```
 
 - no emails are sent
-- the emails logged
+- email metadata is logged
 - useful for development
+
+The noop provider is rejected in production because password recovery routes
+are always available and require deliverable email. Development starts the
+worker with this provider but emits an explicit warning that recovery and
+security messages will not reach recipients.
 
 ---
 
@@ -108,6 +122,9 @@ AUTHARA_EMAIL_PROVIDER=smtp
 ```
 
 Uses an SMTP server (e.g. Mailgun, Mailjet, SES).
+
+SMTP is required in production, independently of
+`AUTHARA_CHALLENGE_ENABLED`.
 
 ---
 
@@ -218,23 +235,63 @@ Default:
 
 ### AUTHARA_EMAIL_JOB_MAX_ATTEMPTS
 
-Maximum retry attempts per job.
+Maximum delivery attempts per job, including attempts interrupted by a worker
+crash.
 
 Default:
 
 ```
-10
+100
 ```
 
 If the environment variable is absent, an operator can change this value at
 runtime. The new limit is used when the next failed attempt is evaluated,
 including for jobs that are already queued.
 
+Transient delivery uses equal-jitter exponential backoff. The first retry is
+scheduled 15–30 seconds later, subsequent windows double, and the delay is
+capped at 6 hours. Security and account-notification jobs remain deliverable for
+72 hours, so a provider outage lasting a day does not discard them. The
+attempt-limit default is deliberately high enough for that delivery window.
+
+Time-sensitive jobs use their own earlier deadline:
+
+- signup, password-reset, and email-change mail stops at challenge expiry;
+- organization invitation mail stops at invitation expiry.
+
+When a deadline is reached, the job becomes `failed` with terminal reason
+`delivery_deadline_exceeded`. Operators can inspect attempt count, next attempt,
+delivery deadline, terminal reason, last error, and queue age in the admin
+delivery queue and failures view.
+
+### AUTHARA_EMAIL_PROCESSING_STALE_AFTER
+
+Age after which an unfinished delivery is treated as an abandoned processing
+lease. The value must be greater than `AUTHARA_EMAIL_SMTP_TIMEOUT`.
+
+Default: `2m`.
+
+### AUTHARA_EMAIL_STALE_REAPER_INTERVAL
+
+How often workers look for abandoned processing leases.
+
+Default: `1m`.
+
+### AUTHARA_EMAIL_MAINTENANCE_BATCH_SIZE
+
+Maximum number of stale email jobs reclaimed in one database batch.
+
+Default: `1000`.
+
 ---
 
 ## Cleanup
 
 Authara automatically cleans up old email records.
+
+Only the replica holding the shared cleanup lease performs retention cleanup.
+`AUTHARA_EMAIL_CLEANUP_INTERVAL` controls the startup-only schedule and defaults
+to `1h`. Cleanup is bounded and unfinished rows are resumed by a later pass.
 
 ### AUTHARA_EMAIL_CLEANUP_SENT_AFTER
 
@@ -274,7 +331,8 @@ Examples:
 Behavior:
 
 - job is retried
-- next attempt is scheduled
+- next attempt uses capped exponential backoff with jitter
+- retries continue until the delivery deadline or maximum attempt count
 
 ---
 
@@ -289,6 +347,25 @@ Behavior:
 
 - job is marked as failed
 - no further retries
+
+SMTP `4xx` replies and network failures are treated as transient. SMTP `5xx`
+replies, rejected recipients, invalid addresses, unrecoverable authentication,
+and invalid job/configuration data are treated as permanent.
+
+---
+
+## Delivery guarantees and duplicates
+
+Email delivery is at-least-once, not exactly-once. If an SMTP server accepts a
+message and Core crashes before recording `sent`, the expired lease is retried
+and the recipient can receive a duplicate. Lease fencing prevents an old worker
+from overwriting the state owned by a newer worker, but it cannot atomically
+combine an external SMTP transaction with the database update.
+
+Challenge-code messages generate the code during each delivery attempt. In the
+rare accepted-message/crash window, a retried duplicate can contain a newer
+code, and only the most recently generated code is valid. Requesting an
+explicit resend likewise makes the newly generated code authoritative.
 
 ---
 

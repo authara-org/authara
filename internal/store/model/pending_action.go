@@ -38,8 +38,9 @@ type PendingEmailChange struct {
 	ID        uuid.UUID `db:"id"`
 	CreatedAt time.Time `db:"created_at"`
 
-	ChallengeID uuid.UUID `db:"challenge_id"`
-	UserID      uuid.UUID `db:"user_id"`
+	ChallengeID         uuid.UUID `db:"challenge_id"`
+	UserID              uuid.UUID `db:"user_id"`
+	InitiatingSessionID uuid.UUID `db:"initiating_session_id"`
 
 	OldEmail string `db:"old_email"`
 	NewEmail string `db:"new_email"`

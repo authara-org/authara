@@ -12,4 +12,5 @@ type AccessIdentity struct {
 	OrganizationID   uuid.UUID
 	OrganizationRole domain.OrganizationRole
 	Roles            roles.Roles
+	EmailVerified    bool
 }

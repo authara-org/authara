@@ -19,8 +19,11 @@ type EmailJob struct {
 
 	AttemptCount        int        `db:"attempt_count"`
 	NextAttemptAt       time.Time  `db:"next_attempt_at"`
+	DeliveryDeadlineAt  time.Time  `db:"delivery_deadline_at"`
 	ProcessingStartedAt *time.Time `db:"processing_started_at"`
 	LastError           *string    `db:"last_error"`
+	TerminalReason      *string    `db:"terminal_reason"`
+	FailedAt            *time.Time `db:"failed_at"`
 	SentAt              *time.Time `db:"sent_at"`
 }
 

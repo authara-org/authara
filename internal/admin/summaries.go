@@ -59,6 +59,7 @@ func summarizePasskeys(passkeys []domain.Passkey) []PasskeySummary {
 			CreatedAt:      passkey.CreatedAt,
 			LastUsedAt:     passkey.LastUsedAt,
 			CloneWarning:   passkey.CloneWarning,
+			RestrictedAt:   passkey.RestrictedAt,
 			BackupEligible: passkey.BackupEligible,
 			BackupState:    passkey.BackupState,
 			DeviceLabel:    passkeyDeviceLabel(passkey.Transport),

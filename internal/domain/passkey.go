@@ -20,6 +20,7 @@ type Passkey struct {
 	AAGUID            *uuid.UUID
 	SignCount         uint32
 	CloneWarning      bool
+	RestrictedAt      *time.Time
 	Name              string
 	LastUsedAt        *time.Time
 
@@ -32,8 +33,9 @@ type Passkey struct {
 type WebAuthnChallengePurpose string
 
 const (
-	WebAuthnChallengePurposeRegistration   WebAuthnChallengePurpose = "registration"
-	WebAuthnChallengePurposeAuthentication WebAuthnChallengePurpose = "authentication"
+	WebAuthnChallengePurposeRegistration     WebAuthnChallengePurpose = "registration"
+	WebAuthnChallengePurposeAuthentication   WebAuthnChallengePurpose = "authentication"
+	WebAuthnChallengePurposeReauthentication WebAuthnChallengePurpose = "reauthentication"
 )
 
 type WebAuthnChallenge struct {
@@ -41,6 +43,7 @@ type WebAuthnChallenge struct {
 	CreatedAt time.Time
 
 	UserID      *uuid.UUID
+	SessionID   *uuid.UUID
 	Purpose     WebAuthnChallengePurpose
 	Challenge   string
 	SessionData []byte

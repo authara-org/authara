@@ -158,7 +158,7 @@ func TestPasskeyAuthenticateOptionsRateLimited(t *testing.T) {
 	})
 }
 
-func TestLoginPageIncludesPasskeyControls(t *testing.T) {
+func TestLoginPageUsesConditionalPasskeysWithoutVisibleButton(t *testing.T) {
 	h := &UIHandler{
 		Features: features.Features{UsernameLoginEnabled: true},
 		Render:   render.New(render.Assets{}, false),
@@ -174,8 +174,8 @@ func TestLoginPageIncludesPasskeyControls(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "data-passkey-login") {
-		t.Fatal("expected login page to include passkey button")
+	if strings.Contains(body, "data-passkey-login") || strings.Contains(body, "Continue with passkey") {
+		t.Fatal("expected login page to omit the visible passkey button")
 	}
 	if !strings.Contains(body, `autocomplete="username webauthn"`) {
 		t.Fatal("expected login identifier input to enable passkey autofill")

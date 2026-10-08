@@ -38,6 +38,9 @@ func TestEnqueueCreatesRenderablePendingJob(t *testing.T) {
 	if job.Status != domain.EmailJobStatusPending || !job.NextAttemptAt.Equal(now) {
 		t.Fatalf("unexpected job schedule: %+v", job)
 	}
+	if !job.DeliveryDeadlineAt.Equal(now.Add(DefaultDeliveryWindow)) {
+		t.Fatalf("delivery deadline = %s, want %s", job.DeliveryDeadlineAt, now.Add(DefaultDeliveryWindow))
+	}
 	var got TemplateData
 	if err := json.Unmarshal(job.TemplateData, &got); err != nil {
 		t.Fatalf("decode template data: %v", err)

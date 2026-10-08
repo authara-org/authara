@@ -25,6 +25,7 @@ import (
 
 // Defines values for AccountRecoveryLinkProofMethods.
 const (
+	AccountRecoveryLinkProofMethodsApple    AccountRecoveryLinkProofMethods = "apple"
 	AccountRecoveryLinkProofMethodsGoogle   AccountRecoveryLinkProofMethods = "google"
 	AccountRecoveryLinkProofMethodsPassword AccountRecoveryLinkProofMethods = "password"
 )
@@ -32,6 +33,8 @@ const (
 // Valid indicates whether the value is a known member of the AccountRecoveryLinkProofMethods enum.
 func (e AccountRecoveryLinkProofMethods) Valid() bool {
 	switch e {
+	case AccountRecoveryLinkProofMethodsApple:
+		return true
 	case AccountRecoveryLinkProofMethodsGoogle:
 		return true
 	case AccountRecoveryLinkProofMethodsPassword:
@@ -43,6 +46,7 @@ func (e AccountRecoveryLinkProofMethods) Valid() bool {
 
 // Defines values for AuthMethodProvider.
 const (
+	AuthMethodProviderApple    AuthMethodProvider = "apple"
 	AuthMethodProviderGoogle   AuthMethodProvider = "google"
 	AuthMethodProviderPassword AuthMethodProvider = "password"
 )
@@ -50,6 +54,8 @@ const (
 // Valid indicates whether the value is a known member of the AuthMethodProvider enum.
 func (e AuthMethodProvider) Valid() bool {
 	switch e {
+	case AuthMethodProviderApple:
+		return true
 	case AuthMethodProviderGoogle:
 		return true
 	case AuthMethodProviderPassword:
@@ -83,8 +89,6 @@ func (e CapabilitiesOrganizationMode) Valid() bool {
 // Defines values for CurrentUserRoles.
 const (
 	AutharaAdmin    CurrentUserRoles = "authara:admin"
-	AutharaAuditor  CurrentUserRoles = "authara:auditor"
-	AutharaMonitor  CurrentUserRoles = "authara:monitor"
 	AutharaOperator CurrentUserRoles = "authara:operator"
 )
 
@@ -92,10 +96,6 @@ const (
 func (e CurrentUserRoles) Valid() bool {
 	switch e {
 	case AutharaAdmin:
-		return true
-	case AutharaAuditor:
-		return true
-	case AutharaMonitor:
 		return true
 	case AutharaOperator:
 		return true
@@ -200,6 +200,24 @@ func (e OrganizationInvitationRole) Valid() bool {
 	}
 }
 
+// Defines values for OrganizationMemberRole.
+const (
+	OrganizationMemberRoleAdmin  OrganizationMemberRole = "admin"
+	OrganizationMemberRoleMember OrganizationMemberRole = "member"
+)
+
+// Valid indicates whether the value is a known member of the OrganizationMemberRole enum.
+func (e OrganizationMemberRole) Valid() bool {
+	switch e {
+	case OrganizationMemberRoleAdmin:
+		return true
+	case OrganizationMemberRoleMember:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OrganizationRole.
 const (
 	OrganizationRoleAdmin  OrganizationRole = "admin"
@@ -280,6 +298,7 @@ func (e Audience) Valid() bool {
 
 // Defines values for AuthProvider.
 const (
+	AuthProviderApple    AuthProvider = "apple"
 	AuthProviderGoogle   AuthProvider = "google"
 	AuthProviderPassword AuthProvider = "password"
 )
@@ -287,6 +306,8 @@ const (
 // Valid indicates whether the value is a known member of the AuthProvider enum.
 func (e AuthProvider) Valid() bool {
 	switch e {
+	case AuthProviderApple:
+		return true
 	case AuthProviderGoogle:
 		return true
 	case AuthProviderPassword:
@@ -362,6 +383,27 @@ func (e LoginWithPasswordParamsAudience) Valid() bool {
 	}
 }
 
+// Defines values for LoginWithAppleParamsAudience.
+const (
+	LoginWithAppleParamsAudienceAdmin    LoginWithAppleParamsAudience = "admin"
+	LoginWithAppleParamsAudienceApp      LoginWithAppleParamsAudience = "app"
+	LoginWithAppleParamsAudienceOperator LoginWithAppleParamsAudience = "operator"
+)
+
+// Valid indicates whether the value is a known member of the LoginWithAppleParamsAudience enum.
+func (e LoginWithAppleParamsAudience) Valid() bool {
+	switch e {
+	case LoginWithAppleParamsAudienceAdmin:
+		return true
+	case LoginWithAppleParamsAudienceApp:
+		return true
+	case LoginWithAppleParamsAudienceOperator:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LoginWithGoogleParamsAudience.
 const (
 	LoginWithGoogleParamsAudienceAdmin    LoginWithGoogleParamsAudience = "admin"
@@ -419,6 +461,21 @@ func (e FinishPasskeyAuthenticationParamsAudience) Valid() bool {
 	case FinishPasskeyAuthenticationParamsAudienceApp:
 		return true
 	case FinishPasskeyAuthenticationParamsAudienceOperator:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CompleteAccountRecoveryLinkWithAppleParamsAudience.
+const (
+	CompleteAccountRecoveryLinkWithAppleParamsAudienceApp CompleteAccountRecoveryLinkWithAppleParamsAudience = "app"
+)
+
+// Valid indicates whether the value is a known member of the CompleteAccountRecoveryLinkWithAppleParamsAudience enum.
+func (e CompleteAccountRecoveryLinkWithAppleParamsAudience) Valid() bool {
+	switch e {
+	case CompleteAccountRecoveryLinkWithAppleParamsAudienceApp:
 		return true
 	default:
 		return false
@@ -529,10 +586,12 @@ type APIError struct {
 
 // Account defines model for Account.
 type Account struct {
-	AuthMethods []AuthMethod     `json:"auth_methods"`
-	Passkeys    []AccountPasskey `json:"passkeys"`
-	Sessions    []AccountSession `json:"sessions"`
-	User        AuthUser         `json:"user"`
+	AuthMethods        []AuthMethod     `json:"auth_methods"`
+	Passkeys           []AccountPasskey `json:"passkeys"`
+	PasskeysNextCursor *string          `json:"passkeys_next_cursor,omitempty"`
+	Sessions           []AccountSession `json:"sessions"`
+	SessionsNextCursor *string          `json:"sessions_next_cursor,omitempty"`
+	User               AuthUser         `json:"user"`
 }
 
 // AccountPasskey defines model for AccountPasskey.
@@ -541,6 +600,13 @@ type AccountPasskey struct {
 	Id         openapi_types.UUID `json:"id"`
 	LastUsedAt *time.Time         `json:"last_used_at,omitempty"`
 	Name       string             `json:"name"`
+}
+
+// AccountRecoveryAppleProofRequest defines model for AccountRecoveryAppleProofRequest.
+type AccountRecoveryAppleProofRequest struct {
+	Code            string  `json:"code"`
+	InvitationToken *string `json:"invitation_token,omitempty"`
+	State           string  `json:"state"`
 }
 
 // AccountRecoveryGoogleProofRequest defines model for AccountRecoveryGoogleProofRequest.
@@ -574,6 +640,28 @@ type AccountSession struct {
 	UserAgent string             `json:"user_agent"`
 }
 
+// AppleAuthorizationRequest defines model for AppleAuthorizationRequest.
+type AppleAuthorizationRequest struct {
+	Code            string  `json:"code"`
+	InvitationToken *string `json:"invitation_token,omitempty"`
+	State           string  `json:"state"`
+}
+
+// AppleLoginOptions defines model for AppleLoginOptions.
+type AppleLoginOptions struct {
+	ClientId    string `json:"client_id"`
+	Nonce       string `json:"nonce"`
+	RedirectUri string `json:"redirect_uri"`
+	State       string `json:"state"`
+}
+
+// AppleReauthenticationRequest defines model for AppleReauthenticationRequest.
+type AppleReauthenticationRequest struct {
+	AuthenticationChallengeId openapi_types.UUID `json:"authentication_challenge_id"`
+	Code                      string             `json:"code"`
+	State                     string             `json:"state"`
+}
+
 // AuthMethod defines model for AuthMethod.
 type AuthMethod struct {
 	CreatedAt time.Time          `json:"created_at"`
@@ -592,11 +680,24 @@ type AuthSession struct {
 
 // AuthUser defines model for AuthUser.
 type AuthUser struct {
-	CreatedAt time.Time           `json:"created_at"`
-	Disabled  bool                `json:"disabled"`
-	Email     openapi_types.Email `json:"email"`
-	Id        openapi_types.UUID  `json:"id"`
-	Username  string              `json:"username"`
+	CreatedAt       time.Time           `json:"created_at"`
+	Disabled        bool                `json:"disabled"`
+	Email           openapi_types.Email `json:"email"`
+	EmailVerified   bool                `json:"email_verified"`
+	EmailVerifiedAt *time.Time          `json:"email_verified_at,omitempty"`
+	Id              openapi_types.UUID  `json:"id"`
+	Username        string              `json:"username"`
+}
+
+// AuthenticationChallenge defines model for AuthenticationChallenge.
+type AuthenticationChallenge struct {
+	ExpiresAt time.Time          `json:"expires_at"`
+	Id        openapi_types.UUID `json:"id"`
+}
+
+// AuthenticationChallengeReference defines model for AuthenticationChallengeReference.
+type AuthenticationChallengeReference struct {
+	AuthenticationChallengeId openapi_types.UUID `json:"authentication_challenge_id"`
 }
 
 // CSRFToken defines model for CSRFToken.
@@ -651,18 +752,21 @@ type CurrentOrganizationMember struct {
 
 // CurrentOrganizationMembers defines model for CurrentOrganizationMembers.
 type CurrentOrganizationMembers struct {
-	Members []CurrentOrganizationMember `json:"members"`
+	Members    []CurrentOrganizationMember `json:"members"`
+	NextCursor *string                     `json:"next_cursor,omitempty"`
 }
 
 // CurrentUser defines model for CurrentUser.
 type CurrentUser struct {
-	CreatedAt    time.Time           `json:"created_at"`
-	Disabled     bool                `json:"disabled"`
-	Email        openapi_types.Email `json:"email"`
-	Id           openapi_types.UUID  `json:"id"`
-	Organization OrganizationSummary `json:"organization"`
-	Roles        []CurrentUserRoles  `json:"roles"`
-	Username     string              `json:"username"`
+	CreatedAt       time.Time           `json:"created_at"`
+	Disabled        bool                `json:"disabled"`
+	Email           openapi_types.Email `json:"email"`
+	EmailVerified   bool                `json:"email_verified"`
+	EmailVerifiedAt *time.Time          `json:"email_verified_at,omitempty"`
+	Id              openapi_types.UUID  `json:"id"`
+	Organization    OrganizationSummary `json:"organization"`
+	Roles           []CurrentUserRoles  `json:"roles"`
+	Username        string              `json:"username"`
 }
 
 // CurrentUserRoles defines model for CurrentUser.Roles.
@@ -675,7 +779,9 @@ type EmailChangeRequest struct {
 
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
-	Error APIError `json:"error"`
+	AuthenticationChallenge *AuthenticationChallenge `json:"authentication_challenge,omitempty"`
+	Error                   APIError                 `json:"error"`
+	ReauthenticateUrl       *string                  `json:"reauthenticate_url,omitempty"`
 }
 
 // GoogleLoginOptions defines model for GoogleLoginOptions.
@@ -688,6 +794,13 @@ type GoogleLoginOptions struct {
 type GoogleLoginRequest struct {
 	Credential string `json:"credential"`
 	Nonce      string `json:"nonce"`
+}
+
+// GoogleReauthenticationRequest defines model for GoogleReauthenticationRequest.
+type GoogleReauthenticationRequest struct {
+	AuthenticationChallengeId openapi_types.UUID `json:"authentication_challenge_id"`
+	Credential                string             `json:"credential"`
+	Nonce                     string             `json:"nonce"`
 }
 
 // InternalCreateInvitationRequest defines model for InternalCreateInvitationRequest.
@@ -717,6 +830,14 @@ type InternalOrganizationActorRequest struct {
 type InternalOwnershipTransferRequest struct {
 	ActorUserId    openapi_types.UUID `json:"actor_user_id"`
 	NewOwnerUserId openapi_types.UUID `json:"new_owner_user_id"`
+}
+
+// InternalUpdateOrganizationMemberRequest defines model for InternalUpdateOrganizationMemberRequest.
+type InternalUpdateOrganizationMemberRequest struct {
+	ActorUserId openapi_types.UUID `json:"actor_user_id"`
+
+	// Role Mutable member role. Ownership changes use the ownership-transfer operation.
+	Role OrganizationMemberRole `json:"role"`
 }
 
 // InvitationGoogleRequest defines model for InvitationGoogleRequest.
@@ -818,6 +939,7 @@ type OrganizationInvitationRole string
 // OrganizationInvitations defines model for OrganizationInvitations.
 type OrganizationInvitations struct {
 	Invitations []OrganizationInvitation `json:"invitations"`
+	NextCursor  *string                  `json:"next_cursor,omitempty"`
 }
 
 // OrganizationMember defines model for OrganizationMember.
@@ -837,9 +959,13 @@ type OrganizationMemberEnvelope struct {
 	Member OrganizationMember `json:"member"`
 }
 
+// OrganizationMemberRole Mutable member role. Ownership changes use the ownership-transfer operation.
+type OrganizationMemberRole string
+
 // OrganizationMembers defines model for OrganizationMembers.
 type OrganizationMembers struct {
-	Members []OrganizationMember `json:"members"`
+	Members    []OrganizationMember `json:"members"`
+	NextCursor *string              `json:"next_cursor,omitempty"`
 }
 
 // OrganizationRole defines model for OrganizationRole.
@@ -847,6 +973,7 @@ type OrganizationRole string
 
 // OrganizationSummaries defines model for OrganizationSummaries.
 type OrganizationSummaries struct {
+	NextCursor    *string               `json:"next_cursor,omitempty"`
 	Organizations []OrganizationSummary `json:"organizations"`
 }
 
@@ -875,6 +1002,13 @@ type PasskeyOptions struct {
 	Options     map[string]interface{} `json:"options"`
 }
 
+// PasskeyReauthenticationFinishRequest defines model for PasskeyReauthenticationFinishRequest.
+type PasskeyReauthenticationFinishRequest struct {
+	AuthenticationChallengeId openapi_types.UUID     `json:"authentication_challenge_id"`
+	ChallengeId               openapi_types.UUID     `json:"challenge_id"`
+	Credential                map[string]interface{} `json:"credential"`
+}
+
 // PasskeyRegistrationFinishRequest defines model for PasskeyRegistrationFinishRequest.
 type PasskeyRegistrationFinishRequest struct {
 	ChallengeId  openapi_types.UUID     `json:"challenge_id"`
@@ -888,6 +1022,12 @@ type PasswordLoginRequest struct {
 	// Identifier The user's email address, or username when AUTHARA_USERNAME_LOGIN_ENABLED=true.
 	Identifier string `json:"identifier"`
 	Password   string `json:"password"`
+}
+
+// PasswordReauthenticationRequest defines model for PasswordReauthenticationRequest.
+type PasswordReauthenticationRequest struct {
+	AuthenticationChallengeId openapi_types.UUID `json:"authentication_challenge_id"`
+	Password                  string             `json:"password"`
 }
 
 // PasswordResetChallengeVerification defines model for PasswordResetChallengeVerification.
@@ -940,6 +1080,12 @@ type Tokens struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+// UpdateOrganizationMemberRequest defines model for UpdateOrganizationMemberRequest.
+type UpdateOrganizationMemberRequest struct {
+	// Role Mutable member role. Ownership changes use the ownership-transfer operation.
+	Role OrganizationMemberRole `json:"role"`
+}
+
 // UpdateOrganizationRequest defines model for UpdateOrganizationRequest.
 type UpdateOrganizationRequest struct {
 	Name string `json:"name"`
@@ -948,6 +1094,7 @@ type UpdateOrganizationRequest struct {
 // UserMemberships defines model for UserMemberships.
 type UserMemberships struct {
 	Memberships []MembershipWithOrganization `json:"memberships"`
+	NextCursor  *string                      `json:"next_cursor,omitempty"`
 }
 
 // AppAudience defines model for AppAudience.
@@ -959,8 +1106,14 @@ type Audience string
 // AuthProvider defines model for AuthProvider.
 type AuthProvider string
 
+// Cursor defines model for Cursor.
+type Cursor = string
+
 // InvitationID defines model for InvitationID.
 type InvitationID = openapi_types.UUID
+
+// Limit defines model for Limit.
+type Limit = int
 
 // OrganizationID defines model for OrganizationID.
 type OrganizationID = openapi_types.UUID
@@ -968,17 +1121,40 @@ type OrganizationID = openapi_types.UUID
 // PasskeyID defines model for PasskeyID.
 type PasskeyID = openapi_types.UUID
 
+// PasskeysCursor defines model for PasskeysCursor.
+type PasskeysCursor = string
+
+// PasskeysLimit defines model for PasskeysLimit.
+type PasskeysLimit = int
+
 // ProviderLinkID defines model for ProviderLinkID.
 type ProviderLinkID = openapi_types.UUID
 
 // SessionID defines model for SessionID.
 type SessionID = openapi_types.UUID
 
+// SessionsCursor defines model for SessionsCursor.
+type SessionsCursor = string
+
+// SessionsLimit defines model for SessionsLimit.
+type SessionsLimit = int
+
 // UserID defines model for UserID.
 type UserID = openapi_types.UUID
 
 // Error defines model for Error.
 type Error = ErrorResponse
+
+// GetCurrentAccountParams defines parameters for GetCurrentAccount.
+type GetCurrentAccountParams struct {
+	// SessionsCursor Opaque cursor for the active-session collection.
+	SessionsCursor *SessionsCursor `form:"sessions_cursor,omitempty" json:"sessions_cursor,omitempty"`
+	SessionsLimit  *SessionsLimit  `form:"sessions_limit,omitempty" json:"sessions_limit,omitempty"`
+
+	// PasskeysCursor Opaque cursor for the passkey collection.
+	PasskeysCursor *PasskeysCursor `form:"passkeys_cursor,omitempty" json:"passkeys_cursor,omitempty"`
+	PasskeysLimit  *PasskeysLimit  `form:"passkeys_limit,omitempty" json:"passkeys_limit,omitempty"`
+}
 
 // AcceptInvitationParams defines parameters for AcceptInvitation.
 type AcceptInvitationParams struct {
@@ -1017,6 +1193,14 @@ type LoginWithPasswordParams struct {
 // LoginWithPasswordParamsAudience defines parameters for LoginWithPassword.
 type LoginWithPasswordParamsAudience string
 
+// LoginWithAppleParams defines parameters for LoginWithApple.
+type LoginWithAppleParams struct {
+	Audience *LoginWithAppleParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+}
+
+// LoginWithAppleParamsAudience defines parameters for LoginWithApple.
+type LoginWithAppleParamsAudience string
+
 // LoginWithGoogleParams defines parameters for LoginWithGoogle.
 type LoginWithGoogleParams struct {
 	Audience *LoginWithGoogleParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
@@ -1024,6 +1208,42 @@ type LoginWithGoogleParams struct {
 
 // LoginWithGoogleParamsAudience defines parameters for LoginWithGoogle.
 type LoginWithGoogleParamsAudience string
+
+// ListCurrentUserOrganizationsParams defines parameters for ListCurrentUserOrganizations.
+type ListCurrentUserOrganizationsParams struct {
+	// Cursor Opaque cursor returned by the preceding page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit Maximum number of collection items to return.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListCurrentOrganizationMembersParams defines parameters for ListCurrentOrganizationMembers.
+type ListCurrentOrganizationMembersParams struct {
+	// Cursor Opaque cursor returned by the preceding page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit Maximum number of collection items to return.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListPublicOrganizationInvitationsParams defines parameters for ListPublicOrganizationInvitations.
+type ListPublicOrganizationInvitationsParams struct {
+	// Cursor Opaque cursor returned by the preceding page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit Maximum number of collection items to return.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListPublicOrganizationMembersParams defines parameters for ListPublicOrganizationMembers.
+type ListPublicOrganizationMembersParams struct {
+	// Cursor Opaque cursor returned by the preceding page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit Maximum number of collection items to return.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
 
 // SwitchOrganizationParams defines parameters for SwitchOrganization.
 type SwitchOrganizationParams struct {
@@ -1040,6 +1260,14 @@ type FinishPasskeyAuthenticationParams struct {
 
 // FinishPasskeyAuthenticationParamsAudience defines parameters for FinishPasskeyAuthentication.
 type FinishPasskeyAuthenticationParamsAudience string
+
+// CompleteAccountRecoveryLinkWithAppleParams defines parameters for CompleteAccountRecoveryLinkWithApple.
+type CompleteAccountRecoveryLinkWithAppleParams struct {
+	Audience *CompleteAccountRecoveryLinkWithAppleParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+}
+
+// CompleteAccountRecoveryLinkWithAppleParamsAudience defines parameters for CompleteAccountRecoveryLinkWithApple.
+type CompleteAccountRecoveryLinkWithAppleParamsAudience string
 
 // CompleteAccountRecoveryLinkWithGoogleParams defines parameters for CompleteAccountRecoveryLinkWithGoogle.
 type CompleteAccountRecoveryLinkWithGoogleParams struct {
@@ -1089,6 +1317,18 @@ type SignupDirectParams struct {
 // SignupDirectParamsAudience defines parameters for SignupDirect.
 type SignupDirectParamsAudience string
 
+// ListPublicUserMembershipsParams defines parameters for ListPublicUserMemberships.
+type ListPublicUserMembershipsParams struct {
+	// Cursor Opaque cursor returned by the preceding page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit Maximum number of collection items to return.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// LinkCurrentUserAppleJSONRequestBody defines body for LinkCurrentUserApple for application/json ContentType.
+type LinkCurrentUserAppleJSONRequestBody = AppleAuthorizationRequest
+
 // LinkCurrentUserGoogleJSONRequestBody defines body for LinkCurrentUserGoogle for application/json ContentType.
 type LinkCurrentUserGoogleJSONRequestBody = GoogleLoginRequest
 
@@ -1122,11 +1362,17 @@ type LoginAndAcceptInvitationJSONRequestBody = InvitationPasswordLoginRequest
 // LoginWithPasswordJSONRequestBody defines body for LoginWithPassword for application/json ContentType.
 type LoginWithPasswordJSONRequestBody = PasswordLoginRequest
 
+// LoginWithAppleJSONRequestBody defines body for LoginWithApple for application/json ContentType.
+type LoginWithAppleJSONRequestBody = AppleAuthorizationRequest
+
 // LoginWithGoogleJSONRequestBody defines body for LoginWithGoogle for application/json ContentType.
 type LoginWithGoogleJSONRequestBody = GoogleLoginRequest
 
 // UpdatePublicOrganizationJSONRequestBody defines body for UpdatePublicOrganization for application/json ContentType.
 type UpdatePublicOrganizationJSONRequestBody = UpdateOrganizationRequest
+
+// UpdatePublicOrganizationMemberJSONRequestBody defines body for UpdatePublicOrganizationMember for application/json ContentType.
+type UpdatePublicOrganizationMemberJSONRequestBody = UpdateOrganizationMemberRequest
 
 // FinishPasskeyAuthenticationJSONRequestBody defines body for FinishPasskeyAuthentication for application/json ContentType.
 type FinishPasskeyAuthenticationJSONRequestBody = PasskeyAuthenticationFinishRequest
@@ -1143,11 +1389,29 @@ type VerifyPasswordResetChallengeJSONRequestBody = PasswordResetChallengeVerific
 // StartGoogleAccountRecoveryLinkJSONRequestBody defines body for StartGoogleAccountRecoveryLink for application/json ContentType.
 type StartGoogleAccountRecoveryLinkJSONRequestBody = GoogleLoginRequest
 
+// CompleteAccountRecoveryLinkWithAppleJSONRequestBody defines body for CompleteAccountRecoveryLinkWithApple for application/json ContentType.
+type CompleteAccountRecoveryLinkWithAppleJSONRequestBody = AccountRecoveryAppleProofRequest
+
 // CompleteAccountRecoveryLinkWithGoogleJSONRequestBody defines body for CompleteAccountRecoveryLinkWithGoogle for application/json ContentType.
 type CompleteAccountRecoveryLinkWithGoogleJSONRequestBody = AccountRecoveryGoogleProofRequest
 
 // CompleteAccountRecoveryLinkWithPasswordJSONRequestBody defines body for CompleteAccountRecoveryLinkWithPassword for application/json ContentType.
 type CompleteAccountRecoveryLinkWithPasswordJSONRequestBody = AccountRecoveryPasswordProofRequest
+
+// ReauthenticateWithAppleJSONRequestBody defines body for ReauthenticateWithApple for application/json ContentType.
+type ReauthenticateWithAppleJSONRequestBody = AppleReauthenticationRequest
+
+// ReauthenticateWithGoogleJSONRequestBody defines body for ReauthenticateWithGoogle for application/json ContentType.
+type ReauthenticateWithGoogleJSONRequestBody = GoogleReauthenticationRequest
+
+// FinishPasskeyReauthenticationJSONRequestBody defines body for FinishPasskeyReauthentication for application/json ContentType.
+type FinishPasskeyReauthenticationJSONRequestBody = PasskeyReauthenticationFinishRequest
+
+// BeginPasskeyReauthenticationJSONRequestBody defines body for BeginPasskeyReauthentication for application/json ContentType.
+type BeginPasskeyReauthenticationJSONRequestBody = AuthenticationChallengeReference
+
+// ReauthenticateWithPasswordJSONRequestBody defines body for ReauthenticateWithPassword for application/json ContentType.
+type ReauthenticateWithPasswordJSONRequestBody = PasswordReauthenticationRequest
 
 // StartSignupChallengeJSONRequestBody defines body for StartSignupChallenge for application/json ContentType.
 type StartSignupChallengeJSONRequestBody = SignupRequest
@@ -1176,6 +1440,9 @@ type CreateInternalOrganizationInvitationJSONRequestBody = InternalCreateInvitat
 // RemoveInternalOrganizationMemberJSONRequestBody defines body for RemoveInternalOrganizationMember for application/json ContentType.
 type RemoveInternalOrganizationMemberJSONRequestBody = InternalOrganizationActorRequest
 
+// UpdateInternalOrganizationMemberJSONRequestBody defines body for UpdateInternalOrganizationMember for application/json ContentType.
+type UpdateInternalOrganizationMemberJSONRequestBody = InternalUpdateOrganizationMemberRequest
+
 // TransferInternalOrganizationOwnershipJSONRequestBody defines body for TransferInternalOrganizationOwnership for application/json ContentType.
 type TransferInternalOrganizationOwnershipJSONRequestBody = InternalOwnershipTransferRequest
 
@@ -1183,7 +1450,10 @@ type TransferInternalOrganizationOwnershipJSONRequestBody = InternalOwnershipTra
 type ServerInterface interface {
 	// GetCurrentAccount Get the authenticated user's account
 	// (GET /auth/api/v1/account)
-	GetCurrentAccount(w http.ResponseWriter, r *http.Request)
+	GetCurrentAccount(w http.ResponseWriter, r *http.Request, params GetCurrentAccountParams)
+	// LinkCurrentUserApple Link Apple to the authenticated user's account
+	// (POST /auth/api/v1/account/auth-methods/apple)
+	LinkCurrentUserApple(w http.ResponseWriter, r *http.Request)
 	// LinkCurrentUserGoogle Link Google to the authenticated user's account
 	// (POST /auth/api/v1/account/auth-methods/google)
 	LinkCurrentUserGoogle(w http.ResponseWriter, r *http.Request)
@@ -1238,6 +1508,12 @@ type ServerInterface interface {
 	// LoginWithPassword Log in with a password
 	// (POST /auth/api/v1/login)
 	LoginWithPassword(w http.ResponseWriter, r *http.Request, params LoginWithPasswordParams)
+	// LoginWithApple Log in with an Apple authorization code
+	// (POST /auth/api/v1/oauth/apple)
+	LoginWithApple(w http.ResponseWriter, r *http.Request, params LoginWithAppleParams)
+	// GetAppleLoginOptions Get Apple login options
+	// (GET /auth/api/v1/oauth/apple/options)
+	GetAppleLoginOptions(w http.ResponseWriter, r *http.Request)
 	// LoginWithGoogle Log in with a Google ID token
 	// (POST /auth/api/v1/oauth/google)
 	LoginWithGoogle(w http.ResponseWriter, r *http.Request, params LoginWithGoogleParams)
@@ -1246,13 +1522,13 @@ type ServerInterface interface {
 	GetGoogleLoginOptions(w http.ResponseWriter, r *http.Request)
 	// ListCurrentUserOrganizations List organizations for the authenticated user
 	// (GET /auth/api/v1/organizations)
-	ListCurrentUserOrganizations(w http.ResponseWriter, r *http.Request)
+	ListCurrentUserOrganizations(w http.ResponseWriter, r *http.Request, params ListCurrentUserOrganizationsParams)
 	// GetCurrentOrganization Get the organization in the current access token
 	// (GET /auth/api/v1/organizations/current)
 	GetCurrentOrganization(w http.ResponseWriter, r *http.Request)
 	// ListCurrentOrganizationMembers List members of the current organization
 	// (GET /auth/api/v1/organizations/current/members)
-	ListCurrentOrganizationMembers(w http.ResponseWriter, r *http.Request)
+	ListCurrentOrganizationMembers(w http.ResponseWriter, r *http.Request, params ListCurrentOrganizationMembersParams)
 	// GetPublicOrganization Get an organization
 	// (GET /auth/api/v1/organizations/{organizationID})
 	GetPublicOrganization(w http.ResponseWriter, r *http.Request, organizationID OrganizationID)
@@ -1261,7 +1537,7 @@ type ServerInterface interface {
 	UpdatePublicOrganization(w http.ResponseWriter, r *http.Request, organizationID OrganizationID)
 	// ListPublicOrganizationInvitations List organization invitations
 	// (GET /auth/api/v1/organizations/{organizationID}/invitations)
-	ListPublicOrganizationInvitations(w http.ResponseWriter, r *http.Request, organizationID OrganizationID)
+	ListPublicOrganizationInvitations(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, params ListPublicOrganizationInvitationsParams)
 	// GetPublicOrganizationInvitation Get an organization invitation
 	// (GET /auth/api/v1/organizations/{organizationID}/invitations/{invitationID})
 	GetPublicOrganizationInvitation(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, invitationID InvitationID)
@@ -1270,10 +1546,13 @@ type ServerInterface interface {
 	RevokePublicOrganizationInvitation(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, invitationID InvitationID)
 	// ListPublicOrganizationMembers List organization members
 	// (GET /auth/api/v1/organizations/{organizationID}/members)
-	ListPublicOrganizationMembers(w http.ResponseWriter, r *http.Request, organizationID OrganizationID)
+	ListPublicOrganizationMembers(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, params ListPublicOrganizationMembersParams)
 	// GetPublicOrganizationMember Get an organization member
 	// (GET /auth/api/v1/organizations/{organizationID}/members/{userID})
 	GetPublicOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID)
+	// UpdatePublicOrganizationMember Update an organization member role
+	// (PATCH /auth/api/v1/organizations/{organizationID}/members/{userID})
+	UpdatePublicOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID)
 	// SwitchOrganization Switch the current session to another organization
 	// (POST /auth/api/v1/organizations/{organizationID}/switch)
 	SwitchOrganization(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, params SwitchOrganizationParams)
@@ -1298,12 +1577,33 @@ type ServerInterface interface {
 	// StartGoogleAccountRecoveryLink Start linking Google to an existing account with the same email
 	// (POST /auth/api/v1/provider-links/recovery/google)
 	StartGoogleAccountRecoveryLink(w http.ResponseWriter, r *http.Request)
+	// CompleteAccountRecoveryLinkWithApple Prove ownership with an existing Apple login and finish linking
+	// (POST /auth/api/v1/provider-links/recovery/{linkID}/apple)
+	CompleteAccountRecoveryLinkWithApple(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithAppleParams)
 	// CompleteAccountRecoveryLinkWithGoogle Prove ownership with an existing Google login and finish linking
 	// (POST /auth/api/v1/provider-links/recovery/{linkID}/google)
 	CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithGoogleParams)
 	// CompleteAccountRecoveryLinkWithPassword Prove ownership with the existing account password and finish linking
 	// (POST /auth/api/v1/provider-links/recovery/{linkID}/password)
 	CompleteAccountRecoveryLinkWithPassword(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithPasswordParams)
+	// ReauthenticateWithApple Reauthenticate the current session with a linked Apple identity
+	// (POST /auth/api/v1/reauthenticate/apple)
+	ReauthenticateWithApple(w http.ResponseWriter, r *http.Request)
+	// CheckRecentAuthentication Require recent authentication for an application action
+	// (POST /auth/api/v1/reauthenticate/check)
+	CheckRecentAuthentication(w http.ResponseWriter, r *http.Request)
+	// ReauthenticateWithGoogle Reauthenticate the current session with a linked Google identity
+	// (POST /auth/api/v1/reauthenticate/google)
+	ReauthenticateWithGoogle(w http.ResponseWriter, r *http.Request)
+	// FinishPasskeyReauthentication Finish passkey reauthentication for the current session
+	// (POST /auth/api/v1/reauthenticate/passkeys/finish)
+	FinishPasskeyReauthentication(w http.ResponseWriter, r *http.Request)
+	// BeginPasskeyReauthentication Start passkey reauthentication for the current session
+	// (POST /auth/api/v1/reauthenticate/passkeys/options)
+	BeginPasskeyReauthentication(w http.ResponseWriter, r *http.Request)
+	// ReauthenticateWithPassword Reauthenticate the current session with a password
+	// (POST /auth/api/v1/reauthenticate/password)
+	ReauthenticateWithPassword(w http.ResponseWriter, r *http.Request)
 	// Logout Log out the current session
 	// (POST /auth/api/v1/sessions/logout)
 	Logout(w http.ResponseWriter, r *http.Request)
@@ -1330,7 +1630,7 @@ type ServerInterface interface {
 	SetCurrentUserPassword(w http.ResponseWriter, r *http.Request)
 	// ListPublicUserMemberships List memberships for the authenticated user
 	// (GET /auth/api/v1/users/{userID}/memberships)
-	ListPublicUserMemberships(w http.ResponseWriter, r *http.Request, userID UserID)
+	ListPublicUserMemberships(w http.ResponseWriter, r *http.Request, userID UserID, params ListPublicUserMembershipsParams)
 	// CreateInternalOrganization Create a team organization
 	// (POST /auth/internal/v1/organizations)
 	CreateInternalOrganization(w http.ResponseWriter, r *http.Request)
@@ -1346,6 +1646,9 @@ type ServerInterface interface {
 	// RemoveInternalOrganizationMember Remove an organization member
 	// (DELETE /auth/internal/v1/organizations/{organizationID}/members/{userID})
 	RemoveInternalOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID)
+	// UpdateInternalOrganizationMember Update an organization member role
+	// (PATCH /auth/internal/v1/organizations/{organizationID}/members/{userID})
+	UpdateInternalOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID)
 	// TransferInternalOrganizationOwnership Transfer organization ownership
 	// (POST /auth/internal/v1/organizations/{organizationID}/ownership-transfer)
 	TransferInternalOrganizationOwnership(w http.ResponseWriter, r *http.Request, organizationID OrganizationID)
@@ -1360,7 +1663,13 @@ type Unimplemented struct{}
 
 // GetCurrentAccount Get the authenticated user's account
 // (GET /auth/api/v1/account)
-func (_ Unimplemented) GetCurrentAccount(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) GetCurrentAccount(w http.ResponseWriter, r *http.Request, params GetCurrentAccountParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// LinkCurrentUserApple Link Apple to the authenticated user's account
+// (POST /auth/api/v1/account/auth-methods/apple)
+func (_ Unimplemented) LinkCurrentUserApple(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1472,6 +1781,18 @@ func (_ Unimplemented) LoginWithPassword(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// LoginWithApple Log in with an Apple authorization code
+// (POST /auth/api/v1/oauth/apple)
+func (_ Unimplemented) LoginWithApple(w http.ResponseWriter, r *http.Request, params LoginWithAppleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAppleLoginOptions Get Apple login options
+// (GET /auth/api/v1/oauth/apple/options)
+func (_ Unimplemented) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // LoginWithGoogle Log in with a Google ID token
 // (POST /auth/api/v1/oauth/google)
 func (_ Unimplemented) LoginWithGoogle(w http.ResponseWriter, r *http.Request, params LoginWithGoogleParams) {
@@ -1486,7 +1807,7 @@ func (_ Unimplemented) GetGoogleLoginOptions(w http.ResponseWriter, r *http.Requ
 
 // ListCurrentUserOrganizations List organizations for the authenticated user
 // (GET /auth/api/v1/organizations)
-func (_ Unimplemented) ListCurrentUserOrganizations(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) ListCurrentUserOrganizations(w http.ResponseWriter, r *http.Request, params ListCurrentUserOrganizationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1498,7 +1819,7 @@ func (_ Unimplemented) GetCurrentOrganization(w http.ResponseWriter, r *http.Req
 
 // ListCurrentOrganizationMembers List members of the current organization
 // (GET /auth/api/v1/organizations/current/members)
-func (_ Unimplemented) ListCurrentOrganizationMembers(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) ListCurrentOrganizationMembers(w http.ResponseWriter, r *http.Request, params ListCurrentOrganizationMembersParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1516,7 +1837,7 @@ func (_ Unimplemented) UpdatePublicOrganization(w http.ResponseWriter, r *http.R
 
 // ListPublicOrganizationInvitations List organization invitations
 // (GET /auth/api/v1/organizations/{organizationID}/invitations)
-func (_ Unimplemented) ListPublicOrganizationInvitations(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
+func (_ Unimplemented) ListPublicOrganizationInvitations(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, params ListPublicOrganizationInvitationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1534,13 +1855,19 @@ func (_ Unimplemented) RevokePublicOrganizationInvitation(w http.ResponseWriter,
 
 // ListPublicOrganizationMembers List organization members
 // (GET /auth/api/v1/organizations/{organizationID}/members)
-func (_ Unimplemented) ListPublicOrganizationMembers(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
+func (_ Unimplemented) ListPublicOrganizationMembers(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, params ListPublicOrganizationMembersParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // GetPublicOrganizationMember Get an organization member
 // (GET /auth/api/v1/organizations/{organizationID}/members/{userID})
 func (_ Unimplemented) GetPublicOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdatePublicOrganizationMember Update an organization member role
+// (PATCH /auth/api/v1/organizations/{organizationID}/members/{userID})
+func (_ Unimplemented) UpdatePublicOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1592,6 +1919,12 @@ func (_ Unimplemented) StartGoogleAccountRecoveryLink(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// CompleteAccountRecoveryLinkWithApple Prove ownership with an existing Apple login and finish linking
+// (POST /auth/api/v1/provider-links/recovery/{linkID}/apple)
+func (_ Unimplemented) CompleteAccountRecoveryLinkWithApple(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithAppleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // CompleteAccountRecoveryLinkWithGoogle Prove ownership with an existing Google login and finish linking
 // (POST /auth/api/v1/provider-links/recovery/{linkID}/google)
 func (_ Unimplemented) CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithGoogleParams) {
@@ -1601,6 +1934,42 @@ func (_ Unimplemented) CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWrit
 // CompleteAccountRecoveryLinkWithPassword Prove ownership with the existing account password and finish linking
 // (POST /auth/api/v1/provider-links/recovery/{linkID}/password)
 func (_ Unimplemented) CompleteAccountRecoveryLinkWithPassword(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithPasswordParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReauthenticateWithApple Reauthenticate the current session with a linked Apple identity
+// (POST /auth/api/v1/reauthenticate/apple)
+func (_ Unimplemented) ReauthenticateWithApple(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CheckRecentAuthentication Require recent authentication for an application action
+// (POST /auth/api/v1/reauthenticate/check)
+func (_ Unimplemented) CheckRecentAuthentication(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReauthenticateWithGoogle Reauthenticate the current session with a linked Google identity
+// (POST /auth/api/v1/reauthenticate/google)
+func (_ Unimplemented) ReauthenticateWithGoogle(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// FinishPasskeyReauthentication Finish passkey reauthentication for the current session
+// (POST /auth/api/v1/reauthenticate/passkeys/finish)
+func (_ Unimplemented) FinishPasskeyReauthentication(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// BeginPasskeyReauthentication Start passkey reauthentication for the current session
+// (POST /auth/api/v1/reauthenticate/passkeys/options)
+func (_ Unimplemented) BeginPasskeyReauthentication(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReauthenticateWithPassword Reauthenticate the current session with a password
+// (POST /auth/api/v1/reauthenticate/password)
+func (_ Unimplemented) ReauthenticateWithPassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1654,7 +2023,7 @@ func (_ Unimplemented) SetCurrentUserPassword(w http.ResponseWriter, r *http.Req
 
 // ListPublicUserMemberships List memberships for the authenticated user
 // (GET /auth/api/v1/users/{userID}/memberships)
-func (_ Unimplemented) ListPublicUserMemberships(w http.ResponseWriter, r *http.Request, userID UserID) {
+func (_ Unimplemented) ListPublicUserMemberships(w http.ResponseWriter, r *http.Request, userID UserID, params ListPublicUserMembershipsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1688,6 +2057,12 @@ func (_ Unimplemented) RemoveInternalOrganizationMember(w http.ResponseWriter, r
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// UpdateInternalOrganizationMember Update an organization member role
+// (PATCH /auth/internal/v1/organizations/{organizationID}/members/{userID})
+func (_ Unimplemented) UpdateInternalOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // TransferInternalOrganizationOwnership Transfer organization ownership
 // (POST /auth/internal/v1/organizations/{organizationID}/ownership-transfer)
 func (_ Unimplemented) TransferInternalOrganizationOwnership(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
@@ -1712,8 +2087,80 @@ type MiddlewareFunc func(http.Handler) http.Handler
 // GetCurrentAccount operation middleware
 func (siw *ServerInterfaceWrapper) GetCurrentAccount(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCurrentAccountParams
+
+	// ------------- Optional query parameter "sessions_cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sessions_cursor", r.URL.Query(), &params.SessionsCursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sessions_cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessions_cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sessions_limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sessions_limit", r.URL.Query(), &params.SessionsLimit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sessions_limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessions_limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "passkeys_cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "passkeys_cursor", r.URL.Query(), &params.PasskeysCursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "passkeys_cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "passkeys_cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "passkeys_limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "passkeys_limit", r.URL.Query(), &params.PasskeysLimit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "passkeys_limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "passkeys_limit", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetCurrentAccount(w, r)
+		siw.Handler.GetCurrentAccount(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LinkCurrentUserApple operation middleware
+func (siw *ServerInterfaceWrapper) LinkCurrentUserApple(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LinkCurrentUserApple(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2106,6 +2553,53 @@ func (siw *ServerInterfaceWrapper) LoginWithPassword(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// LoginWithApple operation middleware
+func (siw *ServerInterfaceWrapper) LoginWithApple(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params LoginWithAppleParams
+
+	// ------------- Optional query parameter "audience" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "audience", r.URL.Query(), &params.Audience, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "audience"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "audience", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LoginWithApple(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAppleLoginOptions operation middleware
+func (siw *ServerInterfaceWrapper) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAppleLoginOptions(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // LoginWithGoogle operation middleware
 func (siw *ServerInterfaceWrapper) LoginWithGoogle(w http.ResponseWriter, r *http.Request) {
 
@@ -2156,8 +2650,40 @@ func (siw *ServerInterfaceWrapper) GetGoogleLoginOptions(w http.ResponseWriter, 
 // ListCurrentUserOrganizations operation middleware
 func (siw *ServerInterfaceWrapper) ListCurrentUserOrganizations(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCurrentUserOrganizationsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListCurrentUserOrganizations(w, r)
+		siw.Handler.ListCurrentUserOrganizations(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2184,8 +2710,40 @@ func (siw *ServerInterfaceWrapper) GetCurrentOrganization(w http.ResponseWriter,
 // ListCurrentOrganizationMembers operation middleware
 func (siw *ServerInterfaceWrapper) ListCurrentOrganizationMembers(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCurrentOrganizationMembersParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListCurrentOrganizationMembers(w, r)
+		siw.Handler.ListCurrentOrganizationMembers(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2262,8 +2820,37 @@ func (siw *ServerInterfaceWrapper) ListPublicOrganizationInvitations(w http.Resp
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPublicOrganizationInvitationsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListPublicOrganizationInvitations(w, r, organizationID)
+		siw.Handler.ListPublicOrganizationInvitations(w, r, organizationID, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2358,8 +2945,37 @@ func (siw *ServerInterfaceWrapper) ListPublicOrganizationMembers(w http.Response
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPublicOrganizationMembersParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListPublicOrganizationMembers(w, r, organizationID)
+		siw.Handler.ListPublicOrganizationMembers(w, r, organizationID, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2395,6 +3011,41 @@ func (siw *ServerInterfaceWrapper) GetPublicOrganizationMember(w http.ResponseWr
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPublicOrganizationMember(w, r, organizationID, userID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePublicOrganizationMember operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePublicOrganizationMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "organizationID" -------------
+	var organizationID OrganizationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "organizationID", chi.URLParam(r, "organizationID"), &organizationID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "organizationID", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userID" -------------
+	var userID UserID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userID", chi.URLParam(r, "userID"), &userID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePublicOrganizationMember(w, r, organizationID, userID)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2563,6 +3214,48 @@ func (siw *ServerInterfaceWrapper) StartGoogleAccountRecoveryLink(w http.Respons
 	handler.ServeHTTP(w, r)
 }
 
+// CompleteAccountRecoveryLinkWithApple operation middleware
+func (siw *ServerInterfaceWrapper) CompleteAccountRecoveryLinkWithApple(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "linkID" -------------
+	var linkID ProviderLinkID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "linkID", chi.URLParam(r, "linkID"), &linkID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "linkID", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompleteAccountRecoveryLinkWithAppleParams
+
+	// ------------- Optional query parameter "audience" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "audience", r.URL.Query(), &params.Audience, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "audience"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "audience", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteAccountRecoveryLinkWithApple(w, r, linkID, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CompleteAccountRecoveryLinkWithGoogle operation middleware
 func (siw *ServerInterfaceWrapper) CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWriter, r *http.Request) {
 
@@ -2638,6 +3331,90 @@ func (siw *ServerInterfaceWrapper) CompleteAccountRecoveryLinkWithPassword(w htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CompleteAccountRecoveryLinkWithPassword(w, r, linkID, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReauthenticateWithApple operation middleware
+func (siw *ServerInterfaceWrapper) ReauthenticateWithApple(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReauthenticateWithApple(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CheckRecentAuthentication operation middleware
+func (siw *ServerInterfaceWrapper) CheckRecentAuthentication(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CheckRecentAuthentication(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReauthenticateWithGoogle operation middleware
+func (siw *ServerInterfaceWrapper) ReauthenticateWithGoogle(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReauthenticateWithGoogle(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// FinishPasskeyReauthentication operation middleware
+func (siw *ServerInterfaceWrapper) FinishPasskeyReauthentication(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.FinishPasskeyReauthentication(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// BeginPasskeyReauthentication operation middleware
+func (siw *ServerInterfaceWrapper) BeginPasskeyReauthentication(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BeginPasskeyReauthentication(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReauthenticateWithPassword operation middleware
+func (siw *ServerInterfaceWrapper) ReauthenticateWithPassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReauthenticateWithPassword(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2850,8 +3627,37 @@ func (siw *ServerInterfaceWrapper) ListPublicUserMemberships(w http.ResponseWrit
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPublicUserMembershipsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListPublicUserMemberships(w, r, userID)
+		siw.Handler.ListPublicUserMemberships(w, r, userID, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2988,6 +3794,41 @@ func (siw *ServerInterfaceWrapper) RemoveInternalOrganizationMember(w http.Respo
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RemoveInternalOrganizationMember(w, r, organizationID, userID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateInternalOrganizationMember operation middleware
+func (siw *ServerInterfaceWrapper) UpdateInternalOrganizationMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "organizationID" -------------
+	var organizationID OrganizationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "organizationID", chi.URLParam(r, "organizationID"), &organizationID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "organizationID", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userID" -------------
+	var userID UserID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userID", chi.URLParam(r, "userID"), &userID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateInternalOrganizationMember(w, r, organizationID, userID)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3172,6 +4013,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/auth/api/v1/oauth/google", wrapper.LoginWithGoogle)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/auth/api/v1/oauth/apple/options", wrapper.GetAppleLoginOptions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/oauth/apple", wrapper.LoginWithApple)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/auth/api/v1/invitations/preview", wrapper.PreviewInvitation)
 	})
 	r.Group(func(r chi.Router) {
@@ -3191,6 +4038,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/provider-links/recovery/{linkID}/google", wrapper.CompleteAccountRecoveryLinkWithGoogle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/provider-links/recovery/{linkID}/apple", wrapper.CompleteAccountRecoveryLinkWithApple)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/login", wrapper.LoginWithPassword)
@@ -3221,6 +4071,24 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/passkeys/register/options", wrapper.BeginPasskeyRegistration)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/reauthenticate/check", wrapper.CheckRecentAuthentication)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/reauthenticate/password", wrapper.ReauthenticateWithPassword)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/reauthenticate/google", wrapper.ReauthenticateWithGoogle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/reauthenticate/apple", wrapper.ReauthenticateWithApple)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/reauthenticate/passkeys/options", wrapper.BeginPasskeyReauthentication)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/reauthenticate/passkeys/finish", wrapper.FinishPasskeyReauthentication)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/passkeys/register/finish", wrapper.FinishPasskeyRegistration)
@@ -3257,6 +4125,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/account/auth-methods/google", wrapper.LinkCurrentUserGoogle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/account/auth-methods/apple", wrapper.LinkCurrentUserApple)
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/auth/api/v1/account/auth-methods/{provider}", wrapper.UnlinkCurrentUserAuthMethod)
@@ -3301,6 +4172,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/auth/api/v1/organizations/{organizationID}/members/{userID}", wrapper.GetPublicOrganizationMember)
 	})
 	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/auth/api/v1/organizations/{organizationID}/members/{userID}", wrapper.UpdatePublicOrganizationMember)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/auth/api/v1/organizations/{organizationID}/invitations", wrapper.ListPublicOrganizationInvitations)
 	})
 	r.Group(func(r chi.Router) {
@@ -3322,6 +4196,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Delete(options.BaseURL+"/auth/internal/v1/organizations/{organizationID}/members/{userID}", wrapper.RemoveInternalOrganizationMember)
 	})
 	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/auth/internal/v1/organizations/{organizationID}/members/{userID}", wrapper.UpdateInternalOrganizationMember)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/internal/v1/organizations/{organizationID}/ownership-transfer", wrapper.TransferInternalOrganizationOwnership)
 	})
 	r.Group(func(r chi.Router) {
@@ -3340,6 +4217,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 type ErrorJSONResponse ErrorResponse
 
 type GetCurrentAccountRequestObject struct {
+	Params GetCurrentAccountParams
 }
 
 type GetCurrentAccountResponseObject interface {
@@ -3360,7 +4238,21 @@ func (response GetCurrentAccount200JSONResponse) VisitGetCurrentAccountResponse(
 	return err
 }
 
-type GetCurrentAccount401JSONResponse struct{ ErrorJSONResponse }
+type GetCurrentAccount400JSONResponse struct{ ErrorJSONResponse }
+
+func (response GetCurrentAccount400JSONResponse) VisitGetCurrentAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentAccount401JSONResponse ErrorResponse
 
 func (response GetCurrentAccount401JSONResponse) VisitGetCurrentAccountResponse(w http.ResponseWriter) error {
 
@@ -3377,6 +4269,120 @@ func (response GetCurrentAccount401JSONResponse) VisitGetCurrentAccountResponse(
 type GetCurrentAccount500JSONResponse ErrorResponse
 
 func (response GetCurrentAccount500JSONResponse) VisitGetCurrentAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserAppleRequestObject struct {
+	Body *LinkCurrentUserAppleJSONRequestBody
+}
+
+type LinkCurrentUserAppleResponseObject interface {
+	VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error
+}
+
+type LinkCurrentUserApple204Response struct {
+}
+
+func (response LinkCurrentUserApple204Response) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type LinkCurrentUserApple400JSONResponse struct{ ErrorJSONResponse }
+
+func (response LinkCurrentUserApple400JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple401JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple401JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple403JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple403JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple404JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple404JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple409JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple409JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple428JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple428JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple500JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple500JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -3474,6 +4480,20 @@ func (response LinkCurrentUserGoogle409JSONResponse) VisitLinkCurrentUserGoogleR
 	return err
 }
 
+type LinkCurrentUserGoogle428JSONResponse ErrorResponse
+
+func (response LinkCurrentUserGoogle428JSONResponse) VisitLinkCurrentUserGoogleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type LinkCurrentUserGoogle500JSONResponse ErrorResponse
 
 func (response LinkCurrentUserGoogle500JSONResponse) VisitLinkCurrentUserGoogleResponse(w http.ResponseWriter) error {
@@ -3556,6 +4576,20 @@ func (response UnlinkCurrentUserAuthMethod409JSONResponse) VisitUnlinkCurrentUse
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnlinkCurrentUserAuthMethod428JSONResponse ErrorResponse
+
+func (response UnlinkCurrentUserAuthMethod428JSONResponse) VisitUnlinkCurrentUserAuthMethodResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -3652,6 +4686,20 @@ func (response StartCurrentUserEmailChange404JSONResponse) VisitStartCurrentUser
 	return err
 }
 
+type StartCurrentUserEmailChange428JSONResponse ErrorResponse
+
+func (response StartCurrentUserEmailChange428JSONResponse) VisitStartCurrentUserEmailChangeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type StartCurrentUserEmailChange500JSONResponse ErrorResponse
 
 func (response StartCurrentUserEmailChange500JSONResponse) VisitStartCurrentUserEmailChangeResponse(w http.ResponseWriter) error {
@@ -3734,6 +4782,20 @@ func (response VerifyCurrentUserEmailChange404JSONResponse) VisitVerifyCurrentUs
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyCurrentUserEmailChange428JSONResponse ErrorResponse
+
+func (response VerifyCurrentUserEmailChange428JSONResponse) VisitVerifyCurrentUserEmailChangeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -3838,6 +4900,20 @@ func (response DeleteCurrentUserPasskey409JSONResponse) VisitDeleteCurrentUserPa
 	return err
 }
 
+type DeleteCurrentUserPasskey428JSONResponse ErrorResponse
+
+func (response DeleteCurrentUserPasskey428JSONResponse) VisitDeleteCurrentUserPasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteCurrentUserPasskey500JSONResponse ErrorResponse
 
 func (response DeleteCurrentUserPasskey500JSONResponse) VisitDeleteCurrentUserPasskeyResponse(w http.ResponseWriter) error {
@@ -3906,6 +4982,20 @@ func (response AddCurrentUserPassword409JSONResponse) VisitAddCurrentUserPasswor
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddCurrentUserPassword428JSONResponse ErrorResponse
+
+func (response AddCurrentUserPassword428JSONResponse) VisitAddCurrentUserPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -4873,6 +5963,162 @@ func (response LoginWithPassword500JSONResponse) VisitLoginWithPasswordResponse(
 	return err
 }
 
+type LoginWithAppleRequestObject struct {
+	Params LoginWithAppleParams
+	Body   *LoginWithAppleJSONRequestBody
+}
+
+type LoginWithAppleResponseObject interface {
+	VisitLoginWithAppleResponse(w http.ResponseWriter) error
+}
+
+type LoginWithApple200JSONResponse AuthSession
+
+func (response LoginWithApple200JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple400JSONResponse struct{ ErrorJSONResponse }
+
+func (response LoginWithApple400JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple401JSONResponse ErrorResponse
+
+func (response LoginWithApple401JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple403JSONResponse ErrorResponse
+
+func (response LoginWithApple403JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple404JSONResponse ErrorResponse
+
+func (response LoginWithApple404JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple409JSONResponse ErrorResponse
+
+func (response LoginWithApple409JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple500JSONResponse ErrorResponse
+
+func (response LoginWithApple500JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppleLoginOptionsRequestObject struct {
+}
+
+type GetAppleLoginOptionsResponseObject interface {
+	VisitGetAppleLoginOptionsResponse(w http.ResponseWriter) error
+}
+
+type GetAppleLoginOptions200JSONResponse AppleLoginOptions
+
+func (response GetAppleLoginOptions200JSONResponse) VisitGetAppleLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppleLoginOptions404JSONResponse struct{ ErrorJSONResponse }
+
+func (response GetAppleLoginOptions404JSONResponse) VisitGetAppleLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppleLoginOptions500JSONResponse ErrorResponse
+
+func (response GetAppleLoginOptions500JSONResponse) VisitGetAppleLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type LoginWithGoogleRequestObject struct {
 	Params LoginWithGoogleParams
 	Body   *LoginWithGoogleJSONRequestBody
@@ -5030,6 +6276,7 @@ func (response GetGoogleLoginOptions500JSONResponse) VisitGetGoogleLoginOptionsR
 }
 
 type ListCurrentUserOrganizationsRequestObject struct {
+	Params ListCurrentUserOrganizationsParams
 }
 
 type ListCurrentUserOrganizationsResponseObject interface {
@@ -5050,7 +6297,21 @@ func (response ListCurrentUserOrganizations200JSONResponse) VisitListCurrentUser
 	return err
 }
 
-type ListCurrentUserOrganizations401JSONResponse struct{ ErrorJSONResponse }
+type ListCurrentUserOrganizations400JSONResponse struct{ ErrorJSONResponse }
+
+func (response ListCurrentUserOrganizations400JSONResponse) VisitListCurrentUserOrganizationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCurrentUserOrganizations401JSONResponse ErrorResponse
 
 func (response ListCurrentUserOrganizations401JSONResponse) VisitListCurrentUserOrganizationsResponse(w http.ResponseWriter) error {
 
@@ -5128,6 +6389,7 @@ func (response GetCurrentOrganization500JSONResponse) VisitGetCurrentOrganizatio
 }
 
 type ListCurrentOrganizationMembersRequestObject struct {
+	Params ListCurrentOrganizationMembersParams
 }
 
 type ListCurrentOrganizationMembersResponseObject interface {
@@ -5148,7 +6410,21 @@ func (response ListCurrentOrganizationMembers200JSONResponse) VisitListCurrentOr
 	return err
 }
 
-type ListCurrentOrganizationMembers401JSONResponse struct{ ErrorJSONResponse }
+type ListCurrentOrganizationMembers400JSONResponse struct{ ErrorJSONResponse }
+
+func (response ListCurrentOrganizationMembers400JSONResponse) VisitListCurrentOrganizationMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCurrentOrganizationMembers401JSONResponse ErrorResponse
 
 func (response ListCurrentOrganizationMembers401JSONResponse) VisitListCurrentOrganizationMembersResponse(w http.ResponseWriter) error {
 
@@ -5361,6 +6637,20 @@ func (response UpdatePublicOrganization404JSONResponse) VisitUpdatePublicOrganiz
 	return err
 }
 
+type UpdatePublicOrganization428JSONResponse ErrorResponse
+
+func (response UpdatePublicOrganization428JSONResponse) VisitUpdatePublicOrganizationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdatePublicOrganization500JSONResponse ErrorResponse
 
 func (response UpdatePublicOrganization500JSONResponse) VisitUpdatePublicOrganizationResponse(w http.ResponseWriter) error {
@@ -5377,6 +6667,7 @@ func (response UpdatePublicOrganization500JSONResponse) VisitUpdatePublicOrganiz
 
 type ListPublicOrganizationInvitationsRequestObject struct {
 	OrganizationID OrganizationID `json:"organizationID"`
+	Params         ListPublicOrganizationInvitationsParams
 }
 
 type ListPublicOrganizationInvitationsResponseObject interface {
@@ -5653,6 +6944,20 @@ func (response RevokePublicOrganizationInvitation409JSONResponse) VisitRevokePub
 	return err
 }
 
+type RevokePublicOrganizationInvitation428JSONResponse ErrorResponse
+
+func (response RevokePublicOrganizationInvitation428JSONResponse) VisitRevokePublicOrganizationInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RevokePublicOrganizationInvitation500JSONResponse ErrorResponse
 
 func (response RevokePublicOrganizationInvitation500JSONResponse) VisitRevokePublicOrganizationInvitationResponse(w http.ResponseWriter) error {
@@ -5669,6 +6974,7 @@ func (response RevokePublicOrganizationInvitation500JSONResponse) VisitRevokePub
 
 type ListPublicOrganizationMembersRequestObject struct {
 	OrganizationID OrganizationID `json:"organizationID"`
+	Params         ListPublicOrganizationMembersParams
 }
 
 type ListPublicOrganizationMembersResponseObject interface {
@@ -5841,6 +7147,128 @@ func (response GetPublicOrganizationMember404JSONResponse) VisitGetPublicOrganiz
 type GetPublicOrganizationMember500JSONResponse ErrorResponse
 
 func (response GetPublicOrganizationMember500JSONResponse) VisitGetPublicOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePublicOrganizationMemberRequestObject struct {
+	OrganizationID OrganizationID `json:"organizationID"`
+	UserID         UserID         `json:"userID"`
+	Body           *UpdatePublicOrganizationMemberJSONRequestBody
+}
+
+type UpdatePublicOrganizationMemberResponseObject interface {
+	VisitUpdatePublicOrganizationMemberResponse(w http.ResponseWriter) error
+}
+
+type UpdatePublicOrganizationMember200JSONResponse OrganizationMemberEnvelope
+
+func (response UpdatePublicOrganizationMember200JSONResponse) VisitUpdatePublicOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePublicOrganizationMember400JSONResponse struct{ ErrorJSONResponse }
+
+func (response UpdatePublicOrganizationMember400JSONResponse) VisitUpdatePublicOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePublicOrganizationMember401JSONResponse ErrorResponse
+
+func (response UpdatePublicOrganizationMember401JSONResponse) VisitUpdatePublicOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePublicOrganizationMember403JSONResponse ErrorResponse
+
+func (response UpdatePublicOrganizationMember403JSONResponse) VisitUpdatePublicOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePublicOrganizationMember404JSONResponse ErrorResponse
+
+func (response UpdatePublicOrganizationMember404JSONResponse) VisitUpdatePublicOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePublicOrganizationMember409JSONResponse ErrorResponse
+
+func (response UpdatePublicOrganizationMember409JSONResponse) VisitUpdatePublicOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePublicOrganizationMember428JSONResponse ErrorResponse
+
+func (response UpdatePublicOrganizationMember428JSONResponse) VisitUpdatePublicOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePublicOrganizationMember500JSONResponse ErrorResponse
+
+func (response UpdatePublicOrganizationMember500JSONResponse) VisitUpdatePublicOrganizationMemberResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -6173,6 +7601,20 @@ func (response FinishPasskeyRegistration422JSONResponse) VisitFinishPasskeyRegis
 	return err
 }
 
+type FinishPasskeyRegistration428JSONResponse ErrorResponse
+
+func (response FinishPasskeyRegistration428JSONResponse) VisitFinishPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type FinishPasskeyRegistration500JSONResponse ErrorResponse
 
 func (response FinishPasskeyRegistration500JSONResponse) VisitFinishPasskeyRegistrationResponse(w http.ResponseWriter) error {
@@ -6232,6 +7674,20 @@ func (response BeginPasskeyRegistration403JSONResponse) VisitBeginPasskeyRegistr
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginPasskeyRegistration428JSONResponse ErrorResponse
+
+func (response BeginPasskeyRegistration428JSONResponse) VisitBeginPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -6506,6 +7962,114 @@ func (response StartGoogleAccountRecoveryLink500JSONResponse) VisitStartGoogleAc
 	return err
 }
 
+type CompleteAccountRecoveryLinkWithAppleRequestObject struct {
+	LinkID ProviderLinkID `json:"linkID"`
+	Params CompleteAccountRecoveryLinkWithAppleParams
+	Body   *CompleteAccountRecoveryLinkWithAppleJSONRequestBody
+}
+
+type CompleteAccountRecoveryLinkWithAppleResponseObject interface {
+	VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error
+}
+
+type CompleteAccountRecoveryLinkWithApple200JSONResponse AuthSession
+
+func (response CompleteAccountRecoveryLinkWithApple200JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple400JSONResponse struct{ ErrorJSONResponse }
+
+func (response CompleteAccountRecoveryLinkWithApple400JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple401JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple401JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple403JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple403JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple404JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple404JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple409JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple409JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple500JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple500JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CompleteAccountRecoveryLinkWithGoogleRequestObject struct {
 	LinkID ProviderLinkID `json:"linkID"`
 	Params CompleteAccountRecoveryLinkWithGoogleParams
@@ -6725,6 +8289,527 @@ func (response CompleteAccountRecoveryLinkWithPassword429JSONResponse) VisitComp
 type CompleteAccountRecoveryLinkWithPassword500JSONResponse ErrorResponse
 
 func (response CompleteAccountRecoveryLinkWithPassword500JSONResponse) VisitCompleteAccountRecoveryLinkWithPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithAppleRequestObject struct {
+	Body *ReauthenticateWithAppleJSONRequestBody
+}
+
+type ReauthenticateWithAppleResponseObject interface {
+	VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error
+}
+
+type ReauthenticateWithApple204Response struct {
+}
+
+func (response ReauthenticateWithApple204Response) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReauthenticateWithApple400JSONResponse struct{ ErrorJSONResponse }
+
+func (response ReauthenticateWithApple400JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithApple401JSONResponse ErrorResponse
+
+func (response ReauthenticateWithApple401JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithApple404JSONResponse ErrorResponse
+
+func (response ReauthenticateWithApple404JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithApple409JSONResponse ErrorResponse
+
+func (response ReauthenticateWithApple409JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithApple500JSONResponse ErrorResponse
+
+func (response ReauthenticateWithApple500JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckRecentAuthenticationRequestObject struct {
+}
+
+type CheckRecentAuthenticationResponseObject interface {
+	VisitCheckRecentAuthenticationResponse(w http.ResponseWriter) error
+}
+
+type CheckRecentAuthentication204Response struct {
+}
+
+func (response CheckRecentAuthentication204Response) VisitCheckRecentAuthenticationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type CheckRecentAuthentication401JSONResponse struct{ ErrorJSONResponse }
+
+func (response CheckRecentAuthentication401JSONResponse) VisitCheckRecentAuthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckRecentAuthentication403JSONResponse ErrorResponse
+
+func (response CheckRecentAuthentication403JSONResponse) VisitCheckRecentAuthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckRecentAuthentication428JSONResponse ErrorResponse
+
+func (response CheckRecentAuthentication428JSONResponse) VisitCheckRecentAuthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckRecentAuthentication500JSONResponse ErrorResponse
+
+func (response CheckRecentAuthentication500JSONResponse) VisitCheckRecentAuthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithGoogleRequestObject struct {
+	Body *ReauthenticateWithGoogleJSONRequestBody
+}
+
+type ReauthenticateWithGoogleResponseObject interface {
+	VisitReauthenticateWithGoogleResponse(w http.ResponseWriter) error
+}
+
+type ReauthenticateWithGoogle204Response struct {
+}
+
+func (response ReauthenticateWithGoogle204Response) VisitReauthenticateWithGoogleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReauthenticateWithGoogle400JSONResponse struct{ ErrorJSONResponse }
+
+func (response ReauthenticateWithGoogle400JSONResponse) VisitReauthenticateWithGoogleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithGoogle401JSONResponse ErrorResponse
+
+func (response ReauthenticateWithGoogle401JSONResponse) VisitReauthenticateWithGoogleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithGoogle404JSONResponse ErrorResponse
+
+func (response ReauthenticateWithGoogle404JSONResponse) VisitReauthenticateWithGoogleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithGoogle409JSONResponse ErrorResponse
+
+func (response ReauthenticateWithGoogle409JSONResponse) VisitReauthenticateWithGoogleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithGoogle500JSONResponse ErrorResponse
+
+func (response ReauthenticateWithGoogle500JSONResponse) VisitReauthenticateWithGoogleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishPasskeyReauthenticationRequestObject struct {
+	Body *FinishPasskeyReauthenticationJSONRequestBody
+}
+
+type FinishPasskeyReauthenticationResponseObject interface {
+	VisitFinishPasskeyReauthenticationResponse(w http.ResponseWriter) error
+}
+
+type FinishPasskeyReauthentication204Response struct {
+}
+
+func (response FinishPasskeyReauthentication204Response) VisitFinishPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type FinishPasskeyReauthentication400JSONResponse struct{ ErrorJSONResponse }
+
+func (response FinishPasskeyReauthentication400JSONResponse) VisitFinishPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishPasskeyReauthentication401JSONResponse ErrorResponse
+
+func (response FinishPasskeyReauthentication401JSONResponse) VisitFinishPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishPasskeyReauthentication409JSONResponse ErrorResponse
+
+func (response FinishPasskeyReauthentication409JSONResponse) VisitFinishPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishPasskeyReauthentication429JSONResponse ErrorResponse
+
+func (response FinishPasskeyReauthentication429JSONResponse) VisitFinishPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishPasskeyReauthentication500JSONResponse ErrorResponse
+
+func (response FinishPasskeyReauthentication500JSONResponse) VisitFinishPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginPasskeyReauthenticationRequestObject struct {
+	Body *BeginPasskeyReauthenticationJSONRequestBody
+}
+
+type BeginPasskeyReauthenticationResponseObject interface {
+	VisitBeginPasskeyReauthenticationResponse(w http.ResponseWriter) error
+}
+
+type BeginPasskeyReauthentication200JSONResponse PasskeyOptions
+
+func (response BeginPasskeyReauthentication200JSONResponse) VisitBeginPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginPasskeyReauthentication400JSONResponse struct{ ErrorJSONResponse }
+
+func (response BeginPasskeyReauthentication400JSONResponse) VisitBeginPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginPasskeyReauthentication401JSONResponse ErrorResponse
+
+func (response BeginPasskeyReauthentication401JSONResponse) VisitBeginPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginPasskeyReauthentication404JSONResponse ErrorResponse
+
+func (response BeginPasskeyReauthentication404JSONResponse) VisitBeginPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginPasskeyReauthentication409JSONResponse ErrorResponse
+
+func (response BeginPasskeyReauthentication409JSONResponse) VisitBeginPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginPasskeyReauthentication429JSONResponse ErrorResponse
+
+func (response BeginPasskeyReauthentication429JSONResponse) VisitBeginPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginPasskeyReauthentication500JSONResponse ErrorResponse
+
+func (response BeginPasskeyReauthentication500JSONResponse) VisitBeginPasskeyReauthenticationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithPasswordRequestObject struct {
+	Body *ReauthenticateWithPasswordJSONRequestBody
+}
+
+type ReauthenticateWithPasswordResponseObject interface {
+	VisitReauthenticateWithPasswordResponse(w http.ResponseWriter) error
+}
+
+type ReauthenticateWithPassword204Response struct {
+}
+
+func (response ReauthenticateWithPassword204Response) VisitReauthenticateWithPasswordResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReauthenticateWithPassword400JSONResponse struct{ ErrorJSONResponse }
+
+func (response ReauthenticateWithPassword400JSONResponse) VisitReauthenticateWithPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithPassword401JSONResponse ErrorResponse
+
+func (response ReauthenticateWithPassword401JSONResponse) VisitReauthenticateWithPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithPassword409JSONResponse ErrorResponse
+
+func (response ReauthenticateWithPassword409JSONResponse) VisitReauthenticateWithPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithPassword429JSONResponse ErrorResponse
+
+func (response ReauthenticateWithPassword429JSONResponse) VisitReauthenticateWithPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithPassword500JSONResponse ErrorResponse
+
+func (response ReauthenticateWithPassword500JSONResponse) VisitReauthenticateWithPasswordResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -7287,6 +9372,34 @@ func (response SetCurrentUserPassword403JSONResponse) VisitSetCurrentUserPasswor
 	return err
 }
 
+type SetCurrentUserPassword409JSONResponse ErrorResponse
+
+func (response SetCurrentUserPassword409JSONResponse) VisitSetCurrentUserPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCurrentUserPassword428JSONResponse ErrorResponse
+
+func (response SetCurrentUserPassword428JSONResponse) VisitSetCurrentUserPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SetCurrentUserPassword500JSONResponse ErrorResponse
 
 func (response SetCurrentUserPassword500JSONResponse) VisitSetCurrentUserPasswordResponse(w http.ResponseWriter) error {
@@ -7303,6 +9416,7 @@ func (response SetCurrentUserPassword500JSONResponse) VisitSetCurrentUserPasswor
 
 type ListPublicUserMembershipsRequestObject struct {
 	UserID UserID `json:"userID"`
+	Params ListPublicUserMembershipsParams
 }
 
 type ListPublicUserMembershipsResponseObject interface {
@@ -7902,6 +10016,114 @@ func (response RemoveInternalOrganizationMember500JSONResponse) VisitRemoveInter
 	return err
 }
 
+type UpdateInternalOrganizationMemberRequestObject struct {
+	OrganizationID OrganizationID `json:"organizationID"`
+	UserID         UserID         `json:"userID"`
+	Body           *UpdateInternalOrganizationMemberJSONRequestBody
+}
+
+type UpdateInternalOrganizationMemberResponseObject interface {
+	VisitUpdateInternalOrganizationMemberResponse(w http.ResponseWriter) error
+}
+
+type UpdateInternalOrganizationMember200JSONResponse OrganizationMemberEnvelope
+
+func (response UpdateInternalOrganizationMember200JSONResponse) VisitUpdateInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateInternalOrganizationMember400JSONResponse struct{ ErrorJSONResponse }
+
+func (response UpdateInternalOrganizationMember400JSONResponse) VisitUpdateInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateInternalOrganizationMember401JSONResponse ErrorResponse
+
+func (response UpdateInternalOrganizationMember401JSONResponse) VisitUpdateInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateInternalOrganizationMember403JSONResponse ErrorResponse
+
+func (response UpdateInternalOrganizationMember403JSONResponse) VisitUpdateInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateInternalOrganizationMember404JSONResponse ErrorResponse
+
+func (response UpdateInternalOrganizationMember404JSONResponse) VisitUpdateInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateInternalOrganizationMember409JSONResponse ErrorResponse
+
+func (response UpdateInternalOrganizationMember409JSONResponse) VisitUpdateInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateInternalOrganizationMember500JSONResponse ErrorResponse
+
+func (response UpdateInternalOrganizationMember500JSONResponse) VisitUpdateInternalOrganizationMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type TransferInternalOrganizationOwnershipRequestObject struct {
 	OrganizationID OrganizationID `json:"organizationID"`
 	Body           *TransferInternalOrganizationOwnershipJSONRequestBody
@@ -8094,6 +10316,9 @@ type StrictServerInterface interface {
 	// GetCurrentAccount Get the authenticated user's account
 	// (GET /auth/api/v1/account)
 	GetCurrentAccount(ctx context.Context, request GetCurrentAccountRequestObject) (GetCurrentAccountResponseObject, error)
+	// LinkCurrentUserApple Link Apple to the authenticated user's account
+	// (POST /auth/api/v1/account/auth-methods/apple)
+	LinkCurrentUserApple(ctx context.Context, request LinkCurrentUserAppleRequestObject) (LinkCurrentUserAppleResponseObject, error)
 	// LinkCurrentUserGoogle Link Google to the authenticated user's account
 	// (POST /auth/api/v1/account/auth-methods/google)
 	LinkCurrentUserGoogle(ctx context.Context, request LinkCurrentUserGoogleRequestObject) (LinkCurrentUserGoogleResponseObject, error)
@@ -8148,6 +10373,12 @@ type StrictServerInterface interface {
 	// LoginWithPassword Log in with a password
 	// (POST /auth/api/v1/login)
 	LoginWithPassword(ctx context.Context, request LoginWithPasswordRequestObject) (LoginWithPasswordResponseObject, error)
+	// LoginWithApple Log in with an Apple authorization code
+	// (POST /auth/api/v1/oauth/apple)
+	LoginWithApple(ctx context.Context, request LoginWithAppleRequestObject) (LoginWithAppleResponseObject, error)
+	// GetAppleLoginOptions Get Apple login options
+	// (GET /auth/api/v1/oauth/apple/options)
+	GetAppleLoginOptions(ctx context.Context, request GetAppleLoginOptionsRequestObject) (GetAppleLoginOptionsResponseObject, error)
 	// LoginWithGoogle Log in with a Google ID token
 	// (POST /auth/api/v1/oauth/google)
 	LoginWithGoogle(ctx context.Context, request LoginWithGoogleRequestObject) (LoginWithGoogleResponseObject, error)
@@ -8184,6 +10415,9 @@ type StrictServerInterface interface {
 	// GetPublicOrganizationMember Get an organization member
 	// (GET /auth/api/v1/organizations/{organizationID}/members/{userID})
 	GetPublicOrganizationMember(ctx context.Context, request GetPublicOrganizationMemberRequestObject) (GetPublicOrganizationMemberResponseObject, error)
+	// UpdatePublicOrganizationMember Update an organization member role
+	// (PATCH /auth/api/v1/organizations/{organizationID}/members/{userID})
+	UpdatePublicOrganizationMember(ctx context.Context, request UpdatePublicOrganizationMemberRequestObject) (UpdatePublicOrganizationMemberResponseObject, error)
 	// SwitchOrganization Switch the current session to another organization
 	// (POST /auth/api/v1/organizations/{organizationID}/switch)
 	SwitchOrganization(ctx context.Context, request SwitchOrganizationRequestObject) (SwitchOrganizationResponseObject, error)
@@ -8208,12 +10442,33 @@ type StrictServerInterface interface {
 	// StartGoogleAccountRecoveryLink Start linking Google to an existing account with the same email
 	// (POST /auth/api/v1/provider-links/recovery/google)
 	StartGoogleAccountRecoveryLink(ctx context.Context, request StartGoogleAccountRecoveryLinkRequestObject) (StartGoogleAccountRecoveryLinkResponseObject, error)
+	// CompleteAccountRecoveryLinkWithApple Prove ownership with an existing Apple login and finish linking
+	// (POST /auth/api/v1/provider-links/recovery/{linkID}/apple)
+	CompleteAccountRecoveryLinkWithApple(ctx context.Context, request CompleteAccountRecoveryLinkWithAppleRequestObject) (CompleteAccountRecoveryLinkWithAppleResponseObject, error)
 	// CompleteAccountRecoveryLinkWithGoogle Prove ownership with an existing Google login and finish linking
 	// (POST /auth/api/v1/provider-links/recovery/{linkID}/google)
 	CompleteAccountRecoveryLinkWithGoogle(ctx context.Context, request CompleteAccountRecoveryLinkWithGoogleRequestObject) (CompleteAccountRecoveryLinkWithGoogleResponseObject, error)
 	// CompleteAccountRecoveryLinkWithPassword Prove ownership with the existing account password and finish linking
 	// (POST /auth/api/v1/provider-links/recovery/{linkID}/password)
 	CompleteAccountRecoveryLinkWithPassword(ctx context.Context, request CompleteAccountRecoveryLinkWithPasswordRequestObject) (CompleteAccountRecoveryLinkWithPasswordResponseObject, error)
+	// ReauthenticateWithApple Reauthenticate the current session with a linked Apple identity
+	// (POST /auth/api/v1/reauthenticate/apple)
+	ReauthenticateWithApple(ctx context.Context, request ReauthenticateWithAppleRequestObject) (ReauthenticateWithAppleResponseObject, error)
+	// CheckRecentAuthentication Require recent authentication for an application action
+	// (POST /auth/api/v1/reauthenticate/check)
+	CheckRecentAuthentication(ctx context.Context, request CheckRecentAuthenticationRequestObject) (CheckRecentAuthenticationResponseObject, error)
+	// ReauthenticateWithGoogle Reauthenticate the current session with a linked Google identity
+	// (POST /auth/api/v1/reauthenticate/google)
+	ReauthenticateWithGoogle(ctx context.Context, request ReauthenticateWithGoogleRequestObject) (ReauthenticateWithGoogleResponseObject, error)
+	// FinishPasskeyReauthentication Finish passkey reauthentication for the current session
+	// (POST /auth/api/v1/reauthenticate/passkeys/finish)
+	FinishPasskeyReauthentication(ctx context.Context, request FinishPasskeyReauthenticationRequestObject) (FinishPasskeyReauthenticationResponseObject, error)
+	// BeginPasskeyReauthentication Start passkey reauthentication for the current session
+	// (POST /auth/api/v1/reauthenticate/passkeys/options)
+	BeginPasskeyReauthentication(ctx context.Context, request BeginPasskeyReauthenticationRequestObject) (BeginPasskeyReauthenticationResponseObject, error)
+	// ReauthenticateWithPassword Reauthenticate the current session with a password
+	// (POST /auth/api/v1/reauthenticate/password)
+	ReauthenticateWithPassword(ctx context.Context, request ReauthenticateWithPasswordRequestObject) (ReauthenticateWithPasswordResponseObject, error)
 	// Logout Log out the current session
 	// (POST /auth/api/v1/sessions/logout)
 	Logout(ctx context.Context, request LogoutRequestObject) (LogoutResponseObject, error)
@@ -8256,6 +10511,9 @@ type StrictServerInterface interface {
 	// RemoveInternalOrganizationMember Remove an organization member
 	// (DELETE /auth/internal/v1/organizations/{organizationID}/members/{userID})
 	RemoveInternalOrganizationMember(ctx context.Context, request RemoveInternalOrganizationMemberRequestObject) (RemoveInternalOrganizationMemberResponseObject, error)
+	// UpdateInternalOrganizationMember Update an organization member role
+	// (PATCH /auth/internal/v1/organizations/{organizationID}/members/{userID})
+	UpdateInternalOrganizationMember(ctx context.Context, request UpdateInternalOrganizationMemberRequestObject) (UpdateInternalOrganizationMemberResponseObject, error)
 	// TransferInternalOrganizationOwnership Transfer organization ownership
 	// (POST /auth/internal/v1/organizations/{organizationID}/ownership-transfer)
 	TransferInternalOrganizationOwnership(ctx context.Context, request TransferInternalOrganizationOwnershipRequestObject) (TransferInternalOrganizationOwnershipResponseObject, error)
@@ -8304,8 +10562,10 @@ type strictHandler struct {
 }
 
 // GetCurrentAccount operation middleware
-func (sh *strictHandler) GetCurrentAccount(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) GetCurrentAccount(w http.ResponseWriter, r *http.Request, params GetCurrentAccountParams) {
 	var request GetCurrentAccountRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetCurrentAccount(ctx, request.(GetCurrentAccountRequestObject))
@@ -8320,6 +10580,37 @@ func (sh *strictHandler) GetCurrentAccount(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetCurrentAccountResponseObject); ok {
 		if err := validResponse.VisitGetCurrentAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LinkCurrentUserApple operation middleware
+func (sh *strictHandler) LinkCurrentUserApple(w http.ResponseWriter, r *http.Request) {
+	var request LinkCurrentUserAppleRequestObject
+
+	var body LinkCurrentUserAppleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LinkCurrentUserApple(ctx, request.(LinkCurrentUserAppleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LinkCurrentUserApple")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LinkCurrentUserAppleResponseObject); ok {
+		if err := validResponse.VisitLinkCurrentUserAppleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -8852,6 +11143,63 @@ func (sh *strictHandler) LoginWithPassword(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// LoginWithApple operation middleware
+func (sh *strictHandler) LoginWithApple(w http.ResponseWriter, r *http.Request, params LoginWithAppleParams) {
+	var request LoginWithAppleRequestObject
+
+	request.Params = params
+
+	var body LoginWithAppleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LoginWithApple(ctx, request.(LoginWithAppleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LoginWithApple")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LoginWithAppleResponseObject); ok {
+		if err := validResponse.VisitLoginWithAppleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAppleLoginOptions operation middleware
+func (sh *strictHandler) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request) {
+	var request GetAppleLoginOptionsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAppleLoginOptions(ctx, request.(GetAppleLoginOptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAppleLoginOptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAppleLoginOptionsResponseObject); ok {
+		if err := validResponse.VisitGetAppleLoginOptionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // LoginWithGoogle operation middleware
 func (sh *strictHandler) LoginWithGoogle(w http.ResponseWriter, r *http.Request, params LoginWithGoogleParams) {
 	var request LoginWithGoogleRequestObject
@@ -8910,8 +11258,10 @@ func (sh *strictHandler) GetGoogleLoginOptions(w http.ResponseWriter, r *http.Re
 }
 
 // ListCurrentUserOrganizations operation middleware
-func (sh *strictHandler) ListCurrentUserOrganizations(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListCurrentUserOrganizations(w http.ResponseWriter, r *http.Request, params ListCurrentUserOrganizationsParams) {
 	var request ListCurrentUserOrganizationsRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListCurrentUserOrganizations(ctx, request.(ListCurrentUserOrganizationsRequestObject))
@@ -8958,8 +11308,10 @@ func (sh *strictHandler) GetCurrentOrganization(w http.ResponseWriter, r *http.R
 }
 
 // ListCurrentOrganizationMembers operation middleware
-func (sh *strictHandler) ListCurrentOrganizationMembers(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListCurrentOrganizationMembers(w http.ResponseWriter, r *http.Request, params ListCurrentOrganizationMembersParams) {
 	var request ListCurrentOrganizationMembersRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListCurrentOrganizationMembers(ctx, request.(ListCurrentOrganizationMembersRequestObject))
@@ -9041,10 +11393,11 @@ func (sh *strictHandler) UpdatePublicOrganization(w http.ResponseWriter, r *http
 }
 
 // ListPublicOrganizationInvitations operation middleware
-func (sh *strictHandler) ListPublicOrganizationInvitations(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
+func (sh *strictHandler) ListPublicOrganizationInvitations(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, params ListPublicOrganizationInvitationsParams) {
 	var request ListPublicOrganizationInvitationsRequestObject
 
 	request.OrganizationID = organizationID
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListPublicOrganizationInvitations(ctx, request.(ListPublicOrganizationInvitationsRequestObject))
@@ -9121,10 +11474,11 @@ func (sh *strictHandler) RevokePublicOrganizationInvitation(w http.ResponseWrite
 }
 
 // ListPublicOrganizationMembers operation middleware
-func (sh *strictHandler) ListPublicOrganizationMembers(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
+func (sh *strictHandler) ListPublicOrganizationMembers(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, params ListPublicOrganizationMembersParams) {
 	var request ListPublicOrganizationMembersRequestObject
 
 	request.OrganizationID = organizationID
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListPublicOrganizationMembers(ctx, request.(ListPublicOrganizationMembersRequestObject))
@@ -9166,6 +11520,40 @@ func (sh *strictHandler) GetPublicOrganizationMember(w http.ResponseWriter, r *h
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetPublicOrganizationMemberResponseObject); ok {
 		if err := validResponse.VisitGetPublicOrganizationMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdatePublicOrganizationMember operation middleware
+func (sh *strictHandler) UpdatePublicOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID) {
+	var request UpdatePublicOrganizationMemberRequestObject
+
+	request.OrganizationID = organizationID
+	request.UserID = userID
+
+	var body UpdatePublicOrganizationMemberJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdatePublicOrganizationMember(ctx, request.(UpdatePublicOrganizationMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdatePublicOrganizationMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdatePublicOrganizationMemberResponseObject); ok {
+		if err := validResponse.VisitUpdatePublicOrganizationMemberResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -9405,6 +11793,40 @@ func (sh *strictHandler) StartGoogleAccountRecoveryLink(w http.ResponseWriter, r
 	}
 }
 
+// CompleteAccountRecoveryLinkWithApple operation middleware
+func (sh *strictHandler) CompleteAccountRecoveryLinkWithApple(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithAppleParams) {
+	var request CompleteAccountRecoveryLinkWithAppleRequestObject
+
+	request.LinkID = linkID
+	request.Params = params
+
+	var body CompleteAccountRecoveryLinkWithAppleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteAccountRecoveryLinkWithApple(ctx, request.(CompleteAccountRecoveryLinkWithAppleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteAccountRecoveryLinkWithApple")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteAccountRecoveryLinkWithAppleResponseObject); ok {
+		if err := validResponse.VisitCompleteAccountRecoveryLinkWithAppleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // CompleteAccountRecoveryLinkWithGoogle operation middleware
 func (sh *strictHandler) CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithGoogleParams) {
 	var request CompleteAccountRecoveryLinkWithGoogleRequestObject
@@ -9466,6 +11888,185 @@ func (sh *strictHandler) CompleteAccountRecoveryLinkWithPassword(w http.Response
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CompleteAccountRecoveryLinkWithPasswordResponseObject); ok {
 		if err := validResponse.VisitCompleteAccountRecoveryLinkWithPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReauthenticateWithApple operation middleware
+func (sh *strictHandler) ReauthenticateWithApple(w http.ResponseWriter, r *http.Request) {
+	var request ReauthenticateWithAppleRequestObject
+
+	var body ReauthenticateWithAppleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReauthenticateWithApple(ctx, request.(ReauthenticateWithAppleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReauthenticateWithApple")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReauthenticateWithAppleResponseObject); ok {
+		if err := validResponse.VisitReauthenticateWithAppleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CheckRecentAuthentication operation middleware
+func (sh *strictHandler) CheckRecentAuthentication(w http.ResponseWriter, r *http.Request) {
+	var request CheckRecentAuthenticationRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CheckRecentAuthentication(ctx, request.(CheckRecentAuthenticationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CheckRecentAuthentication")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CheckRecentAuthenticationResponseObject); ok {
+		if err := validResponse.VisitCheckRecentAuthenticationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReauthenticateWithGoogle operation middleware
+func (sh *strictHandler) ReauthenticateWithGoogle(w http.ResponseWriter, r *http.Request) {
+	var request ReauthenticateWithGoogleRequestObject
+
+	var body ReauthenticateWithGoogleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReauthenticateWithGoogle(ctx, request.(ReauthenticateWithGoogleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReauthenticateWithGoogle")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReauthenticateWithGoogleResponseObject); ok {
+		if err := validResponse.VisitReauthenticateWithGoogleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// FinishPasskeyReauthentication operation middleware
+func (sh *strictHandler) FinishPasskeyReauthentication(w http.ResponseWriter, r *http.Request) {
+	var request FinishPasskeyReauthenticationRequestObject
+
+	var body FinishPasskeyReauthenticationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.FinishPasskeyReauthentication(ctx, request.(FinishPasskeyReauthenticationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "FinishPasskeyReauthentication")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(FinishPasskeyReauthenticationResponseObject); ok {
+		if err := validResponse.VisitFinishPasskeyReauthenticationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// BeginPasskeyReauthentication operation middleware
+func (sh *strictHandler) BeginPasskeyReauthentication(w http.ResponseWriter, r *http.Request) {
+	var request BeginPasskeyReauthenticationRequestObject
+
+	var body BeginPasskeyReauthenticationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.BeginPasskeyReauthentication(ctx, request.(BeginPasskeyReauthenticationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "BeginPasskeyReauthentication")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(BeginPasskeyReauthenticationResponseObject); ok {
+		if err := validResponse.VisitBeginPasskeyReauthenticationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReauthenticateWithPassword operation middleware
+func (sh *strictHandler) ReauthenticateWithPassword(w http.ResponseWriter, r *http.Request) {
+	var request ReauthenticateWithPasswordRequestObject
+
+	var body ReauthenticateWithPasswordJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReauthenticateWithPassword(ctx, request.(ReauthenticateWithPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReauthenticateWithPassword")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReauthenticateWithPasswordResponseObject); ok {
+		if err := validResponse.VisitReauthenticateWithPasswordResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -9709,10 +12310,11 @@ func (sh *strictHandler) SetCurrentUserPassword(w http.ResponseWriter, r *http.R
 }
 
 // ListPublicUserMemberships operation middleware
-func (sh *strictHandler) ListPublicUserMemberships(w http.ResponseWriter, r *http.Request, userID UserID) {
+func (sh *strictHandler) ListPublicUserMemberships(w http.ResponseWriter, r *http.Request, userID UserID, params ListPublicUserMembershipsParams) {
 	var request ListPublicUserMembershipsRequestObject
 
 	request.UserID = userID
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListPublicUserMemberships(ctx, request.(ListPublicUserMembershipsRequestObject))
@@ -9892,6 +12494,40 @@ func (sh *strictHandler) RemoveInternalOrganizationMember(w http.ResponseWriter,
 	}
 }
 
+// UpdateInternalOrganizationMember operation middleware
+func (sh *strictHandler) UpdateInternalOrganizationMember(w http.ResponseWriter, r *http.Request, organizationID OrganizationID, userID UserID) {
+	var request UpdateInternalOrganizationMemberRequestObject
+
+	request.OrganizationID = organizationID
+	request.UserID = userID
+
+	var body UpdateInternalOrganizationMemberJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateInternalOrganizationMember(ctx, request.(UpdateInternalOrganizationMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateInternalOrganizationMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateInternalOrganizationMemberResponseObject); ok {
+		if err := validResponse.VisitUpdateInternalOrganizationMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // TransferInternalOrganizationOwnership operation middleware
 func (sh *strictHandler) TransferInternalOrganizationOwnership(w http.ResponseWriter, r *http.Request, organizationID OrganizationID) {
 	var request TransferInternalOrganizationOwnershipRequestObject
@@ -9956,127 +12592,156 @@ func (sh *strictHandler) DeleteInternalUser(w http.ResponseWriter, r *http.Reque
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"AP//",
+	"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",
+	"AAAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

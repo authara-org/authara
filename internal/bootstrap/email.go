@@ -25,3 +25,14 @@ func newEmailSender(cfg *config.Config, logger *slog.Logger) email.Sender {
 		})
 	}
 }
+
+func warnIfEmailDeliveryUnavailable(cfg *config.Config, logger *slog.Logger) {
+	if cfg.Email.IsDeliverable() {
+		return
+	}
+
+	logger.Warn(
+		"email delivery is unavailable; password recovery and security emails will not reach recipients",
+		"provider", cfg.Email.Provider,
+	)
+}

@@ -40,6 +40,7 @@ type TemplateOverrideStore interface {
 	SetEmailTemplateDeliveryEnabled(context.Context, domain.EmailTemplate, bool, uuid.UUID) (domain.EmailTemplateDeliverySetting, error)
 	GetEmailTemplateVersion(context.Context, domain.EmailTemplate, int64) (domain.EmailTemplateVersion, error)
 	ListEmailTemplateVersions(context.Context, domain.EmailTemplate) ([]domain.EmailTemplateVersion, error)
+	ListEmailTemplateVersionsPage(context.Context, domain.EmailTemplate, int, int) ([]domain.EmailTemplateVersion, error)
 	UpsertEmailTemplateOverride(context.Context, domain.EmailTemplateOverride, int64) (domain.EmailTemplateOverride, error)
 	DeleteEmailTemplateOverride(context.Context, domain.EmailTemplate, int64, uuid.UUID) error
 	ListOperatorAuditEvents(context.Context, store.OperatorAuditEventFilter) ([]domain.OperatorAuditEvent, error)
@@ -237,6 +238,37 @@ func (s *TemplateService) History(ctx context.Context, key domain.EmailTemplate)
 		}
 	}
 	return versions, nil
+}
+
+type TemplateHistoryPage struct {
+	Versions []domain.EmailTemplateVersion
+	Page     int
+	Size     int
+	HasNext  bool
+}
+
+func (s *TemplateService) HistoryPage(ctx context.Context, key domain.EmailTemplate, page, size int) (TemplateHistoryPage, error) {
+	if err := ValidateTemplate(key); err != nil {
+		return TemplateHistoryPage{}, err
+	}
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 {
+		size = 25
+	}
+	if size > 100 {
+		size = 100
+	}
+	versions, err := s.store.ListEmailTemplateVersionsPage(ctx, key, size+1, (page-1)*size)
+	if err != nil {
+		return TemplateHistoryPage{}, fmt.Errorf("list email template versions %q: %w", key, err)
+	}
+	hasNext := len(versions) > size
+	if hasNext {
+		versions = versions[:size]
+	}
+	return TemplateHistoryPage{Versions: versions, Page: page, Size: size, HasNext: hasNext}, nil
 }
 
 func (s *TemplateService) GetVersion(ctx context.Context, key domain.EmailTemplate, version int64) (domain.EmailTemplateVersion, error) {
