@@ -8,8 +8,10 @@ import (
 	"github.com/authara-org/authara/internal/admin"
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
+	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/securityevent"
@@ -20,18 +22,20 @@ import (
 )
 
 type Services struct {
-	Admin          *admin.Service
-	Auth           *auth.Service
-	Passkeys       *passkey.Service
-	Session        *session.Service
-	Organizations  *organization.Service
-	Challenge      *challenge.Service
-	Verification   *challenge.VerificationCodeService
-	EmailTemplates *email.TemplateService
-	EmailWorker    *challenge.Worker
-	WebhookWorker  *webhook.Worker
-	OAuthProviders oauth.OAuthProviders
-	SecurityEvents *securityevent.Service
+	Admin            *admin.Service
+	Auth             *auth.Service
+	Passkeys         *passkey.Service
+	Session          *session.Service
+	Organizations    *organization.Service
+	Challenge        *challenge.Service
+	Verification     *challenge.VerificationCodeService
+	EmailTemplates   *email.TemplateService
+	EmailWorker      *challenge.Worker
+	WebhookWorker    *webhook.Worker
+	OAuthProviders   oauth.OAuthProviders
+	SecurityEvents   *securityevent.Service
+	Apple            *apple.Client
+	AppleCredentials *apple.Credentials
 }
 
 func NewServices(app *App) (Services, error) {
@@ -44,6 +48,32 @@ func NewServices(app *App) (Services, error) {
 	txManager := tx.New(app.Store)
 	accessPolicy := newAccessPolicy(app)
 	oauthProviders := newOAuthProviders(app.Config.Startup())
+	var appleClient *apple.Client
+	var appleCredentials *apple.Credentials
+	for _, provider := range oauthProviders.Providers {
+		if provider.Name != domain.ProviderApple {
+			continue
+		}
+		var err error
+		appleClient, err = apple.New(apple.Config{
+			ClientID: app.Config.OAuth.AppleClientID, TeamID: app.Config.OAuth.AppleTeamID,
+			KeyID: app.Config.OAuth.AppleKeyID, PrivateKey: app.Config.OAuth.ApplePrivateKey,
+			RedirectURI: provider.RedirectURI,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("create Apple OAuth client: %w", err)
+		}
+		appleCredentials, err = apple.NewCredentials(
+			app.Store,
+			app.Config.OAuth.AppleTokenActiveKeyID,
+			app.Config.OAuth.AppleDecodedTokenKeys,
+			appleClient,
+		)
+		if err != nil {
+			return Services{}, fmt.Errorf("create Apple credential store: %w", err)
+		}
+		break
+	}
 	webhookPublisher := newWebhookPublisher(app.Config, app.Store)
 	webhookWorker := newWebhookWorker(app.Config, app.Store, app.Logger, app.Observability)
 	securityEventService := securityevent.New(securityevent.Config{
@@ -91,6 +121,7 @@ func NewServices(app *App) (Services, error) {
 		AccessTokenRevocations: accessTokenRevocations,
 		PasswordMinimumLength:  app.Config.Authentication.PasswordMinimumLength,
 		SecurityEvents:         securityEventService,
+		AppleCredentials:       appleCredentials,
 	})
 
 	sessionService := session.New(session.SessionConfig{
@@ -151,18 +182,20 @@ func NewServices(app *App) (Services, error) {
 	)
 
 	return Services{
-		Admin:          adminService,
-		Auth:           authService,
-		Passkeys:       passkeyService,
-		Session:        sessionService,
-		Organizations:  organizationService,
-		Challenge:      challengeService,
-		Verification:   verificationCodeService,
-		EmailTemplates: emailTemplateService,
-		EmailWorker:    emailWorker,
-		WebhookWorker:  webhookWorker,
-		OAuthProviders: oauthProviders,
-		SecurityEvents: securityEventService,
+		Admin:            adminService,
+		Auth:             authService,
+		Passkeys:         passkeyService,
+		Session:          sessionService,
+		Organizations:    organizationService,
+		Challenge:        challengeService,
+		Verification:     verificationCodeService,
+		EmailTemplates:   emailTemplateService,
+		EmailWorker:      emailWorker,
+		WebhookWorker:    webhookWorker,
+		OAuthProviders:   oauthProviders,
+		SecurityEvents:   securityEventService,
+		Apple:            appleClient,
+		AppleCredentials: appleCredentials,
 	}, nil
 }
 

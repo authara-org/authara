@@ -27,7 +27,7 @@ func main() {
 	}
 
 	if err := lifecycle.Run(Version); err != nil {
-		log.Printf("authara failed: %v", err)
+		log.Print("authara failed during startup")
 		os.Exit(1)
 	}
 }

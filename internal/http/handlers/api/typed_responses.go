@@ -52,6 +52,34 @@ func loginWithGoogleError(code response.ErrorCode, message string) contract.Logi
 	}
 }
 
+func getAppleLoginOptionsError(code response.ErrorCode, message string) contract.GetAppleLoginOptionsResponseObject {
+	spec := mustRouteError(GetAppleLoginOptionsErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	if spec.Status == http.StatusNotFound {
+		return contract.GetAppleLoginOptions404JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	}
+	return contract.GetAppleLoginOptions500JSONResponse(body)
+}
+
+func loginWithAppleError(code response.ErrorCode, message string) contract.LoginWithAppleResponseObject {
+	spec := mustRouteError(LoginWithAppleErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.LoginWithApple400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.LoginWithApple401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.LoginWithApple403JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.LoginWithApple404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.LoginWithApple409JSONResponse(body)
+	default:
+		return contract.LoginWithApple500JSONResponse(body)
+	}
+}
+
 func loginWithPasswordError(code response.ErrorCode, message string) contract.LoginWithPasswordResponseObject {
 	spec := mustRouteError(LoginWithPasswordErrors, code)
 	body := apiErrorBody(spec.Code, message)

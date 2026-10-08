@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
+	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
 	"github.com/authara-org/authara/internal/http/templates/components/icons"
@@ -191,8 +192,14 @@ templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
 					@GoogleLinkButton(googleClientID)
 				}
 			</div>
+		} else if provider.Kind == viewmodel.AuthProviderApple && !provider.Linked {
+			<div class="w-36">
+				@authview.AppleSignin("Link", viewmodel.AuthProviderFlowLink, "", "", "")
+			</div>
 		} else if provider.Linked {
-			if provider.Kind == viewmodel.AuthProviderGoogle {
+			if provider.Kind == viewmodel.AuthProviderGoogle || provider.Kind == viewmodel.AuthProviderApple {
+				{{ providerName := provider.Title }}
+				{{ formID := "remove-" + provider.ID + "-form" }}
 				<div class="hidden sm:block">
 					@button.Button(button.ButtonConfig{
 						Label:   "Unlink",
@@ -200,10 +207,10 @@ templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
 						Color:   button.Light,
 						Variant: button.Outline,
 						OnClick: modal.OpenConfirm(
-							"Unlink Google?",
-							"You will no longer be able to sign in with Google unless you link it again later. Make sure you still have another sign-in method linked to this account.",
-							"Unlink Google",
-							"remove-google-form",
+							"Unlink " + providerName + "?",
+							"You will no longer be able to sign in with " + providerName + " unless you link it again later. Make sure you still have another sign-in method linked to this account.",
+							"Unlink " + providerName,
+							formID,
 							modal.ThemeNeutral,
 						),
 					})
@@ -211,16 +218,16 @@ templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
 				<div class="sm:hidden">
 					@ActionMenu() {
 						@button.Button(button.ButtonConfig{
-							Label: "Unlink Google",
+							Label: "Unlink " + providerName,
 							Type:  button.RegularButton,
 							Color: button.Custom,
 							Class: ` !w-full !rounded-none !border-0 !px-4 !py-3 text-sm
 								text-red-700 hover:bg-grey-50 dark:text-red-400 dark:hover:bg-grey-800`,
 							OnClick: modal.OpenConfirm(
-								"Unlink Google?",
-								"You will no longer be able to sign in with Google unless you link it again later. Make sure you still have another sign-in method linked to this account.",
-								"Unlink Google",
-								"remove-google-form",
+								"Unlink " + providerName + "?",
+								"You will no longer be able to sign in with " + providerName + " unless you link it again later. Make sure you still have another sign-in method linked to this account.",
+								"Unlink " + providerName,
+								formID,
 								modal.ThemeNeutral,
 							) + "; open = false",
 						})

@@ -83,6 +83,7 @@ func (s *AccessTokenService) GenerateWithEmailVerification(
 		Roles:         roles.List(),
 		EmailVerified: emailVerified,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
 			Issuer:    s.issuer,
 			Subject:   userID.String(),
 			Audience:  jwt.ClaimStrings{string(audience)},

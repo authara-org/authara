@@ -8,7 +8,9 @@ import {
   deleteCurrentAccount,
   deletePasskey,
   getGoogleOptions,
+  linkApple,
   linkGoogle,
+  reauthenticateWithApple,
   reauthenticateWithGoogle,
   reauthenticateWithPassword,
   revokeOtherSessions,
@@ -18,6 +20,8 @@ import {
   verifyEmailChange,
 } from "./api.js";
 import { loadGoogleIdentity } from "./google.js";
+import { authorizeWithApple } from "./apple.js";
+import { AppleCredentialButton } from "./apple-button.jsx";
 import {
   reauthenticateWithPasskey,
   registerPasskey,
@@ -200,6 +204,23 @@ export function ReauthenticationDialog({ challenge, account, onCancel, onAuthent
         />
       )}
 
+      {providers.has("apple") && (
+        <AppleCredentialButton
+          disabled={busy}
+          onAction={() =>
+            authenticate(async () => {
+              const authorization = await authorizeWithApple();
+              return reauthenticateWithApple(
+                challenge.id,
+                authorization.code,
+                authorization.state,
+              );
+            })
+          }
+          onError={setError}
+        />
+      )}
+
       {error && <p className="error dialog-feedback" role="alert">{error}</p>}
       <button className="text-button dialog-cancel" type="button" onClick={onCancel} disabled={busy}>
         Cancel
@@ -237,6 +258,7 @@ export function AccountPage({ account, busy, feedback, onBack, onRun, onSensitiv
   const providers = new Set(account.auth_methods.map((method) => method.provider));
   const hasPassword = providers.has("password");
   const hasGoogle = providers.has("google");
+  const hasApple = providers.has("apple");
 
   function confirm(config) {
     setConfirmation({
@@ -432,6 +454,39 @@ export function AccountPage({ account, busy, feedback, onBack, onRun, onSensitiv
                   onCredential={(credential, nonce) =>
                     onSensitive("Linking Google…", () => linkGoogle(credential, nonce), "Google linked.")
                   }
+                  onError={setLocalError}
+                />
+              )}
+            </div>
+
+            <div className="method-panel">
+              <div>
+                <strong>Apple</strong>
+                <p>{hasApple ? "Linked" : "Not linked"}</p>
+              </div>
+              {hasApple ? (
+                <button
+                  className="text-button danger-link"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => confirm({
+                    title: "Unlink Apple?",
+                    body: "You will no longer be able to sign in with this Apple identity.",
+                    label: "Unlink Apple",
+                    action: () => onSensitive("Unlinking Apple…", () => unlinkAuthMethod("apple"), "Apple unlinked."),
+                  })}
+                >Unlink Apple</button>
+              ) : (
+                <AppleCredentialButton
+                  disabled={busy}
+                  onAction={() => onSensitive(
+                    "Linking Apple…",
+                    async () => {
+                      const authorization = await authorizeWithApple();
+                      return linkApple(authorization.code, authorization.state);
+                    },
+                    "Apple linked.",
+                  )}
                   onError={setLocalError}
                 />
               )}

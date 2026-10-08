@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -13,12 +14,22 @@ import (
 	"github.com/authara-org/authara/internal/features"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/session"
 )
+
+type AppleClient interface {
+	Exchange(context.Context, string, string) (apple.ExchangeResult, error)
+	Revoke(context.Context, string) error
+}
+
+type AppleCredentialStore interface {
+	QueueRevocation(context.Context, string) error
+}
 
 type UIHandler struct {
 	Admin          *admin.Service
@@ -32,10 +43,12 @@ type UIHandler struct {
 	EmailTemplates *email.TemplateService
 	Config         *config.Service
 
-	Limiter        ratelimiter.AuthLimiter
-	Logger         *slog.Logger
-	Google         *google.Client
-	OAuthProviders oauth.OAuthProviders
+	Limiter          ratelimiter.AuthLimiter
+	Logger           *slog.Logger
+	Google           *google.Client
+	Apple            AppleClient
+	AppleCredentials AppleCredentialStore
+	OAuthProviders   oauth.OAuthProviders
 
 	AccessTTL  time.Duration
 	RefreshTTL time.Duration
@@ -56,6 +69,13 @@ func (h *UIHandler) usernameLoginEnabled() bool {
 		return h.Config.CurrentAuthentication().UsernameLoginEnabled
 	}
 	return h.Features.UsernameLoginEnabled
+}
+
+func (h *UIHandler) appName() string {
+	if h.Config != nil {
+		return h.Config.CurrentUI().AppName
+	}
+	return config.DefaultAppName
 }
 
 func (h *UIHandler) sessionCookiePolicy() config.SessionCookiePolicy {

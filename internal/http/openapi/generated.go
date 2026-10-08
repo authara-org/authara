@@ -25,6 +25,7 @@ import (
 
 // Defines values for AccountRecoveryLinkProofMethods.
 const (
+	AccountRecoveryLinkProofMethodsApple    AccountRecoveryLinkProofMethods = "apple"
 	AccountRecoveryLinkProofMethodsGoogle   AccountRecoveryLinkProofMethods = "google"
 	AccountRecoveryLinkProofMethodsPassword AccountRecoveryLinkProofMethods = "password"
 )
@@ -32,6 +33,8 @@ const (
 // Valid indicates whether the value is a known member of the AccountRecoveryLinkProofMethods enum.
 func (e AccountRecoveryLinkProofMethods) Valid() bool {
 	switch e {
+	case AccountRecoveryLinkProofMethodsApple:
+		return true
 	case AccountRecoveryLinkProofMethodsGoogle:
 		return true
 	case AccountRecoveryLinkProofMethodsPassword:
@@ -43,6 +46,7 @@ func (e AccountRecoveryLinkProofMethods) Valid() bool {
 
 // Defines values for AuthMethodProvider.
 const (
+	AuthMethodProviderApple    AuthMethodProvider = "apple"
 	AuthMethodProviderGoogle   AuthMethodProvider = "google"
 	AuthMethodProviderPassword AuthMethodProvider = "password"
 )
@@ -50,6 +54,8 @@ const (
 // Valid indicates whether the value is a known member of the AuthMethodProvider enum.
 func (e AuthMethodProvider) Valid() bool {
 	switch e {
+	case AuthMethodProviderApple:
+		return true
 	case AuthMethodProviderGoogle:
 		return true
 	case AuthMethodProviderPassword:
@@ -292,6 +298,7 @@ func (e Audience) Valid() bool {
 
 // Defines values for AuthProvider.
 const (
+	AuthProviderApple    AuthProvider = "apple"
 	AuthProviderGoogle   AuthProvider = "google"
 	AuthProviderPassword AuthProvider = "password"
 )
@@ -299,6 +306,8 @@ const (
 // Valid indicates whether the value is a known member of the AuthProvider enum.
 func (e AuthProvider) Valid() bool {
 	switch e {
+	case AuthProviderApple:
+		return true
 	case AuthProviderGoogle:
 		return true
 	case AuthProviderPassword:
@@ -374,6 +383,27 @@ func (e LoginWithPasswordParamsAudience) Valid() bool {
 	}
 }
 
+// Defines values for LoginWithAppleParamsAudience.
+const (
+	LoginWithAppleParamsAudienceAdmin    LoginWithAppleParamsAudience = "admin"
+	LoginWithAppleParamsAudienceApp      LoginWithAppleParamsAudience = "app"
+	LoginWithAppleParamsAudienceOperator LoginWithAppleParamsAudience = "operator"
+)
+
+// Valid indicates whether the value is a known member of the LoginWithAppleParamsAudience enum.
+func (e LoginWithAppleParamsAudience) Valid() bool {
+	switch e {
+	case LoginWithAppleParamsAudienceAdmin:
+		return true
+	case LoginWithAppleParamsAudienceApp:
+		return true
+	case LoginWithAppleParamsAudienceOperator:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LoginWithGoogleParamsAudience.
 const (
 	LoginWithGoogleParamsAudienceAdmin    LoginWithGoogleParamsAudience = "admin"
@@ -431,6 +461,21 @@ func (e FinishPasskeyAuthenticationParamsAudience) Valid() bool {
 	case FinishPasskeyAuthenticationParamsAudienceApp:
 		return true
 	case FinishPasskeyAuthenticationParamsAudienceOperator:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CompleteAccountRecoveryLinkWithAppleParamsAudience.
+const (
+	CompleteAccountRecoveryLinkWithAppleParamsAudienceApp CompleteAccountRecoveryLinkWithAppleParamsAudience = "app"
+)
+
+// Valid indicates whether the value is a known member of the CompleteAccountRecoveryLinkWithAppleParamsAudience enum.
+func (e CompleteAccountRecoveryLinkWithAppleParamsAudience) Valid() bool {
+	switch e {
+	case CompleteAccountRecoveryLinkWithAppleParamsAudienceApp:
 		return true
 	default:
 		return false
@@ -557,6 +602,13 @@ type AccountPasskey struct {
 	Name       string             `json:"name"`
 }
 
+// AccountRecoveryAppleProofRequest defines model for AccountRecoveryAppleProofRequest.
+type AccountRecoveryAppleProofRequest struct {
+	Code            string  `json:"code"`
+	InvitationToken *string `json:"invitation_token,omitempty"`
+	State           string  `json:"state"`
+}
+
 // AccountRecoveryGoogleProofRequest defines model for AccountRecoveryGoogleProofRequest.
 type AccountRecoveryGoogleProofRequest struct {
 	Credential      string  `json:"credential"`
@@ -586,6 +638,28 @@ type AccountSession struct {
 	ExpiresAt time.Time          `json:"expires_at"`
 	Id        openapi_types.UUID `json:"id"`
 	UserAgent string             `json:"user_agent"`
+}
+
+// AppleAuthorizationRequest defines model for AppleAuthorizationRequest.
+type AppleAuthorizationRequest struct {
+	Code            string  `json:"code"`
+	InvitationToken *string `json:"invitation_token,omitempty"`
+	State           string  `json:"state"`
+}
+
+// AppleLoginOptions defines model for AppleLoginOptions.
+type AppleLoginOptions struct {
+	ClientId    string `json:"client_id"`
+	Nonce       string `json:"nonce"`
+	RedirectUri string `json:"redirect_uri"`
+	State       string `json:"state"`
+}
+
+// AppleReauthenticationRequest defines model for AppleReauthenticationRequest.
+type AppleReauthenticationRequest struct {
+	AuthenticationChallengeId openapi_types.UUID `json:"authentication_challenge_id"`
+	Code                      string             `json:"code"`
+	State                     string             `json:"state"`
 }
 
 // AuthMethod defines model for AuthMethod.
@@ -1119,6 +1193,14 @@ type LoginWithPasswordParams struct {
 // LoginWithPasswordParamsAudience defines parameters for LoginWithPassword.
 type LoginWithPasswordParamsAudience string
 
+// LoginWithAppleParams defines parameters for LoginWithApple.
+type LoginWithAppleParams struct {
+	Audience *LoginWithAppleParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+}
+
+// LoginWithAppleParamsAudience defines parameters for LoginWithApple.
+type LoginWithAppleParamsAudience string
+
 // LoginWithGoogleParams defines parameters for LoginWithGoogle.
 type LoginWithGoogleParams struct {
 	Audience *LoginWithGoogleParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
@@ -1179,6 +1261,14 @@ type FinishPasskeyAuthenticationParams struct {
 // FinishPasskeyAuthenticationParamsAudience defines parameters for FinishPasskeyAuthentication.
 type FinishPasskeyAuthenticationParamsAudience string
 
+// CompleteAccountRecoveryLinkWithAppleParams defines parameters for CompleteAccountRecoveryLinkWithApple.
+type CompleteAccountRecoveryLinkWithAppleParams struct {
+	Audience *CompleteAccountRecoveryLinkWithAppleParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+}
+
+// CompleteAccountRecoveryLinkWithAppleParamsAudience defines parameters for CompleteAccountRecoveryLinkWithApple.
+type CompleteAccountRecoveryLinkWithAppleParamsAudience string
+
 // CompleteAccountRecoveryLinkWithGoogleParams defines parameters for CompleteAccountRecoveryLinkWithGoogle.
 type CompleteAccountRecoveryLinkWithGoogleParams struct {
 	Audience *CompleteAccountRecoveryLinkWithGoogleParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
@@ -1236,6 +1326,9 @@ type ListPublicUserMembershipsParams struct {
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// LinkCurrentUserAppleJSONRequestBody defines body for LinkCurrentUserApple for application/json ContentType.
+type LinkCurrentUserAppleJSONRequestBody = AppleAuthorizationRequest
+
 // LinkCurrentUserGoogleJSONRequestBody defines body for LinkCurrentUserGoogle for application/json ContentType.
 type LinkCurrentUserGoogleJSONRequestBody = GoogleLoginRequest
 
@@ -1269,6 +1362,9 @@ type LoginAndAcceptInvitationJSONRequestBody = InvitationPasswordLoginRequest
 // LoginWithPasswordJSONRequestBody defines body for LoginWithPassword for application/json ContentType.
 type LoginWithPasswordJSONRequestBody = PasswordLoginRequest
 
+// LoginWithAppleJSONRequestBody defines body for LoginWithApple for application/json ContentType.
+type LoginWithAppleJSONRequestBody = AppleAuthorizationRequest
+
 // LoginWithGoogleJSONRequestBody defines body for LoginWithGoogle for application/json ContentType.
 type LoginWithGoogleJSONRequestBody = GoogleLoginRequest
 
@@ -1293,11 +1389,17 @@ type VerifyPasswordResetChallengeJSONRequestBody = PasswordResetChallengeVerific
 // StartGoogleAccountRecoveryLinkJSONRequestBody defines body for StartGoogleAccountRecoveryLink for application/json ContentType.
 type StartGoogleAccountRecoveryLinkJSONRequestBody = GoogleLoginRequest
 
+// CompleteAccountRecoveryLinkWithAppleJSONRequestBody defines body for CompleteAccountRecoveryLinkWithApple for application/json ContentType.
+type CompleteAccountRecoveryLinkWithAppleJSONRequestBody = AccountRecoveryAppleProofRequest
+
 // CompleteAccountRecoveryLinkWithGoogleJSONRequestBody defines body for CompleteAccountRecoveryLinkWithGoogle for application/json ContentType.
 type CompleteAccountRecoveryLinkWithGoogleJSONRequestBody = AccountRecoveryGoogleProofRequest
 
 // CompleteAccountRecoveryLinkWithPasswordJSONRequestBody defines body for CompleteAccountRecoveryLinkWithPassword for application/json ContentType.
 type CompleteAccountRecoveryLinkWithPasswordJSONRequestBody = AccountRecoveryPasswordProofRequest
+
+// ReauthenticateWithAppleJSONRequestBody defines body for ReauthenticateWithApple for application/json ContentType.
+type ReauthenticateWithAppleJSONRequestBody = AppleReauthenticationRequest
 
 // ReauthenticateWithGoogleJSONRequestBody defines body for ReauthenticateWithGoogle for application/json ContentType.
 type ReauthenticateWithGoogleJSONRequestBody = GoogleReauthenticationRequest
@@ -1349,6 +1451,9 @@ type ServerInterface interface {
 	// GetCurrentAccount Get the authenticated user's account
 	// (GET /auth/api/v1/account)
 	GetCurrentAccount(w http.ResponseWriter, r *http.Request, params GetCurrentAccountParams)
+	// LinkCurrentUserApple Link Apple to the authenticated user's account
+	// (POST /auth/api/v1/account/auth-methods/apple)
+	LinkCurrentUserApple(w http.ResponseWriter, r *http.Request)
 	// LinkCurrentUserGoogle Link Google to the authenticated user's account
 	// (POST /auth/api/v1/account/auth-methods/google)
 	LinkCurrentUserGoogle(w http.ResponseWriter, r *http.Request)
@@ -1403,6 +1508,12 @@ type ServerInterface interface {
 	// LoginWithPassword Log in with a password
 	// (POST /auth/api/v1/login)
 	LoginWithPassword(w http.ResponseWriter, r *http.Request, params LoginWithPasswordParams)
+	// LoginWithApple Log in with an Apple authorization code
+	// (POST /auth/api/v1/oauth/apple)
+	LoginWithApple(w http.ResponseWriter, r *http.Request, params LoginWithAppleParams)
+	// GetAppleLoginOptions Get Apple login options
+	// (GET /auth/api/v1/oauth/apple/options)
+	GetAppleLoginOptions(w http.ResponseWriter, r *http.Request)
 	// LoginWithGoogle Log in with a Google ID token
 	// (POST /auth/api/v1/oauth/google)
 	LoginWithGoogle(w http.ResponseWriter, r *http.Request, params LoginWithGoogleParams)
@@ -1466,12 +1577,18 @@ type ServerInterface interface {
 	// StartGoogleAccountRecoveryLink Start linking Google to an existing account with the same email
 	// (POST /auth/api/v1/provider-links/recovery/google)
 	StartGoogleAccountRecoveryLink(w http.ResponseWriter, r *http.Request)
+	// CompleteAccountRecoveryLinkWithApple Prove ownership with an existing Apple login and finish linking
+	// (POST /auth/api/v1/provider-links/recovery/{linkID}/apple)
+	CompleteAccountRecoveryLinkWithApple(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithAppleParams)
 	// CompleteAccountRecoveryLinkWithGoogle Prove ownership with an existing Google login and finish linking
 	// (POST /auth/api/v1/provider-links/recovery/{linkID}/google)
 	CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithGoogleParams)
 	// CompleteAccountRecoveryLinkWithPassword Prove ownership with the existing account password and finish linking
 	// (POST /auth/api/v1/provider-links/recovery/{linkID}/password)
 	CompleteAccountRecoveryLinkWithPassword(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithPasswordParams)
+	// ReauthenticateWithApple Reauthenticate the current session with a linked Apple identity
+	// (POST /auth/api/v1/reauthenticate/apple)
+	ReauthenticateWithApple(w http.ResponseWriter, r *http.Request)
 	// CheckRecentAuthentication Require recent authentication for an application action
 	// (POST /auth/api/v1/reauthenticate/check)
 	CheckRecentAuthentication(w http.ResponseWriter, r *http.Request)
@@ -1547,6 +1664,12 @@ type Unimplemented struct{}
 // GetCurrentAccount Get the authenticated user's account
 // (GET /auth/api/v1/account)
 func (_ Unimplemented) GetCurrentAccount(w http.ResponseWriter, r *http.Request, params GetCurrentAccountParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// LinkCurrentUserApple Link Apple to the authenticated user's account
+// (POST /auth/api/v1/account/auth-methods/apple)
+func (_ Unimplemented) LinkCurrentUserApple(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1655,6 +1778,18 @@ func (_ Unimplemented) PreviewInvitation(w http.ResponseWriter, r *http.Request,
 // LoginWithPassword Log in with a password
 // (POST /auth/api/v1/login)
 func (_ Unimplemented) LoginWithPassword(w http.ResponseWriter, r *http.Request, params LoginWithPasswordParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// LoginWithApple Log in with an Apple authorization code
+// (POST /auth/api/v1/oauth/apple)
+func (_ Unimplemented) LoginWithApple(w http.ResponseWriter, r *http.Request, params LoginWithAppleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAppleLoginOptions Get Apple login options
+// (GET /auth/api/v1/oauth/apple/options)
+func (_ Unimplemented) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1784,6 +1919,12 @@ func (_ Unimplemented) StartGoogleAccountRecoveryLink(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// CompleteAccountRecoveryLinkWithApple Prove ownership with an existing Apple login and finish linking
+// (POST /auth/api/v1/provider-links/recovery/{linkID}/apple)
+func (_ Unimplemented) CompleteAccountRecoveryLinkWithApple(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithAppleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // CompleteAccountRecoveryLinkWithGoogle Prove ownership with an existing Google login and finish linking
 // (POST /auth/api/v1/provider-links/recovery/{linkID}/google)
 func (_ Unimplemented) CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithGoogleParams) {
@@ -1793,6 +1934,12 @@ func (_ Unimplemented) CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWrit
 // CompleteAccountRecoveryLinkWithPassword Prove ownership with the existing account password and finish linking
 // (POST /auth/api/v1/provider-links/recovery/{linkID}/password)
 func (_ Unimplemented) CompleteAccountRecoveryLinkWithPassword(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithPasswordParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReauthenticateWithApple Reauthenticate the current session with a linked Apple identity
+// (POST /auth/api/v1/reauthenticate/apple)
+func (_ Unimplemented) ReauthenticateWithApple(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2000,6 +2147,20 @@ func (siw *ServerInterfaceWrapper) GetCurrentAccount(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCurrentAccount(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LinkCurrentUserApple operation middleware
+func (siw *ServerInterfaceWrapper) LinkCurrentUserApple(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LinkCurrentUserApple(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2383,6 +2544,53 @@ func (siw *ServerInterfaceWrapper) LoginWithPassword(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.LoginWithPassword(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LoginWithApple operation middleware
+func (siw *ServerInterfaceWrapper) LoginWithApple(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params LoginWithAppleParams
+
+	// ------------- Optional query parameter "audience" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "audience", r.URL.Query(), &params.Audience, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "audience"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "audience", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LoginWithApple(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAppleLoginOptions operation middleware
+func (siw *ServerInterfaceWrapper) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAppleLoginOptions(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3006,6 +3214,48 @@ func (siw *ServerInterfaceWrapper) StartGoogleAccountRecoveryLink(w http.Respons
 	handler.ServeHTTP(w, r)
 }
 
+// CompleteAccountRecoveryLinkWithApple operation middleware
+func (siw *ServerInterfaceWrapper) CompleteAccountRecoveryLinkWithApple(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "linkID" -------------
+	var linkID ProviderLinkID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "linkID", chi.URLParam(r, "linkID"), &linkID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "linkID", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompleteAccountRecoveryLinkWithAppleParams
+
+	// ------------- Optional query parameter "audience" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "audience", r.URL.Query(), &params.Audience, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "audience"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "audience", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteAccountRecoveryLinkWithApple(w, r, linkID, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CompleteAccountRecoveryLinkWithGoogle operation middleware
 func (siw *ServerInterfaceWrapper) CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWriter, r *http.Request) {
 
@@ -3081,6 +3331,20 @@ func (siw *ServerInterfaceWrapper) CompleteAccountRecoveryLinkWithPassword(w htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CompleteAccountRecoveryLinkWithPassword(w, r, linkID, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReauthenticateWithApple operation middleware
+func (siw *ServerInterfaceWrapper) ReauthenticateWithApple(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReauthenticateWithApple(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3749,6 +4013,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/auth/api/v1/oauth/google", wrapper.LoginWithGoogle)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/auth/api/v1/oauth/apple/options", wrapper.GetAppleLoginOptions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/oauth/apple", wrapper.LoginWithApple)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/auth/api/v1/invitations/preview", wrapper.PreviewInvitation)
 	})
 	r.Group(func(r chi.Router) {
@@ -3768,6 +4038,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/provider-links/recovery/{linkID}/google", wrapper.CompleteAccountRecoveryLinkWithGoogle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/provider-links/recovery/{linkID}/apple", wrapper.CompleteAccountRecoveryLinkWithApple)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/login", wrapper.LoginWithPassword)
@@ -3807,6 +4080,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/reauthenticate/google", wrapper.ReauthenticateWithGoogle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/reauthenticate/apple", wrapper.ReauthenticateWithApple)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/reauthenticate/passkeys/options", wrapper.BeginPasskeyReauthentication)
@@ -3849,6 +4125,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/account/auth-methods/google", wrapper.LinkCurrentUserGoogle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/account/auth-methods/apple", wrapper.LinkCurrentUserApple)
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/auth/api/v1/account/auth-methods/{provider}", wrapper.UnlinkCurrentUserAuthMethod)
@@ -3990,6 +4269,120 @@ func (response GetCurrentAccount401JSONResponse) VisitGetCurrentAccountResponse(
 type GetCurrentAccount500JSONResponse ErrorResponse
 
 func (response GetCurrentAccount500JSONResponse) VisitGetCurrentAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserAppleRequestObject struct {
+	Body *LinkCurrentUserAppleJSONRequestBody
+}
+
+type LinkCurrentUserAppleResponseObject interface {
+	VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error
+}
+
+type LinkCurrentUserApple204Response struct {
+}
+
+func (response LinkCurrentUserApple204Response) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type LinkCurrentUserApple400JSONResponse struct{ ErrorJSONResponse }
+
+func (response LinkCurrentUserApple400JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple401JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple401JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple403JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple403JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple404JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple404JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple409JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple409JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple428JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple428JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(428)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkCurrentUserApple500JSONResponse ErrorResponse
+
+func (response LinkCurrentUserApple500JSONResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -5559,6 +5952,162 @@ func (response LoginWithPassword429JSONResponse) VisitLoginWithPasswordResponse(
 type LoginWithPassword500JSONResponse ErrorResponse
 
 func (response LoginWithPassword500JSONResponse) VisitLoginWithPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithAppleRequestObject struct {
+	Params LoginWithAppleParams
+	Body   *LoginWithAppleJSONRequestBody
+}
+
+type LoginWithAppleResponseObject interface {
+	VisitLoginWithAppleResponse(w http.ResponseWriter) error
+}
+
+type LoginWithApple200JSONResponse AuthSession
+
+func (response LoginWithApple200JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple400JSONResponse struct{ ErrorJSONResponse }
+
+func (response LoginWithApple400JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple401JSONResponse ErrorResponse
+
+func (response LoginWithApple401JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple403JSONResponse ErrorResponse
+
+func (response LoginWithApple403JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple404JSONResponse ErrorResponse
+
+func (response LoginWithApple404JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple409JSONResponse ErrorResponse
+
+func (response LoginWithApple409JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithApple500JSONResponse ErrorResponse
+
+func (response LoginWithApple500JSONResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppleLoginOptionsRequestObject struct {
+}
+
+type GetAppleLoginOptionsResponseObject interface {
+	VisitGetAppleLoginOptionsResponse(w http.ResponseWriter) error
+}
+
+type GetAppleLoginOptions200JSONResponse AppleLoginOptions
+
+func (response GetAppleLoginOptions200JSONResponse) VisitGetAppleLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppleLoginOptions404JSONResponse struct{ ErrorJSONResponse }
+
+func (response GetAppleLoginOptions404JSONResponse) VisitGetAppleLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppleLoginOptions500JSONResponse ErrorResponse
+
+func (response GetAppleLoginOptions500JSONResponse) VisitGetAppleLoginOptionsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -7413,6 +7962,114 @@ func (response StartGoogleAccountRecoveryLink500JSONResponse) VisitStartGoogleAc
 	return err
 }
 
+type CompleteAccountRecoveryLinkWithAppleRequestObject struct {
+	LinkID ProviderLinkID `json:"linkID"`
+	Params CompleteAccountRecoveryLinkWithAppleParams
+	Body   *CompleteAccountRecoveryLinkWithAppleJSONRequestBody
+}
+
+type CompleteAccountRecoveryLinkWithAppleResponseObject interface {
+	VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error
+}
+
+type CompleteAccountRecoveryLinkWithApple200JSONResponse AuthSession
+
+func (response CompleteAccountRecoveryLinkWithApple200JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple400JSONResponse struct{ ErrorJSONResponse }
+
+func (response CompleteAccountRecoveryLinkWithApple400JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple401JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple401JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple403JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple403JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple404JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple404JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple409JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple409JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAccountRecoveryLinkWithApple500JSONResponse ErrorResponse
+
+func (response CompleteAccountRecoveryLinkWithApple500JSONResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CompleteAccountRecoveryLinkWithGoogleRequestObject struct {
 	LinkID ProviderLinkID `json:"linkID"`
 	Params CompleteAccountRecoveryLinkWithGoogleParams
@@ -7632,6 +8289,92 @@ func (response CompleteAccountRecoveryLinkWithPassword429JSONResponse) VisitComp
 type CompleteAccountRecoveryLinkWithPassword500JSONResponse ErrorResponse
 
 func (response CompleteAccountRecoveryLinkWithPassword500JSONResponse) VisitCompleteAccountRecoveryLinkWithPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithAppleRequestObject struct {
+	Body *ReauthenticateWithAppleJSONRequestBody
+}
+
+type ReauthenticateWithAppleResponseObject interface {
+	VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error
+}
+
+type ReauthenticateWithApple204Response struct {
+}
+
+func (response ReauthenticateWithApple204Response) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReauthenticateWithApple400JSONResponse struct{ ErrorJSONResponse }
+
+func (response ReauthenticateWithApple400JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithApple401JSONResponse ErrorResponse
+
+func (response ReauthenticateWithApple401JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithApple404JSONResponse ErrorResponse
+
+func (response ReauthenticateWithApple404JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithApple409JSONResponse ErrorResponse
+
+func (response ReauthenticateWithApple409JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReauthenticateWithApple500JSONResponse ErrorResponse
+
+func (response ReauthenticateWithApple500JSONResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -9573,6 +10316,9 @@ type StrictServerInterface interface {
 	// GetCurrentAccount Get the authenticated user's account
 	// (GET /auth/api/v1/account)
 	GetCurrentAccount(ctx context.Context, request GetCurrentAccountRequestObject) (GetCurrentAccountResponseObject, error)
+	// LinkCurrentUserApple Link Apple to the authenticated user's account
+	// (POST /auth/api/v1/account/auth-methods/apple)
+	LinkCurrentUserApple(ctx context.Context, request LinkCurrentUserAppleRequestObject) (LinkCurrentUserAppleResponseObject, error)
 	// LinkCurrentUserGoogle Link Google to the authenticated user's account
 	// (POST /auth/api/v1/account/auth-methods/google)
 	LinkCurrentUserGoogle(ctx context.Context, request LinkCurrentUserGoogleRequestObject) (LinkCurrentUserGoogleResponseObject, error)
@@ -9627,6 +10373,12 @@ type StrictServerInterface interface {
 	// LoginWithPassword Log in with a password
 	// (POST /auth/api/v1/login)
 	LoginWithPassword(ctx context.Context, request LoginWithPasswordRequestObject) (LoginWithPasswordResponseObject, error)
+	// LoginWithApple Log in with an Apple authorization code
+	// (POST /auth/api/v1/oauth/apple)
+	LoginWithApple(ctx context.Context, request LoginWithAppleRequestObject) (LoginWithAppleResponseObject, error)
+	// GetAppleLoginOptions Get Apple login options
+	// (GET /auth/api/v1/oauth/apple/options)
+	GetAppleLoginOptions(ctx context.Context, request GetAppleLoginOptionsRequestObject) (GetAppleLoginOptionsResponseObject, error)
 	// LoginWithGoogle Log in with a Google ID token
 	// (POST /auth/api/v1/oauth/google)
 	LoginWithGoogle(ctx context.Context, request LoginWithGoogleRequestObject) (LoginWithGoogleResponseObject, error)
@@ -9690,12 +10442,18 @@ type StrictServerInterface interface {
 	// StartGoogleAccountRecoveryLink Start linking Google to an existing account with the same email
 	// (POST /auth/api/v1/provider-links/recovery/google)
 	StartGoogleAccountRecoveryLink(ctx context.Context, request StartGoogleAccountRecoveryLinkRequestObject) (StartGoogleAccountRecoveryLinkResponseObject, error)
+	// CompleteAccountRecoveryLinkWithApple Prove ownership with an existing Apple login and finish linking
+	// (POST /auth/api/v1/provider-links/recovery/{linkID}/apple)
+	CompleteAccountRecoveryLinkWithApple(ctx context.Context, request CompleteAccountRecoveryLinkWithAppleRequestObject) (CompleteAccountRecoveryLinkWithAppleResponseObject, error)
 	// CompleteAccountRecoveryLinkWithGoogle Prove ownership with an existing Google login and finish linking
 	// (POST /auth/api/v1/provider-links/recovery/{linkID}/google)
 	CompleteAccountRecoveryLinkWithGoogle(ctx context.Context, request CompleteAccountRecoveryLinkWithGoogleRequestObject) (CompleteAccountRecoveryLinkWithGoogleResponseObject, error)
 	// CompleteAccountRecoveryLinkWithPassword Prove ownership with the existing account password and finish linking
 	// (POST /auth/api/v1/provider-links/recovery/{linkID}/password)
 	CompleteAccountRecoveryLinkWithPassword(ctx context.Context, request CompleteAccountRecoveryLinkWithPasswordRequestObject) (CompleteAccountRecoveryLinkWithPasswordResponseObject, error)
+	// ReauthenticateWithApple Reauthenticate the current session with a linked Apple identity
+	// (POST /auth/api/v1/reauthenticate/apple)
+	ReauthenticateWithApple(ctx context.Context, request ReauthenticateWithAppleRequestObject) (ReauthenticateWithAppleResponseObject, error)
 	// CheckRecentAuthentication Require recent authentication for an application action
 	// (POST /auth/api/v1/reauthenticate/check)
 	CheckRecentAuthentication(ctx context.Context, request CheckRecentAuthenticationRequestObject) (CheckRecentAuthenticationResponseObject, error)
@@ -9822,6 +10580,37 @@ func (sh *strictHandler) GetCurrentAccount(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetCurrentAccountResponseObject); ok {
 		if err := validResponse.VisitGetCurrentAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LinkCurrentUserApple operation middleware
+func (sh *strictHandler) LinkCurrentUserApple(w http.ResponseWriter, r *http.Request) {
+	var request LinkCurrentUserAppleRequestObject
+
+	var body LinkCurrentUserAppleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LinkCurrentUserApple(ctx, request.(LinkCurrentUserAppleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LinkCurrentUserApple")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LinkCurrentUserAppleResponseObject); ok {
+		if err := validResponse.VisitLinkCurrentUserAppleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -10347,6 +11136,63 @@ func (sh *strictHandler) LoginWithPassword(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(LoginWithPasswordResponseObject); ok {
 		if err := validResponse.VisitLoginWithPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LoginWithApple operation middleware
+func (sh *strictHandler) LoginWithApple(w http.ResponseWriter, r *http.Request, params LoginWithAppleParams) {
+	var request LoginWithAppleRequestObject
+
+	request.Params = params
+
+	var body LoginWithAppleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LoginWithApple(ctx, request.(LoginWithAppleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LoginWithApple")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LoginWithAppleResponseObject); ok {
+		if err := validResponse.VisitLoginWithAppleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAppleLoginOptions operation middleware
+func (sh *strictHandler) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request) {
+	var request GetAppleLoginOptionsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAppleLoginOptions(ctx, request.(GetAppleLoginOptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAppleLoginOptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAppleLoginOptionsResponseObject); ok {
+		if err := validResponse.VisitGetAppleLoginOptionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -10947,6 +11793,40 @@ func (sh *strictHandler) StartGoogleAccountRecoveryLink(w http.ResponseWriter, r
 	}
 }
 
+// CompleteAccountRecoveryLinkWithApple operation middleware
+func (sh *strictHandler) CompleteAccountRecoveryLinkWithApple(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithAppleParams) {
+	var request CompleteAccountRecoveryLinkWithAppleRequestObject
+
+	request.LinkID = linkID
+	request.Params = params
+
+	var body CompleteAccountRecoveryLinkWithAppleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteAccountRecoveryLinkWithApple(ctx, request.(CompleteAccountRecoveryLinkWithAppleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteAccountRecoveryLinkWithApple")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteAccountRecoveryLinkWithAppleResponseObject); ok {
+		if err := validResponse.VisitCompleteAccountRecoveryLinkWithAppleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // CompleteAccountRecoveryLinkWithGoogle operation middleware
 func (sh *strictHandler) CompleteAccountRecoveryLinkWithGoogle(w http.ResponseWriter, r *http.Request, linkID ProviderLinkID, params CompleteAccountRecoveryLinkWithGoogleParams) {
 	var request CompleteAccountRecoveryLinkWithGoogleRequestObject
@@ -11008,6 +11888,37 @@ func (sh *strictHandler) CompleteAccountRecoveryLinkWithPassword(w http.Response
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CompleteAccountRecoveryLinkWithPasswordResponseObject); ok {
 		if err := validResponse.VisitCompleteAccountRecoveryLinkWithPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReauthenticateWithApple operation middleware
+func (sh *strictHandler) ReauthenticateWithApple(w http.ResponseWriter, r *http.Request) {
+	var request ReauthenticateWithAppleRequestObject
+
+	var body ReauthenticateWithAppleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReauthenticateWithApple(ctx, request.(ReauthenticateWithAppleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReauthenticateWithApple")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReauthenticateWithAppleResponseObject); ok {
+		if err := validResponse.VisitReauthenticateWithAppleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -11681,147 +12592,156 @@ func (sh *strictHandler) DeleteInternalUser(w http.ResponseWriter, r *http.Reque
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"AAAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -18,7 +18,6 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/http/viewmodel"
-	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/google/uuid"
 )
@@ -91,7 +90,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		if err := h.CompleteProviderLink(ctx, linkID, domain.ProviderGoogle, identity.OAuthID, identity.Email, identity.EmailVerified); err != nil {
 			_ = flash.Set(w, flash.Message{
 				Kind:    "error",
-				Message: "Google login failed. Please try again.",
+				Message: "Google sign-in failed. Please try again.",
 			})
 			redirect.Redirect(w, r, redirect.WithReturnTo("/auth/account", httpctx.ReturnToOrDefault(ctx)), http.StatusSeeOther)
 			return
@@ -113,6 +112,11 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, ctx)
 			return
 		}
+		link, err := h.Auth.GetPendingProviderLink(ctx, parsedLinkID)
+		if err != nil {
+			h.renderError(w, r, ctx)
+			return
+		}
 
 		user, err := h.Auth.CompleteAccountRecoveryProviderLinkWithProviderProof(
 			ctx,
@@ -125,47 +129,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			h.renderError(w, r, ctx)
 			return
 		}
-
-		returnTo := httpctx.ReturnToOrDefault(ctx)
-		if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
-			if path != "/auth/invitations/login" {
-				h.redirectInvitationOAuthFailure(w, returnTo)
-				return
-			}
-			result, err := h.Organizations.AcceptInvitation(ctx, organization.AcceptInvitationInput{
-				RawToken: rawToken,
-				UserID:   user.ID,
-				Now:      time.Now().UTC(),
-			})
-			if err != nil {
-				h.redirectInvitationOAuthFailure(w, returnTo)
-				return
-			}
-			h.finishInvitationSessionByID(w, r, user, result.Invitation.ID, time.Now())
-			return
-		}
-
-		audience := redirect.AudienceForPath(returnTo)
-		now := time.Now()
-		accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodGoogle, r.UserAgent(), now, httputil.ClientIPString(r))
-		if err != nil {
-			h.renderError(w, r, ctx)
-			return
-		}
-
-		cookiePolicy := h.sessionCookiePolicy()
-		session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-		session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
-
-		if h.Logger != nil {
-			h.Logger.Info("provider linked after account collision", "user_id", user.ID, "provider", domain.ProviderGoogle)
-		}
-		_ = flash.Set(w, flash.Message{
-			Kind:    "success",
-			Message: "Sign-in provider was connected to your account.",
-		})
-
-		writeOAuthRedirect(w, returnTo)
+		h.finishAccountRecoveryProviderProof(w, r, user, link.Provider, domain.AuthenticationMethodGoogle)
 		return
 	}
 
@@ -295,13 +259,13 @@ func writeOAuthRedirect(w http.ResponseWriter, location string) {
 }
 
 func isOAuthCallback(r *http.Request) bool {
-	return r.URL.Path == "/auth/oauth/google/callback"
+	return r.URL.Path == "/auth/oauth/google/callback" || r.URL.Path == "/auth/oauth/apple/proof"
 }
 
 func (h *UIHandler) renderError(w http.ResponseWriter, r *http.Request, ctx context.Context) {
 	_ = flash.Set(w, flash.Message{
 		Kind:    "error",
-		Message: "Google login failed. Please try again.",
+		Message: "Google sign-in failed. Please try again.",
 	})
 	redirect.Redirect(w, r, redirect.WithReturnTo("/auth/login", httpctx.ReturnToOrDefault(ctx)), http.StatusSeeOther)
 }

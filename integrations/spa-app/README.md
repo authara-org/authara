@@ -1,9 +1,10 @@
 # Authara SPA integration
 
 A React application that uses Authara's public browser API directly wherever a
-public route exists. It implements its own password and Google login, passkey
-login, signup, signup verification, account-management, and organization
-screens. It never embeds or navigates to Authara's hosted user-account page.
+public route exists. It implements its own password, Google, and Apple login,
+provider-collision recovery, passkey login, signup, signup verification,
+account-management, and organization screens. It never embeds or navigates to
+Authara's hosted user-account page.
 
 Operations that intentionally exist only on Authara's internal API go through
 the example application's Go backend at `/spa/api/v1`. That backend resolves
@@ -37,6 +38,11 @@ Add the gateway origin (for example `http://localhost:3001`) to the Google OAuth
 client's authorized JavaScript origins. The SPA does not load Google's script
 when the provider is disabled.
 
+To show the Apple button, enable Apple and configure its Services ID, team ID,
+key ID, private key, and redirect URL as described in the OAuth configuration
+documentation. The SPA uses Apple's popup flow and exchanges only the
+single-use authorization code with Authara.
+
 For production, build the Docker image and serve it at `/spa/` behind an Authara
 Gateway. The nginx configuration serves `index.html` for client-side paths such
 as `/spa/private`; the gateway must continue routing `/auth/*` to Authara. A
@@ -50,6 +56,10 @@ deployment that enables the internal-only controls must also route
 - invitation-code signup through the same public signup API
 - custom Google login through the Google Identity Services button and Authara's
   nonce-bound `/auth/api/v1/oauth/google` flow when Google is enabled
+- custom Apple login through the server-created state and nonce flow
+- account-collision recovery that displays the existing account's available
+  password, Google, or Apple proof methods and links the attempted Google
+  identity after successful proof
 - signup email-code verification and opaque challenge resending
 - cookie-session refresh followed by a single retry
 - current user, organization memberships, active organization, member list, and

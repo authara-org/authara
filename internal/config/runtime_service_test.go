@@ -357,6 +357,7 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 		}
 	}
 
+	set(KeyUIAppName, "Example App")
 	set(KeyUIDefaultReturnTo, "/dashboard")
 	set(KeyAuthenticationUsernameLoginEnabled, "true")
 	set(KeyAuthenticationPasskeyCloneResponse, PasskeyCloneResponseRestrictAndRevoke)
@@ -382,8 +383,9 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	set(KeyWebhookFailedRetention, "96h")
 	set(KeyWebhookMaintenanceBatchSize, "250")
 
-	if got := service.CurrentUI().DefaultReturnTo; got != "/dashboard" {
-		t.Fatalf("default return path = %q", got)
+	ui := service.CurrentUI()
+	if ui.AppName != "Example App" || ui.DefaultReturnTo != "/dashboard" {
+		t.Fatalf("UI policy = %+v", ui)
 	}
 	authentication := service.CurrentAuthentication()
 	if !authentication.UsernameLoginEnabled || authentication.PasskeyCloneResponse != PasskeyCloneResponseRestrictAndRevoke || authentication.PasskeyCloneNotifyUser {
@@ -420,6 +422,37 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	cookies := service.CurrentSessionCookies()
 	if cookies.AccessTokenTTL != 20*time.Minute || cookies.RefreshTokenTTL != 30*24*time.Hour {
 		t.Fatalf("session cookie policy = %+v", cookies)
+	}
+}
+
+func TestApplicationNameRuntimeSettingValidatesAndPublishes(t *testing.T) {
+	service, err := NewService(context.Background(), ServiceOptions{
+		Startup: &Config{}, Store: newMemoryStore(), LookupEnvironment: environment(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	description, err := service.Describe(KeyUIAppName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description.EffectiveValue != DefaultAppName || description.EffectiveSource != SourceDefault || description.Locked {
+		t.Fatalf("default application-name description = %+v", description)
+	}
+
+	updated, err := service.Set(context.Background(), KeyUIAppName, "  Example App  ", uuid.New(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.EffectiveValue != "Example App" || service.CurrentUI().AppName != "Example App" {
+		t.Fatalf("updated application name = %+v / %+v", updated, service.CurrentUI())
+	}
+
+	for _, value := range []string{"   ", strings.Repeat("a", maxAppNameRunes+1)} {
+		if _, err := service.Set(context.Background(), KeyUIAppName, value, uuid.New(), updated.Revision); !errors.Is(err, ErrInvalidValue) {
+			t.Fatalf("set application name %q error = %v, want ErrInvalidValue", value, err)
+		}
 	}
 }
 
@@ -532,7 +565,7 @@ func TestExpiryRevocationModeRejectsUnsafeEnvironmentRemovalProjection(t *testin
 
 func TestRuntimePolicySelectionKeepsInfrastructureAndSchedulingAtStartup(t *testing.T) {
 	dynamic := []Key{
-		KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
+		KeyUIAppName, KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
 		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationEnabled, KeySessionRecentAuthenticationWindow,
 		KeyOrganizationPublicManagementEnabled, KeyOrganizationInvitationTTL,
 		KeyAccessPolicyAllowlistEnabled, KeyAdminAuditRetention,

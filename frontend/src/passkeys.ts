@@ -2,6 +2,7 @@ import {
   notifyRecentAuthenticationComplete,
   requestRecentAuthentication,
 } from "./recentAuthentication";
+import { showToast } from "./toast";
 
 type PasskeyOptionsResponse = {
   challenge_id: string;
@@ -21,8 +22,6 @@ type PasskeyFinishResponse = {
 type PasskeyRegistrationFinishResponse = PasskeyFinishResponse & {
   linkedProvidersHTML?: string;
 };
-
-type ToastKind = "success" | "info" | "error";
 
 let conditionalLoginAbortController: AbortController | null = null;
 
@@ -219,41 +218,6 @@ async function postRegistrationFinish(
   }
 
   return (await res.json()) as PasskeyFinishResponse;
-}
-
-function removeToast(toast: HTMLElement): void {
-  if (toast.dataset.removing === "true") return;
-  toast.dataset.removing = "true";
-  toast.classList.remove("toast-enter");
-  toast.classList.add("toast-exit");
-  toast.addEventListener("animationend", () => toast.remove(), { once: true });
-}
-
-function showToast(kind: ToastKind, message: string): void {
-  const container = document.querySelector<HTMLElement>("#toast-container");
-  const template = document.querySelector<HTMLTemplateElement>(
-    `#toast-template-${kind}`,
-  );
-  const templateRoot = template?.content.firstElementChild;
-
-  if (!container || !(templateRoot instanceof HTMLElement)) {
-    // The root layout should always provide the toast templates. Keep a visible fallback for partial pages.
-    window.alert(message);
-    return;
-  }
-
-  const toast = templateRoot.cloneNode(true) as HTMLElement;
-  const messageEl = toast.querySelector<HTMLElement>("[data-toast-message]");
-  if (messageEl) {
-    messageEl.textContent = message;
-  }
-
-  toast
-    .querySelector<HTMLButtonElement>("[data-toast-close]")
-    ?.addEventListener("click", () => removeToast(toast));
-
-  window.setTimeout(() => removeToast(toast), 5000);
-  container.prepend(toast);
 }
 
 function showPasskeyError(message: string): void {

@@ -163,7 +163,7 @@ func (h *UIHandler) PasskeyAuthenticateOptionsPost(w http.ResponseWriter, r *htt
 		if h.Logger != nil {
 			h.Logger.Error("begin passkey login failed", "err", err)
 		}
-		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not start passkey login.")
+		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not start passkey sign-in.")
 		return
 	}
 

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/http/kit/response"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
@@ -47,7 +49,7 @@ func (h *UIHandler) ProviderLinkConfirmPage(w http.ResponseWriter, r *http.Reque
 		w,
 		r,
 		http.StatusOK,
-		authview.AccountCollision(linkIDStr, email, string(link.Provider), h.accountCollisionProofOptions(providers)),
+		authview.AccountCollision(linkIDStr, email, providerDisplayName(link.Provider), h.accountCollisionProofOptions(providers)),
 	)
 }
 
@@ -75,15 +77,16 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 	linkIDStr := strings.TrimSpace(r.FormValue("link_id"))
 	linkID, err := uuid.Parse(linkIDStr)
 	if err != nil {
-		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid or expired link.", authview.AccountCollisionForm(linkIDStr, "", "Google"))
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid or expired link.", authview.AccountCollisionForm(linkIDStr, "", "account"))
 		return
 	}
 
 	link, err := h.Auth.GetPendingProviderLink(ctx, linkID)
 	if err != nil {
-		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid or expired link.", authview.AccountCollisionForm(linkIDStr, "", "Google"))
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid or expired link.", authview.AccountCollisionForm(linkIDStr, "", "account"))
 		return
 	}
+	providerName := providerDisplayName(link.Provider)
 
 	email := ""
 	if link.ProviderEmail != nil {
@@ -92,7 +95,7 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 	if email == "" {
 		user, err := h.Auth.GetUser(ctx, link.UserID)
 		if err != nil {
-			h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid or expired link.", authview.AccountCollisionForm(linkIDStr, "", "Google"))
+			h.renderFormError(w, r, http.StatusUnprocessableEntity, "Invalid or expired link.", authview.AccountCollisionForm(linkIDStr, "", providerName))
 			return
 		}
 		email = user.Email
@@ -100,21 +103,21 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 
 	allowed, err := h.Limiter.AllowLoginAttempt(ctx, httputil.ClientIP(r), email)
 	if status, message, ok := h.rateLimitResult(allowed, err, "Too many attempts. Please try again later."); !ok {
-		h.renderFormError(w, r, status, message, authview.AccountCollisionForm(linkIDStr, email, "Google"))
+		h.renderFormError(w, r, status, message, authview.AccountCollisionForm(linkIDStr, email, providerName))
 		return
 	}
 
 	password := r.FormValue("password")
 	user, err := h.Auth.CompleteAccountRecoveryProviderLinkWithPassword(ctx, linkID, password, time.Now().UTC())
 	if err != nil {
-		msg := "Could not connect Google. Please try again."
+		msg := fmt.Sprintf("Could not connect %s. Please try again.", providerName)
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			msg = "Invalid password."
 		}
 		if errors.Is(err, auth.ErrPendingProviderLinkExpired) {
 			msg = "This connection request has expired. Please start again."
 		}
-		h.renderFormError(w, r, http.StatusUnprocessableEntity, msg, authview.AccountCollisionForm(linkIDStr, "", "Google"))
+		h.renderFormError(w, r, http.StatusUnprocessableEntity, msg, authview.AccountCollisionForm(linkIDStr, "", providerName))
 		return
 	}
 
@@ -139,7 +142,7 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 
 	audience := redirect.AudienceForPath(returnTo)
 	now := time.Now()
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodGoogle, r.UserAgent(), now, httputil.ClientIPString(r))
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodPassword, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderRequestError(w, r, http.StatusInternalServerError, "Could not create session.")
 		return
@@ -150,10 +153,70 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	if h.Logger != nil {
-		h.Logger.Info("provider linked after account collision", "user_id", user.ID, "provider", "google")
+		h.Logger.Info("provider linked after account collision", "user_id", user.ID, "provider", link.Provider)
 	}
+	_ = flash.Set(w, flash.Message{Kind: "success", Message: "Sign-in provider was connected to your account."})
 
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
+}
+
+func providerDisplayName(provider domain.Provider) string {
+	switch provider {
+	case domain.ProviderApple:
+		return "Apple"
+	case domain.ProviderGoogle:
+		return "Google"
+	case domain.ProviderPassword:
+		return "Password"
+	default:
+		return "account"
+	}
+}
+
+func (h *UIHandler) finishAccountRecoveryProviderProof(
+	w http.ResponseWriter,
+	r *http.Request,
+	user domain.User,
+	targetProvider domain.Provider,
+	authenticationMethod domain.AuthenticationMethod,
+) {
+	ctx := r.Context()
+	returnTo := httpctx.ReturnToOrDefault(ctx)
+	if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
+		if path != "/auth/invitations/login" {
+			h.redirectInvitationOAuthFailure(w, returnTo)
+			return
+		}
+		result, err := h.Organizations.AcceptInvitation(ctx, organization.AcceptInvitationInput{
+			RawToken: rawToken,
+			UserID:   user.ID,
+			Now:      time.Now().UTC(),
+		})
+		if err != nil {
+			h.redirectInvitationOAuthFailure(w, returnTo)
+			return
+		}
+		h.finishInvitationSessionByID(w, r, user, result.Invitation.ID, time.Now())
+		return
+	}
+
+	audience := redirect.AudienceForPath(returnTo)
+	now := time.Now()
+	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, authenticationMethod, r.UserAgent(), now, httputil.ClientIPString(r))
+	if err != nil {
+		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not create session.")
+		return
+	}
+
+	cookiePolicy := h.sessionCookiePolicy()
+	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+
+	if h.Logger != nil {
+		h.Logger.Info("provider linked after account collision", "user_id", user.ID, "provider", targetProvider)
+	}
+	_ = flash.Set(w, flash.Message{Kind: "success", Message: "Sign-in provider was connected to your account."})
+	writeOAuthRedirect(w, returnTo)
 }
 
 func (h *UIHandler) accountCollisionProofOptions(providers []domain.AuthProvider) []authview.AccountCollisionProofOption {
@@ -175,6 +238,14 @@ func (h *UIHandler) accountCollisionProofOptions(providers []domain.AuthProvider
 				Provider: string(domain.ProviderGoogle),
 				Label:    "Google",
 				ClientID: h.Google.ClientID,
+			})
+		case domain.ProviderApple:
+			if h.Apple == nil {
+				continue
+			}
+			options = append(options, authview.AccountCollisionProofOption{
+				Provider: string(domain.ProviderApple),
+				Label:    "Apple",
 			})
 		}
 	}

@@ -33,7 +33,7 @@ func (h *UIHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		http.StatusOK,
-		authview.Login(h.OAuthProviders.Providers, h.usernameLoginEnabled()),
+		authview.Login(h.OAuthProviders.Providers, h.usernameLoginEnabled(), h.appName()),
 	)
 }
 

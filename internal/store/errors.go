@@ -10,6 +10,7 @@ var (
 	ErrUserNotFound                         = errors.New("user not found")
 	ErrSessionNotFound                      = errors.New("session not found")
 	ErrorAuthProviderNotFound               = errors.New("auth_provider not found")
+	ErrorAppleTokenRevocationNotFound       = errors.New("apple token revocation not found")
 	ErrRefreshTokenNotFound                 = errors.New("refresh_token not found")
 	ErrorChallengeNotFound                  = errors.New("challenge not found")
 	ErrorChallengeAlreadyConsumed           = errors.New("challenge already consumed")

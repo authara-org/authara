@@ -120,6 +120,25 @@ func linkCurrentUserGoogleError(code response.ErrorCode, message string) contrac
 	}
 }
 
+func linkCurrentUserAppleError(code response.ErrorCode, message string) contract.LinkCurrentUserAppleResponseObject {
+	spec := mustRouteError(LinkCurrentUserAppleErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.LinkCurrentUserApple400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.LinkCurrentUserApple401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.LinkCurrentUserApple403JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.LinkCurrentUserApple404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.LinkCurrentUserApple409JSONResponse(body)
+	default:
+		return contract.LinkCurrentUserApple500JSONResponse(body)
+	}
+}
+
 func unlinkCurrentUserAuthMethodError(code response.ErrorCode, message string) contract.UnlinkCurrentUserAuthMethodResponseObject {
 	spec := mustRouteError(UnlinkCurrentUserAuthMethodErrors, code)
 	body := apiErrorBody(spec.Code, message)

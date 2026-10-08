@@ -32,7 +32,7 @@ func (h *APIHandler) LoginWithGoogle(ctx context.Context, request contract.Login
 	if !ok {
 		if code == response.CodeUnauthorized {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidAssertion); err != nil {
-				return loginWithGoogleError(responseCodeInternalError(), "Google login error."), nil
+				return loginWithGoogleError(responseCodeInternalError(), "Google sign-in error."), nil
 			}
 		}
 		return loginWithGoogleError(code, message), nil
@@ -75,7 +75,7 @@ func (h *APIHandler) contractGoogleLogin(
 	})
 	if err != nil {
 		code := googleLoginErrorCode(err)
-		message := "Google login error."
+		message := "Google sign-in error."
 		switch code {
 		case codeAccountLinkRequired:
 			message = "An account with this email already exists. Sign in with an existing method and link Google from your account."

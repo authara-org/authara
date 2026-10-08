@@ -123,12 +123,101 @@ cookies set by these endpoints; the returned access and refresh tokens can
 then be stored by the client.
 
 If the Google email belongs to an existing account that has not linked Google,
-the endpoint returns `409 account_link_required`. The user must sign in using
-an existing method and link Google from the account page; Authara never links
-accounts based only on a matching email address.
+the endpoint returns `409 account_link_required`. Continue with the account
+collision recovery flow below; Authara never links accounts based only on a
+matching email address.
 
 Errors: `400 invalid_request`, `401 unauthorized`, `403 forbidden`,
 `404 not_found`, `409 account_link_required`, or `500 internal_error`.
+
+---
+
+## Log in with Apple
+
+Apple login must be enabled with `AUTHARA_OAUTH_PROVIDERS=apple`. First obtain
+the Services ID, redirect URI, and one-time state and nonce:
+
+```text
+GET /auth/api/v1/oauth/apple/options
+```
+
+Initialize Apple's browser SDK with the returned values, the `email` scope,
+and `usePopup: true`. Send the resulting single-use code and returned state to:
+
+```text
+POST /auth/api/v1/oauth/apple?audience=app
+X-CSRF-Token: <csrf-token>
+Content-Type: application/json
+```
+
+```json
+{
+  "code": "<apple-authorization-code>",
+  "state": "<apple-state>"
+}
+```
+
+Authara exchanges the code server-side and validates Apple's signature,
+issuer, audience, expiry, nonce, subject, and verified email before creating a
+session. Browser applications must not generate Apple's client-secret JWT or
+trust identity claims locally.
+
+If the Apple email belongs to an existing account that has not linked that
+Apple subject, the endpoint returns `409 account_link_required`. Sign in with
+an existing method and link Apple from the account page.
+
+Errors match Google login: `400 invalid_request`, `401 unauthorized`,
+`403 forbidden`, `404 not_found`, `409 account_link_required`, or
+`500 internal_error`.
+
+---
+
+## Recover an external-provider account collision
+
+When a verified Google identity has the same email as an existing account,
+create a short-lived pending link using a nonce-bound Google credential:
+
+```text
+POST /auth/api/v1/provider-links/recovery/google
+X-CSRF-Token: <csrf-token>
+Content-Type: application/json
+```
+
+```json
+{
+  "credential": "<google-id-token>",
+  "nonce": "<nonce>"
+}
+```
+
+The `202 Accepted` response identifies the pending link and only the existing
+account methods that are available as proof:
+
+```json
+{
+  "link_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+  "proof_methods": ["password", "apple"]
+}
+```
+
+Complete exactly one proof through the matching endpoint:
+
+```text
+POST /auth/api/v1/provider-links/recovery/{linkID}/password?audience=app
+POST /auth/api/v1/provider-links/recovery/{linkID}/google?audience=app
+POST /auth/api/v1/provider-links/recovery/{linkID}/apple?audience=app
+```
+
+Password proof accepts `{ "password": "..." }`. Google proof accepts a fresh
+`credential` and `nonce` from the Google options flow. Apple proof accepts a
+fresh authorization `code` and `state` from the Apple options flow. Successful
+completion consumes the pending link, links the attempted Google identity to
+the existing user, returns an authenticated session, and sets the session
+cookies.
+
+Pending links expire after ten minutes and are single-use. Invalid or expired
+links return `400 invalid_request` or `409 provider_link_expired`; an identity
+that does not belong to the existing account returns `401 unauthorized`.
 
 ---
 
@@ -498,9 +587,9 @@ Example:
 
 ### Errors
 
-| Status | Code |
-|------|------|
-| 401 | unauthorized |
+| Status | Code         |
+| ------ | ------------ |
+| 401    | unauthorized |
 
 See [Errors](errors.md) for error definitions.
 
@@ -584,9 +673,9 @@ See [Cookies](cookies.md) for details.
 
 ### Query Parameters
 
-| Parameter | Required | Description |
-|------|------|------|
-| `audience` | yes | Requested token audience |
+| Parameter  | Required | Description              |
+| ---------- | -------- | ------------------------ |
+| `audience` | yes      | Requested token audience |
 
 Example:
 
@@ -609,11 +698,11 @@ New session cookies are issued:
 
 ### Errors
 
-| Status | Code |
-|------|------|
-| 401 | unauthorized |
-| 400 | invalid_request |
-| 500 | internal_error |
+| Status | Code            |
+| ------ | --------------- |
+| 401    | unauthorized    |
+| 400    | invalid_request |
+| 500    | internal_error  |
 
 See [Errors](errors.md).
 
@@ -647,11 +736,11 @@ POST /auth/api/v1/tokens/refresh
 
 ### Errors
 
-| Status | Code |
-|------|------|
-| 401 | unauthorized |
-| 400 | invalid_request |
-| 500 | internal_error |
+| Status | Code            |
+| ------ | --------------- |
+| 401    | unauthorized    |
+| 400    | invalid_request |
+| 500    | internal_error  |
 
 See [Errors](errors.md).
 
@@ -915,16 +1004,16 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
 
 ### Errors
 
-| Status | Code |
-|------|------|
-| 401 | unauthorized |
-| 403 | actor_not_member |
-| 403 | actor_not_allowed |
-| 404 | organization_not_found |
-| 409 | already_member |
-| 409 | invitation_already_pending |
-| 400 | invalid_request |
-| 500 | internal_error |
+| Status | Code                       |
+| ------ | -------------------------- |
+| 401    | unauthorized               |
+| 403    | actor_not_member           |
+| 403    | actor_not_allowed          |
+| 404    | organization_not_found     |
+| 409    | already_member             |
+| 409    | invitation_already_pending |
+| 400    | invalid_request            |
+| 500    | internal_error             |
 
 ---
 

@@ -67,6 +67,14 @@ var runtimeDefinitions = func() []Definition {
 func generalPolicyDefinitions() []Definition {
 	return []Definition{
 		{
+			Key: KeyUIAppName, Name: "Application name",
+			Description: "Name displayed on the hosted sign-in and account-creation pages.",
+			Environment: "AUTHARA_APP_NAME", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "Branding", Type: TypeString, DefaultValue: DefaultAppName, HasDefault: true,
+			Minimum: "1 character", Maximum: "80 characters", defaultValue: DefaultAppName,
+			Impact: "Applies immediately to subsequently rendered hosted authentication pages.",
+		},
+		{
 			Key: KeyUIDefaultReturnTo, Name: "Default return path",
 			Description: "Safe relative path used after authentication when no return_to value is supplied.",
 			Environment: "AUTHARA_DEFAULT_RETURN_TO", Control: ControlHybrid, Reload: ReloadDynamic,

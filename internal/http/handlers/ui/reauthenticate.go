@@ -47,12 +47,15 @@ func (h *UIHandler) ReauthenticatePage(w http.ResponseWriter, r *http.Request) {
 	}
 	hasPassword := false
 	hasGoogle := false
+	hasApple := false
 	for _, provider := range providers {
 		switch provider.Provider {
 		case domain.ProviderPassword:
 			hasPassword = true
 		case domain.ProviderGoogle:
 			hasGoogle = true
+		case domain.ProviderApple:
+			hasApple = true
 		}
 	}
 	hasPasskey := false
@@ -73,6 +76,7 @@ func (h *UIHandler) ReauthenticatePage(w http.ResponseWriter, r *http.Request) {
 		hasPassword,
 		hasPasskey,
 		googleClientID,
+		hasApple,
 		challengeID.String(),
 		r.URL.Query().Get("embedded") == "1",
 	))

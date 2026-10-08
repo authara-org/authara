@@ -157,7 +157,8 @@ func TestWorkerRetriesTransientFailureAndLaterDelivers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantNext := now.Add(22500 * time.Millisecond)
+	// PostgreSQL stores timestamptz values with microsecond precision.
+	wantNext := now.Add(22500 * time.Millisecond).Truncate(time.Microsecond)
 	if stored.Status != domain.EmailJobStatusPending || stored.AttemptCount != 1 || !stored.NextAttemptAt.Equal(wantNext) {
 		t.Fatalf("retry state = %+v, want next attempt %s", stored, wantNext)
 	}

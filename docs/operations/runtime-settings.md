@@ -68,6 +68,7 @@ an operator can change them without restarting Core:
 
 | Area | Settings | Runtime effect |
 | --- | --- | --- |
+| Branding | `AUTHARA_APP_NAME` | Subsequently rendered hosted sign-in and account-creation pages use the new application name. |
 | Redirects | `AUTHARA_DEFAULT_RETURN_TO` | Subsequent requests without an explicit `return_to` use the new safe relative path. |
 | Authentication | `AUTHARA_USERNAME_LOGIN_ENABLED`, `AUTHARA_EMAIL_VERIFICATION_REQUIRED`, `AUTHARA_PASSKEY_CLONE_RESPONSE`, `AUTHARA_PASSKEY_CLONE_NOTIFY_USER` | Subsequent password-login requests apply username policy. Requiring verification immediately revokes unverified sessions and directs browser users to verify or replace their address; it is rejected unless challenge and email delivery are configured. Newly detected passkey sign-counter anomalies use the selected alert/restrict/session-revocation response and notification setting. |
 | Tokens and sessions | `AUTHARA_ACCESS_TOKEN_TTL_MINUTES`, `AUTHARA_SESSION_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_TTL_DAYS`, `AUTHARA_REFRESH_TOKEN_ROTATION_INTERVAL`, `AUTHARA_RECENT_AUTHENTICATION_ENABLED`, `AUTHARA_RECENT_AUTHENTICATION_WINDOW` | New tokens and sessions use the new lifetimes. Access-token lifetime is limited to 24 hours so revocation markers cover tokens issued before a reduction. Existing artifacts keep their stored expiry; rotation policy applies on the next refresh. Recent-authentication enforcement and its freshness window apply immediately to sensitive requests. |

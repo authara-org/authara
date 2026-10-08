@@ -11,14 +11,13 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 )
 
-templ Login(oauthProviders []oauth.OAuthProvider, usernameLoginEnabled bool) {
+templ Login(oauthProviders []oauth.OAuthProvider, usernameLoginEnabled bool, appName string) {
 	@templates.PartialRender() {
 		@AuthLayout() {
 			@CardHeader()
-			@HeaderSection("Welcome Back!", "Enter to get unlimited access.")
-			@PasskeyLoginButton()
+			@HeaderSection("Sign in to "+appName, "")
 			@LoginForm(usernameLoginEnabled)
-			@OAuthProviders("Login", oauthProviders)
+			@OAuthProviders("Sign in", oauthProviders, "")
 			<div class="text-center mt-6">
 				<p class="text-grey-800 dark:text-grey-200">
 					Don't have an Account?
@@ -35,22 +34,6 @@ templ Login(oauthProviders []oauth.OAuthProvider, usernameLoginEnabled bool) {
 			</div>
 		}
 	}
-}
-
-templ PasskeyLoginButton() {
-	<div class="mb-6">
-		@button.Button(button.ButtonConfig{
-			Label:   "Continue with passkey",
-			Type:    button.RegularButton,
-			Color:   button.Light,
-			Variant: button.Outline,
-			Icon:    icons.Key(),
-			Attrs: templ.Attributes{
-				"data-passkey-login": "",
-				"data-return-to":     httpctx.ReturnToOrDefault(ctx),
-			},
-		})
-	</div>
 }
 
 templ LoginForm(usernameLoginEnabled bool) {
@@ -138,7 +121,7 @@ templ LoginForm(usernameLoginEnabled bool) {
 			</a>
 		</div>
 		@button.Button(button.ButtonConfig{
-			Label: "Login",
+			Label: "Sign in",
 			Icon:  icons.Login(),
 		})
 	</form>

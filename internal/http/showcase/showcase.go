@@ -66,8 +66,8 @@ func Pages() []Page {
 func fixturePages() []Page {
 	providers := []oauth.OAuthProvider{{Name: domain.ProviderGoogle, ClientID: "showcase-google-client"}}
 	pages := []Page{
-		{Slug: "login", Name: "Login", Group: "Authentication", Component: func() templ.Component { return authview.Login(providers, true) }},
-		{Slug: "signup", Name: "Sign up", Group: "Authentication", Component: func() templ.Component { return authview.Signup(providers) }},
+		{Slug: "login", Name: "Sign in", Group: "Authentication", Component: func() templ.Component { return authview.Login(providers, true, "Authara") }},
+		{Slug: "signup", Name: "Sign up", Group: "Authentication", Component: func() templ.Component { return authview.Signup(providers, "Authara") }},
 		{Slug: "password-reset", Name: "Password reset", Group: "Authentication", Component: authview.PasswordReset},
 		{Slug: "verify-signup", Name: "Verify sign-up", Group: "Authentication", Component: func() templ.Component {
 			return challengeview.VerifyChallenge("11111111-1111-1111-1111-111111111111", "signup", "Verify your email")
@@ -96,7 +96,7 @@ func fixturePages() []Page {
 		{Slug: "add-password", Name: "Add password", Group: "Account", Component: authview.AddPassword},
 		{Slug: "change-password", Name: "Change password", Group: "Account", Component: authview.ChangePassword},
 		{Slug: "reauthenticate", Name: "Reauthenticate", Group: "Account", Component: func() templ.Component {
-			return authview.Reauthenticate(true, true, "showcase-google-client", "fixture-challenge", false)
+			return authview.Reauthenticate(true, true, "showcase-google-client", true, "fixture-challenge", false)
 		}},
 		{Slug: "reauthentication-complete", Name: "Reauthentication complete", Group: "Account", Component: func() templ.Component { return authview.ReauthenticationComplete(false) }},
 		{Slug: "error", Name: "Error page", Group: "System", Component: func() templ.Component {

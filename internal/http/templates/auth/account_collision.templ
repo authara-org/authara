@@ -33,6 +33,8 @@ templ AccountCollision(linkID string, email string, provider string, proofOption
 						@AccountCollisionForm(linkID, email, provider)
 					} else if option.Provider == "google" {
 						@GoogleSignin("Continue", option.ClientID, viewmodel.AuthProviderFlowProof, linkID)
+					} else if option.Provider == "apple" {
+						@AppleSignin("Continue", viewmodel.AuthProviderFlowProof, "", linkID, "")
 					}
 				}
 			</div>

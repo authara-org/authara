@@ -114,6 +114,80 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
 
+  /auth/api/v1/oauth/apple/options:
+    get:
+      operationId: getAppleLoginOptions
+      tags: [Authentication]
+      summary: Get Apple login options
+      description: Returns the Apple Services ID, redirect URI, state, and nonce needed to start Sign in with Apple.
+      security: []
+      x-authara-access: public
+      x-authara-availability: apple-enabled
+      x-authara-set-cookies: [authara_apple_oauth]
+      x-authara-error-codes:
+        "404": [not_found]
+        "500": [internal_error]
+      responses:
+        "200":
+          description: Apple login options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppleLoginOptions"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/oauth/apple:
+    post:
+      operationId: loginWithApple
+      tags: [Authentication]
+      summary: Log in with an Apple authorization code
+      description: Exchanges a one-time Apple authorization code for Authara session cookies and JSON tokens.
+      parameters:
+        - $ref: "#/components/parameters/Audience"
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+          appleOAuthCookie: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-availability: apple-enabled
+      x-authara-set-cookies: [authara_apple_oauth, authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found]
+        "409": [account_link_required]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppleAuthorizationRequest"
+      responses:
+        "200":
+          description: Authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /auth/api/v1/invitations/preview:
     get:
       operationId: previewInvitation
@@ -426,6 +500,56 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/AccountRecoveryGoogleProofRequest"
+      responses:
+        "200":
+          description: Linked provider and authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/provider-links/recovery/{linkID}/apple:
+    post:
+      operationId: completeAccountRecoveryLinkWithApple
+      tags: [Authentication]
+      summary: Prove ownership with an existing Apple login and finish linking
+      description: Consumes a recovery link after Apple provider proof, creates a session, and optionally accepts and switches to an invitation organization.
+      parameters:
+        - $ref: "#/components/parameters/ProviderLinkID"
+        - $ref: "#/components/parameters/AppAudience"
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+          appleOAuthCookie: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-availability: apple-enabled
+      x-authara-set-cookies: [authara_apple_oauth, authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden, invitation_email_mismatch]
+        "404": [not_found, invitation_not_found]
+        "409": [provider_link_expired, auth_method_already_linked, invitation_already_accepted, invitation_revoked, invitation_expired, organization_membership_conflict]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountRecoveryAppleProofRequest"
       responses:
         "200":
           description: Linked provider and authenticated session
@@ -951,6 +1075,46 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
 
+  /auth/api/v1/reauthenticate/apple:
+    post:
+      operationId: reauthenticateWithApple
+      tags: [Sessions]
+      summary: Reauthenticate the current session with a linked Apple identity
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+          appleOAuthCookie: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-availability: apple-enabled
+      x-authara-set-cookies: [authara_apple_oauth]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [not_found]
+        "409": [invalid_authentication_challenge]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppleReauthenticationRequest"
+      responses:
+        "204":
+          description: Session reauthenticated
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /auth/api/v1/reauthenticate/passkeys/options:
     post:
       operationId: beginPasskeyReauthentication
@@ -1449,6 +1613,54 @@ paths:
       responses:
         "204":
           description: Google linked
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "428":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/auth-methods/apple:
+    post:
+      operationId: linkCurrentUserApple
+      tags: [Users]
+      summary: Link Apple to the authenticated user's account
+      description: Uses options from getAppleLoginOptions and links the verified Apple identity to the current account.
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+          appleOAuthCookie: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-recent-auth: required
+      x-authara-availability: apple-enabled
+      x-authara-set-cookies: [authara_apple_oauth]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found]
+        "409": [auth_method_already_linked]
+        "428": [recent_authentication_required]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppleAuthorizationRequest"
+      responses:
+        "204":
+          description: Apple linked
         "400":
           $ref: "#/components/responses/Error"
         "401":
@@ -2475,6 +2687,10 @@ components:
       type: apiKey
       in: cookie
       name: authara_oauth_nonce
+    appleOAuthCookie:
+      type: apiKey
+      in: cookie
+      name: authara_apple_oauth
     internalBearer:
       type: http
       scheme: bearer
@@ -2594,7 +2810,7 @@ components:
       required: true
       schema:
         type: string
-        enum: [password, google]
+        enum: [password, google, apple]
 
   responses:
     Error:
@@ -2651,6 +2867,31 @@ components:
           type: string
         nonce:
           type: string
+    AppleLoginOptions:
+      type: object
+      additionalProperties: false
+      required: [client_id, redirect_uri, state, nonce]
+      properties:
+        client_id:
+          type: string
+        redirect_uri:
+          type: string
+          format: uri
+        state:
+          type: string
+        nonce:
+          type: string
+    AppleAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required: [code, state]
+      properties:
+        code:
+          type: string
+        state:
+          type: string
+        invitation_token:
+          type: string
     InvitationTokenRequest:
       type: object
       additionalProperties: false
@@ -2700,6 +2941,17 @@ components:
         credential:
           type: string
         nonce:
+          type: string
+        invitation_token:
+          type: string
+    AccountRecoveryAppleProofRequest:
+      type: object
+      additionalProperties: false
+      required: [code, state]
+      properties:
+        code:
+          type: string
+        state:
           type: string
         invitation_token:
           type: string
@@ -2799,6 +3051,18 @@ components:
           type: string
         nonce:
           type: string
+    AppleReauthenticationRequest:
+      type: object
+      additionalProperties: false
+      required: [authentication_challenge_id, code, state]
+      properties:
+        authentication_challenge_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        state:
+          type: string
     AuthenticationChallengeReference:
       type: object
       additionalProperties: false
@@ -2876,7 +3140,7 @@ components:
           type: array
           items:
             type: string
-            enum: [password, google]
+            enum: [password, google, apple]
 
     InvitationPreview:
       type: object
@@ -3086,7 +3350,7 @@ components:
       properties:
         provider:
           type: string
-          enum: [password, google]
+          enum: [password, google, apple]
         created_at:
           type: string
           format: date-time

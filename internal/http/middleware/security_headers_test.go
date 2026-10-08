@@ -79,6 +79,24 @@ func TestSecurityHeadersAllowsGoogleOAuthSourcesWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestSecurityHeadersAllowsAppleOAuthSourcesWhenEnabled(t *testing.T) {
+	handler := SecurityHeaders(SecurityHeadersConfig{AllowAppleOAuth: true})(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+	)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/auth/login", nil))
+
+	csp := recorder.Header().Get(headerContentSecurityPolicy)
+	for _, source := range []string{"https://appleid.cdn-apple.com", "https://appleid.apple.com"} {
+		if !strings.Contains(csp, source) {
+			t.Errorf("CSP does not contain %q: %s", source, csp)
+		}
+	}
+	if got := recorder.Header().Get(headerReferrerPolicy); got != "strict-origin-when-cross-origin" {
+		t.Fatalf("Apple OAuth Referrer-Policy = %q", got)
+	}
+}
+
 func TestSecurityHeadersAllowOnlySameOriginReauthenticationFrames(t *testing.T) {
 	handler := SecurityHeaders(SecurityHeadersConfig{})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)

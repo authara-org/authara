@@ -79,6 +79,9 @@ func TestAccessTokenService_GenerateAndParse_AppAudience(t *testing.T) {
 	if claims.Subject != userID.String() {
 		t.Fatalf("expected subject %q, got %q", userID.String(), claims.Subject)
 	}
+	if _, err := uuid.Parse(claims.ID); err != nil {
+		t.Fatalf("expected UUID token ID, got %q", claims.ID)
+	}
 
 	if claims.SessionID != sessionID {
 		t.Fatalf("expected session id %q, got %q", sessionID, claims.SessionID)

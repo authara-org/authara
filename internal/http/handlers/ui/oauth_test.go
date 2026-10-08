@@ -37,6 +37,11 @@ func TestIsOAuthCallback(t *testing.T) {
 		t.Fatalf("expected google callback request to match")
 	}
 
+	req = httptest.NewRequest(http.MethodPost, "/auth/oauth/apple/proof", nil)
+	if !isOAuthCallback(req) {
+		t.Fatalf("expected Apple proof request to match")
+	}
+
 	req = httptest.NewRequest(http.MethodPost, "/auth/invitations/login", nil)
 	if isOAuthCallback(req) {
 		t.Fatalf("expected non-callback request not to match")

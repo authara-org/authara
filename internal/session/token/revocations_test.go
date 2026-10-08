@@ -22,15 +22,17 @@ func TestAccessTokenRevocations(t *testing.T) {
 		SessionID: uuid.New(),
 		OrgID:     uuid.New(),
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:       uuid.NewString(),
 			Subject:  uuid.NewString(),
 			IssuedAt: jwt.NewNumericDate(now),
 		},
 	}
+	accessToken := signedRevocationTestToken(t, claims)
 
-	if err := revocations.RevokeToken(ctx, "secret-token", 3*time.Minute); err != nil {
+	if err := revocations.RevokeToken(ctx, claims, 3*time.Minute); err != nil {
 		t.Fatalf("revoke token failed: %v", err)
 	}
-	if err := revocations.Check(ctx, "secret-token", claims); !errors.Is(err, ErrRevokedToken) {
+	if err := revocations.Check(ctx, accessToken, claims); !errors.Is(err, ErrRevokedToken) {
 		t.Fatalf("expected exact token to be revoked, got %v", err)
 	}
 
@@ -41,19 +43,52 @@ func TestAccessTokenRevocations(t *testing.T) {
 		t.Fatalf("expected membership token to be revoked, got %v", err)
 	}
 	freshClaims := *claims
+	freshClaims.ID = uuid.NewString()
 	freshClaims.IssuedAt = jwt.NewNumericDate(now.Add(time.Second))
 	if err := revocations.Check(ctx, "fresh-token", &freshClaims); err != nil {
 		t.Fatalf("expected token issued after revocation to remain valid, got %v", err)
 	}
 
 	for key, ttl := range store.ttls {
-		if strings.Contains(key, "secret-token") || string(store.values[key]) == "secret-token" {
+		if strings.Contains(key, accessToken) || string(store.values[key]) == accessToken {
 			t.Fatalf("bearer token was stored in Redis entry %q", key)
 		}
 		if ttl != 3*time.Minute && ttl != 10*time.Minute {
 			t.Fatalf("unexpected TTL %s for %q", ttl, key)
 		}
 	}
+}
+
+func TestAccessTokenIdentifierSupportsTokensIssuedBeforeJTI(t *testing.T) {
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	claims := &AccessClaims{
+		SessionID: uuid.New(),
+		OrgID:     uuid.New(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:  uuid.NewString(),
+			Audience: jwt.ClaimStrings{string(AudienceApp)},
+			IssuedAt: jwt.NewNumericDate(now),
+		},
+	}
+
+	identifier, err := accessTokenIdentifier(claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(identifier, "legacy:"+claims.SessionID.String()+":") {
+		t.Fatalf("legacy token identifier = %q", identifier)
+	}
+}
+
+func signedRevocationTestToken(t *testing.T, claims *AccessClaims) string {
+	t.Helper()
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(
+		[]byte("01234567890123456789012345678901"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signed
 }
 
 func TestAccessTokenRevocationsReadsCurrentTTLForEachScope(t *testing.T) {

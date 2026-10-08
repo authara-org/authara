@@ -41,6 +41,23 @@ type recordingAccessPolicy struct {
 
 type publisherFunc func(context.Context, webhook.Envelope) error
 
+type fakeAppleCredentialLifecycle struct {
+	savedToken  string
+	savedUserID uuid.UUID
+	saveErr     error
+}
+
+func (f *fakeAppleCredentialLifecycle) Save(_ context.Context, userID uuid.UUID, token string) error {
+	f.savedUserID = userID
+	f.savedToken = token
+	return f.saveErr
+}
+
+func (f *fakeAppleCredentialLifecycle) PromoteProviderLink(_ context.Context, userID uuid.UUID, _ uuid.UUID) error {
+	f.savedUserID = userID
+	return f.saveErr
+}
+
 type failingPasswordChangedRecorder struct {
 	securityevent.NoopRecorder
 	err error
@@ -995,6 +1012,56 @@ func TestLoginWithExternalIdentity_WithInvitationAddsEmailToAllowlist(t *testing
 	})
 }
 
+func TestLoginWithAppleAcceptsInvitationWithoutCreatingDefaultOrganization(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "apple-invite-owner@example.com", Username: "apple-invite-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, owner.ID, owner.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		orgs := organization.New(organization.Config{
+			Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeSingle, InvitationTTL: time.Hour,
+		})
+		invitedEmail := "apple-invited@example.com"
+		invite, err := orgs.CreateInvitation(ctx, organization.CreateInvitationInput{
+			OrganizationID: org.ID, ActorUserID: owner.ID, Email: invitedEmail, Now: time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		credentials := &fakeAppleCredentialLifecycle{}
+		svc := New(Config{
+			Store: tdb.Store, Tx: tdb.Tx, AccessPolicy: staticAccessPolicy{allowed: true},
+			Organizations: orgs, AppleCredentials: credentials,
+			OAuthProviders: oauth.OAuthProviders{Providers: []oauth.OAuthProvider{
+				oauth.NewOAuthProvider(domain.ProviderApple, "apple-client", "https://auth.example.com"),
+			}},
+		})
+
+		user, err := svc.LoginWithApple(ctx, LoginInput{
+			Provider: domain.ProviderApple, Email: invitedEmail, Username: "apple-invited",
+			OAuthID: "apple-invited-subject", ProviderEmailVerified: true, InvitationToken: invite.RawToken,
+		}, "apple-refresh-token")
+		if err != nil {
+			t.Fatalf("LoginWithApple failed: %v", err)
+		}
+		if credentials.savedUserID != user.ID || credentials.savedToken != "apple-refresh-token" {
+			t.Fatalf("saved credential = user %s token %q", credentials.savedUserID, credentials.savedToken)
+		}
+		if _, err := tdb.Store.GetOrganizationMembership(ctx, org.ID, user.ID); err != nil {
+			t.Fatalf("expected invitation membership: %v", err)
+		}
+		if _, _, err := tdb.Store.GetPersonalOrganizationForUser(ctx, user.ID); !errors.Is(err, store.ErrOrganizationNotFound) {
+			t.Fatalf("unexpected default organization: %v", err)
+		}
+	})
+}
+
 func TestLoginWithExternalIdentity_ExistingEmailMustLink(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -1231,6 +1298,44 @@ func TestDeleteUser_RemovesUser(t *testing.T) {
 		_, err = tdb.Store.GetUserByID(ctx, user.ID)
 		if err == nil {
 			t.Fatal("expected deleted user lookup to fail")
+		}
+	})
+}
+
+func TestDeleteUserRevokesAppleAuthorizationAfterDeletion(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "delete-apple-user@example.com",
+			Username: "delete-apple-user",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		subject := "delete-apple-subject"
+		provider, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID: user.ID, Provider: domain.ProviderApple, ProviderUserID: &subject,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tdb.Store.UpsertAppleCredential(ctx, domain.AppleCredential{
+			AuthProviderID: provider.ID, EncryptionKeyID: "test-key", EncryptedRefreshToken: []byte("encrypted-token"),
+		}, uuid.New()); err != nil {
+			t.Fatal(err)
+		}
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx})
+
+		if err := svc.DeleteUser(ctx, user.ID); err != nil {
+			t.Fatalf("DeleteUser failed: %v", err)
+		}
+		queued, err := tdb.Store.GetNextAppleTokenRevocation(ctx, time.Now().UTC())
+		if err != nil || queued.EncryptionContext != provider.ID || string(queued.EncryptedRefreshToken) != "encrypted-token" {
+			t.Fatalf("queued revocation = %+v, %v", queued, err)
+		}
+		if _, err := tdb.Store.GetUserByID(ctx, user.ID); !errors.Is(err, store.ErrUserNotFound) {
+			t.Fatalf("expected user deletion, got %v", err)
 		}
 	})
 }
@@ -1877,6 +1982,76 @@ func TestUnlinkAuthProvider_AllowedWhenPasskeyExists(t *testing.T) {
 	})
 }
 
+func TestUnlinkAppleRevokesOnlyAfterSuccessfulRemoval(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "apple-unlink@example.com", Username: "apple-unlink"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		subject := "apple-subject"
+		provider, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{UserID: user.ID, Provider: domain.ProviderApple, ProviderUserID: &subject})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tdb.Store.UpsertAppleCredential(ctx, domain.AppleCredential{
+			AuthProviderID: provider.ID, EncryptionKeyID: "test-key", EncryptedRefreshToken: []byte("encrypted-token"),
+		}, uuid.New()); err != nil {
+			t.Fatal(err)
+		}
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx})
+
+		if err := svc.UnlinkAuthProvider(ctx, user.ID, domain.ProviderApple); !errors.Is(err, ErrCannotRemoveLastAuthMethod) {
+			t.Fatalf("unlink only method error = %v", err)
+		}
+		if _, err := tdb.Store.GetNextAppleTokenRevocation(ctx, time.Now().UTC()); !errors.Is(err, store.ErrorAppleTokenRevocationNotFound) {
+			t.Fatalf("rejected unlink queued a revocation: %v", err)
+		}
+
+		passwordHash := "password-hash"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{UserID: user.ID, Provider: domain.ProviderPassword, PasswordHash: &passwordHash}); err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.UnlinkAuthProvider(ctx, user.ID, domain.ProviderApple); err != nil {
+			t.Fatal(err)
+		}
+		if queued, err := tdb.Store.GetNextAppleTokenRevocation(ctx, time.Now().UTC()); err != nil || string(queued.EncryptedRefreshToken) != "encrypted-token" {
+			t.Fatalf("queued revocation = %+v, %v", queued, err)
+		}
+		if _, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderApple, user.ID); !errors.Is(err, store.ErrorAuthProviderNotFound) {
+			t.Fatalf("Apple provider still exists: %v", err)
+		}
+	})
+}
+
+func TestUnlinkAppleDoesNotTrapUserWhenNoStoredTokenExists(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "apple-unreadable@example.com", Username: "apple-unreadable"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		subject := "apple-unreadable-subject"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{UserID: user.ID, Provider: domain.ProviderApple, ProviderUserID: &subject}); err != nil {
+			t.Fatal(err)
+		}
+		passwordHash := "password-hash"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{UserID: user.ID, Provider: domain.ProviderPassword, PasswordHash: &passwordHash}); err != nil {
+			t.Fatal(err)
+		}
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx})
+
+		if err := svc.UnlinkAuthProvider(ctx, user.ID, domain.ProviderApple); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderApple, user.ID); !errors.Is(err, store.ErrorAuthProviderNotFound) {
+			t.Fatalf("Apple provider still exists: %v", err)
+		}
+	})
+}
+
 func TestAddAndChangePasswordQueueSecurityNotifications(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -2156,38 +2331,44 @@ func TestChangePasswordRollsBackWhenSessionAuthenticationCannotBeUpdated(t *test
 
 func TestChangePasswordRollsBackWhenSecurityEventCannotBePersisted(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
+	ctx := context.Background()
+	suffix := uuid.NewString()
 
-	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
-		currentHash, err := Hash("current-password")
-		if err != nil {
-			t.Fatal(err)
-		}
-		user := createPasswordUser(t, ctx, tdb, "password-event-rollback@example.com", "password-event-rollback", currentHash)
-		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
-		if err != nil {
-			t.Fatal(err)
-		}
-		session, err := tdb.Store.CreateSession(ctx, domain.Session{
-			UserID: user.ID, ActiveOrganizationID: organization.ID,
-			ExpiresAt: time.Now().UTC().Add(time.Hour), UserAgent: "password-event-rollback",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		newHash, err := Hash("new-password")
-		if err != nil {
-			t.Fatal(err)
-		}
-		eventErr := errors.New("security event unavailable")
-		svc := New(Config{
-			Store: tdb.Store, Tx: tdb.Tx,
-			SecurityEvents: failingPasswordChangedRecorder{err: eventErr},
-		})
-		if err := svc.ChangePassword(ctx, user.ID, session.ID, "current-password", newHash); !errors.Is(err, eventErr) {
-			t.Fatalf("ChangePassword error = %v, want %v", err, eventErr)
-		}
+	currentHash, err := Hash("current-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := createPasswordUser(t, ctx, tdb, "password-event-rollback-"+suffix+"@example.com", "password-event-rollback-"+suffix, currentHash)
+	organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = tdb.Store.DeleteUser(context.Background(), user.ID)
+		_ = tdb.Store.DeleteOrganization(context.Background(), organization.ID)
+	})
+	session, err := tdb.Store.CreateSession(ctx, domain.Session{
+		UserID: user.ID, ActiveOrganizationID: organization.ID,
+		ExpiresAt: time.Now().UTC().Add(time.Hour), UserAgent: "password-event-rollback",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newHash, err := Hash("new-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventErr := errors.New("security event unavailable")
+	svc := New(Config{
+		Store: tdb.Store, Tx: tdb.Tx,
+		SecurityEvents: failingPasswordChangedRecorder{err: eventErr},
+	})
+	if err := svc.ChangePassword(ctx, user.ID, session.ID, "current-password", newHash); !errors.Is(err, eventErr) {
+		t.Fatalf("ChangePassword error = %v, want %v", err, eventErr)
+	}
 
-		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderPassword, user.ID)
+	testutil.WithRollbackTx(t, tdb, func(assertCtx context.Context) {
+		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(assertCtx, domain.ProviderPassword, user.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2195,14 +2376,14 @@ func TestChangePasswordRollsBackWhenSecurityEventCannotBePersisted(t *testing.T)
 		if err != nil || !valid {
 			t.Fatalf("original password was not preserved, valid=%t err=%v", valid, err)
 		}
-		persistedSession, err := tdb.Store.GetSessionByID(ctx, session.ID)
+		persistedSession, err := tdb.Store.GetSessionByID(assertCtx, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if persistedSession.AuthenticatedAt != nil || persistedSession.AuthenticationMethod != "" {
 			t.Fatalf("session authentication survived event failure: %+v", persistedSession)
 		}
-		if got := testutil.CountEmailJobs(t, ctx, user.Email, domain.EmailTemplatePasswordChanged); got != 0 {
+		if got := testutil.CountEmailJobs(t, assertCtx, user.Email, domain.EmailTemplatePasswordChanged); got != 0 {
 			t.Fatalf("password-changed email jobs = %d, want 0", got)
 		}
 	})

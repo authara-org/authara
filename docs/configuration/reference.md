@@ -31,6 +31,7 @@ Examples:
 ```
 APP_ENV
 LOG_LEVEL
+AUTHARA_APP_NAME
 AUTHARA_DEFAULT_RETURN_TO
 ```
 
@@ -86,6 +87,13 @@ Example:
 ```
 PUBLIC_URL
 ```
+
+### Branding
+
+`AUTHARA_APP_NAME` controls the application name shown on the hosted sign-in
+and account-creation pages. It defaults to `Authara`. When the environment
+variable is absent, operators can change it dynamically from the runtime
+settings page.
 
 ---
 
@@ -170,6 +178,7 @@ Controls organization mode and invitation expiry.
 Changing it after users or organizations exist is currently unsupported.
 
 Modes:
+
 - `personal`: direct signup creates a hidden personal org; invitations are disabled.
 - `single`: direct signup creates one team org; invite signup joins the invited org.
 - `multi`: direct signup creates a personal org; invite signup also joins the invited org.
@@ -220,6 +229,12 @@ Examples:
 ```
 AUTHARA_OAUTH_PROVIDERS
 AUTHARA_OAUTH_GOOGLE_CLIENT_ID
+AUTHARA_OAUTH_APPLE_CLIENT_ID
+AUTHARA_OAUTH_APPLE_TEAM_ID
+AUTHARA_OAUTH_APPLE_KEY_ID
+AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64
+AUTHARA_OAUTH_APPLE_TOKEN_ACTIVE_KEY_ID
+AUTHARA_OAUTH_APPLE_TOKEN_KEYS
 ```
 
 ---

@@ -10,6 +10,7 @@ type AuthProviderKind string
 const (
 	AuthProviderPassword AuthProviderKind = "password"
 	AuthProviderGoogle   AuthProviderKind = "google"
+	AuthProviderApple    AuthProviderKind = "apple"
 )
 
 type AuthProviderFlow string
@@ -39,7 +40,9 @@ func AuthProvidersFromDomain(
 	var (
 		hasPassword   bool
 		hasGoogle     bool
+		hasApple      bool
 		googleEnabled bool
+		appleEnabled  bool
 	)
 
 	for _, p := range providers {
@@ -48,17 +51,21 @@ func AuthProvidersFromDomain(
 			hasPassword = true
 		case domain.ProviderGoogle:
 			hasGoogle = true
+		case domain.ProviderApple:
+			hasApple = true
 		}
 	}
 
 	for _, p := range oauthProviders {
-		if p.Name == domain.ProviderGoogle {
+		switch p.Name {
+		case domain.ProviderGoogle:
 			googleEnabled = true
-			break
+		case domain.ProviderApple:
+			appleEnabled = true
 		}
 	}
 
-	out := make([]AuthProvider, 0, 2)
+	out := make([]AuthProvider, 0, 3)
 
 	if hasPassword {
 		out = append(out, AuthProvider{
@@ -108,6 +115,21 @@ func AuthProvidersFromDomain(
 				ActionURL:   "/auth/providers/google/link",
 			})
 		}
+	}
+
+	if appleEnabled {
+		provider := AuthProvider{
+			ID: "apple", Kind: AuthProviderApple, Title: "Apple",
+			Subtitle:    "Connect your Apple account for faster sign-in.",
+			ActionLabel: "Link Apple", ActionURL: "/auth/providers/apple/link",
+		}
+		if hasApple {
+			provider.Linked = true
+			provider.Subtitle = "Sign in with your Apple account."
+			provider.ActionLabel = "Unlink"
+			provider.ActionURL = "/auth/providers/apple/unlink"
+		}
+		out = append(out, provider)
 	}
 
 	return out

@@ -46,5 +46,6 @@ export function closeAccountPasswordDialog(): void {
   const elements = dialogElements();
   if (!elements) return;
   if (elements.dialog.open) elements.dialog.close();
+  unlockModalScroll(scrollLockOwner);
   elements.content.replaceChildren();
 }

@@ -40,6 +40,7 @@ type codeEnvSpec struct {
 }
 
 var dynamicHybridSettings = map[string]struct{}{
+	"AUTHARA_APP_NAME":                               {},
 	"AUTHARA_DEFAULT_RETURN_TO":                      {},
 	"AUTHARA_USERNAME_LOGIN_ENABLED":                 {},
 	"AUTHARA_EMAIL_VERIFICATION_REQUIRED":            {},

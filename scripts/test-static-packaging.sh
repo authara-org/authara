@@ -265,13 +265,23 @@ BROWSER_PID=""
 kill "$WATCHDOG_PID" 2>/dev/null || true
 wait "$WATCHDOG_PID" 2>/dev/null || true
 
-grep -q 'data-editor-initialized="true"' "$TEST_ROOT/editor.html"
-grep -q 'class="cm-editor' "$TEST_ROOT/editor.html"
-grep -q 'data-sensitive-action-retried="true"' "$TEST_ROOT/editor.html"
-grep -q 'data-password-dialog-updated="true"' "$TEST_ROOT/editor.html"
-grep -q 'data-modal-scroll-lock-seen="true"' "$TEST_ROOT/editor.html"
-grep -q 'data-authentication-skeleton-seen="true"' "$TEST_ROOT/editor.html"
-grep -q 'data-page-load-count="1"' "$TEST_ROOT/editor.html"
+assert_dom_contains() {
+  pattern="$1"
+  description="$2"
+  if ! grep -q "$pattern" "$TEST_ROOT/editor.html"; then
+    echo "Production static test did not observe: $description." >&2
+    grep -Eo '<(html|body|dialog)[^>]*>' "$TEST_ROOT/editor.html" >&2 || true
+    exit 1
+  fi
+}
+
+assert_dom_contains 'data-editor-initialized="true"' "editor initialization"
+assert_dom_contains 'class="cm-editor' "CodeMirror rendering"
+assert_dom_contains 'data-sensitive-action-retried="true"' "sensitive-action retry"
+assert_dom_contains 'data-password-dialog-updated="true"' "password-dialog update"
+assert_dom_contains 'data-modal-scroll-lock-seen="true"' "modal scroll locking"
+assert_dom_contains 'data-authentication-skeleton-seen="true"' "authentication loading state"
+assert_dom_contains 'data-page-load-count="1"' "single page load"
 if grep -Eq '<(html|body)[^>]*class="[^"]*modal-scroll-locked' "$TEST_ROOT/editor.html"; then
   echo "Page remained scroll-locked after dialogs closed." >&2
   grep -Eo '<(html|body|dialog)[^>]*>' "$TEST_ROOT/editor.html" >&2 || true

@@ -10,15 +10,27 @@ import (
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/session"
+	"github.com/google/uuid"
 )
 
 type GoogleVerifier interface {
 	VerifyIDToken(context.Context, string, string) (*google.Identity, error)
+}
+
+type AppleClient interface {
+	Exchange(context.Context, string, string) (apple.ExchangeResult, error)
+	Revoke(context.Context, string) error
+}
+
+type AppleCredentialStore interface {
+	QueueRevocation(context.Context, string) error
+	StageProviderLink(context.Context, uuid.UUID, string, time.Time) error
 }
 
 func (h *APIHandler) passwordPolicyError(err error) (response.ErrorCode, string) {
@@ -45,17 +57,19 @@ func (h *APIHandler) rateLimitResult(allowed bool, err error, limitedMessage str
 }
 
 type APIHandler struct {
-	Auth           *auth.Service
-	Passkeys       *passkey.Service
-	Session        *session.Service
-	Organizations  *organization.Service
-	Challenge      *challenge.Service
-	Verification   *challenge.VerificationCodeService
-	Limiter        ratelimiter.AuthLimiter
-	Logger         *slog.Logger
-	Google         GoogleVerifier
-	OAuthProviders oauth.OAuthProviders
-	Config         RuntimePolicyReader
+	Auth             *auth.Service
+	Passkeys         *passkey.Service
+	Session          *session.Service
+	Organizations    *organization.Service
+	Challenge        *challenge.Service
+	Verification     *challenge.VerificationCodeService
+	Limiter          ratelimiter.AuthLimiter
+	Logger           *slog.Logger
+	Google           GoogleVerifier
+	Apple            AppleClient
+	AppleCredentials AppleCredentialStore
+	OAuthProviders   oauth.OAuthProviders
+	Config           RuntimePolicyReader
 
 	ChallengeEnabled     bool
 	UsernameLoginEnabled bool

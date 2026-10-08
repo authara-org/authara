@@ -227,9 +227,29 @@ func TestAdminValidateRejectsInvalidAuditRetention(t *testing.T) {
 }
 
 func TestUIValidateRejectsUnsafeDefaultReturnTo(t *testing.T) {
-	cfg := UI{DefaultReturnTo: "//evil.example"}
+	cfg := UI{AppName: DefaultAppName, DefaultReturnTo: "//evil.example"}
 
 	if err := cfg.validate(); err == nil {
 		t.Fatal("expected unsafe default return_to validation error")
+	}
+}
+
+func TestUIValidateNormalizesAppName(t *testing.T) {
+	cfg := UI{AppName: "  Example App  ", DefaultReturnTo: "/"}
+
+	if err := cfg.validate(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AppName != "Example App" {
+		t.Fatalf("app name = %q, want %q", cfg.AppName, "Example App")
+	}
+}
+
+func TestUIValidateRejectsInvalidAppName(t *testing.T) {
+	for _, appName := range []string{"   ", strings.Repeat("a", maxAppNameRunes+1)} {
+		cfg := UI{AppName: appName, DefaultReturnTo: "/"}
+		if err := cfg.validate(); err == nil {
+			t.Fatalf("expected app name %q to be rejected", appName)
+		}
 	}
 }

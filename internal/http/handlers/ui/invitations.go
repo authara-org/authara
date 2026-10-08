@@ -46,7 +46,7 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 		description := "Sign in or create an account with " + preview.Invitation.Email + " to accept this invitation."
 		showSignupForm := false
 		actions := []authview.InvitationAction{
-			{Label: "Log in with invited email", Href: invitationAuthURL("/auth/invitations/login", token), Primary: true},
+			{Label: "Sign in with invited email", Href: invitationAuthURL("/auth/invitations/login", token), Primary: true},
 			{Label: "Create account", Href: invitationAuthURL("/auth/invitations/signup", token)},
 		}
 		if h.Organizations.Mode() == organization.OrgModeSingle {
@@ -71,19 +71,19 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 						h.renderInternalError(w, r)
 						return
 					}
-					title = "Log in to accept this invitation"
+					title = "Sign in to accept this invitation"
 					description = "This invitation was sent to an existing account."
 					showSignupForm = false
 					if len(memberships) == 0 {
 						actions = []authview.InvitationAction{{
-							Label:   "Log in with invited email",
+							Label:   "Sign in with invited email",
 							Href:    invitationAuthURL("/auth/invitations/login", token),
 							Primary: true,
 						}}
 					} else {
-						description = "Log in to review what is required before joining " + preview.Organization.Name + "."
+						description = "Sign in to review what is required before joining " + preview.Organization.Name + "."
 						actions = []authview.InvitationAction{{
-							Label: "Log in with invited email",
+							Label: "Sign in with invited email",
 							Href: redirect.WithReturnTo(
 								"/auth/login",
 								invitationAuthURL("/auth/invitations/accept", token),
@@ -210,7 +210,7 @@ func (h *UIHandler) invitationPageForUser(
 		default:
 			page.Description = "This invitation was sent to " + preview.Invitation.Email + ". You are signed in as " + user.Email + "."
 			page.Actions = []authview.InvitationAction{{
-				Label:   "Log in with invited email",
+				Label:   "Sign in with invited email",
 				Href:    invitationAuthURL("/auth/invitations/login", rawToken),
 				Primary: true,
 			}}
@@ -223,7 +223,7 @@ func (h *UIHandler) invitationPageForUser(
 		} else {
 			page.Description = "This invitation was sent to " + preview.Invitation.Email + ". You are signed in as " + user.Email + "."
 			page.Actions = []authview.InvitationAction{
-				{Label: "Log in with invited email", Href: invitationAuthURL("/auth/invitations/login", rawToken), Primary: true},
+				{Label: "Sign in with invited email", Href: invitationAuthURL("/auth/invitations/login", rawToken), Primary: true},
 				{Label: "Create account", Href: invitationAuthURL("/auth/invitations/signup", rawToken)},
 			}
 		}
@@ -368,7 +368,7 @@ func (h *UIHandler) InvitationSignupPost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if exists {
-		msg := "An account already exists for this invitation email. Use invite login instead."
+		msg := "An account already exists for this invitation email. Use invitation sign-in instead."
 		if h.Organizations.Mode() == organization.OrgModeSingle {
 			msg = "An account already exists for this invitation email. In single-organization mode, existing accounts cannot accept invitations."
 		}

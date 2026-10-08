@@ -32,7 +32,7 @@ func (h *UIHandler) SignupPage(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		http.StatusOK,
-		authview.Signup(h.OAuthProviders.Providers),
+		authview.Signup(h.OAuthProviders.Providers, h.appName()),
 	)
 }
 

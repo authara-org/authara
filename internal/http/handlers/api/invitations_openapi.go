@@ -140,7 +140,7 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 	}
 	exists, err := h.Auth.UserExistsByEmail(ctx, preview.Invitation.Email)
 	if err != nil {
-		return authenticateAndAcceptInvitationWithGoogleError(response.CodeInternalError, "Invitation login error."), nil
+		return authenticateAndAcceptInvitationWithGoogleError(response.CodeInternalError, "Invitation sign-in error."), nil
 	}
 	if (request.Body.Flow == contract.Signup && exists) || (request.Body.Flow == contract.Login && !exists) {
 		return authenticateAndAcceptInvitationWithGoogleError(codeInvitationFlowMismatch, "Invitation signup or login flow does not match the account."), nil
@@ -296,6 +296,61 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithGoogle(ctx context.Context, 
 	return contract.CompleteAccountRecoveryLinkWithGoogle200HeadersResponse{Header: header, Body: body}, nil
 }
 
+func (h *APIHandler) CompleteAccountRecoveryLinkWithApple(ctx context.Context, request contract.CompleteAccountRecoveryLinkWithAppleRequestObject) (contract.CompleteAccountRecoveryLinkWithAppleResponseObject, error) {
+	r, ok := contractRequest(ctx)
+	if !ok {
+		return completeAccountRecoveryLinkWithAppleError(response.CodeInternalError, "API contract error."), nil
+	}
+	if request.Body == nil {
+		return completeAccountRecoveryLinkWithAppleError(response.CodeInvalidRequest, "Invalid JSON body."), nil
+	}
+	_, targetUser, code, message, ok := h.recoveryLinkAndUser(ctx, request.LinkID)
+	if !ok {
+		return completeAccountRecoveryLinkWithAppleError(code, message), nil
+	}
+	invitationToken := optionalString(request.Body.InvitationToken)
+	if invitationToken != "" {
+		if code, message, ok := h.validateRecoveryInvitation(ctx, invitationToken, targetUser.Email); !ok {
+			return completeAccountRecoveryLinkWithAppleError(code, message), nil
+		}
+	}
+	result, appleHeader, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State)
+	if !ok {
+		if code == response.CodeUnauthorized {
+			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidAssertion); err != nil {
+				return appleRecoveryErrorWithHeaders(response.CodeInternalError, "Account recovery error.", appleHeader), nil
+			}
+		}
+		return appleRecoveryErrorWithHeaders(code, message, appleHeader), nil
+	}
+	user, err := h.Auth.CompleteAccountRecoveryProviderLinkWithProviderProof(
+		ctx, request.LinkID, domain.ProviderApple, result.Identity.OAuthID, time.Now().UTC(),
+	)
+	if err != nil {
+		h.discardAppleAuthorization(ctx, result.RefreshToken)
+		code, message := recoveryError(err)
+		return appleRecoveryErrorWithHeaders(code, message, appleHeader), nil
+	}
+	if result.RefreshToken != "" {
+		if err := h.Auth.SaveAppleCredential(ctx, user.ID, result.RefreshToken); err != nil {
+			h.discardAppleAuthorization(ctx, result.RefreshToken)
+			if h.Logger != nil {
+				h.Logger.Error("could not refresh Apple credential after account proof", "user_id", user.ID, "err", err)
+			}
+		}
+	}
+	audience := token.AudienceApp
+	if request.Params.Audience != nil {
+		audience = token.Audience(*request.Params.Audience)
+	}
+	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience, domain.AuthenticationMethodApple)
+	if !ok {
+		return appleRecoveryErrorWithHeaders(code, message, appleHeader), nil
+	}
+	copyHeaders(header, appleHeader)
+	return contract.CompleteAccountRecoveryLinkWithApple200HeadersResponse{Header: header, Body: body}, nil
+}
+
 func (h *APIHandler) pendingInvitation(ctx context.Context, rawToken string) (organization.InvitationPreview, response.ErrorCode, string, bool) {
 	preview, err := h.Organizations.InvitationByToken(ctx, strings.TrimSpace(rawToken))
 	if err != nil {
@@ -337,6 +392,10 @@ func (h *APIHandler) startAccountRecoveryLink(ctx context.Context, identity *goo
 		case domain.ProviderGoogle:
 			if h.Google != nil {
 				proofs = append(proofs, contract.AccountRecoveryLinkProofMethodsGoogle)
+			}
+		case domain.ProviderApple:
+			if h.Apple != nil {
+				proofs = append(proofs, contract.AccountRecoveryLinkProofMethodsApple)
 			}
 		}
 	}
@@ -479,7 +538,7 @@ func invitationOrGoogleError(err error) (response.ErrorCode, string) {
 	if code == response.CodeForbidden {
 		return code, "Google login is not allowed for this account."
 	}
-	return code, "Google invitation login error."
+	return code, "Google invitation sign-in error."
 }
 
 func recoveryError(err error) (response.ErrorCode, string) {

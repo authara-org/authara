@@ -109,6 +109,9 @@ func Load() (*Config, error) {
 	if err := cfg.Token.parse(); err != nil {
 		return nil, err
 	}
+	if err := cfg.OAuth.parse(); err != nil {
+		return nil, err
+	}
 	if err := cfg.Session.parse(); err != nil {
 		return nil, err
 	}
@@ -136,6 +139,9 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) validate() error {
+	if c.OAuth.providerEnabled("apple") && c.Values.AppEnv == "prod" && !strings.HasPrefix(strings.ToLower(c.Values.PublicURL), "https://") {
+		return fmt.Errorf("PUBLIC_URL must use https when Apple sign-in is enabled in production")
+	}
 	if c.Token.AccessTokenTTL >= c.Session.RefreshTokenTTL {
 		return fmt.Errorf(
 			"invalid token configuration: access token TTL (%s) "+

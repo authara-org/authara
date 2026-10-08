@@ -9,6 +9,9 @@ import {
   beginPasskeyRegistration,
   changePassword,
   changeUsername,
+  completeAccountRecoveryLinkWithApple,
+  completeAccountRecoveryLinkWithGoogle,
+  completeAccountRecoveryLinkWithPassword,
   createOrganization,
   deleteCurrentAccount,
   deleteOrganization,
@@ -17,15 +20,20 @@ import {
   finishPasskeyRegistration,
   finishPasskeyAuthentication,
   getAccount,
+  getAppleOptions,
   getGoogleOptions,
   getUserWithRefresh,
   inviteMember,
   isRecentAuthenticationRequired,
   linkGoogle,
+  linkApple,
   login,
   loginWithGoogle,
+  loginWithGoogleOrStartRecovery,
+  loginWithApple,
   loadDashboard,
   reauthenticateWithGoogle,
+  reauthenticateWithApple,
   reauthenticateWithPassword,
   removeOrganizationMember,
   resendSignupChallenge,
@@ -35,6 +43,7 @@ import {
   revokeInvitation,
   signupDirect,
   startEmailChange,
+  startGoogleAccountRecoveryLink,
   startSignupChallenge,
   transferOrganizationOwnership,
   unlinkAuthMethod,
@@ -375,6 +384,147 @@ test("Google authentication initializes a nonce and exchanges the credential", a
   });
 });
 
+test("Apple authentication obtains a server flow and exchanges only code and state", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/oauth/apple/options")) {
+      return json({
+        client_id: "apple-client",
+        redirect_uri: "https://auth.example.com/auth/oauth/apple/callback",
+        state: "apple-state",
+        nonce: "apple-nonce",
+      });
+    }
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    return json({ user: { id: "user-1" } });
+  };
+
+  const options = await getAppleOptions();
+  await loginWithApple("apple-code", options.state);
+
+  assert.deepEqual(
+    calls.map(
+      ({ url, options: requestOptions }) =>
+        `${requestOptions.method || "GET"} ${url}`,
+    ),
+    [
+      "GET /auth/api/v1/oauth/apple/options",
+      "GET /auth/api/v1/csrf",
+      "POST /auth/api/v1/oauth/apple?audience=app",
+    ],
+  );
+  assert.deepEqual(JSON.parse(calls[2].options.body), {
+    code: "apple-code",
+    state: "apple-state",
+  });
+});
+
+test("account collision recovery supports password, Google, and Apple proof", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    if (url.endsWith("/provider-links/recovery/google")) {
+      return json(
+        {
+          link_id: "link-1",
+          proof_methods: ["password", "google", "apple"],
+        },
+        202,
+      );
+    }
+    return json({ user: { id: "user-1" } });
+  };
+
+  const recovery = await startGoogleAccountRecoveryLink(
+    "new-google-token",
+    "google-nonce",
+  );
+  await completeAccountRecoveryLinkWithPassword(recovery.link_id, "password123");
+  await completeAccountRecoveryLinkWithGoogle(
+    recovery.link_id,
+    "existing-google-token",
+    "proof-nonce",
+  );
+  await completeAccountRecoveryLinkWithApple(
+    recovery.link_id,
+    "apple-code",
+    "apple-state",
+  );
+
+  const mutations = calls.filter(({ options }) => options.method === "POST");
+  assert.deepEqual(
+    mutations.map(({ url }) => url),
+    [
+      "/auth/api/v1/provider-links/recovery/google",
+      "/auth/api/v1/provider-links/recovery/link-1/password?audience=app",
+      "/auth/api/v1/provider-links/recovery/link-1/google?audience=app",
+      "/auth/api/v1/provider-links/recovery/link-1/apple?audience=app",
+    ],
+  );
+  assert.deepEqual(JSON.parse(mutations[0].options.body), {
+    credential: "new-google-token",
+    nonce: "google-nonce",
+  });
+  assert.deepEqual(JSON.parse(mutations[3].options.body), {
+    code: "apple-code",
+    state: "apple-state",
+  });
+});
+
+test("Google login turns account_link_required into a recovery flow", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    if (url.includes("/oauth/google?")) {
+      return json(
+        {
+          error: {
+            code: "account_link_required",
+            message: "Confirm the existing account.",
+          },
+        },
+        409,
+      );
+    }
+    if (url.endsWith("/provider-links/recovery/google")) {
+      return json(
+        { link_id: "link-1", proof_methods: ["apple"] },
+        202,
+      );
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  const result = await loginWithGoogleOrStartRecovery(
+    "google-token",
+    "google-nonce",
+  );
+
+  assert.equal(result.session, null);
+  assert.deepEqual(result.recovery, {
+    link_id: "link-1",
+    proof_methods: ["apple"],
+  });
+  assert.deepEqual(
+    calls
+      .filter(({ options }) => options.method === "POST")
+      .map(({ url, options }) => [url, JSON.parse(options.body)]),
+    [
+      [
+        "/auth/api/v1/oauth/google?audience=app",
+        { credential: "google-token", nonce: "google-nonce" },
+      ],
+      [
+        "/auth/api/v1/provider-links/recovery/google",
+        { credential: "google-token", nonce: "google-nonce" },
+      ],
+    ],
+  );
+});
+
 test("recent-auth errors retain the challenge needed by an API-only client", async () => {
   const calls = [];
   let unlinkAttempts = 0;
@@ -474,6 +624,7 @@ test("account management uses only browser API routes", async () => {
   await addPassword("password123");
   await changePassword("password123", "password456");
   await linkGoogle("google-token", "google-nonce");
+  await linkApple("apple-code", "apple-state");
   await unlinkAuthMethod("google");
   await deletePasskey("passkey/1");
   await revokeOtherSessions();
@@ -490,6 +641,7 @@ test("account management uses only browser API routes", async () => {
       "POST /auth/api/v1/account/password",
       "PUT /auth/api/v1/account/password",
       "POST /auth/api/v1/account/auth-methods/google",
+      "POST /auth/api/v1/account/auth-methods/apple",
       "DELETE /auth/api/v1/account/auth-methods/google",
       "DELETE /auth/api/v1/account/passkeys/passkey%2F1",
       "DELETE /auth/api/v1/account/sessions/others",
@@ -503,7 +655,7 @@ test("account management uses only browser API routes", async () => {
   );
 });
 
-test("Google and passkey reauthentication use the challenge in every request", async () => {
+test("external providers and passkeys use the reauthentication challenge", async () => {
   const calls = [];
 
   globalThis.fetch = async (url, options = {}) => {
@@ -522,6 +674,7 @@ test("Google and passkey reauthentication use the challenge in every request", a
   };
 
   await reauthenticateWithGoogle("auth-challenge", "google-token", "nonce");
+  await reauthenticateWithApple("auth-challenge", "apple-code", "apple-state");
   await beginPasskeyAuthentication();
   await finishPasskeyAuthentication("login-challenge", {
     id: "login-credential",
@@ -548,6 +701,11 @@ test("Google and passkey reauthentication use the challenge in every request", a
       authentication_challenge_id: "auth-challenge",
       credential: "google-token",
       nonce: "nonce",
+    },
+    {
+      authentication_challenge_id: "auth-challenge",
+      code: "apple-code",
+      state: "apple-state",
     },
     null,
     {

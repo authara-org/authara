@@ -138,6 +138,7 @@ Controls organization mode, invitation expiry, and the server-to-server token fo
 Changing it after users or organizations exist is currently unsupported.
 
 Modes:
+
 - `personal`: direct signup creates a hidden personal org; invitations are disabled.
 - `single`: direct signup creates one team org; invite signup joins the invited org.
 - `multi`: direct signup creates a personal org; invite signup also joins the invited org.
@@ -185,6 +186,12 @@ Examples:
 ```
 AUTHARA_OAUTH_PROVIDERS
 AUTHARA_OAUTH_GOOGLE_CLIENT_ID
+AUTHARA_OAUTH_APPLE_CLIENT_ID
+AUTHARA_OAUTH_APPLE_TEAM_ID
+AUTHARA_OAUTH_APPLE_KEY_ID
+AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64
+AUTHARA_OAUTH_APPLE_TOKEN_ACTIVE_KEY_ID
+AUTHARA_OAUTH_APPLE_TOKEN_KEYS
 ```
 
 ---

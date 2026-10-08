@@ -114,6 +114,22 @@ func (s *Store) GetAuthProviderByMethodAndUserID(ctx context.Context, provider d
 	return toDomainAuthProvider(m), nil
 }
 
+func (s *Store) GetAuthProviderByMethodAndUserIDForUpdate(ctx context.Context, provider domain.Provider, userID uuid.UUID) (domain.AuthProvider, error) {
+	var m model.AuthProvider
+
+	err := scanAuthProvider(s.queryRow(ctx, `
+		SELECT `+authProviderColumns+`
+		FROM auth_providers
+		WHERE user_id = $1 AND provider = $2
+		FOR UPDATE
+	`, userID, string(provider)), &m)
+	if err != nil {
+		return domain.AuthProvider{}, mapNoRows(err, ErrorAuthProviderNotFound)
+	}
+
+	return toDomainAuthProvider(m), nil
+}
+
 func (s *Store) GetAuthProviderByProviderAndProviderUserID(ctx context.Context, provider domain.Provider, providerUserID string) (domain.AuthProvider, error) {
 	var m model.AuthProvider
 

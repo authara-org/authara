@@ -117,6 +117,68 @@ export function loginWithGoogle(credential, nonce) {
   return mutate(`${API}/oauth/google?audience=app`, { credential, nonce });
 }
 
+export function getAppleOptions() {
+  return request(`${API}/oauth/apple/options`);
+}
+
+export function loginWithApple(code, state) {
+  return mutate(`${API}/oauth/apple?audience=app`, { code, state });
+}
+
+export function startGoogleAccountRecoveryLink(credential, nonce) {
+  return mutate(`${API}/provider-links/recovery/google`, {
+    credential,
+    nonce,
+  });
+}
+
+export async function loginWithGoogleOrStartRecovery(credential, nonce) {
+  try {
+    return {
+      session: await loginWithGoogle(credential, nonce),
+      recovery: null,
+    };
+  } catch (error) {
+    if (
+      !(error instanceof APIError) ||
+      error.status !== 409 ||
+      error.code !== "account_link_required"
+    ) {
+      throw error;
+    }
+  }
+
+  return {
+    session: null,
+    recovery: await startGoogleAccountRecoveryLink(credential, nonce),
+  };
+}
+
+export function completeAccountRecoveryLinkWithPassword(linkID, password) {
+  return mutate(
+    `${API}/provider-links/recovery/${encodeURIComponent(linkID)}/password?audience=app`,
+    { password },
+  );
+}
+
+export function completeAccountRecoveryLinkWithGoogle(
+  linkID,
+  credential,
+  nonce,
+) {
+  return mutate(
+    `${API}/provider-links/recovery/${encodeURIComponent(linkID)}/google?audience=app`,
+    { credential, nonce },
+  );
+}
+
+export function completeAccountRecoveryLinkWithApple(linkID, code, state) {
+  return mutate(
+    `${API}/provider-links/recovery/${encodeURIComponent(linkID)}/apple?audience=app`,
+    { code, state },
+  );
+}
+
 export function beginPasskeyAuthentication() {
   return mutate(`${API}/passkeys/authenticate/options`);
 }
@@ -342,6 +404,10 @@ export function linkGoogle(credential, nonce) {
   return mutate(`${API}/account/auth-methods/google`, { credential, nonce });
 }
 
+export function linkApple(code, state) {
+  return mutate(`${API}/account/auth-methods/apple`, { code, state });
+}
+
 export function unlinkAuthMethod(provider) {
   return mutate(
     `${API}/account/auth-methods/${encodeURIComponent(provider)}`,
@@ -399,6 +465,18 @@ export function reauthenticateWithGoogle(
     authentication_challenge_id: authenticationChallengeID,
     credential,
     nonce,
+  });
+}
+
+export function reauthenticateWithApple(
+  authenticationChallengeID,
+  code,
+  state,
+) {
+  return mutate(`${API}/reauthenticate/apple`, {
+    authentication_challenge_id: authenticationChallengeID,
+    code,
+    state,
   });
 }
 

@@ -113,6 +113,58 @@ func (h *APIHandler) ReauthenticateWithGoogle(ctx context.Context, request contr
 	return contract.ReauthenticateWithGoogle204HeadersResponse{Header: header}, nil
 }
 
+func (h *APIHandler) ReauthenticateWithApple(ctx context.Context, request contract.ReauthenticateWithAppleRequestObject) (contract.ReauthenticateWithAppleResponseObject, error) {
+	r, ok := contractRequest(ctx)
+	if !ok {
+		return reauthenticateWithAppleError(response.CodeInternalError, "API contract error."), nil
+	}
+	userID, userOK := httpctx.UserID(ctx)
+	sessionID, sessionOK := httpctx.SessionID(ctx)
+	if !userOK || !sessionOK {
+		return reauthenticateWithAppleError(response.CodeUnauthorized, "Unauthorized."), nil
+	}
+	if request.Body == nil {
+		return reauthenticateWithAppleError(response.CodeInvalidRequest, "Invalid JSON body."), nil
+	}
+	now := time.Now().UTC()
+	if err := h.Session.ValidateAuthenticationChallenge(ctx, userID, sessionID, request.Body.AuthenticationChallengeId, now); err != nil {
+		if errors.Is(err, session.ErrAuthenticationChallengeInvalid) {
+			return reauthenticateWithAppleError(response.CodeInvalidAuthenticationChallenge, "Authentication challenge is invalid or expired."), nil
+		}
+		return reauthenticateWithAppleError(response.CodeInternalError, "Session error."), nil
+	}
+	result, header, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State)
+	if !ok {
+		if code == response.CodeUnauthorized {
+			if err := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidAssertion); err != nil {
+				return appleReauthenticationErrorWithHeaders(response.CodeInternalError, "Authentication error.", header), nil
+			}
+		}
+		return appleReauthenticationErrorWithHeaders(code, message, header), nil
+	}
+	if err := h.Auth.VerifyExternalIdentity(ctx, userID, domain.ProviderApple, result.Identity.OAuthID); err != nil {
+		h.discardAppleAuthorization(ctx, result.RefreshToken)
+		if errors.Is(err, auth.ErrInvalidCredentials) {
+			if recordErr := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidCredentials); recordErr != nil {
+				return appleReauthenticationErrorWithHeaders(response.CodeInternalError, "Authentication error.", header), nil
+			}
+			return appleReauthenticationErrorWithHeaders(response.CodeUnauthorized, "Apple identity is not linked to this account.", header), nil
+		}
+		return appleReauthenticationErrorWithHeaders(response.CodeInternalError, "Authentication error.", header), nil
+	}
+	if err := h.Auth.SaveAppleCredential(ctx, userID, result.RefreshToken); err != nil {
+		h.discardAppleAuthorization(ctx, result.RefreshToken)
+		return appleReauthenticationErrorWithHeaders(response.CodeInternalError, "Apple credential storage error.", header), nil
+	}
+	if err := h.Session.CompleteAuthenticationChallenge(ctx, userID, sessionID, request.Body.AuthenticationChallengeId, domain.AuthenticationMethodApple, now); err != nil {
+		if errors.Is(err, session.ErrAuthenticationChallengeInvalid) {
+			return appleReauthenticationErrorWithHeaders(response.CodeInvalidAuthenticationChallenge, "Authentication challenge is invalid or expired.", header), nil
+		}
+		return appleReauthenticationErrorWithHeaders(response.CodeInternalError, "Session error.", header), nil
+	}
+	return contract.ReauthenticateWithApple204HeadersResponse{Header: header}, nil
+}
+
 func (h *APIHandler) BeginPasskeyReauthentication(ctx context.Context, request contract.BeginPasskeyReauthenticationRequestObject) (contract.BeginPasskeyReauthenticationResponseObject, error) {
 	r, requestOK := contractRequest(ctx)
 	if !requestOK {
@@ -236,6 +288,22 @@ func reauthenticateWithGoogleError(code response.ErrorCode, message string) cont
 		return contract.ReauthenticateWithGoogle409JSONResponse(body)
 	default:
 		return contract.ReauthenticateWithGoogle500JSONResponse(body)
+	}
+}
+
+func reauthenticateWithAppleError(code response.ErrorCode, message string) contract.ReauthenticateWithAppleResponseObject {
+	body := apiErrorBody(code, message)
+	switch code {
+	case response.CodeInvalidRequest:
+		return contract.ReauthenticateWithApple400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case response.CodeUnauthorized:
+		return contract.ReauthenticateWithApple401JSONResponse(body)
+	case response.CodeNotFound:
+		return contract.ReauthenticateWithApple404JSONResponse(body)
+	case response.CodeInvalidAuthenticationChallenge:
+		return contract.ReauthenticateWithApple409JSONResponse(body)
+	default:
+		return contract.ReauthenticateWithApple500JSONResponse(body)
 	}
 }
 

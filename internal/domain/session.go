@@ -29,6 +29,7 @@ const (
 	AuthenticationMethodPassword AuthenticationMethod = "password"
 	AuthenticationMethodPasskey  AuthenticationMethod = "passkey"
 	AuthenticationMethodGoogle   AuthenticationMethod = "google"
+	AuthenticationMethodApple    AuthenticationMethod = "apple"
 )
 
 type AuthenticationChallenge struct {

@@ -322,13 +322,58 @@ func (h *APIHandler) LinkCurrentUserGoogle(ctx context.Context, request contract
 	return contract.LinkCurrentUserGoogle204HeadersResponse{Header: header}, nil
 }
 
+func (h *APIHandler) LinkCurrentUserApple(ctx context.Context, request contract.LinkCurrentUserAppleRequestObject) (contract.LinkCurrentUserAppleResponseObject, error) {
+	r, ok := contractRequest(ctx)
+	if !ok {
+		return linkCurrentUserAppleError(responseCodeInternalError(), "API contract error."), nil
+	}
+	userID, userOK := httpctx.UserID(ctx)
+	sessionID, sessionOK := httpctx.SessionID(ctx)
+	if !userOK || !sessionOK {
+		return linkCurrentUserAppleError(responseCodeUnauthorized(), "Unauthorized."), nil
+	}
+	if request.Body == nil {
+		return linkCurrentUserAppleError(responseCodeInvalidRequest(), "Invalid Apple authorization."), nil
+	}
+	result, header, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State)
+	if !ok {
+		return appleLinkErrorWithHeaders(code, message, header), nil
+	}
+	user, err := h.Auth.GetUser(ctx, userID)
+	if err != nil {
+		h.discardAppleAuthorization(ctx, result.RefreshToken)
+		return appleLinkErrorWithHeaders(responseCodeInternalError(), "Could not link Apple.", header), nil
+	}
+	linkID, err := h.Auth.StartProviderLink(ctx, userID, sessionID, domain.ProviderApple, time.Now().UTC())
+	if err == nil {
+		// An authenticated link is bound to Apple's stable subject. Apple's email
+		// is not required here and must not replace the Authara account email.
+		err = h.Auth.CompleteAppleProviderLink(
+			ctx, linkID, userID, sessionID, result.Identity.OAuthID,
+			user.Email, true, result.RefreshToken, time.Now().UTC(),
+		)
+	}
+	if err != nil {
+		h.discardAppleAuthorization(ctx, result.RefreshToken)
+		switch {
+		case errors.Is(err, auth.ErrAuthProviderAlreadyLinked), errors.Is(err, auth.ErrAuthProviderAlreadyLinkedToUser):
+			return appleLinkErrorWithHeaders(codeAuthMethodAlreadyLinked, "Apple is already linked.", header), nil
+		case errors.Is(err, auth.ErrProviderEmailNotVerified), errors.Is(err, auth.ErrProviderDisabled):
+			return appleLinkErrorWithHeaders(responseCodeForbidden(), "Apple account cannot be linked.", header), nil
+		default:
+			return appleLinkErrorWithHeaders(responseCodeInternalError(), "Could not link Apple.", header), nil
+		}
+	}
+	return contract.LinkCurrentUserApple204HeadersResponse{Header: header}, nil
+}
+
 func (h *APIHandler) UnlinkCurrentUserAuthMethod(ctx context.Context, request contract.UnlinkCurrentUserAuthMethodRequestObject) (contract.UnlinkCurrentUserAuthMethodResponseObject, error) {
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return unlinkCurrentUserAuthMethodError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
 	provider := domain.Provider(request.Provider)
-	if provider != domain.ProviderPassword && provider != domain.ProviderGoogle {
+	if provider != domain.ProviderPassword && provider != domain.ProviderGoogle && provider != domain.ProviderApple {
 		return unlinkCurrentUserAuthMethodError(responseCodeInvalidRequest(), "Invalid authentication method."), nil
 	}
 	if err := h.Auth.UnlinkAuthProvider(ctx, userID, provider); err != nil {

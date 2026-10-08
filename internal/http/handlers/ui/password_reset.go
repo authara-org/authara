@@ -198,8 +198,8 @@ func (h *UIHandler) verifyPasswordResetChallengePost(
 	session.ClearSessionCookies(w)
 
 	c := templ.Join(
-		authview.Login(h.OAuthProviders.Providers, h.usernameLoginEnabled()),
-		toast.ToastMessage(toast.Success, "Your password has been reset. Please log in again."),
+		authview.Login(h.OAuthProviders.Providers, h.usernameLoginEnabled(), h.appName()),
+		toast.ToastMessage(toast.Success, "Your password has been reset. Please sign in again."),
 	)
 
 	_ = render.IntoBody(

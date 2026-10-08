@@ -561,7 +561,10 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		}
 	}
 
-	ui := UIPolicy{DefaultReturnTo: values[KeyUIDefaultReturnTo].(string)}
+	ui := UIPolicy{
+		AppName:         values[KeyUIAppName].(string),
+		DefaultReturnTo: values[KeyUIDefaultReturnTo].(string),
+	}
 	if _, ok := redirect.NormalizeReturnTo(ui.DefaultReturnTo); !ok {
 		return nil, fmt.Errorf("%w: default return path must be a safe relative path", ErrInvalidValue)
 	}
@@ -896,6 +899,9 @@ func parseText(definition Definition, raw string, enforceOperatorBounds bool) (a
 		}
 	default:
 		err = fmt.Errorf("unsupported type %q", definition.Type)
+	}
+	if err == nil && definition.Key == KeyUIAppName {
+		value, err = normalizeAppName(value.(string))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w for %s: %v", ErrInvalidValue, definition.Key, err)

@@ -168,6 +168,10 @@ h2 {
   margin-top: 0.35rem;
 }
 
+.recovery-form {
+  margin-top: 1.5rem;
+}
+
 .passkey-login {
   width: 100%;
   margin-top: 1rem;
@@ -178,6 +182,26 @@ h2 {
 }
 
 .google-auth.disabled {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.apple-action {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 0.75rem;
+}
+
+.apple-button {
+  width: 100%;
+  height: 44px;
+}
+
+.apple-action.pending {
+  visibility: hidden;
+}
+
+.apple-action.disabled {
   pointer-events: none;
   opacity: 0.55;
 }

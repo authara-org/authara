@@ -10,6 +10,7 @@ import (
 const (
 	cleanupBatchSize             = 1000
 	operatorAuditCleanupInterval = 24 * time.Hour
+	appleRevocationInterval      = time.Minute
 )
 
 func newCleanupCoordinator(app *App) (*maintenance.Coordinator, error) {
@@ -114,6 +115,13 @@ func newCleanupCoordinator(app *App) (*maintenance.Coordinator, error) {
 			Name:     "webhook",
 			Interval: cfg.Webhook.CleanupInterval,
 			RunBatch: app.Services.WebhookWorker.CleanupExpiredEventsBatch,
+		})
+	}
+	if app.Services.AppleCredentials != nil {
+		jobs = append(jobs, maintenance.Job{
+			Name:     "apple_token_revocations",
+			Interval: appleRevocationInterval,
+			RunBatch: app.Services.AppleCredentials.ProcessRevocationBatch,
 		})
 	}
 

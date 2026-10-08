@@ -11,13 +11,13 @@ import (
 	"github.com/authara-org/authara/internal/http/viewmodel"
 )
 
-templ Reauthenticate(hasPassword bool, hasPasskey bool, googleClientID string, authenticationChallengeID string, embedded bool) {
+templ Reauthenticate(hasPassword bool, hasPasskey bool, googleClientID string, hasApple bool, authenticationChallengeID string, embedded bool) {
 	if embedded {
 		if httpctx.IsHTMX(ctx) {
-			@ReauthenticationModalContent(hasPassword, hasPasskey, googleClientID, authenticationChallengeID)
+			@ReauthenticationModalContent(hasPassword, hasPasskey, googleClientID, hasApple, authenticationChallengeID)
 		} else {
 			@templates.EmbeddedLayout() {
-				@ReauthenticationModalContent(hasPassword, hasPasskey, googleClientID, authenticationChallengeID)
+				@ReauthenticationModalContent(hasPassword, hasPasskey, googleClientID, hasApple, authenticationChallengeID)
 			}
 		}
 	} else {
@@ -25,22 +25,22 @@ templ Reauthenticate(hasPassword bool, hasPasskey bool, googleClientID string, a
 			@AuthLayout() {
 				@CardHeader()
 				@HeaderSection("Confirm it’s you", "Authenticate again to continue with this sensitive change.")
-				@ReauthenticationMethods(hasPassword, hasPasskey, googleClientID, authenticationChallengeID, false)
+				@ReauthenticationMethods(hasPassword, hasPasskey, googleClientID, hasApple, authenticationChallengeID, false)
 			}
 		}
 	}
 }
 
-templ ReauthenticationModalContent(hasPassword bool, hasPasskey bool, googleClientID string, authenticationChallengeID string) {
+templ ReauthenticationModalContent(hasPassword bool, hasPasskey bool, googleClientID string, hasApple bool, authenticationChallengeID string) {
 	<div class="px-6 py-5">
 		<p class="mb-5 text-sm leading-relaxed text-grey-600 dark:text-grey-300">
 			Use one of your sign-in methods to continue with this sensitive change.
 		</p>
-		@ReauthenticationMethods(hasPassword, hasPasskey, googleClientID, authenticationChallengeID, true)
+		@ReauthenticationMethods(hasPassword, hasPasskey, googleClientID, hasApple, authenticationChallengeID, true)
 	</div>
 }
 
-templ ReauthenticationMethods(hasPassword bool, hasPasskey bool, googleClientID string, authenticationChallengeID string, embedded bool) {
+templ ReauthenticationMethods(hasPassword bool, hasPasskey bool, googleClientID string, hasApple bool, authenticationChallengeID string, embedded bool) {
 	if hasPasskey {
 		<div class="mb-3">
 			@button.Button(button.ButtonConfig{
@@ -88,6 +88,11 @@ templ ReauthenticationMethods(hasPassword bool, hasPasskey bool, googleClientID 
 	if googleClientID != "" {
 		<div class="mt-3" data-authentication-challenge-id={ authenticationChallengeID }>
 			@GoogleSignin("Continue", googleClientID, viewmodel.AuthProviderFlowReauthenticate, "")
+		</div>
+	}
+	if hasApple {
+		<div class="mt-3">
+			@AppleSignin("Continue", viewmodel.AuthProviderFlowReauthenticate, authenticationChallengeID, "", "")
 		</div>
 	}
 }

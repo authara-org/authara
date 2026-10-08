@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 
 import {
   APIError,
+  completeAccountRecoveryLinkWithApple,
+  completeAccountRecoveryLinkWithGoogle,
+  completeAccountRecoveryLinkWithPassword,
   createOrganization,
   deleteOrganization,
   getAccount,
@@ -11,7 +14,8 @@ import {
   isRecentAuthenticationRequired,
   loadDashboard,
   login,
-  loginWithGoogle,
+  loginWithApple,
+  loginWithGoogleOrStartRecovery,
   logout,
   refreshSession,
   removeOrganizationMember,
@@ -31,6 +35,8 @@ import {
   ReauthenticationDialog,
 } from "./account.jsx";
 import { loadGoogleIdentity } from "./google.js";
+import { authorizeWithApple } from "./apple.js";
+import { AppleCredentialButton } from "./apple-button.jsx";
 import { authenticateWithPasskey } from "./passkeys.js";
 import "./styles.css";
 
@@ -53,7 +59,7 @@ function formatDate(value) {
       }).format(date);
 }
 
-function GoogleLogin({ busy, onAuthenticated, setBusy, setError }) {
+function GoogleCredentialButton({ busy, onCredential, setBusy, setError }) {
   const buttonRef = useRef(null);
   const [visible, setVisible] = useState(false);
 
@@ -73,10 +79,9 @@ function GoogleLogin({ busy, onAuthenticated, setBusy, setError }) {
             setBusy(true);
             setError("");
             try {
-              await loginWithGoogle(credential, options.nonce);
-              await onAuthenticated();
+              await onCredential(credential, options.nonce);
             } catch (error) {
-              setError(error.message || "Google login failed.");
+              setError(error.message || "Google sign-in failed.");
             } finally {
               setBusy(false);
             }
@@ -93,14 +98,14 @@ function GoogleLogin({ busy, onAuthenticated, setBusy, setError }) {
       })
       .catch((error) => {
         if (active && (!(error instanceof APIError) || error.status !== 404)) {
-          setError(error.message || "Google login is unavailable.");
+          setError(error.message || "Google sign-in is unavailable.");
         }
       });
 
     return () => {
       active = false;
     };
-  }, [onAuthenticated, setBusy, setError]);
+  }, [onCredential, setBusy, setError]);
 
   return (
     <div
@@ -114,6 +119,152 @@ function GoogleLogin({ busy, onAuthenticated, setBusy, setError }) {
   );
 }
 
+function GoogleLogin({
+  busy,
+  onAuthenticated,
+  onRecoveryRequired,
+  setBusy,
+  setError,
+}) {
+  const authenticate = useCallback(
+    async (credential, nonce) => {
+      const result = await loginWithGoogleOrStartRecovery(credential, nonce);
+      if (result.recovery) {
+        onRecoveryRequired(result.recovery);
+        return;
+      }
+      await onAuthenticated();
+    },
+    [onAuthenticated, onRecoveryRequired],
+  );
+
+  return (
+    <GoogleCredentialButton
+      busy={busy}
+      onCredential={authenticate}
+      setBusy={setBusy}
+      setError={setError}
+    />
+  );
+}
+
+function AccountRecovery({
+  busy,
+  recovery,
+  onAuthenticated,
+  onCancel,
+  setBusy,
+  setError,
+}) {
+  const [password, setPassword] = useState("");
+  const methods = new Set(recovery.proof_methods || []);
+
+  async function complete(action) {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      await onAuthenticated();
+    } catch (error) {
+      setError(error.message || "Could not verify the existing account.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <p className="eyebrow">Account found</p>
+      <h1 id="auth-title">Confirm your existing account.</h1>
+      <p className="lede">
+        An account already uses this email. Sign in with one of its existing
+        methods to connect Google safely.
+      </p>
+
+      {methods.has("password") && (
+        <form
+          className="auth-form recovery-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void complete(() =>
+              completeAccountRecoveryLinkWithPassword(
+                recovery.link_id,
+                password,
+              ),
+            );
+          }}
+        >
+          <label htmlFor="recovery-password">
+            <span>Existing account password</span>
+            <input
+              id="recovery-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+              disabled={busy}
+            />
+          </label>
+          <button className="button primary" type="submit" disabled={busy}>
+            Continue with password
+          </button>
+        </form>
+      )}
+
+      {methods.has("google") && (
+        <GoogleCredentialButton
+          busy={busy}
+          setBusy={setBusy}
+          setError={setError}
+          onCredential={(credential, nonce) =>
+            completeAccountRecoveryLinkWithGoogle(
+              recovery.link_id,
+              credential,
+              nonce,
+            ).then(onAuthenticated)
+          }
+        />
+      )}
+
+      {methods.has("apple") && (
+        <AppleCredentialButton
+          disabled={busy}
+          type="continue"
+          onAction={async () => {
+            const authorization = await authorizeWithApple();
+            await complete(() =>
+              completeAccountRecoveryLinkWithApple(
+                recovery.link_id,
+                authorization.code,
+                authorization.state,
+              ),
+            );
+          }}
+          onError={setError}
+        />
+      )}
+
+      {methods.size === 0 && (
+        <p className="error" role="alert">
+          This account has no available sign-in method for recovery.
+        </p>
+      )}
+
+      <div className="auth-actions">
+        <button
+          className="text-button"
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+        >
+          Start over
+        </button>
+      </div>
+    </>
+  );
+}
+
 function AuthScreen({ onAuthenticated }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
@@ -124,6 +275,7 @@ function AuthScreen({ onAuthenticated }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [recovery, setRecovery] = useState(null);
 
   function selectMode(nextMode) {
     setMode(nextMode);
@@ -133,6 +285,7 @@ function AuthScreen({ onAuthenticated }) {
     setCode("");
     setNotice("");
     setError("");
+    setRecovery(null);
   }
 
   async function submit(event) {
@@ -195,6 +348,33 @@ function AuthScreen({ onAuthenticated }) {
 
   const verifying = mode === "verify";
 
+  if (recovery) {
+    return (
+      <main className="centered">
+        <section className="hero auth-card" aria-labelledby="auth-title">
+          <AccountRecovery
+            busy={busy}
+            recovery={recovery}
+            onAuthenticated={onAuthenticated}
+            onCancel={() => {
+              setRecovery(null);
+              setError("");
+            }}
+            setBusy={setBusy}
+            setError={setError}
+          />
+          <div className="auth-feedback" aria-live="polite">
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="centered">
       <section className="hero auth-card" aria-labelledby="auth-title">
@@ -223,7 +403,7 @@ function AuthScreen({ onAuthenticated }) {
               onClick={() => selectMode("login")}
               disabled={busy}
             >
-              Log in
+              Sign in
             </button>
             <button
               className={mode === "signup" ? "active" : ""}
@@ -320,7 +500,7 @@ function AuthScreen({ onAuthenticated }) {
               : verifying
                 ? "Verify and continue"
                 : mode === "login"
-                  ? "Log in"
+                  ? "Sign in"
                   : mode === "invite"
                     ? "Join organization"
                     : "Create account"}
@@ -355,9 +535,31 @@ function AuthScreen({ onAuthenticated }) {
             <GoogleLogin
               busy={busy}
               onAuthenticated={onAuthenticated}
+              onRecoveryRequired={setRecovery}
               setBusy={setBusy}
               setError={setError}
             />
+            {mode !== "invite" && (
+              <AppleCredentialButton
+                disabled={busy}
+                type={mode === "signup" ? "sign-up" : "sign-in"}
+                onAction={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    const authorization = await authorizeWithApple();
+                    await loginWithApple(
+                      authorization.code,
+                      authorization.state,
+                    );
+                    await onAuthenticated();
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                onError={setError}
+              />
+            )}
           </>
         )}
 

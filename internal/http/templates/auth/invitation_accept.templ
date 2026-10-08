@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"net/url"
+
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/templates"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
@@ -76,7 +78,7 @@ templ InvitationAccept(
 			}
 			if showSignupForm {
 				@InvitationSignupForm(invitedEmail, token)
-				@OAuthProviders("Create account", oauthProviders)
+				@OAuthProviders("Create account", oauthProviders, invitationAppleReturnTo(token))
 			}
 			for _, action := range actions {
 				if action.LogoutReturn != "" {
@@ -100,7 +102,7 @@ templ InvitationSignup(organizationName string, invitedEmail string, token strin
 			@CardHeader()
 			@HeaderSection("Create an account to join "+organizationName, "Use the invited email address to join this organization.")
 			@InvitationSignupForm(invitedEmail, token)
-			@OAuthProviders("Create account", oauthProviders)
+			@OAuthProviders("Create account", oauthProviders, invitationAppleReturnTo(token))
 		}
 	}
 }
@@ -188,11 +190,15 @@ templ InvitationLogin(organizationName string, invitedEmail string, token string
 	@templates.PartialRender() {
 		@AuthLayout() {
 			@CardHeader()
-			@HeaderSection("Log in to join "+organizationName, "Use the account for the invited email address.")
+			@HeaderSection("Sign in to join "+organizationName, "Use the account for the invited email address.")
 			@InvitationLoginForm(invitedEmail, token)
-			@OAuthProviders("Login", oauthProviders)
+			@OAuthProviders("Sign in", oauthProviders, invitationAppleReturnTo(token))
 		}
 	}
+}
+
+func invitationAppleReturnTo(token string) string {
+	return "/auth/invitations/accept?token=" + url.QueryEscape(token)
 }
 
 templ InvitationLoginForm(invitedEmail string, token string) {
@@ -238,7 +244,7 @@ templ InvitationLoginForm(invitedEmail string, token string) {
 			@passwordToggleButton()
 		</div>
 		@button.Button(button.ButtonConfig{
-			Label: "Login and join",
+			Label: "Sign in and join",
 			Icon:  icons.Login(),
 		})
 	</form>

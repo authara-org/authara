@@ -139,3 +139,22 @@ func completeAccountRecoveryLinkWithGoogleError(code response.ErrorCode, message
 		return contract.CompleteAccountRecoveryLinkWithGoogle500JSONResponse(body)
 	}
 }
+
+func completeAccountRecoveryLinkWithAppleError(code response.ErrorCode, message string) contract.CompleteAccountRecoveryLinkWithAppleResponseObject {
+	spec := mustRouteError(CompleteAccountRecoveryLinkWithAppleErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.CompleteAccountRecoveryLinkWithApple400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.CompleteAccountRecoveryLinkWithApple401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.CompleteAccountRecoveryLinkWithApple403JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.CompleteAccountRecoveryLinkWithApple404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.CompleteAccountRecoveryLinkWithApple409JSONResponse(body)
+	default:
+		return contract.CompleteAccountRecoveryLinkWithApple500JSONResponse(body)
+	}
+}

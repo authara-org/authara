@@ -329,7 +329,7 @@ func (s *Service) MarkRecentlyAuthenticated(
 	now time.Time,
 ) error {
 	switch method {
-	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle:
+	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle, domain.AuthenticationMethodApple:
 	default:
 		return ErrRecentAuthenticationRequired
 	}
@@ -426,7 +426,7 @@ func (s *Service) CompleteAuthenticationChallenge(
 	now time.Time,
 ) error {
 	switch method {
-	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle:
+	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle, domain.AuthenticationMethodApple:
 	default:
 		return ErrAuthenticationChallengeInvalid
 	}
@@ -863,7 +863,7 @@ func (s *Service) Logout(ctx context.Context, refreshToken, accessToken string) 
 	if err != nil {
 		return err
 	}
-	if err := s.accessTokenRevocations.RevokeToken(ctx, accessToken, claims.ExpiresAt.Time.Sub(now)); err != nil {
+	if err := s.accessTokenRevocations.RevokeToken(ctx, claims, claims.ExpiresAt.Time.Sub(now)); err != nil {
 		return err
 	}
 	userID, parseErr := uuid.Parse(claims.Subject)
@@ -939,7 +939,7 @@ func (s *Service) RevokeAccessToken(ctx context.Context, accessToken string, now
 	if err != nil {
 		return err
 	}
-	return s.accessTokenRevocations.RevokeToken(ctx, accessToken, claims.ExpiresAt.Time.Sub(now))
+	return s.accessTokenRevocations.RevokeToken(ctx, claims, claims.ExpiresAt.Time.Sub(now))
 }
 
 func (s *Service) identityFromClaims(claims *token.AccessClaims) (*AccessIdentity, error) {
