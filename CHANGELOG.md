@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.0](https://github.com/authara-org/authara/compare/v0.21.1...v0.22.0) (2026-10-08)
+
+
+### Features
+
+* **auth:** add Apple authentication and platform hardening ([#55](https://github.com/authara-org/authara/issues/55)) ([8126d5e](https://github.com/authara-org/authara/commit/8126d5e4350259c383207395cc0a6af2313a187c))
+
 ## [0.21.1](https://github.com/authara-org/authara/compare/v0.21.0...v0.21.1) (2026-09-12)
 
 
