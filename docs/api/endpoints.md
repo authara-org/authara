@@ -178,6 +178,50 @@ Errors match Google login: `400 invalid_request`, `401 unauthorized`,
 
 ---
 
+## Log in with Microsoft
+
+Microsoft login must be enabled with `AUTHARA_OAUTH_PROVIDERS=microsoft`.
+Initialize the attempt with:
+
+```text
+GET /auth/api/v1/oauth/microsoft/options
+```
+
+The response sets the HttpOnly OAuth nonce cookie and returns the Microsoft
+client ID, authority, and nonce. Initialize MSAL Browser with the returned
+client ID and authority, request `openid profile email` through `loginPopup`,
+and use this exact same-origin SPA redirect URI:
+
+```text
+https://your-domain/auth/oauth/microsoft/redirect
+```
+
+Core serves the MSAL redirect bridge at that path. After the popup completes,
+send its ID token and the returned nonce to:
+
+```text
+POST /auth/api/v1/oauth/microsoft?audience=app
+X-CSRF-Token: <csrf-token>
+Content-Type: application/json
+```
+
+```json
+{
+  "credential": "<microsoft-v2-id-token>",
+  "nonce": "<nonce>"
+}
+```
+
+Core validates the signature, audience, tenant-specific issuer, expiry,
+nonce, tenant ID, and object ID. An email collision returns the same
+`409 account_link_required` recovery object as Google and Apple. Microsoft
+email claims never merge accounts without proof from an existing sign-in
+method, and unverified claims do not mark an Authara email as verified.
+
+Errors match the other external providers.
+
+---
+
 ## Recover an external-provider account collision
 
 Login collisions for verified external identities return a short-lived pending
@@ -216,14 +260,16 @@ Complete exactly one proof through the matching endpoint:
 POST /auth/api/v1/provider-links/recovery/{linkID}/password?audience=app
 POST /auth/api/v1/provider-links/recovery/{linkID}/google?audience=app
 POST /auth/api/v1/provider-links/recovery/{linkID}/apple?audience=app
+POST /auth/api/v1/provider-links/recovery/{linkID}/microsoft?audience=app
 ```
 
 Password proof accepts `{ "password": "..." }`. Google proof accepts a fresh
 `code` and `redirect_uri` from the Google popup flow. Apple proof accepts a
-fresh authorization `code` and `state` from the Apple options flow. Successful
-completion consumes the pending link, links the attempted external identity to
-the existing user, returns an authenticated session, and sets the session
-cookies.
+fresh authorization `code` and `state` from the Apple options flow. Microsoft
+proof accepts a fresh `credential` and `nonce` from the Microsoft options and
+popup flow. Successful completion consumes the pending link, links the
+attempted external identity to the existing user, returns an authenticated
+session, and sets the session cookies.
 
 Pending links expire after ten minutes and are single-use. Invalid or expired
 links return `400 invalid_request` or `409 provider_link_expired`; an identity
@@ -529,6 +575,7 @@ Complete that challenge through one of these CSRF-protected flows:
 ```text
 POST /auth/api/v1/reauthenticate/password
 POST /auth/api/v1/reauthenticate/google
+POST /auth/api/v1/reauthenticate/microsoft
 POST /auth/api/v1/reauthenticate/passkeys/options
 POST /auth/api/v1/reauthenticate/passkeys/finish
 ```
@@ -544,7 +591,9 @@ Password reauthentication accepts:
 
 Google accepts the same authorization-code fields as Google login plus
 `authentication_challenge_id`, and the identity must already be linked to the
-current user. Passkey options accepts `{ "authentication_challenge_id": "..." }`;
+current user. Microsoft accepts its login credential and nonce plus the
+challenge ID, and likewise requires an identity already linked to the current
+user. Passkey options accepts `{ "authentication_challenge_id": "..." }`;
 passkey finish accepts both that ID and the WebAuthn `challenge_id` returned by
 the options endpoint.
 

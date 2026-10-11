@@ -129,6 +129,33 @@ export function loginWithApple(code, state) {
   return mutate(`${API}/oauth/apple?audience=app`, { code, state });
 }
 
+export function getMicrosoftOptions() {
+  return request(`${API}/oauth/microsoft/options`);
+}
+
+export function loginWithMicrosoft(credential, nonce) {
+  return mutate(`${API}/oauth/microsoft?audience=app`, { credential, nonce });
+}
+
+export async function loginWithMicrosoftOrStartRecovery(credential, nonce) {
+  try {
+    return {
+      session: await loginWithMicrosoft(credential, nonce),
+      recovery: null,
+    };
+  } catch (error) {
+    if (
+      !(error instanceof APIError) ||
+      error.status !== 409 ||
+      error.code !== "account_link_required" ||
+      !error.recovery
+    ) {
+      throw error;
+    }
+    return { session: null, recovery: error.recovery };
+  }
+}
+
 export function startGoogleAccountRecoveryLink(code, redirectURI) {
   return mutate(`${API}/provider-links/recovery/google`, {
     code,
@@ -177,6 +204,17 @@ export function completeAccountRecoveryLinkWithApple(linkID, code, state) {
   return mutate(
     `${API}/provider-links/recovery/${encodeURIComponent(linkID)}/apple?audience=app`,
     { code, state },
+  );
+}
+
+export function completeAccountRecoveryLinkWithMicrosoft(
+  linkID,
+  credential,
+  nonce,
+) {
+  return mutate(
+    `${API}/provider-links/recovery/${encodeURIComponent(linkID)}/microsoft?audience=app`,
+    { credential, nonce },
   );
 }
 
@@ -412,6 +450,10 @@ export function linkApple(code, state) {
   return mutate(`${API}/account/auth-methods/apple`, { code, state });
 }
 
+export function linkMicrosoft(credential, nonce) {
+  return mutate(`${API}/account/auth-methods/microsoft`, { credential, nonce });
+}
+
 export function unlinkAuthMethod(provider) {
   return mutate(
     `${API}/account/auth-methods/${encodeURIComponent(provider)}`,
@@ -481,6 +523,18 @@ export function reauthenticateWithApple(
     authentication_challenge_id: authenticationChallengeID,
     code,
     state,
+  });
+}
+
+export function reauthenticateWithMicrosoft(
+  authenticationChallengeID,
+  credential,
+  nonce,
+) {
+  return mutate(`${API}/reauthenticate/microsoft`, {
+    authentication_challenge_id: authenticationChallengeID,
+    credential,
+    nonce,
   });
 }
 

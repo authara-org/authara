@@ -71,6 +71,17 @@ services:
       app-router:
         condition: service_started
 
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+
   app-router:
     image: nginx:1.29-alpine
     volumes:
@@ -123,6 +134,8 @@ services:
     build:
       context: ./integrations/spa-app/
       target: dev
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3001}
     volumes:
       - ./integrations/spa-app:/app
       - /app/node_modules

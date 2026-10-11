@@ -303,7 +303,7 @@ func (h *APIHandler) LinkCurrentUserGoogle(ctx context.Context, request contract
 		switch {
 		case errors.Is(err, auth.ErrAuthProviderAlreadyLinked), errors.Is(err, auth.ErrAuthProviderAlreadyLinkedToUser):
 			return linkCurrentUserGoogleError(codeAuthMethodAlreadyLinked, "Google is already linked."), nil
-		case errors.Is(err, auth.ErrProviderEmailNotVerified), errors.Is(err, auth.ErrProviderDisabled):
+		case errors.Is(err, auth.ErrProviderDisabled):
 			return linkCurrentUserGoogleError(responseCodeForbidden(), "Google account cannot be linked."), nil
 		default:
 			return linkCurrentUserGoogleError(responseCodeInternalError(), "Could not link Google."), nil
@@ -348,7 +348,7 @@ func (h *APIHandler) LinkCurrentUserApple(ctx context.Context, request contract.
 		switch {
 		case errors.Is(err, auth.ErrAuthProviderAlreadyLinked), errors.Is(err, auth.ErrAuthProviderAlreadyLinkedToUser):
 			return appleLinkErrorWithHeaders(codeAuthMethodAlreadyLinked, "Apple is already linked.", header), nil
-		case errors.Is(err, auth.ErrProviderEmailNotVerified), errors.Is(err, auth.ErrProviderDisabled):
+		case errors.Is(err, auth.ErrProviderDisabled):
 			return appleLinkErrorWithHeaders(responseCodeForbidden(), "Apple account cannot be linked.", header), nil
 		default:
 			return appleLinkErrorWithHeaders(responseCodeInternalError(), "Could not link Apple.", header), nil
@@ -363,7 +363,7 @@ func (h *APIHandler) UnlinkCurrentUserAuthMethod(ctx context.Context, request co
 		return unlinkCurrentUserAuthMethodError(responseCodeUnauthorized(), "Unauthorized."), nil
 	}
 	provider := domain.Provider(request.Provider)
-	if provider != domain.ProviderPassword && provider != domain.ProviderGoogle && provider != domain.ProviderApple {
+	if provider != domain.ProviderPassword && provider != domain.ProviderGoogle && provider != domain.ProviderApple && provider != domain.ProviderMicrosoft {
 		return unlinkCurrentUserAuthMethodError(responseCodeInvalidRequest(), "Invalid authentication method."), nil
 	}
 	if err := h.Auth.UnlinkAuthProvider(ctx, userID, provider); err != nil {

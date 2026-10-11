@@ -2,6 +2,7 @@ import { initVerificationCodeForm } from "./verificationInput";
 import { showRedirecting, hideRedirecting } from "./ui";
 import { initGoogleSignin } from "./oauth";
 import { initAppleSignin } from "./apple";
+import { initMicrosoftSignin } from "./microsoft";
 import { initPasskeys } from "./passkeys";
 import { initTheme, setTheme } from "./theme";
 import "./confirmDialog";
@@ -45,6 +46,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initAccountPasswordDialog();
   void initAppleSignin(document);
   void initGoogleSignin(document);
+  initMicrosoftSignin(document);
 });
 
 document.body.addEventListener("htmx:beforeRequest", (event: Event) => {
@@ -119,6 +121,7 @@ document.body.addEventListener("htmx:afterSwap", (event: Event) => {
   initAccountPasswordDialog();
   void initAppleSignin(document);
   void initGoogleSignin(document);
+  initMicrosoftSignin(document);
   if (
     evt.detail?.xhr?.getResponseHeader("X-Authara-Close-Password-Dialog") ===
     "true"

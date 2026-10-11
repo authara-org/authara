@@ -195,8 +195,12 @@ templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
 			<div class="w-36">
 				@authview.AppleSignin("Link", viewmodel.AuthProviderFlowLink, "", "", "")
 			</div>
+		} else if provider.Kind == viewmodel.AuthProviderMicrosoft && !provider.Linked {
+			<div class="w-44">
+				@authview.MicrosoftSignin("Link", viewmodel.AuthProviderFlowLink, "", "", "")
+			</div>
 		} else if provider.Linked {
-			if provider.Kind == viewmodel.AuthProviderGoogle || provider.Kind == viewmodel.AuthProviderApple {
+			if provider.Kind == viewmodel.AuthProviderGoogle || provider.Kind == viewmodel.AuthProviderApple || provider.Kind == viewmodel.AuthProviderMicrosoft {
 				{{ providerName := provider.Title }}
 				{{ formID := "remove-" + provider.ID + "-form" }}
 				<div class="hidden sm:block">
@@ -293,6 +297,11 @@ templ AuthProviderIcon(kind viewmodel.AuthProviderKind) {
 			@icons.Lock()
 		case viewmodel.AuthProviderGoogle:
 			@icons.Google()
+		case viewmodel.AuthProviderMicrosoft:
+			<div class="grid h-full w-full grid-cols-2 gap-[2px] p-0.5" aria-hidden="true">
+				<span class="bg-[#f25022]"></span><span class="bg-[#7fba00]"></span>
+				<span class="bg-[#00a4ef]"></span><span class="bg-[#ffb900]"></span>
+			</div>
 		default:
 			@icons.Key()
 	}

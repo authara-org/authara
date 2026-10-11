@@ -97,6 +97,24 @@ func TestSecurityHeadersAllowsAppleOAuthSourcesWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestSecurityHeadersAllowsMicrosoftOAuthSourcesWhenEnabled(t *testing.T) {
+	handler := SecurityHeaders(SecurityHeadersConfig{AllowMicrosoftOAuth: true})(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+	)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/auth/login", nil))
+
+	csp := recorder.Header().Get(headerContentSecurityPolicy)
+	for _, source := range []string{"https://login.microsoftonline.com"} {
+		if !strings.Contains(csp, source) {
+			t.Errorf("CSP does not contain %q: %s", source, csp)
+		}
+	}
+	if got := recorder.Header().Get(headerReferrerPolicy); got != "strict-origin-when-cross-origin" {
+		t.Fatalf("Microsoft OAuth Referrer-Policy = %q", got)
+	}
+}
+
 func TestSecurityHeadersAllowOnlySameOriginReauthenticationFrames(t *testing.T) {
 	handler := SecurityHeaders(SecurityHeadersConfig{})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)

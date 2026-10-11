@@ -10,8 +10,10 @@ import {
   getGoogleOptions,
   linkApple,
   linkGoogle,
+  linkMicrosoft,
   reauthenticateWithApple,
   reauthenticateWithGoogle,
+  reauthenticateWithMicrosoft,
   reauthenticateWithPassword,
   revokeOtherSessions,
   revokeSession,
@@ -22,6 +24,7 @@ import {
 import { loadGoogleIdentity } from "./google.js";
 import { authorizeWithApple } from "./apple.js";
 import { AppleCredentialButton } from "./apple-button.jsx";
+import { MicrosoftCredentialButton } from "./microsoft-button.jsx";
 import {
   reauthenticateWithPasskey,
   registerPasskey,
@@ -231,6 +234,22 @@ export function ReauthenticationDialog({ challenge, account, onCancel, onAuthent
         />
       )}
 
+      {providers.has("microsoft") && (
+        <MicrosoftCredentialButton
+          disabled={busy}
+          onCredential={({ credential, nonce }) =>
+            authenticate(() =>
+              reauthenticateWithMicrosoft(
+                challenge.id,
+                credential,
+                nonce,
+              ),
+            )
+          }
+          onError={setError}
+        />
+      )}
+
       {error && <p className="error dialog-feedback" role="alert">{error}</p>}
       <button className="text-button dialog-cancel" type="button" onClick={onCancel} disabled={busy}>
         Cancel
@@ -269,6 +288,7 @@ export function AccountPage({ account, busy, feedback, onBack, onRun, onSensitiv
   const hasPassword = providers.has("password");
   const hasGoogle = providers.has("google");
   const hasApple = providers.has("apple");
+  const hasMicrosoft = providers.has("microsoft");
 
   function confirm(config) {
     setConfirmation({
@@ -497,6 +517,39 @@ export function AccountPage({ account, busy, feedback, onBack, onRun, onSensitiv
                     },
                     "Apple linked.",
                   )}
+                  onError={setLocalError}
+                />
+              )}
+            </div>
+
+            <div className="method-panel">
+              <div>
+                <strong>Microsoft</strong>
+                <p>{hasMicrosoft ? "Linked" : "Not linked"}</p>
+              </div>
+              {hasMicrosoft ? (
+                <button
+                  className="text-button danger-link"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => confirm({
+                    title: "Unlink Microsoft?",
+                    body: "You will no longer be able to sign in with this Microsoft identity.",
+                    label: "Unlink Microsoft",
+                    action: () => onSensitive("Unlinking Microsoft…", () => unlinkAuthMethod("microsoft"), "Microsoft unlinked."),
+                  })}
+                >Unlink Microsoft</button>
+              ) : (
+                <MicrosoftCredentialButton
+                  disabled={busy}
+                  type="link"
+                  onCredential={({ credential, nonce }) =>
+                    onSensitive(
+                      "Linking Microsoft…",
+                      () => linkMicrosoft(credential, nonce),
+                      "Microsoft linked.",
+                    )
+                  }
                   onError={setLocalError}
                 />
               )}

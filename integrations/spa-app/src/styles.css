@@ -206,6 +206,42 @@ h2 {
   opacity: 0.55;
 }
 
+.microsoft-action {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 0.75rem;
+  gap: 0.65rem;
+}
+
+.microsoft-action.pending {
+  visibility: hidden;
+}
+
+.microsoft-logo {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 1px;
+}
+
+.microsoft-logo span:nth-child(1) {
+  background: #f25022;
+}
+
+.microsoft-logo span:nth-child(2) {
+  background: #7fba00;
+}
+
+.microsoft-logo span:nth-child(3) {
+  background: #00a4ef;
+}
+
+.microsoft-logo span:nth-child(4) {
+  background: #ffb900;
+}
+
 .auth-divider {
   display: flex;
   align-items: center;

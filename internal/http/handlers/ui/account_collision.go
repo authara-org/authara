@@ -166,6 +166,8 @@ func providerDisplayName(provider domain.Provider) string {
 		return "Apple"
 	case domain.ProviderGoogle:
 		return "Google"
+	case domain.ProviderMicrosoft:
+		return "Microsoft"
 	case domain.ProviderPassword:
 		return "Password"
 	default:
@@ -247,8 +249,25 @@ func (h *UIHandler) accountCollisionProofOptions(providers []domain.AuthProvider
 				Provider: string(domain.ProviderApple),
 				Label:    "Apple",
 			})
+		case domain.ProviderMicrosoft:
+			if !h.providerEnabled(domain.ProviderMicrosoft) {
+				continue
+			}
+			options = append(options, authview.AccountCollisionProofOption{
+				Provider: string(domain.ProviderMicrosoft),
+				Label:    "Microsoft",
+			})
 		}
 	}
 
 	return options
+}
+
+func (h *UIHandler) providerEnabled(provider domain.Provider) bool {
+	for _, configured := range h.OAuthProviders.Providers {
+		if configured.Name == provider {
+			return true
+		}
+	}
+	return false
 }

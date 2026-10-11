@@ -329,7 +329,7 @@ func (s *Service) MarkRecentlyAuthenticated(
 	now time.Time,
 ) error {
 	switch method {
-	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle, domain.AuthenticationMethodApple:
+	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle, domain.AuthenticationMethodApple, domain.AuthenticationMethodMicrosoft:
 	default:
 		return ErrRecentAuthenticationRequired
 	}
@@ -426,7 +426,7 @@ func (s *Service) CompleteAuthenticationChallenge(
 	now time.Time,
 ) error {
 	switch method {
-	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle, domain.AuthenticationMethodApple:
+	case domain.AuthenticationMethodPassword, domain.AuthenticationMethodPasskey, domain.AuthenticationMethodGoogle, domain.AuthenticationMethodApple, domain.AuthenticationMethodMicrosoft:
 	default:
 		return ErrAuthenticationChallengeInvalid
 	}

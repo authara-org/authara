@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/authara-org/authara/internal/oauth/microsoft"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/ratelimiter"
@@ -27,6 +28,11 @@ type GoogleVerifier interface {
 type AppleClient interface {
 	Exchange(context.Context, string, string) (apple.ExchangeResult, error)
 	Revoke(context.Context, string) error
+}
+
+type MicrosoftVerifier interface {
+	Authority() string
+	VerifyIDToken(context.Context, string, string) (*microsoft.Identity, error)
 }
 
 type AppleCredentialStore interface {
@@ -68,6 +74,7 @@ type APIHandler struct {
 	Logger           *slog.Logger
 	Google           GoogleVerifier
 	Apple            AppleClient
+	Microsoft        MicrosoftVerifier
 	AppleCredentials AppleCredentialStore
 	OAuthProviders   oauth.OAuthProviders
 	Config           RuntimePolicyReader

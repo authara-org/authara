@@ -293,6 +293,8 @@ func parseLinkProvider(raw string) (domain.Provider, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "google":
 		return domain.ProviderGoogle, nil
+	case "microsoft":
+		return domain.ProviderMicrosoft, nil
 	default:
 		return "", auth.ErrUnsupportedProvider
 	}

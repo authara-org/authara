@@ -22,6 +22,11 @@ func newOAuthProviders(cfg *config.Config) oauth.OAuthProviders {
 				providers,
 				oauth.NewOAuthProvider(domain.ProviderApple, strings.TrimSpace(cfg.OAuth.AppleClientID), cfg.Values.PublicURL),
 			)
+		case string(domain.ProviderMicrosoft):
+			providers = append(
+				providers,
+				oauth.NewOAuthProvider(domain.ProviderMicrosoft, strings.TrimSpace(cfg.OAuth.MicrosoftClientID), cfg.Values.PublicURL),
+			)
 		}
 	}
 

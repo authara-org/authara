@@ -14,6 +14,8 @@ type OAuth struct {
 
 	GoogleClientID     string `env:"AUTHARA_OAUTH_GOOGLE_CLIENT_ID"`
 	GoogleClientSecret string `env:"AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET"`
+	MicrosoftClientID  string `env:"AUTHARA_OAUTH_MICROSOFT_CLIENT_ID"`
+	MicrosoftTenantID  string `env:"AUTHARA_OAUTH_MICROSOFT_TENANT_ID"`
 
 	AppleClientID         string            `env:"AUTHARA_OAUTH_APPLE_CLIENT_ID"`
 	AppleTeamID           string            `env:"AUTHARA_OAUTH_APPLE_TEAM_ID"`
@@ -70,11 +72,37 @@ func (oa *OAuth) validate() error {
 			if _, ok := oa.AppleTokenKeys[oa.AppleTokenActiveKeyID]; !ok {
 				return fmt.Errorf("AUTHARA_OAUTH_APPLE_TOKEN_ACTIVE_KEY_ID %q not found in AUTHARA_OAUTH_APPLE_TOKEN_KEYS", oa.AppleTokenActiveKeyID)
 			}
+		case "microsoft":
+			if strings.TrimSpace(oa.MicrosoftClientID) == "" {
+				return fmt.Errorf("AUTHARA_OAUTH_MICROSOFT_CLIENT_ID is required")
+			}
+			if !validMicrosoftTenant(strings.TrimSpace(oa.MicrosoftTenantID)) {
+				return fmt.Errorf("AUTHARA_OAUTH_MICROSOFT_TENANT_ID must be a UUID, common, organizations, or consumers")
+			}
 		default:
 			return fmt.Errorf("unsupported OAuth provider %q", p)
 		}
 	}
 	return nil
+}
+
+func validMicrosoftTenant(tenant string) bool {
+	switch strings.ToLower(tenant) {
+	case "common", "organizations", "consumers":
+		return true
+	}
+	parts := strings.Split(tenant, "-")
+	if len(parts) != 5 || len(parts[0]) != 8 || len(parts[1]) != 4 || len(parts[2]) != 4 || len(parts[3]) != 4 || len(parts[4]) != 12 {
+		return false
+	}
+	for _, part := range parts {
+		for _, r := range part {
+			if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (oa *OAuth) parse() error {

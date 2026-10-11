@@ -139,8 +139,8 @@ Authara sets security headers on its HTTP responses by default:
 
 These headers harden the built-in authentication UI and API responses against common browser-side risks such as clickjacking, MIME sniffing, referrer leakage, and unexpected script or asset loading.
 
-When Google or Apple OAuth is enabled, the Content Security Policy allows only
-the corresponding official browser SDK origins required by the login,
+When Google, Apple, or Microsoft OAuth is enabled, the Content Security Policy
+allows only the corresponding official browser SDK origins required by login,
 account-linking, and reauthentication UI.
 
 ---

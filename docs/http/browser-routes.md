@@ -138,8 +138,8 @@ Example providers:
 
 - Google
 - Apple
+- Microsoft
 - GitHub (future)
-- Microsoft (future)
 
 Provider identity validation and account selection are handled by Authara. The
 hosted UI uses each provider's official browser SDK to obtain a credential or

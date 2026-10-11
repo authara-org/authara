@@ -587,6 +587,8 @@ func parseProvider(s string) (domain.Provider, error) {
 		return domain.ProviderGoogle, nil
 	case "apple":
 		return domain.ProviderApple, nil
+	case "microsoft":
+		return domain.ProviderMicrosoft, nil
 	case "password":
 		return domain.ProviderPassword, nil
 	default:

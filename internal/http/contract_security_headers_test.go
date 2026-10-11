@@ -60,6 +60,20 @@ func TestSecurityHeadersRouterCSPFollowsGoogleOAuthConfig(t *testing.T) {
 	assertHeader(t, rr.Result().Header, "Referrer-Policy", "strict-origin-when-cross-origin")
 }
 
+func TestSecurityHeadersRouterCSPFollowsMicrosoftOAuthConfig(t *testing.T) {
+	router := newSecurityHeadersTestRouter(oauth.OAuthProviders{
+		Providers: []oauth.OAuthProvider{{Name: domain.ProviderMicrosoft, ClientID: "test-client-id"}},
+	})
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/auth/health", nil))
+
+	csp := recorder.Result().Header.Get("Content-Security-Policy")
+	if !strings.Contains(csp, "https://login.microsoftonline.com") {
+		t.Fatalf("expected Microsoft CSP sources when Microsoft OAuth is configured, got %q", csp)
+	}
+	assertHeader(t, recorder.Result().Header, "Referrer-Policy", "strict-origin-when-cross-origin")
+}
+
 func TestDynamicRouterResponsesAreNotCacheable(t *testing.T) {
 	router := newSecurityHeadersTestRouter(oauth.OAuthProviders{})
 	tests := []struct {

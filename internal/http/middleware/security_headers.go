@@ -14,9 +14,10 @@ const (
 )
 
 type SecurityHeadersConfig struct {
-	AllowGoogleOAuth bool
-	AllowAppleOAuth  bool
-	AllowShowcase    bool
+	AllowGoogleOAuth    bool
+	AllowAppleOAuth     bool
+	AllowMicrosoftOAuth bool
+	AllowShowcase       bool
 }
 
 func SecurityHeaders(cfg SecurityHeadersConfig) func(http.Handler) http.Handler {
@@ -24,7 +25,7 @@ func SecurityHeaders(cfg SecurityHeadersConfig) func(http.Handler) http.Handler 
 	reauthenticationCSP := strings.Replace(csp, "frame-ancestors 'none'", "frame-ancestors 'self'", 1)
 	showcaseCSP := strings.Replace(reauthenticationCSP, "form-action 'self'", "form-action 'none'", 1)
 	referrerPolicy := "same-origin"
-	if cfg.AllowGoogleOAuth || cfg.AllowAppleOAuth {
+	if cfg.AllowGoogleOAuth || cfg.AllowAppleOAuth || cfg.AllowMicrosoftOAuth {
 		referrerPolicy = "strict-origin-when-cross-origin"
 	}
 
@@ -80,6 +81,10 @@ func buildContentSecurityPolicy(cfg SecurityHeadersConfig) string {
 		connectSrc = append(connectSrc, "https://appleid.apple.com")
 		frameSrc = append(frameSrc, "https://appleid.apple.com")
 		styleSrc = append(styleSrc, "https://appleid.cdn-apple.com")
+	}
+	if cfg.AllowMicrosoftOAuth {
+		connectSrc = append(connectSrc, "https://login.microsoftonline.com")
+		frameSrc = append(frameSrc, "https://login.microsoftonline.com")
 	}
 
 	directives := []string{

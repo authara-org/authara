@@ -59,3 +59,15 @@ templ RemoveAppleConfirmForm() {
 		@csrf.CSRFInput()
 	</form>
 }
+
+templ RemoveMicrosoftConfirmForm() {
+	<form
+		id="remove-microsoft-form"
+		hx-post="/auth/providers/microsoft/unlink"
+		hx-target="#linked-providers-section"
+		hx-swap="outerHTML"
+		class="hidden"
+	>
+		@csrf.CSRFInput()
+	</form>
+}

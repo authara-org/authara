@@ -11,6 +11,7 @@ import {
   changeUsername,
   completeAccountRecoveryLinkWithApple,
   completeAccountRecoveryLinkWithGoogle,
+  completeAccountRecoveryLinkWithMicrosoft,
   completeAccountRecoveryLinkWithPassword,
   createOrganization,
   deleteCurrentAccount,
@@ -22,18 +23,23 @@ import {
   getAccount,
   getAppleOptions,
   getGoogleOptions,
+  getMicrosoftOptions,
   getUserWithRefresh,
   inviteMember,
   isRecentAuthenticationRequired,
   linkGoogle,
   linkApple,
+  linkMicrosoft,
   login,
   loginWithGoogle,
   loginWithGoogleOrStartRecovery,
   loginWithApple,
+  loginWithMicrosoft,
+  loginWithMicrosoftOrStartRecovery,
   loadDashboard,
   reauthenticateWithGoogle,
   reauthenticateWithApple,
+  reauthenticateWithMicrosoft,
   reauthenticateWithPassword,
   removeOrganizationMember,
   resendSignupChallenge,
@@ -420,7 +426,42 @@ test("Apple authentication obtains a server flow and exchanges only code and sta
   });
 });
 
-test("account collision recovery supports password, Google, and Apple proof", async () => {
+test("Microsoft authentication exchanges a nonce-bound ID token", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/oauth/microsoft/options")) {
+      return json({
+        client_id: "microsoft-client",
+        authority: "https://login.microsoftonline.com/common",
+        nonce: "microsoft-nonce",
+      });
+    }
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    return json({ user: { id: "user-1" } });
+  };
+
+  const options = await getMicrosoftOptions();
+  await loginWithMicrosoft("microsoft-id-token", options.nonce);
+
+  assert.deepEqual(
+    calls.map(
+      ({ url, options: requestOptions }) =>
+        `${requestOptions.method || "GET"} ${url}`,
+    ),
+    [
+      "GET /auth/api/v1/oauth/microsoft/options",
+      "GET /auth/api/v1/csrf",
+      "POST /auth/api/v1/oauth/microsoft?audience=app",
+    ],
+  );
+  assert.deepEqual(JSON.parse(calls[2].options.body), {
+    credential: "microsoft-id-token",
+    nonce: "microsoft-nonce",
+  });
+});
+
+test("account collision recovery supports every provider proof", async () => {
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, options });
@@ -430,7 +471,7 @@ test("account collision recovery supports password, Google, and Apple proof", as
         {
           link_id: "link-1",
           provider: "google",
-          proof_methods: ["password", "google", "apple"],
+          proof_methods: ["password", "google", "apple", "microsoft"],
         },
         202,
       );
@@ -453,6 +494,11 @@ test("account collision recovery supports password, Google, and Apple proof", as
     "apple-code",
     "apple-state",
   );
+  await completeAccountRecoveryLinkWithMicrosoft(
+    recovery.link_id,
+    "microsoft-id-token",
+    "microsoft-nonce",
+  );
 
   const mutations = calls.filter(({ options }) => options.method === "POST");
   assert.deepEqual(
@@ -462,6 +508,7 @@ test("account collision recovery supports password, Google, and Apple proof", as
       "/auth/api/v1/provider-links/recovery/link-1/password?audience=app",
       "/auth/api/v1/provider-links/recovery/link-1/google?audience=app",
       "/auth/api/v1/provider-links/recovery/link-1/apple?audience=app",
+      "/auth/api/v1/provider-links/recovery/link-1/microsoft?audience=app",
     ],
   );
   assert.deepEqual(JSON.parse(mutations[0].options.body), {
@@ -471,6 +518,10 @@ test("account collision recovery supports password, Google, and Apple proof", as
   assert.deepEqual(JSON.parse(mutations[3].options.body), {
     code: "apple-code",
     state: "apple-state",
+  });
+  assert.deepEqual(JSON.parse(mutations[4].options.body), {
+    credential: "microsoft-id-token",
+    nonce: "microsoft-nonce",
   });
 });
 
@@ -518,6 +569,43 @@ test("Google login turns account_link_required into a recovery flow", async () =
       { code: "google-token", redirect_uri: "https://spa.example.com" },
     ]],
   );
+});
+
+test("Microsoft login turns account_link_required into a recovery flow", async () => {
+  globalThis.fetch = async (url) => {
+    if (url.endsWith("/csrf")) return json({ csrf_token: "csrf-token" });
+    if (url.includes("/oauth/microsoft?")) {
+      return json(
+        {
+          error: {
+            code: "account_link_required",
+            message: "Confirm the existing account.",
+          },
+          recovery: {
+            link_id: "link-2",
+            provider: "microsoft",
+            proof_methods: ["password"],
+          },
+        },
+        409,
+      );
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  const result = await loginWithMicrosoftOrStartRecovery(
+    "microsoft-id-token",
+    "microsoft-nonce",
+  );
+
+  assert.deepEqual(result, {
+    session: null,
+    recovery: {
+      link_id: "link-2",
+      provider: "microsoft",
+      proof_methods: ["password"],
+    },
+  });
 });
 
 test("recent-auth errors retain the challenge needed by an API-only client", async () => {
@@ -620,6 +708,7 @@ test("account management uses only browser API routes", async () => {
   await changePassword("password123", "password456");
   await linkGoogle("google-token", "google-nonce");
   await linkApple("apple-code", "apple-state");
+  await linkMicrosoft("microsoft-id-token", "microsoft-nonce");
   await unlinkAuthMethod("google");
   await deletePasskey("passkey/1");
   await revokeOtherSessions();
@@ -637,6 +726,7 @@ test("account management uses only browser API routes", async () => {
       "PUT /auth/api/v1/account/password",
       "POST /auth/api/v1/account/auth-methods/google",
       "POST /auth/api/v1/account/auth-methods/apple",
+      "POST /auth/api/v1/account/auth-methods/microsoft",
       "DELETE /auth/api/v1/account/auth-methods/google",
       "DELETE /auth/api/v1/account/passkeys/passkey%2F1",
       "DELETE /auth/api/v1/account/sessions/others",
@@ -674,6 +764,11 @@ test("external providers and passkeys use the reauthentication challenge", async
     "https://spa.example.com",
   );
   await reauthenticateWithApple("auth-challenge", "apple-code", "apple-state");
+  await reauthenticateWithMicrosoft(
+    "auth-challenge",
+    "microsoft-id-token",
+    "microsoft-nonce",
+  );
   await beginPasskeyAuthentication();
   await finishPasskeyAuthentication("login-challenge", {
     id: "login-credential",
@@ -705,6 +800,11 @@ test("external providers and passkeys use the reauthentication challenge", async
       authentication_challenge_id: "auth-challenge",
       code: "apple-code",
       state: "apple-state",
+    },
+    {
+      authentication_challenge_id: "auth-challenge",
+      credential: "microsoft-id-token",
+      nonce: "microsoft-nonce",
     },
     null,
     {

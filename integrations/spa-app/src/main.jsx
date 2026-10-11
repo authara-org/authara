@@ -5,6 +5,7 @@ import {
   APIError,
   completeAccountRecoveryLinkWithApple,
   completeAccountRecoveryLinkWithGoogle,
+  completeAccountRecoveryLinkWithMicrosoft,
   completeAccountRecoveryLinkWithPassword,
   createOrganization,
   deleteOrganization,
@@ -16,6 +17,7 @@ import {
   login,
   loginWithApple,
   loginWithGoogleOrStartRecovery,
+  loginWithMicrosoftOrStartRecovery,
   logout,
   refreshSession,
   removeOrganizationMember,
@@ -37,6 +39,7 @@ import {
 import { loadGoogleIdentity } from "./google.js";
 import { authorizeWithApple } from "./apple.js";
 import { AppleCredentialButton } from "./apple-button.jsx";
+import { MicrosoftCredentialButton } from "./microsoft-button.jsx";
 import { authenticateWithPasskey } from "./passkeys.js";
 import "./styles.css";
 
@@ -159,6 +162,40 @@ function GoogleLogin({
   );
 }
 
+function MicrosoftLogin({
+  busy,
+  onAuthenticated,
+  onRecoveryRequired,
+  setBusy,
+  setError,
+  type,
+}) {
+  return (
+    <MicrosoftCredentialButton
+      disabled={busy}
+      type={type}
+      onError={setError}
+      onCredential={async ({ credential, nonce }) => {
+        setBusy(true);
+        setError("");
+        try {
+          const result = await loginWithMicrosoftOrStartRecovery(
+            credential,
+            nonce,
+          );
+          if (result.recovery) {
+            onRecoveryRequired(result.recovery);
+            return;
+          }
+          await onAuthenticated();
+        } finally {
+          setBusy(false);
+        }
+      }}
+    />
+  );
+}
+
 function AccountRecovery({
   busy,
   recovery,
@@ -169,6 +206,8 @@ function AccountRecovery({
 }) {
   const [password, setPassword] = useState("");
   const methods = new Set(recovery.proof_methods || []);
+  const providerName =
+    recovery.provider === "microsoft" ? "Microsoft" : "Google";
 
   async function complete(action) {
     setBusy(true);
@@ -189,7 +228,7 @@ function AccountRecovery({
       <h1 id="auth-title">Confirm your existing account.</h1>
       <p className="lede">
         An account already uses this email. Sign in with one of its existing
-        methods to connect Google safely.
+        methods to connect {providerName} safely.
       </p>
 
       {methods.has("password") && (
@@ -252,6 +291,22 @@ function AccountRecovery({
               ),
             );
           }}
+          onError={setError}
+        />
+      )}
+
+      {methods.has("microsoft") && (
+        <MicrosoftCredentialButton
+          disabled={busy}
+          onCredential={({ credential, nonce }) =>
+            complete(() =>
+              completeAccountRecoveryLinkWithMicrosoft(
+                recovery.link_id,
+                credential,
+                nonce,
+              ),
+            )
+          }
           onError={setError}
         />
       )}
@@ -551,25 +606,35 @@ function AuthScreen({ onAuthenticated }) {
               setError={setError}
             />
             {mode !== "invite" && (
-              <AppleCredentialButton
-                disabled={busy}
-                type={mode === "signup" ? "sign-up" : "sign-in"}
-                onAction={async () => {
-                  setBusy(true);
-                  setError("");
-                  try {
-                    const authorization = await authorizeWithApple();
-                    await loginWithApple(
-                      authorization.code,
-                      authorization.state,
-                    );
-                    await onAuthenticated();
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-                onError={setError}
-              />
+              <>
+                <AppleCredentialButton
+                  disabled={busy}
+                  type={mode === "signup" ? "sign-up" : "sign-in"}
+                  onAction={async () => {
+                    setBusy(true);
+                    setError("");
+                    try {
+                      const authorization = await authorizeWithApple();
+                      await loginWithApple(
+                        authorization.code,
+                        authorization.state,
+                      );
+                      await onAuthenticated();
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  onError={setError}
+                />
+                <MicrosoftLogin
+                  busy={busy}
+                  type={mode === "signup" ? "sign-up" : "sign-in"}
+                  onAuthenticated={onAuthenticated}
+                  onRecoveryRequired={setRecovery}
+                  setBusy={setBusy}
+                  setError={setError}
+                />
+              </>
             )}
           </>
         )}

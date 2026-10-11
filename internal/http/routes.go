@@ -24,9 +24,10 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 		r.Use(cfg.Observability.Middleware)
 	}
 	r.Use(httpmiddleware.SecurityHeaders(httpmiddleware.SecurityHeadersConfig{
-		AllowGoogleOAuth: hasOAuthProvider(cfg, domain.ProviderGoogle),
-		AllowAppleOAuth:  hasOAuthProvider(cfg, domain.ProviderApple),
-		AllowShowcase:    cfg.Dev,
+		AllowGoogleOAuth:    hasOAuthProvider(cfg, domain.ProviderGoogle),
+		AllowAppleOAuth:     hasOAuthProvider(cfg, domain.ProviderApple),
+		AllowMicrosoftOAuth: hasOAuthProvider(cfg, domain.ProviderMicrosoft),
+		AllowShowcase:       cfg.Dev,
 	}))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
@@ -84,6 +85,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(mw.ReturnTo)
+		r.Get("/oauth/microsoft/redirect", uih.MicrosoftRedirectPage)
 		if cfg.Dev {
 			showcaseHandler := showcase.New(uih.Render)
 			r.Get("/showcase", showcaseHandler.Gallery)
@@ -314,6 +316,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Get("/csrf", contracth.GetCsrfToken)
 			r.Get("/oauth/google/options", contracth.GetGoogleLoginOptions)
 			r.Get("/oauth/apple/options", contracth.GetAppleLoginOptions)
+			r.Get("/oauth/microsoft/options", contracth.GetMicrosoftLoginOptions)
 			r.Get("/invitations/preview", contracth.PreviewInvitation)
 
 			r.Group(func(r chi.Router) {
@@ -321,12 +324,14 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 				r.Post("/oauth/google", contracth.LoginWithGoogle)
 				r.Post("/oauth/apple", contracth.LoginWithApple)
+				r.Post("/oauth/microsoft", contracth.LoginWithMicrosoft)
 				r.Post("/invitations/login", contracth.LoginAndAcceptInvitation)
 				r.Post("/invitations/google", contracth.AuthenticateAndAcceptInvitationWithGoogle)
 				r.Post("/provider-links/recovery/google", contracth.StartGoogleAccountRecoveryLink)
 				r.Post("/provider-links/recovery/{linkID}/password", contracth.CompleteAccountRecoveryLinkWithPassword)
 				r.Post("/provider-links/recovery/{linkID}/google", contracth.CompleteAccountRecoveryLinkWithGoogle)
 				r.Post("/provider-links/recovery/{linkID}/apple", contracth.CompleteAccountRecoveryLinkWithApple)
+				r.Post("/provider-links/recovery/{linkID}/microsoft", contracth.CompleteAccountRecoveryLinkWithMicrosoft)
 				r.Post("/login", contracth.LoginWithPassword)
 				r.Post("/signup/direct", contracth.SignupDirect)
 				r.Post("/signup/challenges", contracth.StartSignupChallenge)
@@ -358,6 +363,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 					r.Post("/reauthenticate/password", contracth.ReauthenticateWithPassword)
 					r.Post("/reauthenticate/google", contracth.ReauthenticateWithGoogle)
 					r.Post("/reauthenticate/apple", contracth.ReauthenticateWithApple)
+					r.Post("/reauthenticate/microsoft", contracth.ReauthenticateWithMicrosoft)
 					r.Post("/reauthenticate/passkeys/options", contracth.BeginPasskeyReauthentication)
 					r.Post("/reauthenticate/passkeys/finish", contracth.FinishPasskeyReauthentication)
 					r.Post("/invitations/accept", contracth.AcceptInvitation)
@@ -374,6 +380,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 						r.Post("/account/password", contracth.AddCurrentUserPassword)
 						r.Post("/account/auth-methods/google", contracth.LinkCurrentUserGoogle)
 						r.Post("/account/auth-methods/apple", contracth.LinkCurrentUserApple)
+						r.Post("/account/auth-methods/microsoft", contracth.LinkCurrentUserMicrosoft)
 						r.Delete("/account/auth-methods/{provider}", contracth.UnlinkCurrentUserAuthMethod)
 						r.Delete("/account/passkeys/{passkeyID}", contracth.DeleteCurrentUserPasskey)
 						r.Put("/users/password", contracth.SetCurrentUserPassword)
