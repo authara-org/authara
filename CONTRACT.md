@@ -79,6 +79,15 @@ Major releases may include breaking changes.
 
 All breaking changes must be documented clearly in release notes and migration guides.
 
+### Google authorization-code migration
+
+Authara's first-party Google buttons use Google's popup authorization-code
+flow. Deployments with `google` in `AUTHARA_OAUTH_PROVIDERS` must configure
+`AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET` in addition to the existing client ID and
+register every button-hosting website as an Authorized JavaScript origin.
+Legacy API requests containing a Google ID-token credential and nonce remain
+accepted for compatibility.
+
 ---
 
 # 3. Stability Levels

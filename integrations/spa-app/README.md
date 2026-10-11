@@ -32,6 +32,7 @@ To show the Google button, set:
 ```sh
 AUTHARA_OAUTH_PROVIDERS=google
 AUTHARA_OAUTH_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET=your-google-client-secret
 ```
 
 Add the gateway origin (for example `http://localhost:3001`) to the Google OAuth

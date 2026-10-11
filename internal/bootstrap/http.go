@@ -97,7 +97,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 	}
 	renderer := render.New(assets, enabledFeatures.ChallengeEnabled)
 	authLimiter := newAuthLimiter(app)
-	googleClient := google.New(app.Config.OAuth.GoogleClientID)
+	googleClient := google.New(app.Config.OAuth.GoogleClientID, app.Config.OAuth.GoogleClientSecret)
 	apiHandler := api.New(
 		app.Services.Auth,
 		app.Services.Passkeys,

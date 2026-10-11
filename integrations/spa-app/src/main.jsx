@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import {
@@ -60,7 +60,7 @@ function formatDate(value) {
 }
 
 function GoogleCredentialButton({ busy, onCredential, setBusy, setError }) {
-  const buttonRef = useRef(null);
+  const [codeClient, setCodeClient] = useState(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -69,31 +69,30 @@ function GoogleCredentialButton({ busy, onCredential, setBusy, setError }) {
     getGoogleOptions()
       .then(async (options) => [options, await loadGoogleIdentity()])
       .then(([options, google]) => {
-        if (!active || !buttonRef.current) return;
-
-        google.accounts.id.initialize({
+        if (!active) return;
+        const client = google.accounts.oauth2.initCodeClient({
           client_id: options.client_id,
-          nonce: options.nonce,
-          callback: async ({ credential }) => {
-            if (!credential) return;
+          scope: "openid email profile",
+          ux_mode: "popup",
+          select_account: true,
+          callback: async ({ code, error, error_description: description }) => {
+            if (error || !code) {
+              setError(description || error || "Google sign-in failed.");
+              return;
+            }
             setBusy(true);
             setError("");
             try {
-              await onCredential(credential, options.nonce);
+              await onCredential(code, window.location.origin);
             } catch (error) {
               setError(error.message || "Google sign-in failed.");
             } finally {
               setBusy(false);
             }
           },
+          error_callback: () => setBusy(false),
         });
-        google.accounts.id.renderButton(buttonRef.current, {
-          type: "standard",
-          theme: "outline",
-          size: "large",
-          text: "continue_with",
-          width: Math.min(buttonRef.current.clientWidth, 400),
-        });
+        setCodeClient(() => client);
         setVisible(true);
       })
       .catch((error) => {
@@ -114,7 +113,19 @@ function GoogleCredentialButton({ busy, onCredential, setBusy, setError }) {
       <div className="auth-divider" aria-hidden="true">
         <span>or</span>
       </div>
-      <div className="google-button" ref={buttonRef} />
+      <button
+        className="button secondary wide google-button"
+        type="button"
+        disabled={busy || !codeClient}
+        onClick={() => codeClient.requestCode()}
+      >
+        <img
+          src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+          alt=""
+          aria-hidden="true"
+        />
+        Continue with Google
+      </button>
     </div>
   );
 }
@@ -127,8 +138,8 @@ function GoogleLogin({
   setError,
 }) {
   const authenticate = useCallback(
-    async (credential, nonce) => {
-      const result = await loginWithGoogleOrStartRecovery(credential, nonce);
+    async (code, redirectURI) => {
+      const result = await loginWithGoogleOrStartRecovery(code, redirectURI);
       if (result.recovery) {
         onRecoveryRequired(result.recovery);
         return;
@@ -217,11 +228,11 @@ function AccountRecovery({
           busy={busy}
           setBusy={setBusy}
           setError={setError}
-          onCredential={(credential, nonce) =>
+          onCredential={(code, redirectURI) =>
             completeAccountRecoveryLinkWithGoogle(
               recovery.link_id,
-              credential,
-              nonce,
+              code,
+              redirectURI,
             ).then(onAuthenticated)
           }
         />

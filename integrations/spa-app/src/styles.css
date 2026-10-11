@@ -224,10 +224,18 @@ h2 {
 }
 
 .google-button {
-  display: grid;
+  display: inline-flex;
   width: 100%;
   min-height: 44px;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+}
+
+.google-button img,
+.google-action img {
+  width: 18px;
+  height: 18px;
 }
 
 .auth-actions {
@@ -587,11 +595,13 @@ th {
 }
 
 .google-action {
-  display: grid;
+  display: inline-flex;
   width: 100%;
   min-height: 44px;
   margin-top: 1rem;
-  place-items: center start;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
 }
 
 .google-action.pending {

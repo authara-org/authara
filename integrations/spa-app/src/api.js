@@ -10,6 +10,7 @@ export class APIError extends Error {
     this.response = response;
     this.authenticationChallenge = response?.authentication_challenge ?? null;
     this.reauthenticateURL = response?.reauthenticate_url ?? "";
+    this.recovery = response?.recovery ?? null;
   }
 }
 
@@ -113,8 +114,11 @@ export function getGoogleOptions() {
   return request(`${API}/oauth/google/options`);
 }
 
-export function loginWithGoogle(credential, nonce) {
-  return mutate(`${API}/oauth/google?audience=app`, { credential, nonce });
+export function loginWithGoogle(code, redirectURI) {
+  return mutate(`${API}/oauth/google?audience=app`, {
+    code,
+    redirect_uri: redirectURI,
+  });
 }
 
 export function getAppleOptions() {
@@ -125,33 +129,30 @@ export function loginWithApple(code, state) {
   return mutate(`${API}/oauth/apple?audience=app`, { code, state });
 }
 
-export function startGoogleAccountRecoveryLink(credential, nonce) {
+export function startGoogleAccountRecoveryLink(code, redirectURI) {
   return mutate(`${API}/provider-links/recovery/google`, {
-    credential,
-    nonce,
+    code,
+    redirect_uri: redirectURI,
   });
 }
 
-export async function loginWithGoogleOrStartRecovery(credential, nonce) {
+export async function loginWithGoogleOrStartRecovery(code, redirectURI) {
   try {
     return {
-      session: await loginWithGoogle(credential, nonce),
+      session: await loginWithGoogle(code, redirectURI),
       recovery: null,
     };
   } catch (error) {
     if (
       !(error instanceof APIError) ||
       error.status !== 409 ||
-      error.code !== "account_link_required"
+      error.code !== "account_link_required" ||
+      !error.recovery
     ) {
       throw error;
     }
+    return { session: null, recovery: error.recovery };
   }
-
-  return {
-    session: null,
-    recovery: await startGoogleAccountRecoveryLink(credential, nonce),
-  };
 }
 
 export function completeAccountRecoveryLinkWithPassword(linkID, password) {
@@ -163,12 +164,12 @@ export function completeAccountRecoveryLinkWithPassword(linkID, password) {
 
 export function completeAccountRecoveryLinkWithGoogle(
   linkID,
-  credential,
-  nonce,
+  code,
+  redirectURI,
 ) {
   return mutate(
     `${API}/provider-links/recovery/${encodeURIComponent(linkID)}/google?audience=app`,
-    { credential, nonce },
+    { code, redirect_uri: redirectURI },
   );
 }
 
@@ -400,8 +401,11 @@ export function changePassword(currentPassword, newPassword) {
   );
 }
 
-export function linkGoogle(credential, nonce) {
-  return mutate(`${API}/account/auth-methods/google`, { credential, nonce });
+export function linkGoogle(code, redirectURI) {
+  return mutate(`${API}/account/auth-methods/google`, {
+    code,
+    redirect_uri: redirectURI,
+  });
 }
 
 export function linkApple(code, state) {
@@ -458,13 +462,13 @@ export function reauthenticateWithPassword(authenticationChallengeID, password) 
 
 export function reauthenticateWithGoogle(
   authenticationChallengeID,
-  credential,
-  nonce,
+  code,
+  redirectURI,
 ) {
   return mutate(`${API}/reauthenticate/google`, {
     authentication_challenge_id: authenticationChallengeID,
-    credential,
-    nonce,
+    code,
+    redirect_uri: redirectURI,
   });
 }
 

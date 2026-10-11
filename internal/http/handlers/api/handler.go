@@ -21,6 +21,7 @@ import (
 
 type GoogleVerifier interface {
 	VerifyIDToken(context.Context, string, string) (*google.Identity, error)
+	ExchangeAuthorizationCode(context.Context, string, string) (*google.Identity, error)
 }
 
 type AppleClient interface {

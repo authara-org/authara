@@ -12,7 +12,8 @@ import (
 type OAuth struct {
 	Providers []string `env:"AUTHARA_OAUTH_PROVIDERS"`
 
-	GoogleClientID string `env:"AUTHARA_OAUTH_GOOGLE_CLIENT_ID"`
+	GoogleClientID     string `env:"AUTHARA_OAUTH_GOOGLE_CLIENT_ID"`
+	GoogleClientSecret string `env:"AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET"`
 
 	AppleClientID         string            `env:"AUTHARA_OAUTH_APPLE_CLIENT_ID"`
 	AppleTeamID           string            `env:"AUTHARA_OAUTH_APPLE_TEAM_ID"`
@@ -43,6 +44,9 @@ func (oa *OAuth) validate() error {
 		case "google":
 			if oa.GoogleClientID == "" {
 				return fmt.Errorf("AUTHARA_OAUTH_GOOGLE_CLIENT_ID is required")
+			}
+			if oa.GoogleClientSecret == "" {
+				return fmt.Errorf("AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET is required")
 			}
 		case "apple":
 			if strings.TrimSpace(oa.AppleClientID) == "" {

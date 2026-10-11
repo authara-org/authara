@@ -1,7 +1,6 @@
 package user
 
 import (
-	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
 	"github.com/authara-org/authara/internal/http/templates/components/button"
 	"github.com/authara-org/authara/internal/http/templates/components/csrf"
@@ -268,39 +267,24 @@ templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
 }
 
 templ GoogleLinkButton(clientID string) {
-	<script src="https://accounts.google.com/gsi/client" async></script>
-	<div
+	<button
+		type="button"
+		disabled
+		data-google-button
+		data-google-client-id={ clientID }
 		data-provider="google"
 		data-google-flow={ viewmodel.AuthProviderFlowLink }
 		data-return-to="/auth/account"
 		class="relative flex items-center gap-2 cursor-pointer
 			rounded-lg text text-grey-800 dark:text-grey-200 overflow-hidden"
 	>
-		<div
-			id="g_id_onload"
-			data-client_id={ clientID }
-			data-callback="autharaGoogleCallback"
-			data-auto_prompt="false"
-			data-nonce={ httpctx.OAuthNonceOrDefault(ctx, "") }
-		></div>
 		<img
 			src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
 			class="h-4 w-4"
 			alt="Google logo"
 		/>
 		<span>Link Google</span>
-		<div class="opacity-[0.00001%] absolute inset-0">
-			<div
-				class="g_id_signin"
-				data-type="standard"
-				data-size="large"
-				data-theme="outline"
-				data-text="sign_in_with"
-				data-shape="rectangular"
-				data-logo_alignment="left"
-			></div>
-		</div>
-	</div>
+	</button>
 }
 
 templ AuthProviderIcon(kind viewmodel.AuthProviderKind) {

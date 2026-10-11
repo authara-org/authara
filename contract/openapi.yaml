@@ -69,8 +69,8 @@ paths:
     post:
       operationId: loginWithGoogle
       tags: [Authentication]
-      summary: Log in with a Google ID token
-      description: Exchanges a verified Google ID token for Authara session cookies and JSON tokens.
+      summary: Log in with Google
+      description: Exchanges either a Google authorization code or a legacy verified Google ID token for Authara session cookies and JSON tokens. Account collisions return a pending recovery link in the error response.
       parameters:
         - $ref: "#/components/parameters/Audience"
       security:
@@ -144,7 +144,7 @@ paths:
       operationId: loginWithApple
       tags: [Authentication]
       summary: Log in with an Apple authorization code
-      description: Exchanges a one-time Apple authorization code for Authara session cookies and JSON tokens.
+      description: Exchanges a one-time Apple authorization code for Authara session cookies and JSON tokens. Account collisions return a pending recovery link in the error response.
       parameters:
         - $ref: "#/components/parameters/Audience"
       security:
@@ -2832,6 +2832,8 @@ components:
           $ref: "#/components/schemas/AuthenticationChallenge"
         reauthenticate_url:
           type: string
+        recovery:
+          $ref: "#/components/schemas/AccountRecoveryLink"
     APIError:
       type: object
       additionalProperties: false
@@ -2861,12 +2863,20 @@ components:
     GoogleLoginRequest:
       type: object
       additionalProperties: false
-      required: [credential, nonce]
       properties:
         credential:
           type: string
+          description: Legacy Google ID token. Must be provided together with nonce when code is omitted.
         nonce:
           type: string
+          description: Legacy Google ID-token nonce. Must be provided together with credential when code is omitted.
+        code:
+          type: string
+          description: One-time Google authorization code. Must be provided together with redirect_uri.
+        redirect_uri:
+          type: string
+          format: uri
+          description: Browser origin used by the Google popup code flow. Must be provided together with code.
     AppleLoginOptions:
       type: object
       additionalProperties: false
@@ -2912,14 +2922,23 @@ components:
     InvitationGoogleRequest:
       type: object
       additionalProperties: false
-      required: [token, credential, nonce, flow]
+      required: [token, flow]
       properties:
         token:
           type: string
         credential:
           type: string
+          description: Legacy Google ID token. Must be provided together with nonce when code is omitted.
         nonce:
           type: string
+          description: Legacy Google ID-token nonce. Must be provided together with credential when code is omitted.
+        code:
+          type: string
+          description: One-time Google authorization code. Must be provided together with redirect_uri.
+        redirect_uri:
+          type: string
+          format: uri
+          description: Browser origin used by the Google popup code flow. Must be provided together with code.
         flow:
           type: string
           enum: [signup, login]
@@ -2936,12 +2955,20 @@ components:
     AccountRecoveryGoogleProofRequest:
       type: object
       additionalProperties: false
-      required: [credential, nonce]
       properties:
         credential:
           type: string
+          description: Legacy Google ID token. Must be provided together with nonce when code is omitted.
         nonce:
           type: string
+          description: Legacy Google ID-token nonce. Must be provided together with credential when code is omitted.
+        code:
+          type: string
+          description: One-time Google authorization code. Must be provided together with redirect_uri.
+        redirect_uri:
+          type: string
+          format: uri
+          description: Browser origin used by the Google popup code flow. Must be provided together with code.
         invitation_token:
           type: string
     AccountRecoveryAppleProofRequest:
@@ -3042,15 +3069,24 @@ components:
     GoogleReauthenticationRequest:
       type: object
       additionalProperties: false
-      required: [authentication_challenge_id, credential, nonce]
+      required: [authentication_challenge_id]
       properties:
         authentication_challenge_id:
           type: string
           format: uuid
         credential:
           type: string
+          description: Legacy Google ID token. Must be provided together with nonce when code is omitted.
         nonce:
           type: string
+          description: Legacy Google ID-token nonce. Must be provided together with credential when code is omitted.
+        code:
+          type: string
+          description: One-time Google authorization code. Must be provided together with redirect_uri.
+        redirect_uri:
+          type: string
+          format: uri
+          description: Browser origin used by the Google popup code flow. Must be provided together with code.
     AppleReauthenticationRequest:
       type: object
       additionalProperties: false
@@ -3131,11 +3167,15 @@ components:
     AccountRecoveryLink:
       type: object
       additionalProperties: false
-      required: [link_id, proof_methods]
+      required: [link_id, provider, proof_methods]
       properties:
         link_id:
           type: string
           format: uuid
+        provider:
+          type: string
+          description: External provider that will be attached after existing-account proof succeeds.
+          enum: [google, apple]
         proof_methods:
           type: array
           items:

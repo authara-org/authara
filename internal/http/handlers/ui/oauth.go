@@ -18,6 +18,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/google/uuid"
 )
@@ -32,22 +33,31 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	idToken := r.FormValue("credential")
 	nonce := r.FormValue("nonce")
+	authorizationCode := r.FormValue("code")
+	redirectURI := r.FormValue("redirect_uri")
 	flow := r.FormValue("flow")
 	linkID := r.FormValue("link_id")
 
-	expectedNonce, ok := oauthstate.ReadNonce(r)
-	if idToken == "" || nonce == "" {
+	legacyProvided := idToken != "" || nonce != ""
+	codeProvided := authorizationCode != "" || redirectURI != ""
+	if legacyProvided == codeProvided || (legacyProvided && (idToken == "" || nonce == "")) || (codeProvided && (authorizationCode == "" || redirectURI == "")) {
 		h.renderGoogleFlowError(w, r, ctx, flow)
 		return
 	}
-	if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
-		h.recordGoogleAuthenticationDenial(ctx, r, flow, domain.SecurityEventReasonInvalidAssertion)
-		h.renderGoogleFlowError(w, r, ctx, flow)
-		return
 
+	var identity *google.Identity
+	var err error
+	if codeProvided {
+		identity, err = h.Google.ExchangeAuthorizationCode(ctx, authorizationCode, redirectURI)
+	} else {
+		expectedNonce, ok := oauthstate.ReadNonce(r)
+		if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
+			h.recordGoogleAuthenticationDenial(ctx, r, flow, domain.SecurityEventReasonInvalidAssertion)
+			h.renderGoogleFlowError(w, r, ctx, flow)
+			return
+		}
+		identity, err = h.Google.VerifyIDToken(ctx, idToken, expectedNonce)
 	}
-
-	identity, err := h.Google.VerifyIDToken(ctx, idToken, expectedNonce)
 	if err != nil {
 		h.recordGoogleAuthenticationDenial(ctx, r, flow, domain.SecurityEventReasonInvalidAssertion)
 		h.renderGoogleFlowError(w, r, ctx, flow)

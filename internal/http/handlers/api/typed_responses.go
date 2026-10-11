@@ -33,9 +33,12 @@ func getGoogleLoginOptionsError(code response.ErrorCode, message string) contrac
 	}
 }
 
-func loginWithGoogleError(code response.ErrorCode, message string) contract.LoginWithGoogleResponseObject {
+func loginWithGoogleError(code response.ErrorCode, message string, recovery ...contract.AccountRecoveryLink) contract.LoginWithGoogleResponseObject {
 	spec := mustRouteError(LoginWithGoogleErrors, code)
 	body := apiErrorBody(spec.Code, message)
+	if len(recovery) != 0 {
+		body.Recovery = &recovery[0]
+	}
 	switch spec.Status {
 	case http.StatusBadRequest:
 		return contract.LoginWithGoogle400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
@@ -61,9 +64,12 @@ func getAppleLoginOptionsError(code response.ErrorCode, message string) contract
 	return contract.GetAppleLoginOptions500JSONResponse(body)
 }
 
-func loginWithAppleError(code response.ErrorCode, message string) contract.LoginWithAppleResponseObject {
+func loginWithAppleError(code response.ErrorCode, message string, recovery ...contract.AccountRecoveryLink) contract.LoginWithAppleResponseObject {
 	spec := mustRouteError(LoginWithAppleErrors, code)
 	body := apiErrorBody(spec.Code, message)
+	if len(recovery) != 0 {
+		body.Recovery = &recovery[0]
+	}
 	switch spec.Status {
 	case http.StatusBadRequest:
 		return contract.LoginWithApple400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}

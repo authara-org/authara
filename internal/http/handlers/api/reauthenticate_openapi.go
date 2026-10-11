@@ -86,7 +86,7 @@ func (h *APIHandler) ReauthenticateWithGoogle(ctx context.Context, request contr
 		}
 		return reauthenticateWithGoogleError(response.CodeInternalError, "Session error."), nil
 	}
-	identity, header, code, message, ok := h.verifyGoogleCredential(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
 	if !ok {
 		if code == response.CodeUnauthorized {
 			if err := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidAssertion); err != nil {

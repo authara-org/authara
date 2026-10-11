@@ -97,8 +97,9 @@ The response sets the HttpOnly `authara_oauth_nonce` cookie and returns:
 }
 ```
 
-Pass both values to Google Identity Services. After Google returns its ID-token
-credential, exchange it while preserving the nonce cookie:
+Initialize a Google popup code client with the returned client ID and the
+`openid email profile` scopes. After Google returns its one-time authorization
+code, exchange it with the browser origin:
 
 ```text
 POST /auth/api/v1/oauth/google?audience=app
@@ -108,10 +109,13 @@ Content-Type: application/json
 
 ```json
 {
-  "credential": "<google-id-token>",
-  "nonce": "<nonce>"
+  "code": "<google-authorization-code>",
+  "redirect_uri": "https://app.example.com"
 }
 ```
+
+For compatibility, Authara also accepts the previous `credential` and `nonce`
+pair and verifies the nonce cookie.
 
 `audience` is optional and defaults to `app`; supported values are `app` and
 `admin`. On success Authara returns the same user, access-token, and
@@ -123,9 +127,10 @@ cookies set by these endpoints; the returned access and refresh tokens can
 then be stored by the client.
 
 If the Google email belongs to an existing account that has not linked Google,
-the endpoint returns `409 account_link_required`. Continue with the account
-collision recovery flow below; Authara never links accounts based only on a
-matching email address.
+the endpoint returns `409 account_link_required` with a `recovery` object. It
+contains the pending provider, short-lived `link_id`, and the existing account
+methods that can prove ownership. Continue with the matching recovery endpoint
+below; Authara never links accounts based only on a matching email address.
 
 Errors: `400 invalid_request`, `401 unauthorized`, `403 forbidden`,
 `404 not_found`, `409 account_link_required`, or `500 internal_error`.
@@ -163,8 +168,9 @@ session. Browser applications must not generate Apple's client-secret JWT or
 trust identity claims locally.
 
 If the Apple email belongs to an existing account that has not linked that
-Apple subject, the endpoint returns `409 account_link_required`. Sign in with
-an existing method and link Apple from the account page.
+Apple subject, the endpoint returns `409 account_link_required` with the same
+typed `recovery` object. Authara safely stages the Apple refresh token while the
+user proves ownership with an existing password, Google, or Apple method.
 
 Errors match Google login: `400 invalid_request`, `401 unauthorized`,
 `403 forbidden`, `404 not_found`, `409 account_link_required`, or
@@ -174,8 +180,9 @@ Errors match Google login: `400 invalid_request`, `401 unauthorized`,
 
 ## Recover an external-provider account collision
 
-When a verified Google identity has the same email as an existing account,
-create a short-lived pending link using a nonce-bound Google credential:
+Login collisions for verified external identities return a short-lived pending
+link directly. A client that needs to start the Google flow explicitly can use
+a fresh Google authorization code:
 
 ```text
 POST /auth/api/v1/provider-links/recovery/google
@@ -185,17 +192,20 @@ Content-Type: application/json
 
 ```json
 {
-  "credential": "<google-id-token>",
-  "nonce": "<nonce>"
+  "code": "<google-authorization-code>",
+  "redirect_uri": "https://app.example.com"
 }
 ```
 
-The `202 Accepted` response identifies the pending link and only the existing
-account methods that are available as proof:
+The `202 Accepted` response identifies the provider being attached and only the
+existing account methods that are available as proof. Login collisions already
+return this object in their `409` response, so applications normally do not
+need to call the start endpoint separately:
 
 ```json
 {
   "link_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+  "provider": "google",
   "proof_methods": ["password", "apple"]
 }
 ```
@@ -209,9 +219,9 @@ POST /auth/api/v1/provider-links/recovery/{linkID}/apple?audience=app
 ```
 
 Password proof accepts `{ "password": "..." }`. Google proof accepts a fresh
-`credential` and `nonce` from the Google options flow. Apple proof accepts a
+`code` and `redirect_uri` from the Google popup flow. Apple proof accepts a
 fresh authorization `code` and `state` from the Apple options flow. Successful
-completion consumes the pending link, links the attempted Google identity to
+completion consumes the pending link, links the attempted external identity to
 the existing user, returns an authenticated session, and sets the session
 cookies.
 
@@ -532,7 +542,7 @@ Password reauthentication accepts:
 }
 ```
 
-Google accepts the same nonce-bound credential fields as Google login plus
+Google accepts the same authorization-code fields as Google login plus
 `authentication_challenge_id`, and the identity must already be linked to the
 current user. Passkey options accepts `{ "authentication_challenge_id": "..." }`;
 passkey finish accepts both that ID and the WebAuthn `challenge_id` returned by

@@ -95,27 +95,29 @@ func (h *APIHandler) contractAppleLogin(
 		message := "Apple sign-in error."
 		switch code {
 		case codeAccountLinkRequired:
-			link, linkErr := h.Auth.StartAccountRecoveryProviderLink(ctx, auth.OAuthIdentityInput{
+			recovery, recoveryCode, recoveryMessage, ok := h.startAccountRecoveryLink(ctx, auth.OAuthIdentityInput{
 				Provider:              domain.ProviderApple,
 				Email:                 result.Identity.Email,
 				ProviderUserID:        result.Identity.OAuthID,
 				ProviderEmailVerified: result.Identity.EmailVerified,
-			}, time.Now().UTC())
-			if linkErr != nil {
+			})
+			if !ok {
 				h.discardAppleAuthorization(ctx, result.RefreshToken)
-				return appleLoginErrorWithHeaders(response.CodeInternalError, "Apple sign-in error.", header)
+				return appleLoginErrorWithHeaders(recoveryCode, recoveryMessage, header)
 			}
-			if h.AppleCredentials == nil || h.AppleCredentials.StageProviderLink(ctx, link.ID, result.RefreshToken, link.ExpiresAt) != nil {
+			link, linkErr := h.Auth.GetPendingProviderLink(ctx, recovery.LinkId)
+			if linkErr != nil || h.AppleCredentials == nil || h.AppleCredentials.StageProviderLink(ctx, recovery.LinkId, result.RefreshToken, link.ExpiresAt) != nil {
 				h.discardAppleAuthorization(ctx, result.RefreshToken)
 				return appleLoginErrorWithHeaders(response.CodeInternalError, "Apple sign-in error.", header)
 			}
 
 			u := url.URL{Path: "/auth/provider-links/confirm"}
 			q := u.Query()
-			q.Set("link_id", link.ID.String())
+			q.Set("link_id", recovery.LinkId.String())
 			u.RawQuery = q.Encode()
 			header.Set("X-Authara-Redirect", u.String())
 			message = "Confirm your existing sign-in method to connect Apple."
+			return appleLoginErrorWithHeaders(code, message, header, recovery)
 		case response.CodeForbidden:
 			h.discardAppleAuthorization(ctx, result.RefreshToken)
 			message = "Apple login is not allowed for this account."
