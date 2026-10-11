@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.23.0](https://github.com/authara-org/authara/compare/v0.22.0...v0.23.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **auth:** add symmetric provider recovery and Google code flow ([#60](https://github.com/authara-org/authara/issues/60))
+
+### Features
+
+* **auth:** add symmetric provider recovery and Google code flow ([#60](https://github.com/authara-org/authara/issues/60)) ([526c175](https://github.com/authara-org/authara/commit/526c1757ce293705edfd897061e0168e3d54cd7a))
+
 ## [0.22.0](https://github.com/authara-org/authara/compare/v0.21.1...v0.22.0) (2026-10-08)
 
 
