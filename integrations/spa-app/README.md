@@ -1,10 +1,10 @@
 # Authara SPA integration
 
 A React application that uses Authara's public browser API directly wherever a
-public route exists. It implements its own password, Google, and Apple login,
-provider-collision recovery, passkey login, signup, signup verification,
-account-management, and organization screens. It never embeds or navigates to
-Authara's hosted user-account page.
+public route exists. It implements its own password, Google, Apple, and
+Microsoft login, provider-collision recovery, passkey login, signup, signup
+verification, account-management, and organization screens. It never embeds or
+navigates to Authara's hosted user-account page.
 
 Operations that intentionally exist only on Authara's internal API go through
 the example application's Go backend at `/spa/api/v1`. That backend resolves
@@ -27,6 +27,19 @@ available at [http://localhost:3001](http://localhost:3001), and Authara owns
 `/spa/account`. Vite runs inside Compose, so React source changes are applied
 without rebuilding or restarting the stack.
 
+For a public HTTPS development origin, configure the named Cloudflare Tunnel
+route to `http://gateway:3000`, then set these values in the repository `.env`:
+
+```sh
+PUBLIC_URL=https://your-development-domain
+COMPOSE_PROFILES=tunnel
+CLOUDFLARE_TUNNEL_TOKEN=your-tunnel-token
+```
+
+`make dev` then starts `cloudflared` with the rest of the stack while keeping
+`http://localhost:3001` available for direct local debugging. Register the
+public origin with each enabled OAuth provider.
+
 To show the Google button, set:
 
 ```sh
@@ -44,6 +57,22 @@ key ID, private key, and redirect URL as described in the OAuth configuration
 documentation. The SPA uses Apple's popup flow and exchanges only the
 single-use authorization code with Authara.
 
+To show the Microsoft button, enable Microsoft with the Entra application client
+ID and tenant policy:
+
+```sh
+AUTHARA_OAUTH_PROVIDERS=google,apple,microsoft
+AUTHARA_OAUTH_MICROSOFT_CLIENT_ID=your-application-client-id
+AUTHARA_OAUTH_MICROSOFT_TENANT_ID=common
+```
+
+Register the exact gateway callback, such as
+`http://localhost:3001/auth/oauth/microsoft/redirect`, as a Microsoft
+Single-page application redirect URI. For the public tunnel, register
+`https://playground.authara.org/auth/oauth/microsoft/redirect`. The custom
+button uses Microsoft's popup authorization-code flow with PKCE and Core's
+dedicated MSAL redirect bridge.
+
 For production, build the Docker image and serve it at `/spa/` behind an Authara
 Gateway. The nginx configuration serves `index.html` for client-side paths such
 as `/spa/private`; the gateway must continue routing `/auth/*` to Authara. A
@@ -58,9 +87,10 @@ deployment that enables the internal-only controls must also route
 - custom Google login through the Google Identity Services button and Authara's
   nonce-bound `/auth/api/v1/oauth/google` flow when Google is enabled
 - custom Apple login through the server-created state and nonce flow
+- custom Microsoft login through the popup PKCE flow and nonce-bound ID token
 - account-collision recovery that displays the existing account's available
-  password, Google, or Apple proof methods and links the attempted Google
-  identity after successful proof
+  password, Google, Apple, or Microsoft proof methods and links the attempted
+  external identity after successful proof
 - signup email-code verification and opaque challenge resending
 - cookie-session refresh followed by a single retry
 - current user, organization memberships, active organization, member list, and
@@ -69,7 +99,8 @@ deployment that enables the internal-only controls must also route
   ownership transfer when allowed by the configured mode and role
 - invitation listing, detail lookup, role-aware creation, revocation, and
   resending
-- React-owned profile, email, password, Google, passkey, and session management
+- React-owned profile, email, password, Google, Apple, Microsoft, passkey, and
+  session management
 - current-user deletion through the application backend and Authara internal API
 - recent-authentication handling that preserves the `428` challenge, opens a
   React dialog, and retries the original mutation after successful step-up

@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/apple"
+	"github.com/authara-org/authara/internal/oauth/microsoft"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/securityevent"
@@ -36,6 +37,7 @@ type Services struct {
 	SecurityEvents   *securityevent.Service
 	Apple            *apple.Client
 	AppleCredentials *apple.Credentials
+	Microsoft        *microsoft.Client
 }
 
 func NewServices(app *App) (Services, error) {
@@ -50,29 +52,38 @@ func NewServices(app *App) (Services, error) {
 	oauthProviders := newOAuthProviders(app.Config.Startup())
 	var appleClient *apple.Client
 	var appleCredentials *apple.Credentials
+	var microsoftClient *microsoft.Client
 	for _, provider := range oauthProviders.Providers {
-		if provider.Name != domain.ProviderApple {
-			continue
+		switch provider.Name {
+		case domain.ProviderApple:
+			var err error
+			appleClient, err = apple.New(apple.Config{
+				ClientID: app.Config.OAuth.AppleClientID, TeamID: app.Config.OAuth.AppleTeamID,
+				KeyID: app.Config.OAuth.AppleKeyID, PrivateKey: app.Config.OAuth.ApplePrivateKey,
+				RedirectURI: provider.RedirectURI,
+			})
+			if err != nil {
+				return Services{}, fmt.Errorf("create Apple OAuth client: %w", err)
+			}
+			appleCredentials, err = apple.NewCredentials(
+				app.Store,
+				app.Config.OAuth.AppleTokenActiveKeyID,
+				app.Config.OAuth.AppleDecodedTokenKeys,
+				appleClient,
+			)
+			if err != nil {
+				return Services{}, fmt.Errorf("create Apple credential store: %w", err)
+			}
+		case domain.ProviderMicrosoft:
+			var err error
+			microsoftClient, err = microsoft.New(microsoft.Config{
+				ClientID: app.Config.OAuth.MicrosoftClientID,
+				TenantID: app.Config.OAuth.MicrosoftTenantID,
+			})
+			if err != nil {
+				return Services{}, fmt.Errorf("create Microsoft OAuth client: %w", err)
+			}
 		}
-		var err error
-		appleClient, err = apple.New(apple.Config{
-			ClientID: app.Config.OAuth.AppleClientID, TeamID: app.Config.OAuth.AppleTeamID,
-			KeyID: app.Config.OAuth.AppleKeyID, PrivateKey: app.Config.OAuth.ApplePrivateKey,
-			RedirectURI: provider.RedirectURI,
-		})
-		if err != nil {
-			return Services{}, fmt.Errorf("create Apple OAuth client: %w", err)
-		}
-		appleCredentials, err = apple.NewCredentials(
-			app.Store,
-			app.Config.OAuth.AppleTokenActiveKeyID,
-			app.Config.OAuth.AppleDecodedTokenKeys,
-			appleClient,
-		)
-		if err != nil {
-			return Services{}, fmt.Errorf("create Apple credential store: %w", err)
-		}
-		break
 	}
 	webhookPublisher := newWebhookPublisher(app.Config, app.Store)
 	webhookWorker := newWebhookWorker(app.Config, app.Store, app.Logger, app.Observability)
@@ -196,6 +207,7 @@ func NewServices(app *App) (Services, error) {
 		SecurityEvents:   securityEventService,
 		Apple:            appleClient,
 		AppleCredentials: appleCredentials,
+		Microsoft:        microsoftClient,
 	}, nil
 }
 

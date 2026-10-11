@@ -217,7 +217,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error)
 		}
 		return user, loginErr
 
-	case domain.ProviderGoogle, domain.ProviderApple:
+	case domain.ProviderGoogle, domain.ProviderApple, domain.ProviderMicrosoft:
 		return s.loginWithExternal(ctx, in, "")
 
 	default:
@@ -251,6 +251,8 @@ func (s *Service) loginWithExternal(ctx context.Context, in LoginInput, appleRef
 	method := domain.AuthenticationMethodGoogle
 	if in.Provider == domain.ProviderApple {
 		method = domain.AuthenticationMethodApple
+	} else if in.Provider == domain.ProviderMicrosoft {
+		method = domain.AuthenticationMethodMicrosoft
 	}
 	if err := s.ensureEmailAllowed(ctx, in.Email, invitationSource{Token: strings.TrimSpace(in.InvitationToken)}); err != nil {
 		if errors.Is(err, ErrEmailNotAllowed) {
@@ -745,9 +747,6 @@ func (s *Service) StartAccountRecoveryProviderLink(
 	if !s.IsProviderEnabled(in.Provider) {
 		return domain.PendingProviderLink{}, ErrProviderDisabled
 	}
-	if !in.ProviderEmailVerified {
-		return domain.PendingProviderLink{}, ErrProviderEmailNotVerified
-	}
 	if in.ProviderUserID == "" || in.Email == "" {
 		return domain.PendingProviderLink{}, ErrPendingProviderLinkInvalid
 	}
@@ -772,7 +771,7 @@ func (s *Service) StartAccountRecoveryProviderLink(
 			Provider:              in.Provider,
 			ProviderUserID:        &providerUserID,
 			ProviderEmail:         &providerEmail,
-			ProviderEmailVerified: true,
+			ProviderEmailVerified: in.ProviderEmailVerified,
 			Purpose:               domain.PendingProviderLinkPurposeAccountRecovery,
 			ExpiresAt:             now.Add(10 * time.Minute),
 		})
@@ -860,7 +859,7 @@ func (s *Service) completeProviderLink(
 			return ErrPendingProviderLinkInvalid
 		}
 
-		if providerUserID == "" || providerEmail == "" || !providerEmailVerified {
+		if providerUserID == "" || providerEmail == "" {
 			return ErrPendingProviderLinkInvalid
 		}
 
@@ -885,8 +884,10 @@ func (s *Service) completeProviderLink(
 		if err != nil {
 			return err
 		}
-		if err := s.markCurrentEmailVerified(txCtx, &user, providerEmail, now); err != nil {
-			return err
+		if providerEmailVerified {
+			if err := s.markCurrentEmailVerified(txCtx, &user, providerEmail, now); err != nil {
+				return err
+			}
 		}
 		if provider == domain.ProviderApple {
 			if appleRefreshToken == "" || s.appleCredentials == nil {
@@ -923,7 +924,7 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithPassword(
 		if link.Purpose != domain.PendingProviderLinkPurposeAccountRecovery {
 			return ErrPendingProviderLinkInvalid
 		}
-		if link.ProviderUserID == nil || *link.ProviderUserID == "" || link.ProviderEmail == nil || *link.ProviderEmail == "" || !link.ProviderEmailVerified {
+		if link.ProviderUserID == nil || *link.ProviderUserID == "" || link.ProviderEmail == nil || *link.ProviderEmail == "" {
 			return ErrPendingProviderLinkInvalid
 		}
 
@@ -978,8 +979,10 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithPassword(
 				return err
 			}
 		}
-		if err := s.markCurrentEmailVerified(txCtx, &user, *link.ProviderEmail, now); err != nil {
-			return err
+		if link.ProviderEmailVerified {
+			if err := s.markCurrentEmailVerified(txCtx, &user, *link.ProviderEmail, now); err != nil {
+				return err
+			}
 		}
 		return s.enqueueAuthMethodChanged(txCtx, user, link.Provider, domain.EmailTemplateAuthMethodAdded, now)
 	})
@@ -1021,7 +1024,7 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
 		if link.Purpose != domain.PendingProviderLinkPurposeAccountRecovery {
 			return ErrPendingProviderLinkInvalid
 		}
-		if link.ProviderUserID == nil || *link.ProviderUserID == "" || link.ProviderEmail == nil || *link.ProviderEmail == "" || !link.ProviderEmailVerified {
+		if link.ProviderUserID == nil || *link.ProviderUserID == "" || link.ProviderEmail == nil || *link.ProviderEmail == "" {
 			return ErrPendingProviderLinkInvalid
 		}
 
@@ -1077,8 +1080,10 @@ func (s *Service) CompleteAccountRecoveryProviderLinkWithProviderProof(
 				return err
 			}
 		}
-		if err := s.markCurrentEmailVerified(txCtx, &user, *link.ProviderEmail, now); err != nil {
-			return err
+		if link.ProviderEmailVerified {
+			if err := s.markCurrentEmailVerified(txCtx, &user, *link.ProviderEmail, now); err != nil {
+				return err
+			}
 		}
 		return s.enqueueAuthMethodChanged(txCtx, user, link.Provider, domain.EmailTemplateAuthMethodAdded, now)
 	})

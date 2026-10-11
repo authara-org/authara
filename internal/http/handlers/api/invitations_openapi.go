@@ -401,6 +401,10 @@ func (h *APIHandler) startAccountRecoveryLink(ctx context.Context, identity auth
 			if h.Apple != nil {
 				proofs = append(proofs, contract.AccountRecoveryLinkProofMethodsApple)
 			}
+		case domain.ProviderMicrosoft:
+			if h.Microsoft != nil {
+				proofs = append(proofs, contract.AccountRecoveryLinkProofMethodsMicrosoft)
+			}
 		}
 	}
 	return contract.AccountRecoveryLink{
@@ -561,7 +565,7 @@ func recoveryError(err error) (response.ErrorCode, string) {
 		return codePasswordProviderNotFound, "Password authentication is not available for this account."
 	case errors.Is(err, auth.ErrAuthProviderAlreadyLinked), errors.Is(err, auth.ErrAuthProviderAlreadyLinkedToUser):
 		return codeAuthMethodAlreadyLinked, "Authentication method already linked."
-	case errors.Is(err, auth.ErrProviderDisabled), errors.Is(err, auth.ErrProviderEmailNotVerified):
+	case errors.Is(err, auth.ErrProviderDisabled):
 		return response.CodeForbidden, "Provider linking is not allowed."
 	case errors.Is(err, store.ErrUserNotFound):
 		return response.CodeNotFound, "Account not found."

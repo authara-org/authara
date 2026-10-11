@@ -10,7 +10,7 @@ import (
 
 func TestEmbeddedReauthenticationUsesCompactLayout(t *testing.T) {
 	var page strings.Builder
-	if err := Reauthenticate(true, true, "google-client-id", true, "challenge-id", true).Render(context.Background(), &page); err != nil {
+	if err := Reauthenticate(true, true, "google-client-id", true, true, "challenge-id", true).Render(context.Background(), &page); err != nil {
 		t.Fatal(err)
 	}
 
@@ -21,6 +21,7 @@ func TestEmbeddedReauthenticationUsesCompactLayout(t *testing.T) {
 		`data-passkey-reauthenticate`,
 		`data-google-flow`,
 		`data-apple-flow`,
+		`data-microsoft-flow`,
 		`reauthenticate`,
 		`name="embedded" value="1"`,
 	} {
@@ -36,7 +37,7 @@ func TestEmbeddedReauthenticationUsesCompactLayout(t *testing.T) {
 func TestEmbeddedReauthenticationHTMXReturnsModalFragment(t *testing.T) {
 	ctx := httpctx.WithHTMX(context.Background())
 	var page strings.Builder
-	if err := Reauthenticate(true, true, "google-client-id", true, "challenge-id", true).Render(ctx, &page); err != nil {
+	if err := Reauthenticate(true, true, "google-client-id", true, true, "challenge-id", true).Render(ctx, &page); err != nil {
 		t.Fatal(err)
 	}
 

@@ -133,6 +133,15 @@ type GetAppleLoginOptions200HeadersResponse struct {
 	Body   AppleLoginOptions
 }
 
+type GetMicrosoftLoginOptions200HeadersResponse struct {
+	Header http.Header
+	Body   MicrosoftLoginOptions
+}
+
+func (r GetMicrosoftLoginOptions200HeadersResponse) VisitGetMicrosoftLoginOptionsResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
+}
+
 func (r GetAppleLoginOptions200HeadersResponse) VisitGetAppleLoginOptionsResponse(w http.ResponseWriter) error {
 	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
@@ -151,6 +160,15 @@ type LoginWithApple200HeadersResponse struct {
 	Body   AuthSession
 }
 
+type LoginWithMicrosoft200HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
+}
+
+func (r LoginWithMicrosoft200HeadersResponse) VisitLoginWithMicrosoftResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
+}
+
 func (r LoginWithApple200HeadersResponse) VisitLoginWithAppleResponse(w http.ResponseWriter) error {
 	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
@@ -161,6 +179,16 @@ type LinkCurrentUserGoogle204HeadersResponse struct {
 
 type LinkCurrentUserApple204HeadersResponse struct {
 	Header http.Header
+}
+
+type LinkCurrentUserMicrosoft204HeadersResponse struct {
+	Header http.Header
+}
+
+func (r LinkCurrentUserMicrosoft204HeadersResponse) VisitLinkCurrentUserMicrosoftResponse(w http.ResponseWriter) error {
+	writeHeaders(w.Header(), r.Header)
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func (r LinkCurrentUserApple204HeadersResponse) VisitLinkCurrentUserAppleResponse(w http.ResponseWriter) error {
@@ -175,6 +203,16 @@ type ReauthenticateWithGoogle204HeadersResponse struct {
 
 type ReauthenticateWithApple204HeadersResponse struct {
 	Header http.Header
+}
+
+type ReauthenticateWithMicrosoft204HeadersResponse struct {
+	Header http.Header
+}
+
+func (r ReauthenticateWithMicrosoft204HeadersResponse) VisitReauthenticateWithMicrosoftResponse(w http.ResponseWriter) error {
+	writeHeaders(w.Header(), r.Header)
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func (r ReauthenticateWithApple204HeadersResponse) VisitReauthenticateWithAppleResponse(w http.ResponseWriter) error {
@@ -261,6 +299,15 @@ func (r CompleteAccountRecoveryLinkWithGoogle200HeadersResponse) VisitCompleteAc
 type CompleteAccountRecoveryLinkWithApple200HeadersResponse struct {
 	Header http.Header
 	Body   AuthSession
+}
+
+type CompleteAccountRecoveryLinkWithMicrosoft200HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
+}
+
+func (r CompleteAccountRecoveryLinkWithMicrosoft200HeadersResponse) VisitCompleteAccountRecoveryLinkWithMicrosoftResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusOK, r.Header, r.Body)
 }
 
 func (r CompleteAccountRecoveryLinkWithApple200HeadersResponse) VisitCompleteAccountRecoveryLinkWithAppleResponse(w http.ResponseWriter) error {

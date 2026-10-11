@@ -26,10 +26,11 @@ type Session struct {
 type AuthenticationMethod string
 
 const (
-	AuthenticationMethodPassword AuthenticationMethod = "password"
-	AuthenticationMethodPasskey  AuthenticationMethod = "passkey"
-	AuthenticationMethodGoogle   AuthenticationMethod = "google"
-	AuthenticationMethodApple    AuthenticationMethod = "apple"
+	AuthenticationMethodPassword  AuthenticationMethod = "password"
+	AuthenticationMethodPasskey   AuthenticationMethod = "passkey"
+	AuthenticationMethodGoogle    AuthenticationMethod = "google"
+	AuthenticationMethodApple     AuthenticationMethod = "apple"
+	AuthenticationMethodMicrosoft AuthenticationMethod = "microsoft"
 )
 
 type AuthenticationChallenge struct {

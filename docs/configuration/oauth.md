@@ -7,6 +7,7 @@ Currently supported providers:
 ```
 google
 apple
+microsoft
 ```
 
 Additional providers may be added in future versions.
@@ -26,7 +27,7 @@ AUTHARA_OAUTH_PROVIDERS
 Example:
 
 ```
-AUTHARA_OAUTH_PROVIDERS=google,apple
+AUTHARA_OAUTH_PROVIDERS=google,apple,microsoft
 ```
 
 Multiple providers may be enabled using a comma-separated list.
@@ -59,6 +60,60 @@ https://your-domain
 Authara uses Google's popup authorization-code flow. The browser sends the
 one-time code to Core, and Core exchanges it using the client secret. Keep the
 client secret on the Authara server; never expose it to browser JavaScript.
+
+## Microsoft identity platform
+
+Create an app registration in Microsoft Entra and add this exact Single-page
+application (SPA) redirect URI for every origin that displays an Authara
+Microsoft button:
+
+```
+https://your-domain/auth/oauth/microsoft/redirect
+```
+
+Enable ID tokens for the application. The redirect page is Authara's dedicated
+MSAL bridge and must keep the `/auth/oauth/microsoft/redirect` path.
+
+Microsoft does not guarantee a verified email claim, including for some work
+and school accounts. Authara therefore keys Microsoft identities by their
+immutable tenant and object IDs and stores the returned email as unverified
+unless Microsoft supplies `verified_primary_email` or a true `xms_edov` claim.
+You may add both claims under **Token configuration** > **Add optional claim**
+> **ID**; the browser already requests the `email` OpenID Connect scope that
+`xms_edov` depends on.
+
+Required configuration:
+
+```dotenv
+AUTHARA_OAUTH_PROVIDERS=microsoft
+AUTHARA_OAUTH_MICROSOFT_CLIENT_ID=00000000-0000-0000-0000-000000000000
+AUTHARA_OAUTH_MICROSOFT_TENANT_ID=common
+```
+
+`AUTHARA_OAUTH_MICROSOFT_TENANT_ID` accepts a tenant UUID or `common`,
+`organizations`, or `consumers`. Use a tenant UUID for a single-tenant app,
+`organizations` for work and school accounts, `consumers` for personal
+Microsoft accounts, or `common` for both.
+
+Authara's button uses Microsoft's popup authorization-code flow with PKCE.
+Core validates the resulting v2 ID token against the issuing tenant, client
+ID, signature, expiry, and one-time nonce. Accounts are keyed by the immutable
+tenant ID and object ID, not by a mutable email address. If the suggested email
+already belongs to an Authara account, Authara requires proof using an existing
+sign-in method before linking Microsoft. An unverified Microsoft email never
+marks the Authara email as verified. New accounts retain `email_verified=false`;
+enable Authara's required email-verification policy if the application requires
+mailbox ownership before access.
+
+### Troubleshooting Microsoft sign-in
+
+- A Microsoft address can belong to either a personal account or a work or
+  school account. The account picker may ask which identity type to use.
+- Missing Microsoft email-verification claims do not block sign-in or linking,
+  but the email remains unverified until Authara verifies it separately.
+- The redirect URI must be registered under the **Single-page application**
+  platform and must exactly match the button origin plus
+  `/auth/oauth/microsoft/redirect`.
 
 ## Sign in with Apple
 
@@ -143,5 +198,6 @@ not revoke the previous Apple key until that overlap has passed.
   one line and that every refresh-token key decodes to exactly 32 bytes.
 - If sign-in works but relay mail is not delivered, verify the sending domain,
   SPF, and DKIM configuration in Apple's private email relay settings.
-- A user whose Apple email already belongs to an Authara account must first
-  sign in with the existing method and then link Apple from the account page.
+- A user whose Apple email already belongs to an Authara account can prove
+  ownership with an existing method and complete Authara's collision-recovery
+  flow, or sign in first and link Apple from the account page.

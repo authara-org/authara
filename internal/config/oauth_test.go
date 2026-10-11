@@ -54,6 +54,30 @@ func TestGoogleOAuthRequiresClientSecret(t *testing.T) {
 	}
 }
 
+func TestMicrosoftOAuthRequiresClientAndValidTenant(t *testing.T) {
+	oauth := OAuth{Providers: []string{"microsoft"}}
+	if err := oauth.validate(); err == nil || !strings.Contains(err.Error(), "MICROSOFT_CLIENT_ID") {
+		t.Fatalf("validate error = %v", err)
+	}
+
+	oauth.MicrosoftClientID = "client-id"
+	if err := oauth.validate(); err == nil || !strings.Contains(err.Error(), "MICROSOFT_TENANT_ID") {
+		t.Fatalf("validate error = %v", err)
+	}
+
+	for _, tenant := range []string{"common", "organizations", "consumers", "11111111-2222-3333-4444-555555555555"} {
+		oauth.MicrosoftTenantID = tenant
+		if err := oauth.validate(); err != nil {
+			t.Fatalf("validate Microsoft tenant %q: %v", tenant, err)
+		}
+	}
+
+	oauth.MicrosoftTenantID = "not-a-tenant"
+	if err := oauth.validate(); err == nil || !strings.Contains(err.Error(), "must be a UUID") {
+		t.Fatalf("validate error = %v", err)
+	}
+}
+
 func TestAppleOAuthRejectsIncompleteOrInvalidKeys(t *testing.T) {
 	oauth := validAppleOAuth(t)
 	oauth.AppleTeamID = ""

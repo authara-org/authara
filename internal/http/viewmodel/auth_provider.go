@@ -8,9 +8,10 @@ import (
 type AuthProviderKind string
 
 const (
-	AuthProviderPassword AuthProviderKind = "password"
-	AuthProviderGoogle   AuthProviderKind = "google"
-	AuthProviderApple    AuthProviderKind = "apple"
+	AuthProviderPassword  AuthProviderKind = "password"
+	AuthProviderGoogle    AuthProviderKind = "google"
+	AuthProviderApple     AuthProviderKind = "apple"
+	AuthProviderMicrosoft AuthProviderKind = "microsoft"
 )
 
 type AuthProviderFlow string
@@ -38,11 +39,13 @@ func AuthProvidersFromDomain(
 	oauthProviders []oauth.OAuthProvider,
 ) []AuthProvider {
 	var (
-		hasPassword   bool
-		hasGoogle     bool
-		hasApple      bool
-		googleEnabled bool
-		appleEnabled  bool
+		hasPassword      bool
+		hasGoogle        bool
+		hasApple         bool
+		hasMicrosoft     bool
+		googleEnabled    bool
+		appleEnabled     bool
+		microsoftEnabled bool
 	)
 
 	for _, p := range providers {
@@ -53,6 +56,8 @@ func AuthProvidersFromDomain(
 			hasGoogle = true
 		case domain.ProviderApple:
 			hasApple = true
+		case domain.ProviderMicrosoft:
+			hasMicrosoft = true
 		}
 	}
 
@@ -62,10 +67,12 @@ func AuthProvidersFromDomain(
 			googleEnabled = true
 		case domain.ProviderApple:
 			appleEnabled = true
+		case domain.ProviderMicrosoft:
+			microsoftEnabled = true
 		}
 	}
 
-	out := make([]AuthProvider, 0, 3)
+	out := make([]AuthProvider, 0, 4)
 
 	if hasPassword {
 		out = append(out, AuthProvider{
@@ -128,6 +135,21 @@ func AuthProvidersFromDomain(
 			provider.Subtitle = "Sign in with your Apple account."
 			provider.ActionLabel = "Unlink"
 			provider.ActionURL = "/auth/providers/apple/unlink"
+		}
+		out = append(out, provider)
+	}
+
+	if microsoftEnabled {
+		provider := AuthProvider{
+			ID: "microsoft", Kind: AuthProviderMicrosoft, Title: "Microsoft",
+			Subtitle:    "Connect your Microsoft account for faster sign-in.",
+			ActionLabel: "Link Microsoft", ActionURL: "/auth/providers/microsoft/link",
+		}
+		if hasMicrosoft {
+			provider.Linked = true
+			provider.Subtitle = "Sign in with your Microsoft account."
+			provider.ActionLabel = "Unlink"
+			provider.ActionURL = "/auth/providers/microsoft/unlink"
 		}
 		out = append(out, provider)
 	}

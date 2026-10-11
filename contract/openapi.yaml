@@ -188,6 +188,81 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
 
+  /auth/api/v1/oauth/microsoft/options:
+    get:
+      operationId: getMicrosoftLoginOptions
+      tags: [Authentication]
+      summary: Get Microsoft login options
+      description: Returns the Microsoft client ID, authority, and nonce needed to start the Microsoft popup flow.
+      security: []
+      x-authara-access: public
+      x-authara-availability: microsoft-enabled
+      x-authara-set-cookies: [authara_oauth_nonce]
+      x-authara-error-codes:
+        "404": [not_found]
+        "500": [internal_error]
+      responses:
+        "200":
+          description: Microsoft login options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MicrosoftLoginOptions"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/oauth/microsoft:
+    post:
+      operationId: loginWithMicrosoft
+      tags: [Authentication]
+      summary: Log in with Microsoft
+      description: Exchanges a nonce-bound Microsoft ID token for Authara session cookies and JSON tokens. Account collisions return a pending recovery link in the error response.
+      parameters:
+        - $ref: "#/components/parameters/Audience"
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+          oauthNonceCookie: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-availability: microsoft-enabled
+      x-authara-clear-cookies: [authara_oauth_nonce]
+      x-authara-set-cookies: [authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found]
+        "409": [account_link_required]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MicrosoftLoginRequest"
+      responses:
+        "200":
+          description: Authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /auth/api/v1/invitations/preview:
     get:
       operationId: previewInvitation
@@ -550,6 +625,57 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/AccountRecoveryAppleProofRequest"
+      responses:
+        "200":
+          description: Linked provider and authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/provider-links/recovery/{linkID}/microsoft:
+    post:
+      operationId: completeAccountRecoveryLinkWithMicrosoft
+      tags: [Authentication]
+      summary: Prove ownership with an existing Microsoft login and finish linking
+      description: Consumes a recovery link after Microsoft provider proof, creates a session, and optionally accepts and switches to an invitation organization.
+      parameters:
+        - $ref: "#/components/parameters/ProviderLinkID"
+        - $ref: "#/components/parameters/AppAudience"
+      security:
+        - csrfCookie: []
+          csrfHeader: []
+          oauthNonceCookie: []
+      x-authara-access: public
+      x-authara-csrf: required
+      x-authara-availability: microsoft-enabled
+      x-authara-clear-cookies: [authara_oauth_nonce]
+      x-authara-set-cookies: [authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden, invitation_email_mismatch]
+        "404": [not_found, invitation_not_found]
+        "409": [provider_link_expired, auth_method_already_linked, invitation_already_accepted, invitation_revoked, invitation_expired, organization_membership_conflict]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountRecoveryMicrosoftProofRequest"
       responses:
         "200":
           description: Linked provider and authenticated session
@@ -1115,6 +1241,46 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
 
+  /auth/api/v1/reauthenticate/microsoft:
+    post:
+      operationId: reauthenticateWithMicrosoft
+      tags: [Sessions]
+      summary: Reauthenticate the current session with a linked Microsoft identity
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+          oauthNonceCookie: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-availability: microsoft-enabled
+      x-authara-clear-cookies: [authara_oauth_nonce]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [not_found]
+        "409": [invalid_authentication_challenge]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MicrosoftReauthenticationRequest"
+      responses:
+        "204":
+          description: Session reauthenticated
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /auth/api/v1/reauthenticate/passkeys/options:
     post:
       operationId: beginPasskeyReauthentication
@@ -1661,6 +1827,54 @@ paths:
       responses:
         "204":
           description: Apple linked
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "428":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/account/auth-methods/microsoft:
+    post:
+      operationId: linkCurrentUserMicrosoft
+      tags: [Users]
+      summary: Link Microsoft to the authenticated user's account
+      description: Uses options from getMicrosoftLoginOptions and links the verified Microsoft identity to the current account.
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+          oauthNonceCookie: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-recent-auth: required
+      x-authara-availability: microsoft-enabled
+      x-authara-clear-cookies: [authara_oauth_nonce]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "404": [not_found]
+        "409": [auth_method_already_linked]
+        "428": [recent_authentication_required]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MicrosoftLoginRequest"
+      responses:
+        "204":
+          description: Microsoft linked
         "400":
           $ref: "#/components/responses/Error"
         "401":
@@ -2810,7 +3024,7 @@ components:
       required: true
       schema:
         type: string
-        enum: [password, google, apple]
+        enum: [password, google, apple, microsoft]
 
   responses:
     Error:
@@ -2902,6 +3116,30 @@ components:
           type: string
         invitation_token:
           type: string
+    MicrosoftLoginOptions:
+      type: object
+      additionalProperties: false
+      required: [client_id, authority, nonce]
+      properties:
+        client_id:
+          type: string
+        authority:
+          type: string
+          format: uri
+        nonce:
+          type: string
+    MicrosoftLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [credential, nonce]
+      properties:
+        credential:
+          type: string
+          description: Microsoft v2 ID token returned by the popup authorization-code flow.
+        nonce:
+          type: string
+        invitation_token:
+          type: string
     InvitationTokenRequest:
       type: object
       additionalProperties: false
@@ -2979,6 +3217,17 @@ components:
         code:
           type: string
         state:
+          type: string
+        invitation_token:
+          type: string
+    AccountRecoveryMicrosoftProofRequest:
+      type: object
+      additionalProperties: false
+      required: [credential, nonce]
+      properties:
+        credential:
+          type: string
+        nonce:
           type: string
         invitation_token:
           type: string
@@ -3099,6 +3348,18 @@ components:
           type: string
         state:
           type: string
+    MicrosoftReauthenticationRequest:
+      type: object
+      additionalProperties: false
+      required: [authentication_challenge_id, credential, nonce]
+      properties:
+        authentication_challenge_id:
+          type: string
+          format: uuid
+        credential:
+          type: string
+        nonce:
+          type: string
     AuthenticationChallengeReference:
       type: object
       additionalProperties: false
@@ -3175,12 +3436,12 @@ components:
         provider:
           type: string
           description: External provider that will be attached after existing-account proof succeeds.
-          enum: [google, apple]
+          enum: [google, apple, microsoft]
         proof_methods:
           type: array
           items:
             type: string
-            enum: [password, google, apple]
+            enum: [password, google, apple, microsoft]
 
     InvitationPreview:
       type: object
@@ -3390,7 +3651,7 @@ components:
       properties:
         provider:
           type: string
-          enum: [password, google, apple]
+          enum: [password, google, apple, microsoft]
         created_at:
           type: string
           format: date-time

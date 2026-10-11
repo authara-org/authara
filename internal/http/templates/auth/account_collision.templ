@@ -35,6 +35,8 @@ templ AccountCollision(linkID string, email string, provider string, proofOption
 						@GoogleSignin("Continue", option.ClientID, viewmodel.AuthProviderFlowProof, linkID)
 					} else if option.Provider == "apple" {
 						@AppleSignin("Continue", viewmodel.AuthProviderFlowProof, "", linkID, "")
+					} else if option.Provider == "microsoft" {
+						@MicrosoftSignin("Continue", viewmodel.AuthProviderFlowProof, "", linkID, "")
 					}
 				}
 			</div>

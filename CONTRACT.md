@@ -88,6 +88,16 @@ register every button-hosting website as an Authorized JavaScript origin.
 Legacy API requests containing a Google ID-token credential and nonce remain
 accepted for compatibility.
 
+### Microsoft identity-token contract
+
+Microsoft login uses the browser authorization-code flow with PKCE and sends a
+v2 ID token plus the Core-issued nonce to the Microsoft endpoints. Core keys a
+Microsoft identity by `tid:oid`, validates the tenant-specific issuer and
+signature, and accepts email-based account recovery only for Microsoft-verified
+email claims. Deployments enable the provider with `microsoft` in
+`AUTHARA_OAUTH_PROVIDERS` and configure both
+`AUTHARA_OAUTH_MICROSOFT_CLIENT_ID` and `AUTHARA_OAUTH_MICROSOFT_TENANT_ID`.
+
 ---
 
 # 3. Stability Levels

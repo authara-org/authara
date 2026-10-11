@@ -64,7 +64,11 @@ func Pages() []Page {
 }
 
 func fixturePages() []Page {
-	providers := []oauth.OAuthProvider{{Name: domain.ProviderGoogle, ClientID: "showcase-google-client"}}
+	providers := []oauth.OAuthProvider{
+		{Name: domain.ProviderGoogle, ClientID: "showcase-google-client"},
+		{Name: domain.ProviderApple, ClientID: "showcase-apple-client"},
+		{Name: domain.ProviderMicrosoft, ClientID: "showcase-microsoft-client"},
+	}
 	pages := []Page{
 		{Slug: "login", Name: "Sign in", Group: "Authentication", Component: func() templ.Component { return authview.Login(providers, true, "Authara") }},
 		{Slug: "signup", Name: "Sign up", Group: "Authentication", Component: func() templ.Component { return authview.Signup(providers, "Authara") }},
@@ -96,7 +100,7 @@ func fixturePages() []Page {
 		{Slug: "add-password", Name: "Add password", Group: "Account", Component: authview.AddPassword},
 		{Slug: "change-password", Name: "Change password", Group: "Account", Component: authview.ChangePassword},
 		{Slug: "reauthenticate", Name: "Reauthenticate", Group: "Account", Component: func() templ.Component {
-			return authview.Reauthenticate(true, true, "showcase-google-client", true, "fixture-challenge", false)
+			return authview.Reauthenticate(true, true, "showcase-google-client", true, true, "fixture-challenge", false)
 		}},
 		{Slug: "reauthentication-complete", Name: "Reauthentication complete", Group: "Account", Component: func() templ.Component { return authview.ReauthenticationComplete(false) }},
 		{Slug: "error", Name: "Error page", Group: "System", Component: func() templ.Component {
@@ -118,6 +122,7 @@ func fixtureAccount() templ.Component {
 		AuthProviders: []viewmodel.AuthProvider{
 			{ID: "password", Kind: viewmodel.AuthProviderPassword, Title: "Password", Subtitle: "Use your email and password to sign in.", Linked: true, Primary: true, ActionLabel: "Change password"},
 			{ID: "google", Kind: viewmodel.AuthProviderGoogle, Title: "Google", Subtitle: "alex@example.com", Linked: true, ActionLabel: "Unlink"},
+			{ID: "microsoft", Kind: viewmodel.AuthProviderMicrosoft, Title: "Microsoft", Subtitle: "Not linked", ActionLabel: "Link"},
 		},
 		Passkeys: []viewmodel.Passkey{{ID: uuid.MustParse("44444444-4444-4444-4444-444444444444"), Name: "MacBook Touch ID", CreatedAt: "Sep 12, 2026", LastUsedAt: "Sep 27, 2026", CanDelete: true}},
 	})

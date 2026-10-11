@@ -3,11 +3,14 @@ const path = require("path");
 module.exports = (env, argv) => ({
   mode: argv.mode || "development",
 
-  entry: "./src/main.ts",
+  entry: {
+    app: "./src/main.ts",
+    "microsoft-redirect": "./src/microsoftRedirect.ts",
+  },
 
   output: {
     path: path.resolve(__dirname, "dist"),
-    filename: "app.js",
+    filename: "[name].js",
     chunkFilename: "[id].app.[contenthash:16].js",
   },
 

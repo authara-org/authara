@@ -20,7 +20,6 @@ var (
 	ErrPendingProviderLinkExpired      = errors.New("pending provider link expired")
 	ErrPendingProviderLinkInvalid      = errors.New("pending provider link invalid")
 	ErrPendingProviderLinkNeedsProof   = errors.New("pending provider link requires proof")
-	ErrProviderEmailNotVerified        = errors.New("provider email is not verified")
 	ErrProviderDisabled                = errors.New("provider disabled")
 	ErrPasswordProviderMissing         = errors.New("password provider missing")
 	ErrPasskeyNotFound                 = errors.New("passkey not found")

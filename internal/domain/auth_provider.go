@@ -9,9 +9,10 @@ import (
 type Provider string
 
 const (
-	ProviderPassword Provider = "password"
-	ProviderGoogle   Provider = "google"
-	ProviderApple    Provider = "apple"
+	ProviderPassword  Provider = "password"
+	ProviderGoogle    Provider = "google"
+	ProviderApple     Provider = "apple"
+	ProviderMicrosoft Provider = "microsoft"
 )
 
 type AuthProvider struct {

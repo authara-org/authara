@@ -2595,6 +2595,50 @@ func TestCompleteProviderLinkQueuesSecurityNotification(t *testing.T) {
 	})
 }
 
+func TestCompleteProviderLinkDoesNotTrustUnverifiedProviderEmail(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user := createPasswordUser(t, ctx, tdb, "unverified-provider-link@example.com", "unverified-provider-link", "hashed-password")
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+			OAuthProviders: oauth.OAuthProviders{Providers: []oauth.OAuthProvider{
+				oauth.NewOAuthProvider(domain.ProviderMicrosoft, "client-id", "http://localhost:3000"),
+			}},
+		})
+		now := time.Date(2026, 10, 11, 20, 0, 0, 0, time.UTC)
+		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		session, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID: user.ID, ActiveOrganizationID: organization.ID,
+			ExpiresAt: now.Add(time.Hour), UserAgent: "provider-link-test",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		linkID, err := svc.StartProviderLink(ctx, user.ID, session.ID, domain.ProviderMicrosoft, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.CompleteProviderLink(
+			ctx, linkID, user.ID, session.ID, domain.ProviderMicrosoft,
+			"tenant-id:object-id", user.Email, false, now,
+		); err != nil {
+			t.Fatalf("CompleteProviderLink failed: %v", err)
+		}
+		stored, err := tdb.Store.GetUserByID(ctx, user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored.EmailVerifiedAt != nil {
+			t.Fatal("unverified Microsoft email marked the Authara email as verified")
+		}
+	})
+}
+
 func TestGetUser_NotFound(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
@@ -2855,7 +2899,7 @@ func TestStartAccountRecoveryProviderLink_CreatesPendingLinkForExistingEmail(t *
 			Provider:              domain.ProviderGoogle,
 			Email:                 "collision@example.com",
 			ProviderUserID:        "google-collision-sub",
-			ProviderEmailVerified: true,
+			ProviderEmailVerified: false,
 		}, time.Date(2026, 5, 7, 8, 0, 0, 0, time.UTC))
 		if err != nil {
 			t.Fatalf("StartAccountRecoveryProviderLink failed: %v", err)
@@ -2872,6 +2916,9 @@ func TestStartAccountRecoveryProviderLink_CreatesPendingLinkForExistingEmail(t *
 		}
 		if link.ProviderUserID == nil || *link.ProviderUserID != "google-collision-sub" {
 			t.Fatalf("expected pending provider user id to be stored")
+		}
+		if link.ProviderEmailVerified {
+			t.Fatal("unverified provider email was stored as verified")
 		}
 	})
 }
@@ -2933,6 +2980,44 @@ func TestCompleteAccountRecoveryProviderLinkWithPassword_LinksProvider(t *testin
 		_, err = svc.CompleteAccountRecoveryProviderLinkWithPassword(ctx, link.ID, "correct-password", now)
 		if !errors.Is(err, ErrPendingProviderLinkExpired) && !errors.Is(err, ErrPendingProviderLinkInvalid) {
 			t.Fatalf("expected consumed pending link to be rejected, got %v", err)
+		}
+	})
+}
+
+func TestCompleteAccountRecoveryProviderLinkDoesNotTrustUnverifiedEmail(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		passwordHash, err := Hash("correct-password")
+		if err != nil {
+			t.Fatal(err)
+		}
+		user := createPasswordUser(t, ctx, tdb, "unverified-collision@example.com", "unverified-collision", passwordHash)
+		svc := New(Config{
+			Store: tdb.Store,
+			Tx:    tdb.Tx,
+			OAuthProviders: oauth.OAuthProviders{Providers: []oauth.OAuthProvider{
+				oauth.NewOAuthProvider(domain.ProviderMicrosoft, "client-id", "http://localhost:3000"),
+			}},
+		})
+		now := time.Date(2026, 10, 11, 20, 0, 0, 0, time.UTC)
+		link, err := svc.StartAccountRecoveryProviderLink(ctx, OAuthIdentityInput{
+			Provider: domain.ProviderMicrosoft, Email: user.Email,
+			ProviderUserID: "tenant-id:object-id", ProviderEmailVerified: false,
+		}, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		linked, err := svc.CompleteAccountRecoveryProviderLinkWithPassword(ctx, link.ID, "correct-password", now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if linked.EmailVerifiedAt != nil {
+			t.Fatal("unverified Microsoft email marked the Authara email as verified")
+		}
+		provider, err := tdb.Store.GetAuthProviderByProviderAndProviderUserID(ctx, domain.ProviderMicrosoft, "tenant-id:object-id")
+		if err != nil || provider.UserID != user.ID {
+			t.Fatalf("Microsoft provider was not linked: provider=%+v err=%v", provider, err)
 		}
 	})
 }

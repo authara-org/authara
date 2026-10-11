@@ -53,6 +53,8 @@ settings_metadata:
   AUTHARA_OAUTH_PROVIDERS: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_GOOGLE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET: {control: env, reload: startup, sensitive: true, group: oauth}
+  AUTHARA_OAUTH_MICROSOFT_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_OAUTH_MICROSOFT_TENANT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_APPLE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_APPLE_TEAM_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_APPLE_KEY_ID: {control: env, reload: startup, sensitive: false, group: oauth}
@@ -474,6 +476,7 @@ variables:
     allowed_values:
       - google
       - apple
+      - microsoft
 
   - name: AUTHARA_OAUTH_GOOGLE_CLIENT_ID
     stability: stable
@@ -490,6 +493,23 @@ variables:
     required_if:
       variable: AUTHARA_OAUTH_PROVIDERS
       contains: google
+
+  - name: AUTHARA_OAUTH_MICROSOFT_CLIENT_ID
+    stability: stable
+    required: false
+    type: string
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: microsoft
+
+  - name: AUTHARA_OAUTH_MICROSOFT_TENANT_ID
+    stability: stable
+    required: false
+    type: string
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: microsoft
+    notes: Microsoft tenant UUID, common, organizations, or consumers.
 
   - name: AUTHARA_OAUTH_APPLE_CLIENT_ID
     stability: stable

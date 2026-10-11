@@ -36,6 +36,7 @@ func TestInvitationAppleSigninReturnsToInvitationAcceptance(t *testing.T) {
 	providers := []oauth.OAuthProvider{
 		oauth.NewOAuthProvider(domain.ProviderGoogle, "google-client", "https://auth.example.com"),
 		oauth.NewOAuthProvider(domain.ProviderApple, "apple-client", "https://auth.example.com"),
+		oauth.NewOAuthProvider(domain.ProviderMicrosoft, "microsoft-client", "https://auth.example.com"),
 	}
 	var html strings.Builder
 	if err := OAuthProviders("Login", providers, "/auth/invitations/accept?token=invite-token").Render(ctx, &html); err != nil {
@@ -45,8 +46,26 @@ func TestInvitationAppleSigninReturnsToInvitationAcceptance(t *testing.T) {
 	if got := strings.Count(output, `data-return-to="/auth/invitations/login?token=invite-token"`); got != 1 {
 		t.Fatal("Google invitation return path changed")
 	}
-	if got := strings.Count(output, `data-return-to="/auth/invitations/accept?token=invite-token"`); got != 1 {
-		t.Fatal("Apple invitation does not return to acceptance")
+	if got := strings.Count(output, `data-return-to="/auth/invitations/accept?token=invite-token"`); got != 2 {
+		t.Fatal("Apple and Microsoft invitations do not return to acceptance")
+	}
+}
+
+func TestMicrosoftSigninRendersCustomButton(t *testing.T) {
+	var html strings.Builder
+	if err := MicrosoftSignin("Continue", viewmodel.AuthProviderFlowReauthenticate, "challenge-id", "", "").Render(context.Background(), &html); err != nil {
+		t.Fatal(err)
+	}
+
+	output := html.String()
+	for _, want := range []string{
+		`data-microsoft-button`, `Continue with Microsoft`, `data-microsoft-flow="reauthenticate"`,
+		`data-authentication-challenge-id="challenge-id"`, `bg-[#f25022]`, `bg-[#7fba00]`,
+		`bg-[#00a4ef]`, `bg-[#ffb900]`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("Microsoft button is missing %q", want)
+		}
 	}
 }
 
@@ -91,6 +110,19 @@ func TestAppleButtonLabelMatchesAuthenticationAction(t *testing.T) {
 	} {
 		if got := appleButtonLabel(action); got != want {
 			t.Errorf("appleButtonLabel(%q) = %q, want %q", action, got, want)
+		}
+	}
+}
+
+func TestMicrosoftButtonLabelMatchesAuthenticationAction(t *testing.T) {
+	for action, want := range map[string]string{
+		"Login":          "Sign in with Microsoft",
+		"Signup":         "Sign up with Microsoft",
+		"Create account": "Sign up with Microsoft",
+		"Link":           "Link Microsoft",
+	} {
+		if got := microsoftButtonLabel(action); got != want {
+			t.Errorf("microsoftButtonLabel(%q) = %q, want %q", action, got, want)
 		}
 	}
 }

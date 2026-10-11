@@ -26,6 +26,8 @@ templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider, appleR
 						@GoogleSignin(action, p.ClientID, viewmodel.AuthProviderFlowLogin, "")
 					case "apple":
 						@AppleSignin(action, viewmodel.AuthProviderFlowLogin, "", "", appleReturnTo)
+					case "microsoft":
+						@MicrosoftSignin(action, viewmodel.AuthProviderFlowLogin, "", "", appleReturnTo)
 				}
 			}
 		</div>
@@ -60,7 +62,7 @@ templ AppleSignin(action string, flow viewmodel.AuthProviderFlow, authentication
 	<div
 		class="authara-apple-signin w-full"
 		data-apple-flow={ string(flow) }
-		data-return-to={ appleReturnDestination(ctx, returnTo) }
+		data-return-to={ oauthReturnDestination(ctx, returnTo) }
 		data-authentication-challenge-id={ authenticationChallengeID }
 		data-link-id={ linkID }
 	>
@@ -81,7 +83,29 @@ templ AppleSignin(action string, flow viewmodel.AuthProviderFlow, authentication
 	</div>
 }
 
-func appleReturnDestination(ctx context.Context, override string) string {
+templ MicrosoftSignin(action string, flow viewmodel.AuthProviderFlow, authenticationChallengeID string, linkID string, returnTo string) {
+	<button
+		type="button"
+		data-microsoft-button
+		data-microsoft-flow={ string(flow) }
+		data-return-to={ oauthReturnDestination(ctx, returnTo) }
+		data-authentication-challenge-id={ authenticationChallengeID }
+		data-link-id={ linkID }
+		disabled
+		aria-disabled="true"
+		class="relative h-[42px] w-full cursor-pointer overflow-hidden rounded-xl border border-grey-400 bg-white px-3.5 py-0 text-base text-grey-800 transition-[background-color,border-color,opacity] hover:border-grey-500 hover:bg-grey-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-wait dark:border-transparent dark:bg-white dark:text-grey-800 dark:hover:border-transparent dark:hover:bg-grey-50 dark:focus-visible:ring-offset-grey-900"
+	>
+		<span class="flex h-full items-center justify-center gap-2">
+			<span class="grid h-4 w-4 shrink-0 grid-cols-2 gap-[1px]" aria-hidden="true">
+				<span class="bg-[#f25022]"></span><span class="bg-[#7fba00]"></span>
+				<span class="bg-[#00a4ef]"></span><span class="bg-[#ffb900]"></span>
+			</span>
+			<span>{ microsoftButtonLabel(action) }</span>
+		</span>
+	</button>
+}
+
+func oauthReturnDestination(ctx context.Context, override string) string {
 	if override != "" {
 		return override
 	}
@@ -109,5 +133,18 @@ func appleButtonLabel(action string) string {
 		return "Link Apple"
 	default:
 		return "Continue with Apple"
+	}
+}
+
+func microsoftButtonLabel(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "login", "signin", "sign in":
+		return "Sign in with Microsoft"
+	case "create account", "signup", "sign up":
+		return "Sign up with Microsoft"
+	case "link":
+		return "Link Microsoft"
+	default:
+		return "Continue with Microsoft"
 	}
 }

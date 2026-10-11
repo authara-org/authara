@@ -21,6 +21,24 @@ func TestAccountAlwaysIncludesDeletion(t *testing.T) {
 	}
 }
 
+func TestAccountIncludesProviderUnlinkForms(t *testing.T) {
+	var page strings.Builder
+	if err := Account(AccountConfig{}).Render(context.Background(), &page); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, provider := range []string{"password", "google", "apple", "microsoft"} {
+		for _, want := range []string{
+			`id="remove-` + provider + `-form"`,
+			`hx-post="/auth/providers/` + provider + `/unlink"`,
+		} {
+			if !strings.Contains(page.String(), want) {
+				t.Errorf("account page does not contain %q", want)
+			}
+		}
+	}
+}
+
 func TestAccountPasswordActionsOpenDialog(t *testing.T) {
 	for _, test := range []struct {
 		name     string

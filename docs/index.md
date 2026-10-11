@@ -26,7 +26,7 @@ Features include:
 - login and signup flows
 - cookie-based sessions
 - refresh token rotation
-- Google and Apple login
+- Google, Apple, and Microsoft login
 - CSRF protection for browser flows
 - a stable HTTP authentication interface
 - Authara-hosted organization invitation acceptance

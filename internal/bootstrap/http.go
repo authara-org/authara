@@ -117,6 +117,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 	)
 	apiHandler.Apple = app.Services.Apple
 	apiHandler.AppleCredentials = app.Services.AppleCredentials
+	apiHandler.Microsoft = app.Services.Microsoft
 	uiHandler := ui.New(
 		app.Services.Admin,
 		app.Services.Auth,
