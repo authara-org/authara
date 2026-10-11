@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/authara-org/authara/compare/v0.23.0...v0.24.0) (2026-10-11)
+
+
+### Features
+
+* **auth:** add Microsoft authentication ([#62](https://github.com/authara-org/authara/issues/62)) ([92d2db0](https://github.com/authara-org/authara/commit/92d2db09ae6713a7fe7833a1ae4f0b01c8d3b0d4))
+
 ## [0.23.0](https://github.com/authara-org/authara/compare/v0.22.0...v0.23.0) (2026-10-11)
 
 
