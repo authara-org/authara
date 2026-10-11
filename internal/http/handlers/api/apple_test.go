@@ -254,6 +254,16 @@ func TestAppleLoginDoesNotMergeAnExistingEmail(t *testing.T) {
 		if recorder.Code != http.StatusConflict || credentials.stagedToken != "unused-refresh-token" || credentials.queuedToken != "" {
 			t.Fatalf("status = %d, staged=%q, queued=%q, body=%s", recorder.Code, credentials.stagedToken, credentials.queuedToken, recorder.Body.String())
 		}
+		var body contract.ErrorResponse
+		if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Error.Code != string(codeAccountLinkRequired) || body.Recovery == nil || body.Recovery.Provider != contract.AccountRecoveryLinkProviderApple {
+			t.Fatalf("unexpected recovery response: %+v", body)
+		}
+		if len(body.Recovery.ProofMethods) != 1 || body.Recovery.ProofMethods[0] != contract.AccountRecoveryLinkProofMethodsPassword {
+			t.Fatalf("unexpected proof methods: %+v", body.Recovery.ProofMethods)
+		}
 		recoveryURL, err := url.Parse(recorder.Header().Get("X-Authara-Redirect"))
 		if err != nil {
 			t.Fatal(err)
@@ -274,6 +284,92 @@ func TestAppleLoginDoesNotMergeAnExistingEmail(t *testing.T) {
 		}
 		if _, err := tdb.Store.GetAuthProviderByProviderAndProviderUserID(ctx, domain.ProviderApple, "different-apple-subject"); err == nil {
 			t.Fatal("Apple subject was silently linked to the existing account")
+		}
+	})
+}
+
+func TestGoogleProofCompletesAppleAccountRecovery(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "google-proof@example.com", Username: "google-proof"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		googleSubject := "existing-google-proof-subject"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID: user.ID, Provider: domain.ProviderGoogle, ProviderUserID: &googleSubject,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatal(err)
+		}
+
+		providers := oauth.OAuthProviders{Providers: []oauth.OAuthProvider{
+			oauth.NewOAuthProvider(domain.ProviderGoogle, "google-client", "https://auth.example.com"),
+			oauth.NewOAuthProvider(domain.ProviderApple, "com.example.web", "https://auth.example.com"),
+		}}
+		credentials := &fakeAppleCredentials{}
+		appleClient := &fakeAppleClient{result: apple.ExchangeResult{
+			Identity: apple.Identity{
+				OAuthID: "new-apple-subject", Email: user.Email, EmailVerified: true,
+			},
+			RefreshToken: "new-apple-refresh-token",
+		}}
+		organizations := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeSingle})
+		h := &APIHandler{
+			Auth: auth.New(auth.Config{
+				Store: tdb.Store, Tx: tdb.Tx, OAuthProviders: providers,
+				Organizations: organizations, AppleCredentials: credentials,
+			}),
+			Session: newAPIHandlerTestSessionService(t, tdb), OAuthProviders: providers,
+			Apple: appleClient, AppleCredentials: credentials,
+			Google:    fakeGoogleVerifier{identity: &google.Identity{OAuthID: googleSubject, Email: user.Email, EmailVerified: true}},
+			AccessTTL: time.Minute, RefreshTTL: time.Hour,
+		}
+
+		appleRequest := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/apple", nil)
+		appleRequest.AddCookie(&http.Cookie{Name: "authara_apple_oauth", Value: "state.nonce"})
+		appleResponse, err := h.LoginWithApple(contractCtx(ctx, appleRequest), contract.LoginWithAppleRequestObject{
+			Body: &contract.AppleAuthorizationRequest{Code: "code", State: "state"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		appleRecorder := httptest.NewRecorder()
+		writeContractResponse(t, appleRecorder, appleResponse)
+		var collision contract.ErrorResponse
+		if err := json.Unmarshal(appleRecorder.Body.Bytes(), &collision); err != nil {
+			t.Fatal(err)
+		}
+		if collision.Recovery == nil || collision.Recovery.Provider != contract.AccountRecoveryLinkProviderApple || len(collision.Recovery.ProofMethods) != 1 || collision.Recovery.ProofMethods[0] != contract.AccountRecoveryLinkProofMethodsGoogle {
+			t.Fatalf("unexpected recovery response: %+v", collision.Recovery)
+		}
+
+		googleRequest := googleAPIRequest(ctx, "/auth/api/v1/provider-links/recovery/"+collision.Recovery.LinkId.String()+"/google", "proof-nonce")
+		googleResponse, err := h.CompleteAccountRecoveryLinkWithGoogle(
+			contractCtx(ctx, googleRequest),
+			contract.CompleteAccountRecoveryLinkWithGoogleRequestObject{
+				LinkID: collision.Recovery.LinkId,
+				Body: &contract.AccountRecoveryGoogleProofRequest{
+					Credential: testString("existing-google"), Nonce: testString("proof-nonce"),
+				},
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		googleRecorder := httptest.NewRecorder()
+		writeContractResponse(t, googleRecorder, googleResponse)
+		if googleRecorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, body=%s", googleRecorder.Code, googleRecorder.Body.String())
+		}
+		linked, err := tdb.Store.GetAuthProviderByProviderAndProviderUserID(ctx, domain.ProviderApple, "new-apple-subject")
+		if err != nil || linked.UserID != user.ID {
+			t.Fatalf("linked provider = %+v, err=%v", linked, err)
+		}
+		if credentials.userID != user.ID || credentials.token != "new-apple-refresh-token" {
+			t.Fatalf("credentials = %+v", credentials)
 		}
 	})
 }
@@ -359,7 +455,7 @@ func TestAppleProofCompletesGoogleAccountRecovery(t *testing.T) {
 			Apple: client, AppleCredentials: credentials, AccessTTL: time.Minute, RefreshTTL: time.Hour,
 		}
 
-		recovery, code, message, ok := h.startAccountRecoveryLink(ctx, &google.Identity{
+		recovery, code, message, ok := h.startGoogleAccountRecoveryLink(ctx, &google.Identity{
 			OAuthID: "new-google-subject", Email: user.Email, EmailVerified: true,
 		})
 		if !ok {

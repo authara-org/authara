@@ -122,8 +122,8 @@ func copyResponseHeaders(destination http.Header, source http.Header) {
 	}
 }
 
-func appleLoginErrorWithHeaders(code response.ErrorCode, message string, header http.Header) contract.LoginWithAppleResponseObject {
-	return loginWithAppleHeadersResponse{header: header, response: loginWithAppleError(code, message)}
+func appleLoginErrorWithHeaders(code response.ErrorCode, message string, header http.Header, recovery ...contract.AccountRecoveryLink) contract.LoginWithAppleResponseObject {
+	return loginWithAppleHeadersResponse{header: header, response: loginWithAppleError(code, message, recovery...)}
 }
 
 func appleLinkErrorWithHeaders(code response.ErrorCode, message string, header http.Header) contract.LinkCurrentUserAppleResponseObject {

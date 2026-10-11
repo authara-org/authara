@@ -127,7 +127,7 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 	if request.Body == nil || strings.TrimSpace(request.Body.Token) == "" {
 		return authenticateAndAcceptInvitationWithGoogleError(response.CodeInvalidRequest, "Invitation token required."), nil
 	}
-	identity, header, code, message, ok := h.verifyGoogleCredential(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
 	if !ok {
 		return authenticateAndAcceptInvitationWithGoogleError(code, message), nil
 	}
@@ -153,7 +153,7 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 		InvitationToken:       request.Body.Token,
 	})
 	if errors.Is(err, auth.ErrAccountExistsMustLink) {
-		link, code, message, ok := h.startAccountRecoveryLink(ctx, identity)
+		link, code, message, ok := h.startGoogleAccountRecoveryLink(ctx, identity)
 		if !ok {
 			return authenticateAndAcceptInvitationWithGoogleError(code, message), nil
 		}
@@ -204,11 +204,11 @@ func (h *APIHandler) StartGoogleAccountRecoveryLink(ctx context.Context, request
 	if request.Body == nil {
 		return startGoogleAccountRecoveryLinkError(response.CodeInvalidRequest, "Invalid JSON body."), nil
 	}
-	identity, header, code, message, ok := h.verifyGoogleCredential(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
 	if !ok {
 		return startGoogleAccountRecoveryLinkError(code, message), nil
 	}
-	link, code, message, ok := h.startAccountRecoveryLink(ctx, identity)
+	link, code, message, ok := h.startGoogleAccountRecoveryLink(ctx, identity)
 	if !ok {
 		return startGoogleAccountRecoveryLinkError(code, message), nil
 	}
@@ -275,7 +275,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithGoogle(ctx context.Context, 
 			return completeAccountRecoveryLinkWithGoogleError(code, message), nil
 		}
 	}
-	identity, nonceHeader, code, message, ok := h.verifyGoogleCredential(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, nonceHeader, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
 	if !ok {
 		return completeAccountRecoveryLinkWithGoogleError(code, message), nil
 	}
@@ -369,13 +369,17 @@ func (h *APIHandler) pendingInvitation(ctx context.Context, rawToken string) (or
 	}
 }
 
-func (h *APIHandler) startAccountRecoveryLink(ctx context.Context, identity *google.Identity) (contract.AccountRecoveryLink, response.ErrorCode, string, bool) {
-	link, err := h.Auth.StartAccountRecoveryProviderLink(ctx, auth.OAuthIdentityInput{
+func (h *APIHandler) startGoogleAccountRecoveryLink(ctx context.Context, identity *google.Identity) (contract.AccountRecoveryLink, response.ErrorCode, string, bool) {
+	return h.startAccountRecoveryLink(ctx, auth.OAuthIdentityInput{
 		Provider:              domain.ProviderGoogle,
 		Email:                 identity.Email,
 		ProviderUserID:        identity.OAuthID,
 		ProviderEmailVerified: identity.EmailVerified,
-	}, time.Now().UTC())
+	})
+}
+
+func (h *APIHandler) startAccountRecoveryLink(ctx context.Context, identity auth.OAuthIdentityInput) (contract.AccountRecoveryLink, response.ErrorCode, string, bool) {
+	link, err := h.Auth.StartAccountRecoveryProviderLink(ctx, identity, time.Now().UTC())
 	if err != nil {
 		code, message := recoveryError(err)
 		return contract.AccountRecoveryLink{}, code, message, false
@@ -399,7 +403,11 @@ func (h *APIHandler) startAccountRecoveryLink(ctx context.Context, identity *goo
 			}
 		}
 	}
-	return contract.AccountRecoveryLink{LinkId: link.ID, ProofMethods: proofs}, "", "", true
+	return contract.AccountRecoveryLink{
+		LinkId:       link.ID,
+		Provider:     contract.AccountRecoveryLinkProvider(link.Provider),
+		ProofMethods: proofs,
+	}, "", "", true
 }
 
 func (h *APIHandler) recoveryLinkAndUser(ctx context.Context, linkID contract.ProviderLinkID) (domain.PendingProviderLink, domain.User, response.ErrorCode, string, bool) {

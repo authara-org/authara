@@ -43,6 +43,17 @@ func TestAppleOAuthValidateAndParse(t *testing.T) {
 	}
 }
 
+func TestGoogleOAuthRequiresClientSecret(t *testing.T) {
+	oauth := OAuth{Providers: []string{"google"}, GoogleClientID: "client-id"}
+	if err := oauth.validate(); err == nil || !strings.Contains(err.Error(), "GOOGLE_CLIENT_SECRET") {
+		t.Fatalf("validate error = %v", err)
+	}
+	oauth.GoogleClientSecret = "client-secret"
+	if err := oauth.validate(); err != nil {
+		t.Fatalf("validate configured Google OAuth: %v", err)
+	}
+}
+
 func TestAppleOAuthRejectsIncompleteOrInvalidKeys(t *testing.T) {
 	oauth := validAppleOAuth(t)
 	oauth.AppleTeamID = ""

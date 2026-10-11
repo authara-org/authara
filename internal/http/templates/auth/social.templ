@@ -33,44 +33,26 @@ templ OAuthProviders(action string, oauthProviders []oauth.OAuthProvider, appleR
 }
 
 templ GoogleSignin(action string, clientID string, flow viewmodel.AuthProviderFlow, linkID string) {
-	<script src="https://accounts.google.com/gsi/client" async></script>
 	@button.Button(button.ButtonConfig{
 		Type:  button.RegularButton,
 		Color: button.Custom,
+		Disabled: true,
 		Class: " relative !h-[42px] !w-full !rounded-xl !border !border-grey-400 !px-3.5 !py-0 text-base text-grey-800 overflow-hidden bg-white hover:bg-grey-50 hover:border-grey-500 dark:!border-transparent dark:bg-white dark:text-grey-800 dark:hover:!border-transparent dark:hover:bg-grey-50",
 		Attrs: templ.Attributes{
-			"id":               "google-signin-btn",
-			"data-provider":    "google",
-			"data-google-flow": string(flow),
-			"data-link-id":     linkID,
-			"data-return-to":   httpctx.ReturnToOrDefault(ctx),
+			"data-google-button":    true,
+			"data-google-client-id": clientID,
+			"data-provider":         "google",
+			"data-google-flow":      string(flow),
+			"data-link-id":          linkID,
+			"data-return-to":        httpctx.ReturnToOrDefault(ctx),
 		},
 	}) {
-		<div
-			id="g_id_onload"
-			data-client_id={ clientID }
-			data-callback="autharaGoogleCallback"
-			data-auto_prompt="false"
-			data-nonce={ httpctx.OAuthNonceOrDefault(ctx, "") }
-		></div>
 		<img
 			src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
 			class="h-4 w-4"
 			alt="Google logo"
 		/>
 		<span>{ googleButtonLabel(action) }</span>
-		<div class="absolute inset-0 overflow-hidden opacity-[0.00001%]">
-			<div
-				class="g_id_signin"
-				data-type="standard"
-				data-size="large"
-				data-theme="outline"
-				data-text="sign_in_with"
-				data-shape="rectangular"
-				data-logo_alignment="left"
-				data-width="400"
-			></div>
-		</div>
 	}
 }
 

@@ -39,11 +39,11 @@ function formatDate(value) {
 }
 
 function GoogleCredentialButton({ disabled, onCredential, onError }) {
-  const buttonRef = useRef(null);
   const credentialHandler = useRef(onCredential);
   const errorHandler = useRef(onError);
   const [available, setAvailable] = useState(true);
   const [ready, setReady] = useState(false);
+  const [codeClient, setCodeClient] = useState(null);
 
   credentialHandler.current = onCredential;
   errorHandler.current = onError;
@@ -53,23 +53,24 @@ function GoogleCredentialButton({ disabled, onCredential, onError }) {
     getGoogleOptions()
       .then(async (options) => [options, await loadGoogleIdentity()])
       .then(([options, google]) => {
-        if (!active || !buttonRef.current) return;
-        google.accounts.id.initialize({
+        if (!active) return;
+        const client = google.accounts.oauth2.initCodeClient({
           client_id: options.client_id,
-          nonce: options.nonce,
-          callback: ({ credential }) => {
-            if (credential) {
-              void credentialHandler.current(credential, options.nonce);
+          scope: "openid email profile",
+          ux_mode: "popup",
+          select_account: true,
+          callback: ({ code, error, error_description: description }) => {
+            if (error || !code) {
+              errorHandler.current(
+                description || error || "Google authentication failed.",
+              );
+              return;
             }
+            void credentialHandler.current(code, window.location.origin);
           },
+          error_callback: () => undefined,
         });
-        google.accounts.id.renderButton(buttonRef.current, {
-          type: "standard",
-          theme: "outline",
-          size: "large",
-          text: "continue_with",
-          width: Math.min(buttonRef.current.clientWidth || 320, 400),
-        });
+        setCodeClient(() => client);
         setReady(true);
       })
       .catch((error) => {
@@ -89,10 +90,19 @@ function GoogleCredentialButton({ disabled, onCredential, onError }) {
 
   if (!available) return <p className="subdued">Google is not enabled.</p>;
   return (
-    <div
-      className={`google-action ${ready ? "" : "pending"} ${disabled ? "disabled" : ""}`}
-      ref={buttonRef}
-    />
+    <button
+      className={`button secondary google-action ${ready ? "" : "pending"}`}
+      type="button"
+      disabled={disabled || !codeClient}
+      onClick={() => codeClient.requestCode()}
+    >
+      <img
+        src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+        alt=""
+        aria-hidden="true"
+      />
+      Continue with Google
+    </button>
   );
 }
 
@@ -197,8 +207,8 @@ export function ReauthenticationDialog({ challenge, account, onCancel, onAuthent
       {providers.has("google") && (
         <GoogleCredentialButton
           disabled={busy}
-          onCredential={(credential, nonce) =>
-            authenticate(() => reauthenticateWithGoogle(challenge.id, credential, nonce))
+          onCredential={(code, redirectURI) =>
+            authenticate(() => reauthenticateWithGoogle(challenge.id, code, redirectURI))
           }
           onError={setError}
         />
@@ -451,8 +461,8 @@ export function AccountPage({ account, busy, feedback, onBack, onRun, onSensitiv
               ) : (
                 <GoogleCredentialButton
                   disabled={busy}
-                  onCredential={(credential, nonce) =>
-                    onSensitive("Linking Google…", () => linkGoogle(credential, nonce), "Google linked.")
+                  onCredential={(code, redirectURI) =>
+                    onSensitive("Linking Google…", () => linkGoogle(code, redirectURI), "Google linked.")
                   }
                   onError={setLocalError}
                 />

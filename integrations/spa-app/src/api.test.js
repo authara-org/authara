@@ -352,7 +352,7 @@ test("custom authentication uses CSRF and the signup challenge API", async () =>
   });
 });
 
-test("Google authentication initializes a nonce and exchanges the credential", async () => {
+test("Google authentication exchanges an authorization code", async () => {
   const calls = [];
 
   globalThis.fetch = async (url, options = {}) => {
@@ -365,7 +365,7 @@ test("Google authentication initializes a nonce and exchanges the credential", a
   };
 
   const options = await getGoogleOptions();
-  await loginWithGoogle("google-id-token", options.nonce);
+  await loginWithGoogle("google-code", "https://spa.example.com");
 
   assert.deepEqual(
     calls.map(({ url, options: requestOptions }) =>
@@ -379,8 +379,8 @@ test("Google authentication initializes a nonce and exchanges the credential", a
   );
   assert.equal(calls[2].options.headers["X-CSRF-Token"], "csrf-token");
   assert.deepEqual(JSON.parse(calls[2].options.body), {
-    credential: "google-id-token",
-    nonce: "google-nonce",
+    code: "google-code",
+    redirect_uri: "https://spa.example.com",
   });
 });
 
@@ -429,6 +429,7 @@ test("account collision recovery supports password, Google, and Apple proof", as
       return json(
         {
           link_id: "link-1",
+          provider: "google",
           proof_methods: ["password", "google", "apple"],
         },
         202,
@@ -439,13 +440,13 @@ test("account collision recovery supports password, Google, and Apple proof", as
 
   const recovery = await startGoogleAccountRecoveryLink(
     "new-google-token",
-    "google-nonce",
+    "https://spa.example.com",
   );
   await completeAccountRecoveryLinkWithPassword(recovery.link_id, "password123");
   await completeAccountRecoveryLinkWithGoogle(
     recovery.link_id,
     "existing-google-token",
-    "proof-nonce",
+    "https://spa.example.com",
   );
   await completeAccountRecoveryLinkWithApple(
     recovery.link_id,
@@ -464,8 +465,8 @@ test("account collision recovery supports password, Google, and Apple proof", as
     ],
   );
   assert.deepEqual(JSON.parse(mutations[0].options.body), {
-    credential: "new-google-token",
-    nonce: "google-nonce",
+    code: "new-google-token",
+    redirect_uri: "https://spa.example.com",
   });
   assert.deepEqual(JSON.parse(mutations[3].options.body), {
     code: "apple-code",
@@ -485,14 +486,13 @@ test("Google login turns account_link_required into a recovery flow", async () =
             code: "account_link_required",
             message: "Confirm the existing account.",
           },
+          recovery: {
+            link_id: "link-1",
+            provider: "google",
+            proof_methods: ["apple"],
+          },
         },
         409,
-      );
-    }
-    if (url.endsWith("/provider-links/recovery/google")) {
-      return json(
-        { link_id: "link-1", proof_methods: ["apple"] },
-        202,
       );
     }
     throw new Error(`Unexpected request: ${url}`);
@@ -500,28 +500,23 @@ test("Google login turns account_link_required into a recovery flow", async () =
 
   const result = await loginWithGoogleOrStartRecovery(
     "google-token",
-    "google-nonce",
+    "https://spa.example.com",
   );
 
   assert.equal(result.session, null);
   assert.deepEqual(result.recovery, {
     link_id: "link-1",
+    provider: "google",
     proof_methods: ["apple"],
   });
   assert.deepEqual(
     calls
       .filter(({ options }) => options.method === "POST")
       .map(({ url, options }) => [url, JSON.parse(options.body)]),
-    [
-      [
-        "/auth/api/v1/oauth/google?audience=app",
-        { credential: "google-token", nonce: "google-nonce" },
-      ],
-      [
-        "/auth/api/v1/provider-links/recovery/google",
-        { credential: "google-token", nonce: "google-nonce" },
-      ],
-    ],
+    [[
+      "/auth/api/v1/oauth/google?audience=app",
+      { code: "google-token", redirect_uri: "https://spa.example.com" },
+    ]],
   );
 });
 
@@ -673,7 +668,11 @@ test("external providers and passkeys use the reauthentication challenge", async
     return new Response(null, { status: 204 });
   };
 
-  await reauthenticateWithGoogle("auth-challenge", "google-token", "nonce");
+  await reauthenticateWithGoogle(
+    "auth-challenge",
+    "google-code",
+    "https://spa.example.com",
+  );
   await reauthenticateWithApple("auth-challenge", "apple-code", "apple-state");
   await beginPasskeyAuthentication();
   await finishPasskeyAuthentication("login-challenge", {
@@ -699,8 +698,8 @@ test("external providers and passkeys use the reauthentication challenge", async
   assert.deepEqual(bodies, [
     {
       authentication_challenge_id: "auth-challenge",
-      credential: "google-token",
-      nonce: "nonce",
+      code: "google-code",
+      redirect_uri: "https://spa.example.com",
     },
     {
       authentication_challenge_id: "auth-challenge",

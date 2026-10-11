@@ -2,9 +2,7 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
-	"net/http"
 	"strings"
 	"time"
 
@@ -13,7 +11,6 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
-	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/validation"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/identity"
@@ -294,14 +291,9 @@ func (h *APIHandler) LinkCurrentUserGoogle(ctx context.Context, request contract
 	if request.Body == nil {
 		return linkCurrentUserGoogleError(responseCodeInvalidRequest(), "Invalid Google credential."), nil
 	}
-	nonce := strings.TrimSpace(request.Body.Nonce)
-	expectedNonce, ok := oauthstate.ReadNonce(r)
-	if !ok || nonce == "" || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
-		return linkCurrentUserGoogleError(responseCodeUnauthorized(), "Invalid Google credential."), nil
-	}
-	identity, err := h.Google.VerifyIDToken(ctx, strings.TrimSpace(request.Body.Credential), expectedNonce)
-	if err != nil {
-		return linkCurrentUserGoogleError(responseCodeUnauthorized(), "Invalid Google credential."), nil
+	identity, header, code, message, verified := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
+	if !verified {
+		return linkCurrentUserGoogleError(code, message), nil
 	}
 	linkID, err := h.Auth.StartProviderLink(ctx, userID, sessionID, domain.ProviderGoogle, time.Now().UTC())
 	if err == nil {
@@ -317,8 +309,6 @@ func (h *APIHandler) LinkCurrentUserGoogle(ctx context.Context, request contract
 			return linkCurrentUserGoogleError(responseCodeInternalError(), "Could not link Google."), nil
 		}
 	}
-	header := make(http.Header)
-	oauthstate.ClearNonce(contract.HeaderWriter(header))
 	return contract.LinkCurrentUserGoogle204HeadersResponse{Header: header}, nil
 }
 

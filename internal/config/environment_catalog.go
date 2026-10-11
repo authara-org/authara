@@ -30,6 +30,7 @@ var sensitiveEnvironmentVariables = map[string]struct{}{
 	"AUTHARA_WEBHOOK_SECRET":                 {},
 	"AUTHARA_EMAIL_SMTP_USERNAME":            {},
 	"AUTHARA_EMAIL_SMTP_PASSWORD":            {},
+	"AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET":     {},
 	"AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64": {},
 	"AUTHARA_OAUTH_APPLE_TOKEN_KEYS":         {},
 }

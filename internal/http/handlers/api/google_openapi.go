@@ -28,7 +28,7 @@ func (h *APIHandler) LoginWithGoogle(ctx context.Context, request contract.Login
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	identity, header, code, message, ok := h.verifyGoogleCredential(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
 	if !ok {
 		if code == response.CodeUnauthorized {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidAssertion); err != nil {
@@ -78,18 +78,23 @@ func (h *APIHandler) contractGoogleLogin(
 		message := "Google sign-in error."
 		switch code {
 		case codeAccountLinkRequired:
-			message = "An account with this email already exists. Sign in with an existing method and link Google from your account."
+			recovery, recoveryCode, recoveryMessage, ok := h.startGoogleAccountRecoveryLink(ctx, identity)
+			if !ok {
+				return googleLoginErrorWithHeaders(recoveryCode, recoveryMessage, header)
+			}
+			message = "An account with this email already exists. Prove ownership with an existing sign-in method to connect Google."
+			return googleLoginErrorWithHeaders(code, message, header, recovery)
 		case response.CodeForbidden:
 			message = "Google login is not allowed for this account."
 		}
-		return loginWithGoogleError(code, message)
+		return googleLoginErrorWithHeaders(code, message, header)
 	}
 	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodGoogle, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
-		return loginWithGoogleError(response.CodeForbidden, "Account cannot access requested audience.")
+		return googleLoginErrorWithHeaders(response.CodeForbidden, "Account cannot access requested audience.", header)
 	case response.CodeInternalError:
-		return loginWithGoogleError(response.CodeInternalError, "Session error.")
+		return googleLoginErrorWithHeaders(response.CodeInternalError, "Session error.", header)
 	}
 	cookiePolicy := h.sessionCookiePolicy()
 	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))

@@ -52,6 +52,7 @@ settings_metadata:
   AUTHARA_INTERNAL_API_TOKEN: {control: env, reload: startup, sensitive: true, group: internal_api}
   AUTHARA_OAUTH_PROVIDERS: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_GOOGLE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET: {control: env, reload: startup, sensitive: true, group: oauth}
   AUTHARA_OAUTH_APPLE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_APPLE_TEAM_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_APPLE_KEY_ID: {control: env, reload: startup, sensitive: false, group: oauth}
@@ -475,6 +476,14 @@ variables:
       - apple
 
   - name: AUTHARA_OAUTH_GOOGLE_CLIENT_ID
+    stability: stable
+    required: false
+    type: string
+    required_if:
+      variable: AUTHARA_OAUTH_PROVIDERS
+      contains: google
+
+  - name: AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET
     stability: stable
     required: false
     type: string

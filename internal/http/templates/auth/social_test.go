@@ -11,18 +11,20 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 )
 
-func TestGoogleSigninRendersOneFullWidthGISButton(t *testing.T) {
+func TestGoogleSigninRendersCustomCodeFlowButton(t *testing.T) {
 	var html strings.Builder
 	if err := GoogleSignin("Continue", "client-id", viewmodel.AuthProviderFlowReauthenticate, "").Render(context.Background(), &html); err != nil {
 		t.Fatal(err)
 	}
 
 	output := html.String()
-	if got := strings.Count(output, `class="g_id_signin"`); got != 1 {
-		t.Fatalf("Google GIS button count = %d, want 1", got)
+	for _, want := range []string{`data-google-button`, `data-google-client-id="client-id"`, `data-google-flow="reauthenticate"`, `Continue with Google`} {
+		if !strings.Contains(output, want) {
+			t.Errorf("Google button is missing %q", want)
+		}
 	}
-	if !strings.Contains(output, `data-width="400"`) {
-		t.Fatal("Google GIS button is missing its full-width configuration")
+	if strings.Contains(output, `g_id_signin`) || strings.Contains(output, `opacity-[0.00001%]`) {
+		t.Fatal("Google button still renders the hidden GIS overlay")
 	}
 	if !strings.Contains(output, `dark:!border-transparent`) || !strings.Contains(output, `dark:hover:!border-transparent`) {
 		t.Fatal("Google button is missing its dark-mode border override")

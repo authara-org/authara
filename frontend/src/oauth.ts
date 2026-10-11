@@ -4,33 +4,36 @@ import {
   requestRecentAuthentication,
 } from "./recentAuthentication";
 
-type GoogleCredentialResponse = { credential?: string };
-type GoogleCredentialHandler = (
-  response: GoogleCredentialResponse,
-) => Promise<void>;
+type GoogleCodeResponse = { code?: string; error?: string };
+type GoogleCodeClient = { requestCode(): void };
+type GoogleIdentity = {
+  accounts: {
+    oauth2: {
+      initCodeClient(options: {
+        client_id: string;
+        scope: string;
+        ux_mode: "popup";
+        select_account: boolean;
+        callback: (response: GoogleCodeResponse) => void;
+        error_callback: () => void;
+      }): GoogleCodeClient;
+    };
+  };
+};
 
 declare global {
   interface Window {
-    autharaGoogleCallback?: (
-      response: GoogleCredentialResponse,
-    ) => void | Promise<void>;
-    autharaGoogleCredentialHandler?: GoogleCredentialHandler;
-    autharaGoogleCredentialQueue?: GoogleCredentialResponse[];
+    google?: GoogleIdentity;
   }
 }
 
-function getGoogleFlowButton(): HTMLElement | null {
-  return document.querySelector("[data-google-flow]");
-}
+const googleIdentityURL = "https://accounts.google.com/gsi/client";
+const initializedGoogleButtons = new WeakSet<HTMLButtonElement>();
+let googleIdentityPromise: Promise<GoogleIdentity> | undefined;
 
 function getCSRFToken(): string {
   const match = document.cookie.match(/(?:^|;\s*)authara_csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : "";
-}
-
-function getGoogleNonce(): string {
-  const onload = document.querySelector<HTMLElement>("#g_id_onload");
-  return onload?.dataset.nonce || "";
 }
 
 function getReturnTo(btn: HTMLElement | null): string {
@@ -74,24 +77,25 @@ function authenticationFailureURL(
   return `/auth/login?return_to=${encodeURIComponent(returnTo)}`;
 }
 
-async function handleGoogleCredentialAttempt(
-  response: GoogleCredentialResponse,
+async function handleGoogleAuthorizationAttempt(
+  response: GoogleCodeResponse,
+  btn: HTMLButtonElement,
   allowRecentAuthenticationRetry: boolean,
+  retry: () => void,
 ): Promise<void> {
-  const credential = response?.credential;
-  if (!credential) return;
+  const code = response?.code;
+  if (!code) return;
 
-  const btn = getGoogleFlowButton();
-  const flow = btn?.dataset.googleFlow || "login";
+  const flow = btn.dataset.googleFlow || "login";
   const returnTo = getReturnTo(btn);
   const provider = btn?.dataset.provider || "google";
-  const linkID = btn?.dataset.linkId || "";
+  let linkID = btn?.dataset.linkId || "";
   const authenticationChallengeID = getAuthenticationChallengeID(btn);
 
   const form = new URLSearchParams();
-  form.set("credential", credential);
+  form.set("code", code);
+  form.set("redirect_uri", window.location.origin);
   form.set("flow", flow);
-  form.set("nonce", getGoogleNonce());
   if (flow === "reauthenticate") {
     form.set("authentication_challenge_id", authenticationChallengeID);
   }
@@ -105,7 +109,7 @@ async function handleGoogleCredentialAttempt(
       form.set("link_id", linkID);
     }
 
-    if (flow === "link") {
+    if (flow === "link" && !linkID) {
       const startRes = await fetch(
         `/auth/providers/${encodeURIComponent(provider)}/link/start`,
         {
@@ -126,7 +130,8 @@ async function handleGoogleCredentialAttempt(
           };
           if (allowRecentAuthenticationRetry && data.reauthenticate_url) {
             await requestRecentAuthentication(data.reauthenticate_url);
-            return handleGoogleCredentialAttempt(response, false);
+            retry();
+            return;
           }
         }
         window.location.href = "/auth/account";
@@ -139,7 +144,12 @@ async function handleGoogleCredentialAttempt(
         return;
       }
 
-      form.set("link_id", data.link_id);
+      linkID = data.link_id;
+      btn.dataset.linkId = linkID;
+    }
+
+    if (flow === "link") {
+      form.set("link_id", linkID);
     }
 
     const res = await fetch(
@@ -169,7 +179,8 @@ async function handleGoogleCredentialAttempt(
       const data = (await res.json()) as { reauthenticate_url?: string };
       if (allowRecentAuthenticationRetry && data.reauthenticate_url) {
         await requestRecentAuthentication(data.reauthenticate_url);
-        return handleGoogleCredentialAttempt(response, false);
+        retry();
+        return;
       }
       window.location.href = authenticationFailureURL(
         flow,
@@ -203,17 +214,75 @@ async function handleGoogleCredentialAttempt(
   }
 }
 
-const handleGoogleCredential: GoogleCredentialHandler = (response) =>
-  handleGoogleCredentialAttempt(response, true);
+function loadGoogleIdentity(): Promise<GoogleIdentity> {
+  if (window.google?.accounts?.oauth2) return Promise.resolve(window.google);
+  if (googleIdentityPromise) return googleIdentityPromise;
 
-window.autharaGoogleCredentialHandler = handleGoogleCredential;
-
-if (typeof window.autharaGoogleCallback !== "function") {
-  window.autharaGoogleCallback = (response: GoogleCredentialResponse) => {
-    void handleGoogleCredential(response);
-  };
+  const loading = new Promise<GoogleIdentity>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${googleIdentityURL}"]`,
+    );
+    const script = existing ?? document.createElement("script");
+    script.addEventListener(
+      "load",
+      () =>
+        window.google?.accounts?.oauth2
+          ? resolve(window.google)
+          : reject(new Error("Could not load Google Identity Services.")),
+      { once: true },
+    );
+    script.addEventListener(
+      "error",
+      () => reject(new Error("Could not load Google Identity Services.")),
+      { once: true },
+    );
+    if (!existing) {
+      script.src = googleIdentityURL;
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  });
+  googleIdentityPromise = loading.catch((error) => {
+    googleIdentityPromise = undefined;
+    throw error;
+  });
+  return googleIdentityPromise;
 }
 
-for (const response of window.autharaGoogleCredentialQueue?.splice(0) ?? []) {
-  void handleGoogleCredential(response);
+export async function initGoogleSignin(root: ParentNode): Promise<void> {
+  const buttons = Array.from(
+    root.querySelectorAll<HTMLButtonElement>("[data-google-button]"),
+  ).filter((button) => !initializedGoogleButtons.has(button));
+  if (buttons.length === 0) return;
+
+  try {
+    const google = await loadGoogleIdentity();
+    for (const button of buttons) {
+      const clientID = button.dataset.googleClientId;
+      if (!clientID) continue;
+      let client: GoogleCodeClient;
+      client = google.accounts.oauth2.initCodeClient({
+        client_id: clientID,
+        scope: "openid email profile",
+        ux_mode: "popup",
+        select_account: true,
+        callback: (response) => {
+          button.disabled = true;
+          void handleGoogleAuthorizationAttempt(response, button, true, () =>
+            client.requestCode(),
+          ).finally(() => {
+            button.disabled = false;
+          });
+        },
+        error_callback: () => {
+          button.disabled = false;
+        },
+      });
+      button.addEventListener("click", () => client.requestCode());
+      initializedGoogleButtons.add(button);
+      button.disabled = false;
+    }
+  } catch (error) {
+    console.error("Google authentication is unavailable.", error);
+  }
 }

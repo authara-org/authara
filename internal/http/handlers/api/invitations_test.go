@@ -100,7 +100,7 @@ func TestGoogleInvitationSignupAcceptsAndSwitches(t *testing.T) {
 		req := googleAPIRequest(ctx, "/auth/api/v1/invitations/google", "signup-nonce")
 		resp, err := h.AuthenticateAndAcceptInvitationWithGoogle(contractCtx(ctx, req), contract.AuthenticateAndAcceptInvitationWithGoogleRequestObject{
 			Body: &contract.InvitationGoogleRequest{
-				Token: invite.RawToken, Credential: "credential", Nonce: "signup-nonce", Flow: contract.Signup,
+				Token: invite.RawToken, Credential: testString("credential"), Nonce: testString("signup-nonce"), Flow: contract.Signup,
 			},
 		})
 		if err != nil {
@@ -130,7 +130,7 @@ func TestGoogleInvitationCollisionPasswordProofLinksAcceptsAndSwitches(t *testin
 		googleReq := googleAPIRequest(ctx, "/auth/api/v1/invitations/google", "collision-nonce")
 		googleResp, err := h.AuthenticateAndAcceptInvitationWithGoogle(contractCtx(ctx, googleReq), contract.AuthenticateAndAcceptInvitationWithGoogleRequestObject{
 			Body: &contract.InvitationGoogleRequest{
-				Token: invite.RawToken, Credential: "credential", Nonce: "collision-nonce", Flow: contract.Login,
+				Token: invite.RawToken, Credential: testString("credential"), Nonce: testString("collision-nonce"), Flow: contract.Login,
 			},
 		})
 		if err != nil {
@@ -183,7 +183,7 @@ func TestGoogleInvitationCollisionGoogleProofReplacesIdentityAcceptsAndSwitches(
 		googleReq := googleAPIRequest(ctx, "/auth/api/v1/invitations/google", "provider-collision-nonce")
 		googleResp, err := h.AuthenticateAndAcceptInvitationWithGoogle(contractCtx(ctx, googleReq), contract.AuthenticateAndAcceptInvitationWithGoogleRequestObject{
 			Body: &contract.InvitationGoogleRequest{
-				Token: invite.RawToken, Credential: "new-google", Nonce: "provider-collision-nonce", Flow: contract.Login,
+				Token: invite.RawToken, Credential: testString("new-google"), Nonce: testString("provider-collision-nonce"), Flow: contract.Login,
 			},
 		})
 		if err != nil {
@@ -205,7 +205,7 @@ func TestGoogleInvitationCollisionGoogleProofReplacesIdentityAcceptsAndSwitches(
 		completeResp, err := h.CompleteAccountRecoveryLinkWithGoogle(contractCtx(ctx, completeReq), contract.CompleteAccountRecoveryLinkWithGoogleRequestObject{
 			LinkID: link.LinkId,
 			Body: &contract.AccountRecoveryGoogleProofRequest{
-				Credential: "existing-google", Nonce: "provider-proof-nonce", InvitationToken: &invite.RawToken,
+				Credential: testString("existing-google"), Nonce: testString("provider-proof-nonce"), InvitationToken: &invite.RawToken,
 			},
 		})
 		if err != nil {
@@ -231,6 +231,12 @@ type fakeGoogleVerifier struct {
 func (f fakeGoogleVerifier) VerifyIDToken(_ context.Context, _ string, _ string) (*google.Identity, error) {
 	return f.identity, nil
 }
+
+func (f fakeGoogleVerifier) ExchangeAuthorizationCode(_ context.Context, _ string, _ string) (*google.Identity, error) {
+	return f.identity, nil
+}
+
+func testString(value string) *string { return &value }
 
 func newInvitationAPIHandler(t *testing.T, tdb *testutil.TestDB) (*APIHandler, *organization.Service) {
 	t.Helper()

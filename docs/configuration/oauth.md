@@ -39,19 +39,26 @@ Required configuration:
 
 ```
 AUTHARA_OAUTH_GOOGLE_CLIENT_ID
+AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET
 ```
 
 Example:
 
 ```
 AUTHARA_OAUTH_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET=your-client-secret
 ```
 
-The OAuth client must be configured with the correct redirect URL:
+Use a Web application OAuth client. Add every website that displays an Authara
+Google button to the client's Authorized JavaScript origins. For example:
 
 ```
-https://your-domain/auth/oauth/google/callback
+https://your-domain
 ```
+
+Authara uses Google's popup authorization-code flow. The browser sends the
+one-time code to Core, and Core exchanges it using the client secret. Keep the
+client secret on the Authara server; never expose it to browser JavaScript.
 
 ## Sign in with Apple
 

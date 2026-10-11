@@ -64,7 +64,7 @@ func TestGoogleLoginPostRejectsMismatchedNonce(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	resp, err := h.LoginWithGoogle(contractCtx(req.Context(), req), contract.LoginWithGoogleRequestObject{
-		Body: &contract.GoogleLoginRequest{Credential: "id-token", Nonce: "wrong"},
+		Body: &contract.GoogleLoginRequest{Credential: testString("id-token"), Nonce: testString("wrong")},
 	})
 	if err != nil {
 		t.Fatalf("LoginWithGoogle failed: %v", err)
@@ -80,6 +80,29 @@ func TestGoogleLoginPostRejectsMismatchedNonce(t *testing.T) {
 		recorder.login[0].AuthenticationMethod != domain.AuthenticationMethodGoogle ||
 		recorder.login[0].UserID != nil {
 		t.Fatalf("unexpected Google login denial event: %+v", recorder.login)
+	}
+}
+
+func TestVerifyGoogleAuthorizationCodeDoesNotRequireNonceCookie(t *testing.T) {
+	h := &APIHandler{
+		Google: fakeGoogleVerifier{identity: &google.Identity{
+			OAuthID: "google-code-user", Email: "code@example.com", EmailVerified: true,
+		}},
+		OAuthProviders: googleTestProviders(),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/google", nil)
+	identity, header, code, message, ok := h.verifyGoogleAuthorization(
+		context.Background(), req, nil, nil,
+		testString("authorization-code"), testString("https://app.example"),
+	)
+	if !ok || code != "" || message != "" {
+		t.Fatalf("verification failed: ok=%t code=%q message=%q", ok, code, message)
+	}
+	if identity.OAuthID != "google-code-user" {
+		t.Fatalf("unexpected identity: %+v", identity)
+	}
+	if header.Get("Set-Cookie") == "" {
+		t.Fatal("expected stale OAuth nonce cookie to be cleared")
 	}
 }
 
@@ -123,12 +146,19 @@ func TestCompleteGoogleLoginRequiresExplicitLinkForExistingEmail(t *testing.T) {
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		h := newGoogleAPIHandler(t, tdb)
-		if _, err := tdb.Store.CreateUser(ctx, domain.User{
+		existing, err := tdb.Store.CreateUser(ctx, domain.User{
 			ID:       uuid.New(),
 			Email:    "existing-google-api@example.com",
 			Username: "existing-google-api",
-		}); err != nil {
+		})
+		if err != nil {
 			t.Fatalf("create existing user: %v", err)
+		}
+		passwordHash := "password-hash"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID: existing.ID, Provider: domain.ProviderPassword, PasswordHash: &passwordHash,
+		}); err != nil {
+			t.Fatalf("create password provider: %v", err)
 		}
 
 		req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/google", nil).WithContext(ctx)
@@ -143,16 +173,18 @@ func TestCompleteGoogleLoginRequiresExplicitLinkForExistingEmail(t *testing.T) {
 		if rr.Code != http.StatusConflict {
 			t.Fatalf("expected status %d, got %d body=%s", http.StatusConflict, rr.Code, rr.Body.String())
 		}
-		var body struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
+		var body contract.ErrorResponse
 		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		if body.Error.Code != string(codeAccountLinkRequired) {
 			t.Fatalf("expected %q, got %q", codeAccountLinkRequired, body.Error.Code)
+		}
+		if body.Recovery == nil || body.Recovery.Provider != contract.AccountRecoveryLinkProviderGoogle {
+			t.Fatalf("expected Google recovery details, got %+v", body.Recovery)
+		}
+		if len(body.Recovery.ProofMethods) != 1 || body.Recovery.ProofMethods[0] != contract.AccountRecoveryLinkProofMethodsPassword {
+			t.Fatalf("unexpected proof methods: %+v", body.Recovery.ProofMethods)
 		}
 	})
 }
@@ -200,8 +232,8 @@ func TestGoogleReauthenticationRequiresIdentityLinkedToCurrentUser(t *testing.T)
 		responseObject, err := h.ReauthenticateWithGoogle(requestCtx, contract.ReauthenticateWithGoogleRequestObject{
 			Body: &contract.GoogleReauthenticationRequest{
 				AuthenticationChallengeId: authenticationChallenge.ID,
-				Credential:                "id-token",
-				Nonce:                     nonce,
+				Credential:                testString("id-token"),
+				Nonce:                     testString(nonce),
 			},
 		})
 		if err != nil {
@@ -217,8 +249,8 @@ func TestGoogleReauthenticationRequiresIdentityLinkedToCurrentUser(t *testing.T)
 		responseObject, err = h.ReauthenticateWithGoogle(requestCtx, contract.ReauthenticateWithGoogleRequestObject{
 			Body: &contract.GoogleReauthenticationRequest{
 				AuthenticationChallengeId: authenticationChallenge.ID,
-				Credential:                "id-token",
-				Nonce:                     nonce,
+				Credential:                testString("id-token"),
+				Nonce:                     testString(nonce),
 			},
 		})
 		if err != nil {
