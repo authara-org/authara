@@ -48,6 +48,25 @@ func TestSetAccessToken(t *testing.T) {
 	}
 }
 
+func TestSetSessionCookiesConfiguredDomain(t *testing.T) {
+	Configure(true, "example.com")
+	defer Configure(true, "")
+
+	recorder := httptest.NewRecorder()
+	SetAccessToken(recorder, "access-token-value", 3600)
+	SetRefreshToken(recorder, "refresh-token-value", 7200)
+
+	cookies := recorder.Result().Cookies()
+	if len(cookies) != 2 {
+		t.Fatalf("cookies = %#v, want two", cookies)
+	}
+	for _, cookie := range cookies {
+		if cookie.Domain != "example.com" {
+			t.Fatalf("cookie %q domain = %q, want example.com", cookie.Name, cookie.Domain)
+		}
+	}
+}
+
 func TestSetRefreshToken(t *testing.T) {
 	rec := httptest.NewRecorder()
 
@@ -135,6 +154,24 @@ func TestClearSessionCookies(t *testing.T) {
 		}
 		if !c.Expires.Equal(time.Unix(0, 0)) {
 			t.Fatalf("expected Expires=%v, got %v", time.Unix(0, 0), c.Expires)
+		}
+	}
+}
+
+func TestClearSessionCookiesConfiguredDomain(t *testing.T) {
+	Configure(true, "example.com")
+	defer Configure(true, "")
+
+	recorder := httptest.NewRecorder()
+	ClearSessionCookies(recorder)
+
+	cookies := recorder.Result().Cookies()
+	if len(cookies) != 2 {
+		t.Fatalf("cookies = %#v, want two", cookies)
+	}
+	for _, cookie := range cookies {
+		if cookie.Domain != "example.com" {
+			t.Fatalf("cookie %q domain = %q, want example.com", cookie.Name, cookie.Domain)
 		}
 	}
 }

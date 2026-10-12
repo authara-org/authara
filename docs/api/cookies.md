@@ -40,6 +40,7 @@ Example characteristics:
 | Secure | yes (in production) |
 | SameSite | Lax |
 | Path | `/` |
+| Domain | host-only, or `AUTHARA_COOKIE_DOMAIN` when configured |
 
 The access token typically expires after **10 minutes**.
 
@@ -59,6 +60,7 @@ Properties:
 | Secure | yes (in production) |
 | SameSite | Lax |
 | Path | `/` |
+| Domain | host-only, or `AUTHARA_COOKIE_DOMAIN` when configured |
 
 Important characteristics:
 
@@ -85,6 +87,7 @@ Properties:
 | Secure | yes (in production) |
 | SameSite | Lax |
 | Path | `/` |
+| Domain | host-only, or `AUTHARA_COOKIE_DOMAIN` when configured |
 
 ---
 
@@ -140,6 +143,12 @@ Authara configures cookies to follow common security best practices:
 - CSRF tokens protect state-changing requests
 
 In production deployments cookies should always be served over **HTTPS**.
+
+By default, Authara omits the cookie `Domain` attribute, so the browser sends
+the cookies only to the host that issued them. Deployments may set
+`AUTHARA_COOKIE_DOMAIN` to a registrable parent domain when trusted subdomains
+must share a browser session. The setting covers every subdomain and cannot be
+used as a list of selected hosts.
 
 ---
 

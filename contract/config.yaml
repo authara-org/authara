@@ -27,6 +27,7 @@ settings_metadata:
   AUTHARA_REDIS_PASSWORD: {control: env, reload: startup, sensitive: true, group: cache}
   AUTHARA_REDIS_DB: {control: env, reload: startup, sensitive: false, group: cache}
   PUBLIC_URL: {control: env, reload: startup, sensitive: false, group: public_url}
+  AUTHARA_COOKIE_DOMAIN: {control: env, reload: startup, sensitive: false, group: public_url}
   AUTHARA_APP_NAME: {control: hybrid, reload: dynamic, sensitive: false, group: branding}
   AUTHARA_DEFAULT_RETURN_TO: {control: hybrid, reload: dynamic, sensitive: false, group: public_url}
   AUTHARA_TRUST_PROXY_HEADERS: {control: env, reload: startup, sensitive: false, group: public_url}
@@ -292,6 +293,12 @@ variables:
     required: true
     type: url
     notes: Must not include /auth
+
+  - name: AUTHARA_COOKIE_DOMAIN
+    stability: stable
+    required: false
+    type: string
+    notes: Optional parent domain for access, refresh, and CSRF cookies. Empty keeps cookies host-only. Must match the PUBLIC_URL host or be its registrable parent domain.
 
   - name: AUTHARA_APP_NAME
     stability: stable

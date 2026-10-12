@@ -83,7 +83,14 @@ Example:
 
 ```
 PUBLIC_URL
+AUTHARA_COOKIE_DOMAIN
 ```
+
+`AUTHARA_COOKIE_DOMAIN` is optional and startup-only. When unset, session and
+CSRF cookies are host-only. Set it to a registrable parent such as
+`example.com` only when every covered subdomain is part of the same trusted
+authentication boundary. A cookie supports one domain scope, not a list of
+individual hosts.
 
 ---
 

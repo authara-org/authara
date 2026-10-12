@@ -30,6 +30,7 @@ func EnsureCookie(w http.ResponseWriter, r *http.Request) (string, error) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieName,
 		Value:    tok,
+		Domain:   cookieDomain,
 		Path:     "/",
 		Secure:   secureCookies,
 		HttpOnly: false,
