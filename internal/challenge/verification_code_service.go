@@ -52,19 +52,39 @@ func (s *VerificationCodeService) GenerateCode(
 	if len(s.secrets) == 0 {
 		return "", ErrVerificationCodeSecretNotConfigured
 	}
-	policy := s.policy.CurrentChallenge()
 
 	code, err := generateSixDigitCode()
 	if err != nil {
 		return "", err
 	}
+	return s.storeCode(ctx, challenge, code, now)
+}
 
+func (s *VerificationCodeService) GenerateCodeForDelivery(
+	ctx context.Context,
+	challenge domain.Challenge,
+	deliveryID uuid.UUID,
+	now time.Time,
+) (string, error) {
+	if len(s.secrets) == 0 {
+		return "", ErrVerificationCodeSecretNotConfigured
+	}
+	return s.storeCode(ctx, challenge, stableSixDigitCode(challenge.ID, deliveryID, s.secrets[0]), now)
+}
+
+func (s *VerificationCodeService) storeCode(
+	ctx context.Context,
+	challenge domain.Challenge,
+	code string,
+	now time.Time,
+) (string, error) {
+	policy := s.policy.CurrentChallenge()
 	expiresAt := now.Add(policy.VerificationCodeTTL)
 	if expiresAt.After(challenge.ExpiresAt) {
 		expiresAt = challenge.ExpiresAt
 	}
 
-	err = s.store.UpsertVerificationCode(ctx, domain.VerificationCode{
+	err := s.store.UpsertVerificationCode(ctx, domain.VerificationCode{
 		ChallengeID: challenge.ID,
 		CodeHash:    hashVerificationCode(code, s.secrets[0]),
 		ExpiresAt:   expiresAt,
@@ -74,6 +94,17 @@ func (s *VerificationCodeService) GenerateCode(
 	}
 
 	return code, nil
+}
+
+func stableSixDigitCode(challengeID, deliveryID uuid.UUID, secret []byte) string {
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte("authara-email-verification-code-v1"))
+	_, _ = mac.Write(challengeID[:])
+	_, _ = mac.Write(deliveryID[:])
+
+	n := new(big.Int).SetBytes(mac.Sum(nil))
+	n.Mod(n, big.NewInt(1000000))
+	return fmt.Sprintf("%06d", n.Int64())
 }
 
 func (s *VerificationCodeService) VerifyCode(

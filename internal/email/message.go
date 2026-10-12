@@ -1,7 +1,8 @@
 package email
 
 type Message struct {
-	Subject string
-	Text    string
-	HTML    string
+	MessageID string
+	Subject   string
+	Text      string
+	HTML      string
 }
