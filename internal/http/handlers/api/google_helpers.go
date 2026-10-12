@@ -58,20 +58,19 @@ func (h *APIHandler) verifyGoogleAuthorization(
 
 	var identity *google.Identity
 	var err error
+	header := make(http.Header)
 	if codeProvided {
 		identity, err = h.Google.ExchangeAuthorizationCode(ctx, codeValue, redirectURIValue)
 	} else {
-		expectedNonce, ok := oauthstate.ReadNonce(r)
+		expectedNonce, ok := oauthstate.Consume(contract.HeaderWriter(header), r, nonceValue)
 		if !ok || subtle.ConstantTimeCompare([]byte(nonceValue), []byte(expectedNonce)) != 1 {
-			return nil, nil, response.CodeUnauthorized, "Invalid Google credential.", false
+			return nil, header, response.CodeUnauthorized, "Invalid Google credential.", false
 		}
 		identity, err = h.Google.VerifyIDToken(ctx, credentialValue, expectedNonce)
 	}
 	if err != nil {
-		return nil, nil, response.CodeUnauthorized, "Invalid Google credential.", false
+		return nil, header, response.CodeUnauthorized, "Invalid Google credential.", false
 	}
-	header := make(http.Header)
-	oauthstate.ClearNonce(contract.HeaderWriter(header))
 	return identity, header, "", "", true
 }
 

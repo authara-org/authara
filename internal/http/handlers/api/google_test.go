@@ -101,8 +101,8 @@ func TestVerifyGoogleAuthorizationCodeDoesNotRequireNonceCookie(t *testing.T) {
 	if identity.OAuthID != "google-code-user" {
 		t.Fatalf("unexpected identity: %+v", identity)
 	}
-	if header.Get("Set-Cookie") == "" {
-		t.Fatal("expected stale OAuth nonce cookie to be cleared")
+	if header.Get("Set-Cookie") != "" {
+		t.Fatal("authorization-code flow changed unrelated OAuth nonces")
 	}
 }
 

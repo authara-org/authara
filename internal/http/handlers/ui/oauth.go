@@ -50,7 +50,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	if codeProvided {
 		identity, err = h.Google.ExchangeAuthorizationCode(ctx, authorizationCode, redirectURI)
 	} else {
-		expectedNonce, ok := oauthstate.ReadNonce(r)
+		expectedNonce, ok := oauthstate.Consume(w, r, nonce)
 		if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
 			h.recordGoogleAuthenticationDenial(ctx, r, flow, domain.SecurityEventReasonInvalidAssertion)
 			h.renderGoogleFlowError(w, r, ctx, flow)
@@ -65,7 +65,6 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if flow == string(viewmodel.AuthProviderFlowReauthenticate) {
-		oauthstate.ClearNonce(w)
 		userID, userOK := httpctx.UserID(ctx)
 		sessionID, sessionOK := httpctx.SessionID(ctx)
 		authenticationChallengeID, challengeOK := authenticationChallengeID(r)
@@ -96,7 +95,6 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		if !h.requireRecentProviderLinkAuthentication(w, r) {
 			return
 		}
-		oauthstate.ClearNonce(w)
 		if err := h.CompleteProviderLink(ctx, linkID, domain.ProviderGoogle, identity.OAuthID, identity.Email, identity.EmailVerified); err != nil {
 			_ = flash.Set(w, flash.Message{
 				Kind:    "error",
@@ -116,7 +114,6 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if flow == string(viewmodel.AuthProviderFlowProof) {
-		oauthstate.ClearNonce(w)
 		parsedLinkID, err := uuid.Parse(strings.TrimSpace(linkID))
 		if err != nil {
 			h.renderError(w, r, ctx)
@@ -143,7 +140,6 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oauthstate.ClearNonce(w)
 	returnTo := httpctx.ReturnToOrDefault(ctx)
 	if path, rawToken, ok := invitationAuthReturnTo(returnTo); ok {
 		h.finishInvitationOAuth(w, r, path, rawToken, returnTo, identity.Email, identity.EmailVerified, identity.OAuthID)

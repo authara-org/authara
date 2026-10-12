@@ -25,6 +25,7 @@ import { loadGoogleIdentity } from "./google.js";
 import { authorizeWithApple } from "./apple.js";
 import { AppleCredentialButton } from "./apple-button.jsx";
 import { MicrosoftCredentialButton } from "./microsoft-button.jsx";
+import { authorizeWithMicrosoft, prepareMicrosoft } from "./microsoft.js";
 import {
   reauthenticateWithPasskey,
   registerPasskey,
@@ -543,13 +544,20 @@ export function AccountPage({ account, busy, feedback, onBack, onRun, onSensitiv
                 <MicrosoftCredentialButton
                   disabled={busy}
                   type="link"
-                  onCredential={({ credential, nonce }) =>
-                    onSensitive(
+                  onCredential={({ credential, nonce }) => {
+                    let proof = { credential, nonce };
+                    return onSensitive(
                       "Linking Microsoft…",
-                      () => linkMicrosoft(credential, nonce),
+                      async () => {
+                        const current = proof;
+                        proof = null;
+                        if (!current) await prepareMicrosoft();
+                        const fresh = current || await authorizeWithMicrosoft();
+                        return linkMicrosoft(fresh.credential, fresh.nonce);
+                      },
                       "Microsoft linked.",
-                    )
-                  }
+                    );
+                  }}
                   onError={setLocalError}
                 />
               )}

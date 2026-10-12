@@ -54,11 +54,11 @@ func (h *UIHandler) ReauthenticatePage(w http.ResponseWriter, r *http.Request) {
 		case domain.ProviderPassword:
 			hasPassword = true
 		case domain.ProviderGoogle:
-			hasGoogle = true
+			hasGoogle = h.reauthenticationProviderEnabled(domain.ProviderGoogle)
 		case domain.ProviderApple:
-			hasApple = true
+			hasApple = h.reauthenticationProviderEnabled(domain.ProviderApple)
 		case domain.ProviderMicrosoft:
-			hasMicrosoft = true
+			hasMicrosoft = h.reauthenticationProviderEnabled(domain.ProviderMicrosoft)
 		}
 	}
 	hasPasskey := false
@@ -84,6 +84,22 @@ func (h *UIHandler) ReauthenticatePage(w http.ResponseWriter, r *http.Request) {
 		challengeID.String(),
 		r.URL.Query().Get("embedded") == "1",
 	))
+}
+
+func (h *UIHandler) reauthenticationProviderEnabled(provider domain.Provider) bool {
+	if !h.providerEnabled(provider) {
+		return false
+	}
+	switch provider {
+	case domain.ProviderGoogle:
+		return h.Google != nil && h.Google.ClientID != ""
+	case domain.ProviderApple:
+		return h.Apple != nil
+	case domain.ProviderMicrosoft:
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *UIHandler) ReauthenticationCompletePage(w http.ResponseWriter, r *http.Request) {

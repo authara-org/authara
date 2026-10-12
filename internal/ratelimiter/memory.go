@@ -159,6 +159,19 @@ func (l *InMemoryLimiter) AllowLoginAttempt(_ context.Context, ip net.IP, email 
 	)
 }
 
+func (l *InMemoryLimiter) AllowOAuthAttempt(_ context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
+	return l.allowIP(
+		ip,
+		l.loginByIP,
+		cfg.LoginIPLimit,
+		cfg.LoginIPWindow,
+		cfg.CleanupEvery,
+		cfg.MaxEntries,
+		"login",
+	)
+}
+
 func (l *InMemoryLimiter) AllowSignupAttempt(_ context.Context, ip net.IP, email string) (bool, error) {
 	cfg := l.cfg()
 	return l.allow(ip, email,

@@ -24,7 +24,7 @@ func New(a Assets, challengeEnabled bool) Renderer {
 
 		_, ok = httpctx.OAuthNonce(r.Context())
 		if !ok {
-			nonce, err := oauthstate.EnsureNonce(w, r)
+			nonce, err := oauthstate.Create(w, r)
 			if err != nil {
 				writeSetupError(w)
 				return err

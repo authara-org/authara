@@ -34,6 +34,11 @@ func (l *CacheLimiter) AllowLoginAttempt(ctx context.Context, ip net.IP, email s
 	)
 }
 
+func (l *CacheLimiter) AllowOAuthAttempt(ctx context.Context, ip net.IP) (bool, error) {
+	cfg := l.cfg()
+	return l.allowIP(ctx, ip, cfg.LoginIPLimit, cfg.LoginIPWindow, "login")
+}
+
 func (l *CacheLimiter) AllowSignupAttempt(ctx context.Context, ip net.IP, email string) (bool, error) {
 	cfg := l.cfg()
 	return l.allow(ctx, ip, email,

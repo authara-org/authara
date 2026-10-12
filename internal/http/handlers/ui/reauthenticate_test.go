@@ -13,6 +13,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/testutil"
 )
@@ -99,4 +100,28 @@ func TestEmbeddedPasswordReauthenticationSignalsParentWithoutNavigation(t *testi
 			t.Fatalf("session was not marked recently authenticated: %v", err)
 		}
 	})
+}
+
+func TestReauthenticationProviderMustBeConfiguredAndOperational(t *testing.T) {
+	h := &UIHandler{OAuthProviders: oauth.OAuthProviders{Providers: []oauth.OAuthProvider{
+		oauth.NewOAuthProvider(domain.ProviderGoogle, "google-client", "https://auth.example.com"),
+		oauth.NewOAuthProvider(domain.ProviderApple, "apple-client", "https://auth.example.com"),
+		oauth.NewOAuthProvider(domain.ProviderMicrosoft, "microsoft-client", "https://auth.example.com"),
+	}}}
+	if h.reauthenticationProviderEnabled(domain.ProviderGoogle) || h.reauthenticationProviderEnabled(domain.ProviderApple) {
+		t.Fatal("providers without operational clients were enabled")
+	}
+	if !h.reauthenticationProviderEnabled(domain.ProviderMicrosoft) {
+		t.Fatal("configured Microsoft provider was disabled")
+	}
+
+	h.Google = google.New("google-client")
+	h.Apple = &fakeUIAppleClient{}
+	if !h.reauthenticationProviderEnabled(domain.ProviderGoogle) || !h.reauthenticationProviderEnabled(domain.ProviderApple) {
+		t.Fatal("configured providers with operational clients were disabled")
+	}
+	h.OAuthProviders = oauth.OAuthProviders{}
+	if h.reauthenticationProviderEnabled(domain.ProviderGoogle) || h.reauthenticationProviderEnabled(domain.ProviderApple) || h.reauthenticationProviderEnabled(domain.ProviderMicrosoft) {
+		t.Fatal("disabled providers were exposed for reauthentication")
+	}
 }
