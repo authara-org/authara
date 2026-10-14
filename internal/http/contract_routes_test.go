@@ -60,6 +60,13 @@ func TestMetricsRouteIsRegistered(t *testing.T) {
 	}
 }
 
+func TestJWKSRouteIsRegistered(t *testing.T) {
+	routes := collectRoutes(t, newContractTestRouter())
+	if !routes[http.MethodGet+" /auth/.well-known/jwks.json"] {
+		t.Fatal("GET /auth/.well-known/jwks.json is not registered")
+	}
+}
+
 func TestHealthRoutesAreRegistered(t *testing.T) {
 	readiness := meta.NewReadinessWithChecker(false, successfulReadinessChecker{})
 	router := newContractTestRouterWithReadiness(readiness)

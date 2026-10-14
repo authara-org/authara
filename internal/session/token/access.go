@@ -92,7 +92,7 @@ func (s *AccessTokenService) GenerateWithEmailVerification(
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	token.Header["kid"] = kid
 
 	signed, err := token.SignedString(key)
@@ -121,7 +121,7 @@ func (s *AccessTokenService) parse(
 	audienceOption jwt.ParserOption,
 ) (*AccessClaims, error) {
 	parser := jwt.NewParser(
-		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
+		jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
 		audienceOption,
 		jwt.WithIssuer(s.issuer),
 		jwt.WithTimeFunc(func() time.Time { return now }),

@@ -6,7 +6,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev:webpack": "webpack --mode development --watch",
-    "dev:tailwind": "tailwindcss -i ./src/styles/style.css -o ./dist/app.css --watch",
+    "dev:tailwind": "tailwindcss -i ./src/styles/style.css -o ./dist/app.css --watch=always",
     "build": "npm run build:webpack && npm run build:tailwind",
     "build:webpack": "rm -rf dist && webpack --mode production",
     "build:tailwind": "tailwindcss -i ./src/styles/style.css -o ./dist/app.css --minify"

@@ -123,7 +123,7 @@ func TestRuntimeSettingsRenderGroupsStatesMutabilityAndHideSecrets(t *testing.T)
 			EffectiveValue: "https://auth.example", EffectiveSource: config.SourceEnvironment, Locked: true,
 		},
 		{
-			Definition:     config.Definition{Key: "AUTHARA_JWT_KEYS", Name: "JWT keys", Environment: "AUTHARA_JWT_KEYS", Group: "Token", Type: config.TypeMap, Required: true, Sensitive: true},
+			Definition:     config.Definition{Key: "AUTHARA_JWT_PRIVATE_KEYS", Name: "JWT private keys", Environment: "AUTHARA_JWT_PRIVATE_KEYS", Group: "Token", Type: config.TypeMap, Required: true, Sensitive: true},
 			EffectiveValue: "must-never-render", EffectiveSource: config.SourceEnvironment, Locked: true,
 		},
 		{

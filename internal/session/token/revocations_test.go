@@ -2,6 +2,7 @@ package token
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"strconv"
 	"strings"
@@ -82,8 +83,8 @@ func TestAccessTokenIdentifierSupportsTokensIssuedBeforeJTI(t *testing.T) {
 
 func signedRevocationTestToken(t *testing.T, claims *AccessClaims) string {
 	t.Helper()
-	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(
-		[]byte("01234567890123456789012345678901"),
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims).SignedString(
+		ed25519.NewKeyFromSeed([]byte("01234567890123456789012345678901")),
 	)
 	if err != nil {
 		t.Fatal(err)

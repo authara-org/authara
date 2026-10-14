@@ -115,6 +115,9 @@ func Load() (*Config, error) {
 	if err := cfg.Session.parse(); err != nil {
 		return nil, err
 	}
+	if err := cfg.Challenge.parse(); err != nil {
+		return nil, err
+	}
 	if err := cfg.RateLimit.parse(); err != nil {
 		return nil, err
 	}

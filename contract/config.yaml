@@ -39,7 +39,7 @@ settings_metadata:
   AUTHARA_PASSWORD_MIN_LENGTH: {control: env, reload: startup, sensitive: false, group: authentication}
   AUTHARA_JWT_ISSUER: {control: env, reload: startup, sensitive: false, group: tokens}
   AUTHARA_JWT_ACTIVE_KEY_ID: {control: env, reload: startup, sensitive: false, group: tokens}
-  AUTHARA_JWT_KEYS: {control: env, reload: startup, sensitive: true, group: tokens}
+  AUTHARA_JWT_PRIVATE_KEYS: {control: env, reload: startup, sensitive: true, group: tokens}
   AUTHARA_ACCESS_TOKEN_TTL_MINUTES: {control: hybrid, reload: dynamic, sensitive: false, group: tokens}
   AUTHARA_SESSION_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
   AUTHARA_REFRESH_TOKEN_TTL_DAYS: {control: hybrid, reload: dynamic, sensitive: false, group: sessions}
@@ -107,6 +107,8 @@ settings_metadata:
   AUTHARA_CHALLENGE_MAX_ATTEMPTS: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
   AUTHARA_CHALLENGE_MAX_RESENDS: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
   AUTHARA_CHALLENGE_MIN_RESEND_INTERVAL: {control: hybrid, reload: dynamic, sensitive: false, group: challenges}
+  AUTHARA_CHALLENGE_VERIFICATION_CODE_ACTIVE_KEY_ID: {control: env, reload: startup, sensitive: false, group: challenges}
+  AUTHARA_CHALLENGE_VERIFICATION_CODE_KEYS: {control: env, reload: startup, sensitive: true, group: challenges}
   AUTHARA_EMAIL_PROVIDER: {control: env, reload: startup, sensitive: false, group: email}
   AUTHARA_EMAIL_FROM: {control: env, reload: startup, sensitive: false, group: email}
   AUTHARA_EMAIL_SMTP_HOST: {control: env, reload: startup, sensitive: false, group: email}
@@ -384,11 +386,12 @@ variables:
     required: true
     type: string
 
-  - name: AUTHARA_JWT_KEYS
+  - name: AUTHARA_JWT_PRIVATE_KEYS
     stability: stable
     required: true
     type: map[string]base64
-    format: "keyID:base64secret,keyID2:base64secret2"
+    format: "keyID:base64Ed25519Seed,keyID2:base64Ed25519Seed2"
+    notes: Each value must decode to exactly 32 bytes. Public keys are derived and exposed through /auth/.well-known/jwks.json.
 
   - name: AUTHARA_ACCESS_TOKEN_TTL_MINUTES
     stability: stable
@@ -900,6 +903,18 @@ variables:
     required: false
     type: duration
     default: 30s
+
+  - name: AUTHARA_CHALLENGE_VERIFICATION_CODE_ACTIVE_KEY_ID
+    stability: stable
+    required: true
+    type: string
+
+  - name: AUTHARA_CHALLENGE_VERIFICATION_CODE_KEYS
+    stability: stable
+    required: true
+    type: map[string]base64
+    format: "keyID:base64secret,keyID2:base64secret2"
+    notes: HMAC secrets for verification-code hashing. Each value must decode to at least 32 bytes; retain old keys until all codes created with them have expired.
 
   # ------------------------------------------------------------
   # Email

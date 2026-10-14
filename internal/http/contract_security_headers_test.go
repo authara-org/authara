@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,8 +11,10 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/handlers/meta"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/oauth"
+	"github.com/authara-org/authara/internal/session/token"
 )
 
 func TestSecurityHeadersAreAppliedByRouter(t *testing.T) {
@@ -39,6 +42,19 @@ func TestSecurityHeadersAreAppliedByRouter(t *testing.T) {
 			t.Fatalf("expected CSP to contain %q, got %q", expected, csp)
 		}
 	}
+}
+
+func TestJWKSRouteOverridesNoStoreWithPublicCachePolicy(t *testing.T) {
+	router := newSecurityHeadersTestRouter(oauth.OAuthProviders{})
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/auth/.well-known/jwks.json", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	assertHeader(t, recorder.Result().Header, "Cache-Control", meta.JWKSCacheControl)
+	assertHeader(t, recorder.Result().Header, "Content-Type", "application/jwk-set+json")
+	assertHeader(t, recorder.Result().Header, "Access-Control-Allow-Origin", "*")
 }
 
 func TestSecurityHeadersRouterCSPFollowsGoogleOAuthConfig(t *testing.T) {
@@ -144,6 +160,10 @@ func newSecurityHeadersTestRouter(providers oauth.OAuthProviders) http.Handler {
 		w.WriteHeader(status)
 		return nil
 	})
+	keys, err := token.NewKeySet("test", map[string][]byte{"test": bytes.Repeat([]byte{1}, 32)})
+	if err != nil {
+		panic(err)
+	}
 
 	cfg := ServerConfig{
 		Version:        "test",
@@ -151,6 +171,7 @@ func newSecurityHeadersTestRouter(providers oauth.OAuthProviders) http.Handler {
 		Dev:            true,
 		Logger:         logger,
 		OAuthProviders: providers,
+		JWKS:           meta.JWKS(keys),
 		Handlers:       newTestHandlers(logger, renderer),
 	}
 

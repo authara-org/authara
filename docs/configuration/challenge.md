@@ -162,6 +162,23 @@ Prevents:
 - email spam
 - abuse of resend functionality
 
+### Verification-code hashing keys
+
+`AUTHARA_CHALLENGE_VERIFICATION_CODE_ACTIVE_KEY_ID` selects the HMAC key used
+for newly generated email verification codes.
+`AUTHARA_CHALLENGE_VERIFICATION_CODE_KEYS` contains that key and any older keys
+still needed to validate unexpired codes:
+
+```env
+AUTHARA_CHALLENGE_VERIFICATION_CODE_ACTIVE_KEY_ID=challenge-2026-06
+AUTHARA_CHALLENGE_VERIFICATION_CODE_KEYS=challenge-2026-06:BASE64_NEW_KEY,challenge-2026-01:BASE64_OLD_KEY
+```
+
+Each value must be valid base64 that decodes to at least 32 bytes. Generate a
+key with `openssl rand -base64 32`. These keys are startup-only secrets and
+must be independent from JWT signing seeds. After changing the active key,
+keep old keys configured for at least the verification-code lifetime.
+
 ## Runtime overrides
 
 The five challenge lifetime and limit settings above are hybrid. If their

@@ -83,6 +83,36 @@ func TestAccountPasswordActionsOpenDialog(t *testing.T) {
 	}
 }
 
+func TestGoogleLinkButtonRendersOneButton(t *testing.T) {
+	var html strings.Builder
+	if err := GoogleLinkButton("client-id").Render(context.Background(), &html); err != nil {
+		t.Fatal(err)
+	}
+
+	output := html.String()
+	if got := strings.Count(output, "<button"); got != 1 {
+		t.Fatalf("Google link rendered %d buttons, want 1", got)
+	}
+	for _, want := range []string{`data-google-button`, `data-google-client-id="client-id"`, `Link Google`} {
+		if !strings.Contains(output, want) {
+			t.Errorf("Google link button is missing %q", want)
+		}
+	}
+}
+
+func TestAppleProviderRendersAppleIcon(t *testing.T) {
+	var html strings.Builder
+	if err := AuthProviderIcon(viewmodel.AuthProviderApple).Render(context.Background(), &html); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{`items-center justify-center`, `viewBox="0 0 814 1000"`} {
+		if !strings.Contains(html.String(), want) {
+			t.Fatalf("Apple provider icon is missing %q", want)
+		}
+	}
+}
+
 func TestAccountShowsOperatorWorkspaceOnlyForOperators(t *testing.T) {
 	var operatorPage strings.Builder
 	if err := Account(AccountConfig{OperatorAccess: true}).Render(context.Background(), &operatorPage); err != nil {

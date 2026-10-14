@@ -28,6 +28,7 @@ type ServerConfig struct {
 	OAuthProviders    oauth.OAuthProviders
 	Handlers          Handlers
 	Readiness         *meta.Readiness
+	JWKS              http.Handler
 
 	disableOpenAPIValidation        bool
 	strictOpenAPIResponseValidation bool

@@ -353,7 +353,7 @@ func TestAccessTokenService_Parse_MissingSubjectInvalidClaims(t *testing.T) {
 		},
 	}
 
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	tok.Header["kid"] = kid
 
 	tokenString, err := tok.SignedString(key)
@@ -386,7 +386,7 @@ func TestAccessTokenService_Parse_NilSessionIDInvalidClaims(t *testing.T) {
 		},
 	}
 
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	tok.Header["kid"] = kid
 
 	tokenString, err := tok.SignedString(key)
