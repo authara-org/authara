@@ -6,9 +6,10 @@ endif
 export EMAIL
 
 DOCKER_COMPOSE_FILE = docker-compose.dev.yaml
-DOCKER_COMPOSE_DEV  = docker compose -f $(DOCKER_COMPOSE_FILE)
-DOCKER_COMPOSE_TEST = docker compose -f $(DOCKER_COMPOSE_FILE)
-DOCKER_COMPOSE_ENV  = POSTGRESQL_DATABASE='$(POSTGRESQL_DATABASE)' POSTGRESQL_USERNAME='$(POSTGRESQL_USERNAME)' POSTGRESQL_PASSWORD='$(POSTGRESQL_PASSWORD)' AUTHARA_INTERNAL_API_TOKEN='$(AUTHARA_INTERNAL_API_TOKEN)' AUTHARA_JWT_ISSUER='$(AUTHARA_JWT_ISSUER)' AUTHARA_JWT_KEYS='$(AUTHARA_JWT_KEYS)' AUTHARA_WEBHOOK_SECRET='$(AUTHARA_WEBHOOK_SECRET)'
+DOCKER_COMPOSE_FILES = -f $(DOCKER_COMPOSE_FILE) $(if $(wildcard docker-compose.override.yml),-f docker-compose.override.yml)
+DOCKER_COMPOSE_DEV  = docker compose $(DOCKER_COMPOSE_FILES)
+DOCKER_COMPOSE_TEST = docker compose $(DOCKER_COMPOSE_FILES)
+DOCKER_COMPOSE_ENV  = POSTGRESQL_DATABASE='$(POSTGRESQL_DATABASE)' POSTGRESQL_USERNAME='$(POSTGRESQL_USERNAME)' POSTGRESQL_PASSWORD='$(POSTGRESQL_PASSWORD)' AUTHARA_INTERNAL_API_TOKEN='$(AUTHARA_INTERNAL_API_TOKEN)' AUTHARA_JWT_ISSUER='$(AUTHARA_JWT_ISSUER)' AUTHARA_JWT_PRIVATE_KEYS='$(AUTHARA_JWT_PRIVATE_KEYS)' AUTHARA_CHALLENGE_VERIFICATION_CODE_KEYS='$(AUTHARA_CHALLENGE_VERIFICATION_CODE_KEYS)' AUTHARA_WEBHOOK_SECRET='$(AUTHARA_WEBHOOK_SECRET)'
 
 POSTGRES_SERVICE   = postgres
 AUTHARA_SERVICE   = authara
@@ -42,22 +43,18 @@ dev:
 			echo "Starting dev environment with tmux..."; \
 			tmux new-session -d -s authara -c '$(CURDIR)' \
 				'$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE_DEV) up' \; \
-				split-window -h -c '$(CURDIR)/frontend' \
-				'npm run dev:tailwind' \; \
 				attach; \
 		fi; \
 	else \
 		echo ""; \
 		echo "tmux not found."; \
 		echo ""; \
-		echo "Please run the following in two terminals:"; \
-		echo "  1) $(DOCKER_COMPOSE_DEV) up"; \
-		echo "  2) cd frontend && npm run dev:tailwind"; \
+		echo "Please run: $(DOCKER_COMPOSE_DEV) up"; \
 		echo ""; \
 	fi
 
 dev-tailwind:
-	cd frontend && npm run dev:tailwind
+	$(DOCKER_COMPOSE_DEV) up frontend-tailwind
 
 mailpit-up:
 	$(DOCKER_COMPOSE_DEV) up -d $(MAILPIT_SERVICE)
@@ -75,12 +72,7 @@ migrate-up:
 	$(DOCKER_COMPOSE_DEV) build $(MIGRATIONS_SERVICE)
 	$(DOCKER_COMPOSE_DEV) run --rm $(MIGRATIONS_SERVICE)
 
-db-clean:
-	$(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
-	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE) \
-	-Atc "SELECT 'TRUNCATE TABLE authara.' || string_agg(quote_ident(tablename), ', ') || ' RESTART IDENTITY CASCADE;' FROM pg_tables WHERE schemaname = 'authara'" \
-	| $(DOCKER_COMPOSE_DEV) exec -T $(POSTGRES_SERVICE) \
-	psql -U $(POSTGRESQL_USERNAME) -d $(POSTGRESQL_DATABASE)
+db-clean: db-reset
 
 db-truncate-table:
 ifndef TABLE

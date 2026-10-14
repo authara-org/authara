@@ -137,6 +137,13 @@ Unless explicitly stated otherwise, documented public behavior is considered **S
 
 - `POST /auth/sessions/logout`
 
+### Token verification metadata
+
+- `GET /auth/.well-known/jwks.json`
+
+The JWKS contains only public Ed25519 verification keys. Access tokens use
+`alg=EdDSA` and carry a `kid` matching one of those keys.
+
 ### OAuth flow endpoints
 
 Any documented OAuth callback endpoint used by browser-based integrations is part of the public contract once released and documented.

@@ -7,6 +7,15 @@ services:
       - ./frontend:/frontend
     command: npm run dev:webpack
 
+  frontend-tailwind:
+    image: node:24-alpine
+    working_dir: /frontend
+    volumes:
+      - ./frontend:/frontend
+      - frontend-tailwind-node-modules:/frontend/node_modules
+      - ./internal/http/templates:/internal/http/templates:ro
+    command: sh -c "npm install --no-audit --no-fund && exec npm run dev:tailwind"
+
   postgres:
     image: postgres:16.2
     ports:
@@ -123,7 +132,7 @@ services:
       AUTHARA_AUDIENCE: app
       AUTHARA_BASE_URL: http://authara:8080
       AUTHARA_ISSUER: ${AUTHARA_JWT_ISSUER}
-      AUTHARA_JWT_KEYS: ${AUTHARA_JWT_KEYS}
+      AUTHARA_JWKS_URL: http://authara:8080/auth/.well-known/jwks.json
       AUTHARA_WEBHOOK_SECRET: ${AUTHARA_WEBHOOK_SECRET}
       AUTHARA_INTERNAL_API_TOKEN: ${AUTHARA_INTERNAL_API_TOKEN:-dev-internal-token}
     volumes:
@@ -144,3 +153,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  frontend-tailwind-node-modules:

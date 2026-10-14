@@ -68,6 +68,11 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	if cfg.Observability != nil {
 		r.Get("/metrics", cfg.Observability.Handler().ServeHTTP)
 	}
+	jwks := cfg.JWKS
+	if jwks == nil {
+		jwks = meta.JWKS(nil)
+	}
+	r.Get("/auth/.well-known/jwks.json", jwks.ServeHTTP)
 
 	r.Group(func(r chi.Router) {
 		r.Get("/auth/live", meta.Liveness)

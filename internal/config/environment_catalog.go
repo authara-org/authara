@@ -22,17 +22,18 @@ type EnvironmentVariable struct {
 }
 
 var sensitiveEnvironmentVariables = map[string]struct{}{
-	"POSTGRESQL_USERNAME":                    {},
-	"POSTGRESQL_PASSWORD":                    {},
-	"AUTHARA_REDIS_PASSWORD":                 {},
-	"AUTHARA_JWT_KEYS":                       {},
-	"AUTHARA_INTERNAL_API_TOKEN":             {},
-	"AUTHARA_WEBHOOK_SECRET":                 {},
-	"AUTHARA_EMAIL_SMTP_USERNAME":            {},
-	"AUTHARA_EMAIL_SMTP_PASSWORD":            {},
-	"AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET":     {},
-	"AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64": {},
-	"AUTHARA_OAUTH_APPLE_TOKEN_KEYS":         {},
+	"POSTGRESQL_USERNAME":                      {},
+	"POSTGRESQL_PASSWORD":                      {},
+	"AUTHARA_REDIS_PASSWORD":                   {},
+	"AUTHARA_JWT_PRIVATE_KEYS":                 {},
+	"AUTHARA_CHALLENGE_VERIFICATION_CODE_KEYS": {},
+	"AUTHARA_INTERNAL_API_TOKEN":               {},
+	"AUTHARA_WEBHOOK_SECRET":                   {},
+	"AUTHARA_EMAIL_SMTP_USERNAME":              {},
+	"AUTHARA_EMAIL_SMTP_PASSWORD":              {},
+	"AUTHARA_OAUTH_GOOGLE_CLIENT_SECRET":       {},
+	"AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64":   {},
+	"AUTHARA_OAUTH_APPLE_TOKEN_KEYS":           {},
 }
 
 var environmentVariableTypeOverrides = map[string]string{

@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
+	"github.com/google/uuid"
 )
 
 type WorkerConfig struct {
@@ -465,6 +466,9 @@ func (w *Worker) processJob(ctx context.Context, job domain.EmailJob, now time.T
 	if w.sender == nil {
 		return email.PermanentError("configuration_error", errors.New("email sender is not configured"))
 	}
+	if job.ID != uuid.Nil {
+		msg.MessageID = fmt.Sprintf("<%s@authara.local>", job.ID)
+	}
 	return w.sender.Send(ctx, job.ToEmail, msg)
 }
 
@@ -495,7 +499,7 @@ func (w *Worker) verificationCodeForJob(ctx context.Context, job domain.EmailJob
 	if challenge.IsConsumed() || challenge.IsExpired(now) {
 		return "", email.PermanentError("message_expired", errors.New("email challenge is no longer active"))
 	}
-	code, err := w.codeSvc.GenerateCode(ctx, challenge, now)
+	code, err := w.codeSvc.GenerateCodeForDelivery(ctx, challenge, job.ID, now)
 	if errors.Is(err, ErrVerificationCodeSecretNotConfigured) {
 		return "", email.PermanentError("configuration_error", err)
 	}

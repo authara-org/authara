@@ -183,13 +183,7 @@ templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
 			@PasswordProviderActions(provider)
 		} else if provider.Kind == viewmodel.AuthProviderGoogle && !provider.Linked {
 			<div class="w-fit">
-				@button.Button(button.ButtonConfig{
-					Type:    button.RegularButton,
-					Color:   button.Light,
-					Variant: button.Outline,
-				}) {
-					@GoogleLinkButton(googleClientID)
-				}
+				@GoogleLinkButton(googleClientID)
 			</div>
 		} else if provider.Kind == viewmodel.AuthProviderApple && !provider.Linked {
 			<div class="w-36">
@@ -271,24 +265,26 @@ templ AuthProviderRow(provider viewmodel.AuthProvider, googleClientID string) {
 }
 
 templ GoogleLinkButton(clientID string) {
-	<button
-		type="button"
-		disabled
-		data-google-button
-		data-google-client-id={ clientID }
-		data-provider="google"
-		data-google-flow={ viewmodel.AuthProviderFlowLink }
-		data-return-to="/auth/account"
-		class="relative flex items-center gap-2 cursor-pointer
-			rounded-lg text text-grey-800 dark:text-grey-200 overflow-hidden"
-	>
+	@button.Button(button.ButtonConfig{
+		Type:     button.RegularButton,
+		Color:    button.Light,
+		Variant:  button.Outline,
+		Disabled: true,
+		Attrs: templ.Attributes{
+			"data-google-button":    true,
+			"data-google-client-id": clientID,
+			"data-provider":         "google",
+			"data-google-flow":      string(viewmodel.AuthProviderFlowLink),
+			"data-return-to":        "/auth/account",
+		},
+	}) {
 		<img
 			src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
 			class="h-4 w-4"
 			alt="Google logo"
 		/>
 		<span>Link Google</span>
-	</button>
+	}
 }
 
 templ AuthProviderIcon(kind viewmodel.AuthProviderKind) {
@@ -297,6 +293,10 @@ templ AuthProviderIcon(kind viewmodel.AuthProviderKind) {
 			@icons.Lock()
 		case viewmodel.AuthProviderGoogle:
 			@icons.Google()
+		case viewmodel.AuthProviderApple:
+			<div class="flex h-full w-full items-center justify-center">
+				@icons.AppleLogoBlack()
+			</div>
 		case viewmodel.AuthProviderMicrosoft:
 			<div class="grid h-full w-full grid-cols-2 gap-[2px] p-0.5" aria-hidden="true">
 				<span class="bg-[#f25022]"></span><span class="bg-[#7fba00]"></span>

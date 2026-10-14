@@ -86,7 +86,21 @@ Example:
 
 ```
 PUBLIC_URL
+AUTHARA_COOKIE_DOMAIN
 ```
+
+`AUTHARA_COOKIE_DOMAIN` optionally sets the `Domain` attribute on
+`authara_access`, `authara_refresh`, and `authara_csrf`. It must match the
+`PUBLIC_URL` host or be its registrable parent domain. Leave it unset for
+host-only cookies. For example, a `PUBLIC_URL` of `https://auth.example.com`
+may use `AUTHARA_COOKIE_DOMAIN=example.com` to send those cookies to the apex
+domain and all `*.example.com` hosts.
+
+Cookie domains cannot express a host allowlist or exclude a subdomain. Every
+host covered by the configured domain must therefore be trusted with the
+session. Changing this setting can leave existing cookies under the previous
+scope; deployments should sign users out or clear the old cookies during the
+transition.
 
 ### Branding
 
@@ -212,7 +226,7 @@ Examples:
 
 ```
 AUTHARA_JWT_ISSUER
-AUTHARA_JWT_KEYS
+AUTHARA_JWT_PRIVATE_KEYS
 AUTHARA_JWT_ACTIVE_KEY_ID
 ```
 

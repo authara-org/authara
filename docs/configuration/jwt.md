@@ -1,192 +1,130 @@
 # JWT Configuration
 
-Authara issues **JSON Web Tokens (JWTs)** as short-lived access tokens.
-
-JWTs are used to authenticate requests between the browser, the application, and Authara-protected APIs.
-
-JWT configuration controls:
-
-- the token issuer
-- signing keys
-- key rotation
-
----
+Authara issues short-lived JWT access tokens signed with Ed25519 (`alg=EdDSA`).
+Core holds the private signing seeds; applications and SDKs validate tokens
+with public keys from Authara's JWKS endpoint. A relying application never
+needs access to private signing material.
 
 See also: [Configuration Reference](reference.md)
 
----
+## Configuration
 
-# Overview
-
-Authara signs access tokens using symmetric keys configured via environment variables.
-
-Each key has a **key ID (`kid`)** which is embedded in the token header.  
-This allows Authara to support **multiple active keys** for safe key rotation.
-
-Relevant configuration variables:
-
-```
-AUTHARA_JWT_ISSUER
-AUTHARA_JWT_ACTIVE_KEY_ID
-AUTHARA_JWT_KEYS
-AUTHARA_ACCESS_TOKEN_TTL_MINUTES
-AUTHARA_ACCESS_TOKEN_REVOCATION_MODE
-```
-
-When revocation mode is `expiry`, the access-token lifetime is capped at 10
-minutes because already-issued JWTs cannot be invalidated online. Runtime
-updates are subject to the same cap. In `immediate` mode, Redis-backed checks
-reject revoked tokens before their normal expiry.
-
----
-
-# JWT Issuer
-
-```
-AUTHARA_JWT_ISSUER
-```
-
-Defines the `iss` claim included in all issued access tokens.
-
-Example:
-
-```
+```env
 AUTHARA_JWT_ISSUER=authara
-```
-
-Applications validating tokens should verify that the `iss` claim matches the expected issuer.
-
----
-
-# Active Signing Key
-
-```
-AUTHARA_JWT_ACTIVE_KEY_ID
-```
-
-Specifies the key ID used to sign **newly issued tokens**.
-
-Example:
-
-```
 AUTHARA_JWT_ACTIVE_KEY_ID=key-2026-01
+AUTHARA_JWT_PRIVATE_KEYS=key-2026-01:BASE64_ED25519_SEED
+AUTHARA_ACCESS_TOKEN_TTL_MINUTES=10
 ```
 
-The key ID must exist in `AUTHARA_JWT_KEYS`.
+`AUTHARA_JWT_ISSUER` becomes the token's `iss` claim. Validators must compare
+it exactly with their configured expected issuer.
 
----
+`AUTHARA_JWT_ACTIVE_KEY_ID` selects the key used for new tokens. It must exist
+in `AUTHARA_JWT_PRIVATE_KEYS`, and its ID is included in the JWT header as
+`kid`.
 
-# Signing Keys
+`AUTHARA_JWT_PRIVATE_KEYS` is a comma-separated map:
 
-```
-AUTHARA_JWT_KEYS
-```
-
-Defines the set of signing keys available to Authara.
-
-Format:
-
-```
-keyID:base64secret,keyID2:base64secret2
+```text
+keyID:base64Ed25519Seed,keyID2:base64Ed25519Seed2
 ```
 
-Example:
-
-```
-AUTHARA_JWT_KEYS=key-2026-01:VZp2u1sYz0g2nF2vY8q8dP7cZQpL5cRrXn0k7FZ0xkE=,key-2025-09:Qk8K6E3XrV6mF4T9yZcA2p9xYbDqZpM0JwH3uZ8sL1E=
-```
-
-Each entry contains:
-
-```
-keyID : base64-encoded secret
-```
-
-The key ID is included in the JWT header as the `kid` field.
-
----
-
-# Key Rotation
-
-Authara supports **safe key rotation** by allowing multiple signing keys.
-
-The typical rotation process is:
-
-1. Generate a new secret key.
-2. Add the new key to `AUTHARA_JWT_KEYS`.
-3. Update `AUTHARA_JWT_ACTIVE_KEY_ID` to the new key.
-4. Restart Authara.
-
-Example:
-
-```
-AUTHARA_JWT_ACTIVE_KEY_ID=key-2026-06
-
-AUTHARA_JWT_KEYS=
-  key-2026-06:NEW_SECRET,
-  key-2026-01:OLD_SECRET
-```
-
-New tokens will be signed with the new key while older tokens continue to validate using the previous key.
-
-Once all old tokens have expired, the previous key can be removed.
-
----
-
-# Generating Keys
-
-JWT secrets should be **cryptographically random**.
-
-Example using OpenSSL:
+Every seed must decode to exactly 32 bytes. Generate one with:
 
 ```bash
 openssl rand -base64 32
 ```
 
-Example output:
+Keep private seeds in a secret manager, use different keys per environment,
+and never provide this setting to an application or SDK.
 
-```
-VZp2u1sYz0g2nF2vY8q8dP7cZQpL5cRrXn0k7FZ0xkE=
-```
+## Public JWKS
 
----
+Core publishes the corresponding public keys at:
 
-# Security Recommendations
-
-- Always generate keys using a secure random generator.
-- Do not reuse secrets across environments.
-- Rotate keys periodically.
-- Store secrets in a secure secret management system when running in production.
-
----
-
-# Token Lifetime
-
-Access token lifetime is configured separately:
-
-```
-AUTHARA_ACCESS_TOKEN_TTL_MINUTES
+```text
+GET /auth/.well-known/jwks.json
 ```
 
-default:
+Each JWK is an `OKP`/`Ed25519` verification key with `alg=EdDSA`, `use=sig`,
+and the matching `kid`. The response contains no private `d` value. It is
+publicly cacheable for five minutes and supports conditional requests with an
+ETag.
 
+Configure an SDK with Authara's base URL or the explicit JWKS URL. Validation
+must still check the signature, `kid`, algorithm, issuer, audience, expiry,
+issued-at time, and required Authara claims. JWKS is key metadata, not an
+introspection endpoint and not an OpenID Connect discovery document.
+
+## Key rotation
+
+Rotation overlaps the old and new public keys. For the smoothest rollout,
+publish the new key before using it:
+
+1. Generate a new 32-byte seed.
+2. Add it to `AUTHARA_JWT_PRIVATE_KEYS` without changing the active key, then
+   restart Core.
+3. Wait at least the five-minute JWKS cache lifetime so validators learn the
+   new public key.
+4. Set `AUTHARA_JWT_ACTIVE_KEY_ID` to the new ID and restart Core again.
+5. Keep the old key configured for at least the maximum access-token lifetime,
+   plus cache and clock-skew allowance.
+6. Remove the old key and restart Core after that window.
+
+For example:
+
+```env
+AUTHARA_JWT_ACTIVE_KEY_ID=key-2026-06
+AUTHARA_JWT_PRIVATE_KEYS=key-2026-06:BASE64_NEW_SEED,key-2026-01:BASE64_OLD_SEED
 ```
-10
-```
 
-The lifetime must be between 1 and 1440 minutes. Expiry-only revocation mode
-uses the stricter maximum of 10 minutes.
+SDKs normally use the cached JWKS. When a token arrives with a new `kid`, the
+Authara Go SDK performs one rate-limited refresh immediately, so rollout does
+not have to wait for normal cache expiry.
 
-Access tokens are intentionally **short-lived**, while refresh tokens control the overall session lifetime.
+Do not remove the old key at the same time you activate the new one. An
+already-issued token remains valid until expiry and must retain a matching
+public key throughout that bounded lifetime.
 
----
+### Rotation with multiple Core replicas
 
-# Summary
+Every Core replica behind a load balancer must use the same private-key set and
+active key. A replica that signs with a new key while another replica still
+publishes only the old JWKS can create tokens that validators intermittently
+reject, depending on which replica serves the JWKS request.
 
-JWT configuration defines:
+Use two fleet-wide rollouts:
 
-- the token issuer
-- the active signing key
-- the available signing keys for validation
+1. Add the new private key to every replica while the old key remains active.
+2. Confirm every replica publishes both public keys, then wait at least the
+   five-minute JWKS cache lifetime.
+3. Change the active key to the new ID on every replica, keeping both keys.
+4. After the old-token lifetime, JWKS cache lifetime, and clock-skew allowance
+   have elapsed, remove the old key from every replica.
 
-Multiple keys allow **safe rotation without breaking existing sessions**.
+Do not activate a key during the first rolling deployment. Complete and verify
+the fleet-wide prepublication step before any replica signs with the new key.
+
+## Token lifetime and revocation
+
+`AUTHARA_ACCESS_TOKEN_TTL_MINUTES` defaults to 10 and may be between 1 and
+1440 minutes. Expiry-only revocation mode imposes the stricter 10-minute
+maximum. With immediate revocation, SDK middleware can additionally query the
+shared Redis revocation records after local signature verification.
+
+JWKS changes only how the signature is verified. It does not replace Authara's
+existing session, refresh-token, or Redis revocation behavior.
+
+## Migration from shared HS256 keys
+
+This release removes HS256 access-token signing and the
+`AUTHARA_JWT_KEYS` setting. Replace it with `AUTHARA_JWT_PRIVATE_KEYS`, and
+configure relying services with Authara's base URL or JWKS URL instead of a
+shared secret.
+
+If Core and relying services are deployed independently, release the
+JWKS-capable SDK first, update each service, and then deploy the EdDSA-signing
+Core version. There is intentionally no dual-algorithm period: accepting both
+HS256 and EdDSA would preserve the secret-sharing design and widen the
+algorithm-confusion surface. Because no production consumers exist yet, the
+cleanest rollout is a coordinated breaking deployment.

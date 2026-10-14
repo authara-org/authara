@@ -10,7 +10,7 @@ import (
 func configureRuntime(cfg *config.Config) {
 	secure := cfg.Values.AppEnv == "prod"
 
-	csrf.Configure(secure)
+	csrf.Configure(secure, cfg.Values.CookieDomain)
 	oauthstate.Configure(secure)
-	session.Configure(secure)
+	session.Configure(secure, cfg.Values.CookieDomain)
 }

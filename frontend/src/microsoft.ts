@@ -154,7 +154,12 @@ async function submit(
     const data = (await response.json()) as { reauthenticate_url?: string };
     if (allowRecentAuthenticationRetry && data.reauthenticate_url) {
       await requestRecentAuthentication(data.reauthenticate_url);
-      return submit(button, configuration, result, false);
+      const retryRuntime = await prepareMicrosoft();
+      preparedRuntime = undefined;
+      runtimePromise = undefined;
+      setButtonsReady(false);
+      const retryResult = await authorize(retryRuntime);
+      return submit(button, retryRuntime.configuration, retryResult, false);
     }
   }
   if (response.status === 409 && flow === "login") {

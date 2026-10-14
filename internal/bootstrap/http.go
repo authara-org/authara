@@ -160,6 +160,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		OAuthProviders:    app.Services.OAuthProviders,
 		Handlers:          handlers,
 		Readiness:         meta.NewReadinessWithObserver(false, readinessChecker, app.Observability),
+		JWKS:              meta.JWKS(app.Config.Token.KeySet),
 	}, mw)
 
 	return server, nil

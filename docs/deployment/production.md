@@ -192,6 +192,10 @@ In multi-instance deployments, operators should consider:
 - load balancing behavior
 - schema compatibility during rollout
 
+Configure the same JWT private-key set and active key on every replica. Signing
+key changes require a fleet-wide prepublication phase before activation; see
+[JWT key rotation](../configuration/jwt.md#rotation-with-multiple-core-replicas).
+
 Some features, such as the default in-memory rate limiter, are instance-local.
 
 Use the same access-token revocation mode on every replica. The recommended

@@ -83,7 +83,14 @@ Example:
 
 ```
 PUBLIC_URL
+AUTHARA_COOKIE_DOMAIN
 ```
+
+`AUTHARA_COOKIE_DOMAIN` is optional and startup-only. When unset, session and
+CSRF cookies are host-only. Set it to a registrable parent such as
+`example.com` only when every covered subdomain is part of the same trusted
+authentication boundary. A cookie supports one domain scope, not a list of
+individual hosts.
 
 ---
 
@@ -169,7 +176,7 @@ Examples:
 
 ```
 AUTHARA_JWT_ISSUER
-AUTHARA_JWT_KEYS
+AUTHARA_JWT_PRIVATE_KEYS
 AUTHARA_JWT_ACTIVE_KEY_ID
 ```
 
@@ -212,6 +219,8 @@ Examples:
 AUTHARA_CHALLENGE_ENABLED
 AUTHARA_CHALLENGE_TTL
 AUTHARA_CHALLENGE_MAX_ATTEMPTS
+AUTHARA_CHALLENGE_VERIFICATION_CODE_ACTIVE_KEY_ID
+AUTHARA_CHALLENGE_VERIFICATION_CODE_KEYS
 ```
 
 ---

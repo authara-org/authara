@@ -16,6 +16,7 @@ func SetAccessToken(w http.ResponseWriter, token string, maxAgeSeconds int) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     accessCookieName,
 		Value:    token,
+		Domain:   cookieDomain,
 		Path:     cookiePath,
 		HttpOnly: true,
 		Secure:   secureCookies,
@@ -29,6 +30,7 @@ func SetRefreshToken(w http.ResponseWriter, token string, maxAgeSeconds int) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    token,
+		Domain:   cookieDomain,
 		Path:     cookiePath,
 		HttpOnly: true,
 		Secure:   secureCookies,
@@ -44,6 +46,7 @@ func ClearSessionCookies(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     accessCookieName,
 		Value:    "",
+		Domain:   cookieDomain,
 		Path:     cookiePath,
 		HttpOnly: true,
 		Secure:   secureCookies,
@@ -55,6 +58,7 @@ func ClearSessionCookies(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    "",
+		Domain:   cookieDomain,
 		Path:     cookiePath,
 		HttpOnly: true,
 		Secure:   secureCookies,

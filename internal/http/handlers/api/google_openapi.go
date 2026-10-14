@@ -50,7 +50,7 @@ func (h *APIHandler) GetGoogleLoginOptions(ctx context.Context, _ contract.GetGo
 		return getGoogleLoginOptionsError(responseCodeNotFound(), "Google login is not enabled."), nil
 	}
 	header := make(http.Header)
-	nonce, err := oauthstate.EnsureNonce(contract.HeaderWriter(header), r)
+	nonce, err := oauthstate.Create(contract.HeaderWriter(header), r)
 	if err != nil {
 		return getGoogleLoginOptionsError(responseCodeInternalError(), "Google login setup error."), nil
 	}

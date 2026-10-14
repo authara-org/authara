@@ -362,10 +362,12 @@ and the recipient can receive a duplicate. Lease fencing prevents an old worker
 from overwriting the state owned by a newer worker, but it cannot atomically
 combine an external SMTP transaction with the database update.
 
-Challenge-code messages generate the code during each delivery attempt. In the
-rare accepted-message/crash window, a retried duplicate can contain a newer
-code, and only the most recently generated code is valid. Requesting an
-explicit resend likewise makes the newly generated code authoritative.
+Retries of one queued job reuse its `Message-ID`. This can help receiving mail
+systems recognize a duplicate, but SMTP does not require them to suppress it.
+Challenge-code messages also reuse the same code for retries of one job, so a
+deduplicated message cannot leave the recipient with an invalidated code. An
+explicit resend creates a new job, `Message-ID`, and code, making that new code
+authoritative.
 
 ---
 

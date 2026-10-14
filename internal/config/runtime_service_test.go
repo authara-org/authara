@@ -195,7 +195,7 @@ func TestEnvironmentCatalogReportsSetDefaultUnsetAndSensitiveStates(t *testing.T
 		{Name: "APP_ENV", DisplayName: "Application environment", Group: "Runtime", Type: "enum", Default: "dev", HasDefault: true},
 		{Name: "LOG_LEVEL", DisplayName: "Log level", Group: "Runtime", Type: "string"},
 		{Name: "PUBLIC_URL", DisplayName: "Public URL", Group: "Public URL", Type: "url", Required: true},
-		{Name: "AUTHARA_JWT_KEYS", DisplayName: "JWT keys", Group: "Tokens", Type: "map", Required: true, Sensitive: true},
+		{Name: "AUTHARA_JWT_PRIVATE_KEYS", DisplayName: "JWT private keys", Group: "Tokens", Type: "map", Required: true, Sensitive: true},
 		{Name: "AUTHARA_INTERNAL_API_TOKEN", DisplayName: "Internal API token", Group: "Internal API", Type: "string", Sensitive: true},
 		{Name: "AUTHARA_OAUTH_GOOGLE_CLIENT_ID", DisplayName: "OAuth Google client ID", Group: "OAuth", Type: "string"},
 		{Name: "AUTHARA_CHALLENGE_TTL", DisplayName: "Challenge TTL", Group: "Challenges", Type: "duration", Default: "30m", HasDefault: true},
@@ -205,7 +205,7 @@ func TestEnvironmentCatalogReportsSetDefaultUnsetAndSensitiveStates(t *testing.T
 		Environment: variables,
 		LookupEnvironment: environment(map[string]string{
 			"PUBLIC_URL":                 "https://auth.example",
-			"AUTHARA_JWT_KEYS":           "sensitive-key-material",
+			"AUTHARA_JWT_PRIVATE_KEYS":   "sensitive-key-material",
 			"AUTHARA_INTERNAL_API_TOKEN": "",
 			"AUTHARA_CHALLENGE_TTL":      "45m",
 		}),
@@ -225,11 +225,11 @@ func TestEnvironmentCatalogReportsSetDefaultUnsetAndSensitiveStates(t *testing.T
 	assertEnvironmentDescription(t, descriptions["AUTHARA_INTERNAL_API_TOKEN"], SourceUnset, "", true)
 	assertEnvironmentDescription(t, descriptions["AUTHARA_CHALLENGE_TTL"], SourceEnvironment, "45m0s", true)
 
-	secret := descriptions["AUTHARA_JWT_KEYS"]
+	secret := descriptions["AUTHARA_JWT_PRIVATE_KEYS"]
 	if secret.EffectiveSource != SourceEnvironment || secret.EffectiveValue != "Configured (value hidden)" || !secret.Locked {
 		t.Fatalf("sensitive description = %+v", secret)
 	}
-	if got := service.environmentValues[Key("AUTHARA_JWT_KEYS")]; got != "" {
+	if got := service.environmentValues[Key("AUTHARA_JWT_PRIVATE_KEYS")]; got != "" {
 		t.Fatalf("runtime settings retained sensitive value: %q", got)
 	}
 	if editable := descriptions["AUTHARA_CHALLENGE_MAX_ATTEMPTS"]; editable.Locked || editable.EffectiveSource != SourceDefault {

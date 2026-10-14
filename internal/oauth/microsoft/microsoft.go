@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
@@ -18,6 +20,7 @@ import (
 const (
 	loginHost        = "https://login.microsoftonline.com"
 	consumerTenantID = "9188040d-6c67-4c5b-b112-36a304b66dad"
+	maxTenantKeySets = 64
 )
 
 type Identity struct {
@@ -38,6 +41,9 @@ type Client struct {
 	TenantID   string
 	httpClient *http.Client
 	loginHost  string
+	keySetsMu  sync.Mutex
+	keySets    map[string]*oidc.RemoteKeySet
+	keySetFIFO []string
 }
 
 func New(cfg Config) (*Client, error) {
@@ -55,9 +61,13 @@ func New(cfg Config) (*Client, error) {
 	}
 	client := cfg.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &Client{ClientID: clientID, TenantID: tenantID, httpClient: client, loginHost: host}, nil
+	client = newJWKSHTTPClient(client)
+	return &Client{
+		ClientID: clientID, TenantID: tenantID, httpClient: client, loginHost: host,
+		keySets: make(map[string]*oidc.RemoteKeySet),
+	}, nil
 }
 
 func (c *Client) Authority() string {
@@ -83,7 +93,7 @@ func (c *Client) VerifyIDToken(ctx context.Context, rawToken, expectedNonce stri
 	}
 
 	issuer := c.loginHost + "/" + tenantID + "/v2.0"
-	keys := oidc.NewRemoteKeySet(oidc.ClientContext(ctx, c.httpClient), c.loginHost+"/"+tenantID+"/discovery/v2.0/keys")
+	keys := c.keySet(tenantID)
 	verifier := oidc.NewVerifier(issuer, keys, &oidc.Config{
 		ClientID:             c.ClientID,
 		SupportedSigningAlgs: []string{oidc.RS256},
@@ -131,6 +141,25 @@ func (c *Client) VerifyIDToken(ctx context.Context, rawToken, expectedNonce stri
 		Email:         email,
 		EmailVerified: emailVerified,
 	}, nil
+}
+
+func (c *Client) keySet(tenantID string) *oidc.RemoteKeySet {
+	c.keySetsMu.Lock()
+	defer c.keySetsMu.Unlock()
+	if keys := c.keySets[tenantID]; keys != nil {
+		return keys
+	}
+	if len(c.keySetFIFO) >= maxTenantKeySets {
+		delete(c.keySets, c.keySetFIFO[0])
+		c.keySetFIFO = c.keySetFIFO[1:]
+	}
+	keys := oidc.NewRemoteKeySet(
+		oidc.ClientContext(context.Background(), c.httpClient),
+		c.loginHost+"/"+tenantID+"/discovery/v2.0/keys",
+	)
+	c.keySets[tenantID] = keys
+	c.keySetFIFO = append(c.keySetFIFO, tenantID)
+	return keys
 }
 
 func (c *Client) allowsTenant(tenantID string) bool {

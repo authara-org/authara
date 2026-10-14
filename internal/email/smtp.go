@@ -153,6 +153,9 @@ func buildMIMEMessage(from, to string, msg Message) ([]byte, error) {
 	if err := validateHeaderValue("Subject", msg.Subject); err != nil {
 		return nil, err
 	}
+	if err := validateMessageID(msg.MessageID); err != nil {
+		return nil, err
+	}
 
 	boundary := fmt.Sprintf("authara-%d", time.Now().UnixNano())
 
@@ -160,6 +163,9 @@ func buildMIMEMessage(from, to string, msg Message) ([]byte, error) {
 
 	writeHeader(&b, "From", fromAddr)
 	writeHeader(&b, "To", toAddr)
+	if msg.MessageID != "" {
+		writeHeader(&b, "Message-ID", msg.MessageID)
+	}
 	writeHeader(&b, "Subject", msg.Subject)
 	writeHeader(&b, "MIME-Version", "1.0")
 	writeHeader(&b, "Content-Type", fmt.Sprintf(`multipart/alternative; boundary="%s"`, boundary))
@@ -217,6 +223,23 @@ func parseHeaderAddress(key string, raw string) (string, error) {
 func validateHeaderValue(key string, value string) error {
 	if strings.ContainsAny(value, "\r\n") {
 		return fmt.Errorf("smtp: %s header contains line breaks", key)
+	}
+	return nil
+}
+
+func validateMessageID(value string) error {
+	if value == "" {
+		return nil
+	}
+	if err := validateHeaderValue("Message-ID", value); err != nil {
+		return err
+	}
+	if len(value) < 5 || value[0] != '<' || value[len(value)-1] != '>' {
+		return fmt.Errorf("smtp: invalid Message-ID header")
+	}
+	id := value[1 : len(value)-1]
+	if strings.Count(id, "@") != 1 || strings.ContainsAny(id, " \t<>") {
+		return fmt.Errorf("smtp: invalid Message-ID header")
 	}
 	return nil
 }

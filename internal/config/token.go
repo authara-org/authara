@@ -1,8 +1,10 @@
 package config
 
 import (
+	"crypto/ed25519"
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/session/token"
@@ -11,7 +13,7 @@ import (
 type Token struct {
 	Issuer                string            `env:"AUTHARA_JWT_ISSUER,required"`
 	ActiveKeyID           string            `env:"AUTHARA_JWT_ACTIVE_KEY_ID,required"`
-	Keys                  map[string]string `env:"AUTHARA_JWT_KEYS,required"`
+	PrivateKeys           map[string]string `env:"AUTHARA_JWT_PRIVATE_KEYS,required"`
 	AccessTokenTTLMinutes int               `env:"AUTHARA_ACCESS_TOKEN_TTL_MINUTES,default=10"`
 
 	AccessTokenTTL time.Duration
@@ -19,29 +21,29 @@ type Token struct {
 }
 
 func (t *Token) validate() error {
-	if t.Issuer == "" {
+	if strings.TrimSpace(t.Issuer) == "" {
 		return fmt.Errorf("AUTHARA_JWT_ISSUER must not be empty")
 	}
 
-	if t.ActiveKeyID == "" {
+	if strings.TrimSpace(t.ActiveKeyID) == "" {
 		return fmt.Errorf("AUTHARA_JWT_ACTIVE_KEY_ID must not be empty")
 	}
 
-	if len(t.Keys) == 0 {
-		return fmt.Errorf("AUTHARA_JWT_KEYS must contain at least one key")
+	if len(t.PrivateKeys) == 0 {
+		return fmt.Errorf("AUTHARA_JWT_PRIVATE_KEYS must contain at least one key")
 	}
 
-	key, ok := t.Keys[t.ActiveKeyID]
+	key, ok := t.PrivateKeys[t.ActiveKeyID]
 	if !ok {
 		return fmt.Errorf(
-			"AUTHARA_JWT_ACTIVE_KEY_ID %q not found in AUTHARA_JWT_KEYS",
+			"AUTHARA_JWT_ACTIVE_KEY_ID %q not found in AUTHARA_JWT_PRIVATE_KEYS",
 			t.ActiveKeyID,
 		)
 	}
 
 	if key == "" {
 		return fmt.Errorf(
-			"AUTHARA_JWT_KEYS[%q] must not be empty",
+			"AUTHARA_JWT_PRIVATE_KEYS[%q] must not be empty",
 			t.ActiveKeyID,
 		)
 	}
@@ -59,15 +61,19 @@ func (t *Token) validate() error {
 func (t *Token) parse() error {
 	t.AccessTokenTTL = time.Duration(t.AccessTokenTTLMinutes) * time.Minute
 
-	decoded := make(map[string][]byte, len(t.Keys))
+	decoded := make(map[string][]byte, len(t.PrivateKeys))
 
-	for id, encoded := range t.Keys {
-		key, err := base64.StdEncoding.DecodeString(encoded)
+	for id, encoded := range t.PrivateKeys {
+		key, err := base64.StdEncoding.Strict().DecodeString(encoded)
 		if err != nil {
-			return fmt.Errorf("AUTHARA_JWT_KEYS[%q] is not valid base64", id)
+			return fmt.Errorf("AUTHARA_JWT_PRIVATE_KEYS[%q] is not valid base64", id)
 		}
-		if len(key) < 32 {
-			return fmt.Errorf("AUTHARA_JWT_KEYS[%q] must decode to at least 32 bytes", id)
+		if len(key) != ed25519.SeedSize {
+			return fmt.Errorf(
+				"AUTHARA_JWT_PRIVATE_KEYS[%q] must decode to exactly %d bytes",
+				id,
+				ed25519.SeedSize,
+			)
 		}
 		decoded[id] = key
 	}

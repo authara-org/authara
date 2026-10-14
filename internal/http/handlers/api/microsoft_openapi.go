@@ -35,21 +35,31 @@ func (h *APIHandler) verifyMicrosoftAuthorization(
 	r *http.Request,
 	credential string,
 	nonce string,
-) (*microsoft.Identity, http.Header, response.ErrorCode, string, bool) {
+) (*microsoft.Identity, http.Header, response.ErrorCode, string, bool, bool) {
 	if _, ok := h.microsoftClientID(); !ok || h.Microsoft == nil {
-		return nil, nil, response.CodeNotFound, "Microsoft login is not enabled.", false
+		return nil, nil, response.CodeNotFound, "Microsoft login is not enabled.", false, false
 	}
 	credential = strings.TrimSpace(credential)
 	nonce = strings.TrimSpace(nonce)
 	if credential == "" || nonce == "" {
-		return nil, nil, response.CodeInvalidRequest, "Microsoft credential and nonce required.", false
-	}
-	expectedNonce, ok := oauthstate.ReadNonce(r)
-	if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
-		return nil, nil, response.CodeUnauthorized, "Invalid Microsoft credential.", false
+		return nil, nil, response.CodeInvalidRequest, "Microsoft credential and nonce required.", false, false
 	}
 	header := make(http.Header)
-	oauthstate.ClearNonce(contract.HeaderWriter(header))
+	expectedNonce, ok := oauthstate.Consume(contract.HeaderWriter(header), r, nonce)
+	if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
+		return nil, header, response.CodeUnauthorized, "Invalid Microsoft credential.", false, false
+	}
+	if h.Limiter != nil {
+		ip := httputil.ClientIP(r)
+		allowed, err := h.Limiter.AllowOAuthAttempt(ctx, ip)
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many Microsoft authentication attempts. Please try again later."); !ok {
+			if code == response.CodeRateLimited {
+				code = response.CodeUnauthorized
+				message = "Invalid Microsoft credential."
+			}
+			return nil, header, code, message, false, code == response.CodeUnauthorized
+		}
+	}
 	identity, err := h.Microsoft.VerifyIDToken(ctx, credential, expectedNonce)
 	if err != nil {
 		logger := h.Logger
@@ -57,9 +67,9 @@ func (h *APIHandler) verifyMicrosoftAuthorization(
 			logger = slog.Default()
 		}
 		logger.WarnContext(ctx, "microsoft credential rejected", "err", err)
-		return nil, header, response.CodeUnauthorized, "Invalid Microsoft credential.", false
+		return nil, header, response.CodeUnauthorized, "Invalid Microsoft credential.", false, false
 	}
-	return identity, header, "", "", true
+	return identity, header, "", "", true, false
 }
 
 func (h *APIHandler) GetMicrosoftLoginOptions(ctx context.Context, _ contract.GetMicrosoftLoginOptionsRequestObject) (contract.GetMicrosoftLoginOptionsResponseObject, error) {
@@ -72,7 +82,7 @@ func (h *APIHandler) GetMicrosoftLoginOptions(ctx context.Context, _ contract.Ge
 		return getMicrosoftLoginOptionsError(response.CodeNotFound, "Microsoft login is not enabled."), nil
 	}
 	header := make(http.Header)
-	nonce, err := oauthstate.EnsureNonce(contract.HeaderWriter(header), r)
+	nonce, err := oauthstate.Create(contract.HeaderWriter(header), r)
 	if err != nil {
 		return getMicrosoftLoginOptionsError(response.CodeInternalError, "Microsoft login setup error."), nil
 	}
@@ -98,9 +108,9 @@ func (h *APIHandler) LoginWithMicrosoft(ctx context.Context, request contract.Lo
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	identity, header, code, message, ok := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok, throttled := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
 	if !ok {
-		if code == response.CodeUnauthorized {
+		if code == response.CodeUnauthorized && !throttled {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodMicrosoft, domain.SecurityEventReasonInvalidAssertion); err != nil {
 				return microsoftLoginErrorWithHeaders(response.CodeInternalError, "Microsoft sign-in error.", header), nil
 			}
@@ -159,7 +169,7 @@ func (h *APIHandler) LinkCurrentUserMicrosoft(ctx context.Context, request contr
 	if request.Body == nil {
 		return linkCurrentUserMicrosoftError(response.CodeInvalidRequest, "Invalid Microsoft credential."), nil
 	}
-	identity, header, code, message, ok := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok, _ := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
 	if !ok {
 		return microsoftLinkErrorWithHeaders(code, message, header), nil
 	}
@@ -200,9 +210,9 @@ func (h *APIHandler) ReauthenticateWithMicrosoft(ctx context.Context, request co
 		}
 		return reauthenticateWithMicrosoftError(response.CodeInternalError, "Session error."), nil
 	}
-	identity, header, code, message, ok := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok, throttled := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
 	if !ok {
-		if code == response.CodeUnauthorized {
+		if code == response.CodeUnauthorized && !throttled {
 			if err := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodMicrosoft, domain.SecurityEventReasonInvalidAssertion); err != nil {
 				return microsoftReauthenticationErrorWithHeaders(response.CodeInternalError, "Authentication error.", header), nil
 			}
@@ -245,7 +255,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithMicrosoft(ctx context.Contex
 			return completeAccountRecoveryLinkWithMicrosoftError(code, message), nil
 		}
 	}
-	identity, nonceHeader, code, message, ok := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, nonceHeader, code, message, ok, _ := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
 	if !ok {
 		return microsoftRecoveryErrorWithHeaders(code, message, nonceHeader), nil
 	}

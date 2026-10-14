@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,11 +29,13 @@ func TestVerifyIDToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := jose.JSONWebKey{Key: &privateKey.PublicKey, KeyID: "test-key", Algorithm: string(jose.RS256), Use: "sig"}
+	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/"+testTenantID+"/discovery/v2.0/keys" {
 			http.NotFound(w, r)
 			return
 		}
+		requests++
 		_ = json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{key}})
 	}))
 	defer server.Close()
@@ -52,6 +56,90 @@ func TestVerifyIDToken(t *testing.T) {
 	}
 	if identity.OAuthID != testTenantID+":"+testObjectID || identity.Email != "person@example.com" || !identity.EmailVerified {
 		t.Fatalf("identity = %#v", identity)
+	}
+	if _, err := client.VerifyIDToken(context.Background(), raw, nonce); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 {
+		t.Fatalf("JWKS requests = %d, want 1", requests)
+	}
+}
+
+func TestInvalidSignaturesReuseCachedJWKSResponse(t *testing.T) {
+	trustedKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgedKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := jose.JSONWebKey{Key: &trustedKey.PublicKey, KeyID: "test-key", Algorithm: string(jose.RS256), Use: "sig"}
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		_ = json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{key}})
+	}))
+	defer server.Close()
+
+	client, err := New(Config{ClientID: testClientID, TenantID: testTenantID, LoginHost: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := map[string]any{
+		"tid": testTenantID, "oid": testObjectID, "nonce": "expected", "ver": "2.0",
+		"email": "person@example.com", "xms_edov": true,
+	}
+	if _, err := client.VerifyIDToken(context.Background(), microsoftToken(t, trustedKey, server.URL, claims), "expected"); err != nil {
+		t.Fatal(err)
+	}
+	forged := microsoftToken(t, forgedKey, server.URL, claims)
+	for i := 0; i < 2; i++ {
+		if _, err := client.VerifyIDToken(context.Background(), forged, "expected"); err == nil {
+			t.Fatal("VerifyIDToken accepted a forged signature")
+		}
+	}
+	if requests != 1 {
+		t.Fatalf("JWKS requests = %d, want 1", requests)
+	}
+}
+
+func TestJWKSFetchBudgetIsBounded(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	client, err := New(Config{ClientID: testClientID, TenantID: "common", HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < jwksFetchLimit; i++ {
+		response, err := client.httpClient.Get(fmt.Sprintf("%s/tenant-%d", server.URL, i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = response.Body.Close()
+	}
+	if _, err := client.httpClient.Get(server.URL + "/over-budget"); !errors.Is(err, errJWKSFetchLimited) {
+		t.Fatalf("over-budget request error = %v", err)
+	}
+	if requests != jwksFetchLimit {
+		t.Fatalf("network requests = %d, want %d", requests, jwksFetchLimit)
+	}
+}
+
+func TestTenantKeySetCacheIsBounded(t *testing.T) {
+	client, err := New(Config{ClientID: testClientID, TenantID: "common"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < maxTenantKeySets+1; i++ {
+		client.keySet(fmt.Sprintf("%08x-0000-4000-8000-000000000000", i))
+	}
+	if len(client.keySets) != maxTenantKeySets || len(client.keySetFIFO) != maxTenantKeySets {
+		t.Fatalf("key set cache sizes = %d, %d; want %d", len(client.keySets), len(client.keySetFIFO), maxTenantKeySets)
 	}
 }
 

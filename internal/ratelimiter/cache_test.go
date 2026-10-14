@@ -24,6 +24,22 @@ func TestCacheLimiterRateLimitsByIP(t *testing.T) {
 	assertRateLimited(t, allowed, err, "login:ip")
 }
 
+func TestCacheLimiterOAuthUsesLoginIPBucket(t *testing.T) {
+	limiter := NewCacheLimiter(newFakeCounterCache(), LimiterConfig{
+		LoginIPLimit:     2,
+		LoginIPWindow:    time.Minute,
+		LoginEmailLimit:  99,
+		LoginEmailWindow: time.Minute,
+	})
+	ip := net.ParseIP("192.0.2.1")
+
+	allowed, err := limiter.AllowOAuthAttempt(context.Background(), ip)
+	assertAllowed(t, allowed, err)
+	assertLoginAllowed(t, limiter, ip, "person@example.com")
+	allowed, err = limiter.AllowOAuthAttempt(context.Background(), ip)
+	assertRateLimited(t, allowed, err, "login:ip")
+}
+
 func TestCacheLimiterRateLimitsByKey(t *testing.T) {
 	limiter := NewCacheLimiter(newFakeCounterCache(), LimiterConfig{
 		LoginIPLimit:     99,

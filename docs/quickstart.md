@@ -35,8 +35,14 @@ PUBLIC_URL=http://localhost:3000
 
 AUTHARA_JWT_ISSUER=authara
 AUTHARA_JWT_ACTIVE_KEY_ID=key-1
-AUTHARA_JWT_KEYS=key-1:VZp2u1sYz0g2nF2vY8q8dP7cZQpL5cRrXn0k7FZ0xkE=
+AUTHARA_JWT_PRIVATE_KEYS=key-1:MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
+
+AUTHARA_CHALLENGE_VERIFICATION_CODE_ACTIVE_KEY_ID=challenge-1
+AUTHARA_CHALLENGE_VERIFICATION_CODE_KEYS=challenge-1:YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUY=
 ```
+
+The example keys are development-only. Generate independent production values
+with `openssl rand -base64 32`.
 
 For the full list of available variables, see the configuration reference.
 

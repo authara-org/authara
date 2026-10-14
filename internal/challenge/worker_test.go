@@ -585,7 +585,7 @@ func TestWorkerSuppliesCodeToEveryCodeTemplate(t *testing.T) {
 	})
 }
 
-func TestChallengeEmailRetryMakesNewestGeneratedCodeAuthoritative(t *testing.T) {
+func TestChallengeEmailRetryReusesMessageIdentityAndCode(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		now := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
@@ -608,8 +608,10 @@ func TestChallengeEmailRetryMakesNewestGeneratedCodeAuthoritative(t *testing.T) 
 			deliveredCodes = append(deliveredCodes, data[email.TemplateVariableCode])
 			return email.Message{Subject: "code", Text: "code"}, nil
 		})
-		worker := NewWorker(tdb.Store, codeService, renderer, &recordingEmailSender{}, nil, WorkerConfig{})
+		sender := &recordingEmailSender{}
+		worker := NewWorker(tdb.Store, codeService, renderer, sender, nil, WorkerConfig{})
 		job := domain.EmailJob{
+			ID:          uuid.New(),
 			ChallengeID: &challengeRow.ID,
 			ToEmail:     challengeRow.Email,
 			Template:    domain.EmailTemplateSignupCode,
@@ -623,9 +625,21 @@ func TestChallengeEmailRetryMakesNewestGeneratedCodeAuthoritative(t *testing.T) 
 			t.Fatalf("first code should initially verify: %v", err)
 		}
 
+		if err := worker.processJob(ctx, job, now.Add(time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		if retryCode := deliveredCodes[1]; retryCode != firstCode {
+			t.Fatalf("retry code = %q, want original code %q", retryCode, firstCode)
+		}
+		if len(sender.messages) != 2 || sender.messages[0].MessageID == "" || sender.messages[1].MessageID != sender.messages[0].MessageID {
+			t.Fatalf("retry Message-IDs = %#v, want the same non-empty value", sender.messages)
+		}
+
 		latestCode := firstCode
 		for range 10 {
-			if err := worker.processJob(ctx, job, now.Add(time.Second)); err != nil {
+			resendJob := job
+			resendJob.ID = uuid.New()
+			if err := worker.processJob(ctx, resendJob, now.Add(2*time.Second)); err != nil {
 				t.Fatal(err)
 			}
 			latestCode = deliveredCodes[len(deliveredCodes)-1]
@@ -634,12 +648,15 @@ func TestChallengeEmailRetryMakesNewestGeneratedCodeAuthoritative(t *testing.T) 
 			}
 		}
 		if latestCode == firstCode {
-			t.Fatal("generated codes unexpectedly remained identical")
+			t.Fatal("codes for distinct delivery jobs unexpectedly remained identical")
 		}
-		if err := codeService.VerifyCode(ctx, challengeRow.ID, firstCode, now.Add(time.Second)); !errors.Is(err, ErrInvalidVerificationCode) {
+		if sender.messages[len(sender.messages)-1].MessageID == sender.messages[0].MessageID {
+			t.Fatal("explicit resend reused the original Message-ID")
+		}
+		if err := codeService.VerifyCode(ctx, challengeRow.ID, firstCode, now.Add(2*time.Second)); !errors.Is(err, ErrInvalidVerificationCode) {
 			t.Fatalf("first code verification = %v, want ErrInvalidVerificationCode", err)
 		}
-		if err := codeService.VerifyCode(ctx, challengeRow.ID, latestCode, now.Add(time.Second)); err != nil {
+		if err := codeService.VerifyCode(ctx, challengeRow.ID, latestCode, now.Add(2*time.Second)); err != nil {
 			t.Fatalf("latest code should verify: %v", err)
 		}
 	})
