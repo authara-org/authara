@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.25.0](https://github.com/authara-org/authara/compare/v0.24.0...v0.25.0) (2026-10-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* publish Ed25519 verification keys ([#64](https://github.com/authara-org/authara/issues/64))
+
+### Features
+
+* publish Ed25519 verification keys ([#64](https://github.com/authara-org/authara/issues/64)) ([5859111](https://github.com/authara-org/authara/commit/58591118ec0d346cebf23037fcde8d10d73f84b0))
+
 ## [0.24.0](https://github.com/authara-org/authara/compare/v0.23.0...v0.24.0) (2026-10-11)
 
 
