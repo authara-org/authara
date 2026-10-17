@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/authara-org/authara/compare/v0.25.0...v0.26.0) (2026-10-17)
+
+
+### Features
+
+* **auth:** add native session transport ([#66](https://github.com/authara-org/authara/issues/66)) ([7dcd5b0](https://github.com/authara-org/authara/commit/7dcd5b00775748e91ef144326157925b4004133e))
+
 ## [0.25.0](https://github.com/authara-org/authara/compare/v0.24.0...v0.25.0) (2026-10-14)
 
 
