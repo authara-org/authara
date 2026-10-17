@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1](https://github.com/authara-org/authara/compare/v0.26.0...v0.26.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **auth:** harden social session handling ([#68](https://github.com/authara-org/authara/issues/68)) ([5c9bdcd](https://github.com/authara-org/authara/commit/5c9bdcd998196a83e2a74a2bf78a7c5e2cb3c995))
+
 ## [0.26.0](https://github.com/authara-org/authara/compare/v0.25.0...v0.26.0) (2026-10-17)
 
 
