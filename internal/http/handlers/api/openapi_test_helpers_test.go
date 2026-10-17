@@ -8,10 +8,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/authara-org/authara/internal/domain"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/session/token"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+func TestContractCookieAuthSessionOmitsBearerCredentials(t *testing.T) {
+	session := toContractCookieAuthSession(domain.User{})
+	if session.AccessToken != "" || session.RefreshToken != "" {
+		t.Fatal("cookie session exposed bearer credentials")
+	}
+}
 
 func writeContractResponse(t *testing.T, rr *httptest.ResponseRecorder, resp any) {
 	t.Helper()

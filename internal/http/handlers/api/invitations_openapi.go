@@ -128,7 +128,7 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 	if request.Body == nil || strings.TrimSpace(request.Body.Token) == "" {
 		return authenticateAndAcceptInvitationWithGoogleError(response.CodeInvalidRequest, "Invitation token required."), nil
 	}
-	identity, header, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
+	identity, header, code, message, ok, _ := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
 	if !ok {
 		return authenticateAndAcceptInvitationWithGoogleError(code, message), nil
 	}
@@ -187,6 +187,9 @@ func (h *APIHandler) AuthenticateAndAcceptInvitationWithGoogle(ctx context.Conte
 	if !ok {
 		return authenticateAndAcceptInvitationWithGoogleError(code, message), nil
 	}
+	if !tokenSessionRequested(r) {
+		body = toContractCookieAuthSession(user)
+	}
 	copyHeaders(sessionHeaders, header)
 	return contract.AuthenticateAndAcceptInvitationWithGoogle200HeadersResponse{
 		Header: sessionHeaders,
@@ -205,7 +208,7 @@ func (h *APIHandler) StartGoogleAccountRecoveryLink(ctx context.Context, request
 	if request.Body == nil {
 		return startGoogleAccountRecoveryLinkError(response.CodeInvalidRequest, "Invalid JSON body."), nil
 	}
-	identity, header, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
+	identity, header, code, message, ok, _ := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
 	if !ok {
 		return startGoogleAccountRecoveryLinkError(code, message), nil
 	}
@@ -276,7 +279,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithGoogle(ctx context.Context, 
 			return completeAccountRecoveryLinkWithGoogleError(code, message), nil
 		}
 	}
-	identity, nonceHeader, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri, request.Body.ChallengeId)
+	identity, nonceHeader, code, message, ok, _ := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri, request.Body.ChallengeId)
 	if !ok {
 		return completeAccountRecoveryLinkWithGoogleError(code, message), nil
 	}
@@ -292,6 +295,9 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithGoogle(ctx context.Context, 
 	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience, domain.AuthenticationMethodGoogle)
 	if !ok {
 		return completeAccountRecoveryLinkWithGoogleError(code, message), nil
+	}
+	if !tokenSessionRequested(r) {
+		body = toContractCookieAuthSession(user)
 	}
 	copyHeaders(header, nonceHeader)
 	return contract.CompleteAccountRecoveryLinkWithGoogle200HeadersResponse{Header: header, Body: body}, nil
@@ -315,9 +321,9 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithApple(ctx context.Context, r
 			return completeAccountRecoveryLinkWithAppleError(code, message), nil
 		}
 	}
-	result, appleHeader, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State, request.Body.ChallengeId)
+	result, appleHeader, code, message, ok, throttled := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State, request.Body.ChallengeId)
 	if !ok {
-		if code == response.CodeUnauthorized {
+		if code == response.CodeUnauthorized && !throttled {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidAssertion); err != nil {
 				return appleRecoveryErrorWithHeaders(response.CodeInternalError, "Account recovery error.", appleHeader), nil
 			}
@@ -347,6 +353,9 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithApple(ctx context.Context, r
 	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience, domain.AuthenticationMethodApple)
 	if !ok {
 		return appleRecoveryErrorWithHeaders(code, message, appleHeader), nil
+	}
+	if !tokenSessionRequested(r) {
+		body = toContractCookieAuthSession(user)
 	}
 	copyHeaders(header, appleHeader)
 	return contract.CompleteAccountRecoveryLinkWithApple200HeadersResponse{Header: header, Body: body}, nil

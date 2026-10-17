@@ -18,6 +18,7 @@ import (
 	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
@@ -28,11 +29,49 @@ type fakeAppleClient struct {
 	err     error
 	nonce   string
 	revoked string
+	calls   int
 }
 
 func (f *fakeAppleClient) Exchange(_ context.Context, _ string, nonce string) (apple.ExchangeResult, error) {
+	f.calls++
 	f.nonce = nonce
 	return f.result, f.err
+}
+
+func TestAppleVerificationIsRateLimitedBeforeProviderCall(t *testing.T) {
+	securityEvents := &capturingSecurityEvents{}
+	client := &fakeAppleClient{err: context.DeadlineExceeded}
+	h := &APIHandler{
+		Auth: auth.New(auth.Config{SecurityEvents: securityEvents}),
+		Limiter: ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{
+			LoginIPLimit: 1, LoginIPWindow: time.Minute,
+		}),
+		Apple: client, OAuthProviders: appleTestProviders(),
+	}
+	verify := func(state string) {
+		request := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/apple", nil)
+		request.RemoteAddr = "192.0.2.1:1234"
+		request.AddCookie(&http.Cookie{Name: "authara_apple_oauth", Value: state + ".nonce"})
+		responseObject, err := h.LoginWithApple(contractCtx(request.Context(), request), contract.LoginWithAppleRequestObject{
+			Body: &contract.AppleAuthorizationRequest{Code: "code", State: state},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder := httptest.NewRecorder()
+		writeContractResponse(t, recorder, responseObject)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+		}
+	}
+	verify("first")
+	verify("second")
+	if client.calls != 1 {
+		t.Fatalf("provider verification calls = %d, want 1", client.calls)
+	}
+	if len(securityEvents.login) != 1 {
+		t.Fatalf("login denial events = %d, want 1", len(securityEvents.login))
+	}
 }
 
 func (f *fakeAppleClient) Revoke(_ context.Context, token string) error {

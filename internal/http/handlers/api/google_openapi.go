@@ -27,9 +27,9 @@ func (h *APIHandler) LoginWithGoogle(ctx context.Context, request contract.Login
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	identity, header, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri, request.Body.ChallengeId)
+	identity, header, code, message, ok, throttled := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri, request.Body.ChallengeId)
 	if !ok {
-		if code == response.CodeUnauthorized {
+		if code == response.CodeUnauthorized && !throttled {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidAssertion); err != nil {
 				return loginWithGoogleError(responseCodeInternalError(), "Google sign-in error."), nil
 			}
@@ -109,5 +109,9 @@ func (h *APIHandler) contractGoogleLogin(
 		return googleLoginErrorWithHeaders(response.CodeInternalError, "Session error.", header)
 	}
 	copyHeaders(header, sessionHeader(h, r, accessToken, refreshToken))
-	return contract.LoginWithGoogle200HeadersResponse{Header: header, Body: toContractAuthSession(user, accessToken, refreshToken)}
+	body := toContractAuthSession(user, accessToken, refreshToken)
+	if !tokenSessionRequested(r) {
+		body = toContractCookieAuthSession(user)
+	}
+	return contract.LoginWithGoogle200HeadersResponse{Header: header, Body: body}
 }

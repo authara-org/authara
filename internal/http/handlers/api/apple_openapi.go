@@ -69,9 +69,9 @@ func (h *APIHandler) LoginWithApple(ctx context.Context, request contract.LoginW
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	result, header, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State, request.Body.ChallengeId)
+	result, header, code, message, ok, throttled := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State, request.Body.ChallengeId)
 	if !ok {
-		if code == response.CodeUnauthorized {
+		if code == response.CodeUnauthorized && !throttled {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidAssertion); err != nil {
 				return appleLoginErrorWithHeaders(response.CodeInternalError, "Apple sign-in error.", header), nil
 			}
@@ -149,7 +149,11 @@ func (h *APIHandler) contractAppleLogin(
 		return appleLoginErrorWithHeaders(response.CodeInternalError, "Session error.", header)
 	}
 	copyHeaders(header, sessionHeader(h, r, accessToken, refreshToken))
-	return contract.LoginWithApple200HeadersResponse{Header: header, Body: toContractAuthSession(user, accessToken, refreshToken)}
+	body := toContractAuthSession(user, accessToken, refreshToken)
+	if !tokenSessionRequested(r) {
+		body = toContractCookieAuthSession(user)
+	}
+	return contract.LoginWithApple200HeadersResponse{Header: header, Body: body}
 }
 
 func appleLoginErrorCode(err error) response.ErrorCode {

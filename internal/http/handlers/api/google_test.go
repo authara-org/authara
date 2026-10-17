@@ -16,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
@@ -91,7 +92,7 @@ func TestVerifyGoogleAuthorizationCodeDoesNotRequireNonceCookie(t *testing.T) {
 		OAuthProviders: googleTestProviders(),
 	}
 	req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/google", nil)
-	identity, header, code, message, ok := h.verifyGoogleAuthorization(
+	identity, header, code, message, ok, _ := h.verifyGoogleAuthorization(
 		context.Background(), req, nil, nil,
 		testString("authorization-code"), testString("https://app.example"),
 	)
@@ -163,6 +164,43 @@ func TestLinkCurrentUserGoogleAcceptsTokenTransportChallenge(t *testing.T) {
 	})
 }
 
+func TestGoogleVerificationIsRateLimitedBeforeProviderCall(t *testing.T) {
+	calls := 0
+	securityEvents := &capturingSecurityEvents{}
+	h := &APIHandler{
+		Auth: auth.New(auth.Config{SecurityEvents: securityEvents}),
+		Limiter: ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{
+			LoginIPLimit: 1, LoginIPWindow: time.Minute,
+		}),
+		Google:         fakeGoogleVerifier{err: context.DeadlineExceeded, calls: &calls},
+		OAuthProviders: googleTestProviders(),
+	}
+	verify := func(nonce string) {
+		request := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/google", nil)
+		request.RemoteAddr = "192.0.2.1:1234"
+		request.AddCookie(&http.Cookie{Name: "authara_oauth_nonce", Value: nonce})
+		responseObject, err := h.LoginWithGoogle(contractCtx(request.Context(), request), contract.LoginWithGoogleRequestObject{
+			Body: &contract.GoogleLoginRequest{Credential: testString("id-token"), Nonce: &nonce},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder := httptest.NewRecorder()
+		writeContractResponse(t, recorder, responseObject)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+		}
+	}
+	verify("first")
+	verify("second")
+	if calls != 1 {
+		t.Fatalf("provider verification calls = %d, want 1", calls)
+	}
+	if len(securityEvents.login) != 1 {
+		t.Fatalf("login denial events = %d, want 1", len(securityEvents.login))
+	}
+}
+
 type capturingSecurityEvents struct {
 	securityevent.NoopRecorder
 	login []securityevent.Authentication
@@ -194,7 +232,13 @@ func TestCompleteGoogleLoginCreatesSession(t *testing.T) {
 		if !hasCookie(rr.Result().Cookies(), "authara_access") || !hasCookie(rr.Result().Cookies(), "authara_refresh") {
 			t.Fatal("expected Google login to set session cookies")
 		}
-		assertResponseTokens(t, rr.Body.Bytes())
+		var body contract.AuthSession
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.AccessToken != "" || body.RefreshToken != "" {
+			t.Fatal("browser social-login response exposed bearer credentials")
+		}
 	})
 }
 

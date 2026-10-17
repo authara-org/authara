@@ -45,17 +45,29 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var identity *google.Identity
-	var err error
-	if codeProvided {
-		identity, err = h.Google.ExchangeAuthorizationCode(ctx, authorizationCode, redirectURI)
-	} else {
-		expectedNonce, ok := oauthstate.Consume(w, r, nonce)
+	expectedNonce := ""
+	if legacyProvided {
+		var ok bool
+		expectedNonce, ok = oauthstate.Consume(w, r, nonce)
 		if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
 			h.recordGoogleAuthenticationDenial(ctx, r, flow, domain.SecurityEventReasonInvalidAssertion)
 			h.renderGoogleFlowError(w, r, ctx, flow)
 			return
 		}
+	}
+	if h.Limiter != nil {
+		allowed, err := h.Limiter.AllowOAuthAttempt(ctx, httputil.ClientIP(r))
+		if _, _, ok := h.rateLimitResult(allowed, err, "Too many Google authentication attempts. Please try again later."); !ok {
+			h.renderGoogleFlowError(w, r, ctx, flow)
+			return
+		}
+	}
+
+	var identity *google.Identity
+	var err error
+	if codeProvided {
+		identity, err = h.Google.ExchangeAuthorizationCode(ctx, authorizationCode, redirectURI)
+	} else {
 		identity, err = h.Google.VerifyIDToken(ctx, idToken, expectedNonce)
 	}
 	if err != nil {

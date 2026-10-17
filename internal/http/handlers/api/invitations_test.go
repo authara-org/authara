@@ -213,7 +213,7 @@ func TestGoogleInvitationCollisionGoogleProofReplacesIdentityAcceptsAndSwitches(
 		}
 		completeRR := httptest.NewRecorder()
 		writeContractResponse(t, completeRR, completeResp)
-		assertInvitationSession(t, ctx, h, completeRR, invitedOrg.ID)
+		assertCookieInvitationSession(t, ctx, h, completeRR, invitedOrg.ID)
 		provider, err := tdb.Store.GetAuthProviderByProviderAndProviderUserID(ctx, domain.ProviderGoogle, "google-new-collision")
 		if err != nil {
 			t.Fatalf("expected replacement Google provider identity: %v", err)
@@ -226,14 +226,22 @@ func TestGoogleInvitationCollisionGoogleProofReplacesIdentityAcceptsAndSwitches(
 
 type fakeGoogleVerifier struct {
 	identity *google.Identity
+	err      error
+	calls    *int
 }
 
 func (f fakeGoogleVerifier) VerifyIDToken(_ context.Context, _ string, _ string) (*google.Identity, error) {
-	return f.identity, nil
+	if f.calls != nil {
+		*f.calls++
+	}
+	return f.identity, f.err
 }
 
 func (f fakeGoogleVerifier) ExchangeAuthorizationCode(_ context.Context, _ string, _ string) (*google.Identity, error) {
-	return f.identity, nil
+	if f.calls != nil {
+		*f.calls++
+	}
+	return f.identity, f.err
 }
 
 func testString(value string) *string { return &value }
@@ -350,7 +358,33 @@ func assertGoogleInvitationSession(t *testing.T, ctx context.Context, h *APIHand
 	if body.Status != contract.Authenticated || body.Session == nil {
 		t.Fatalf("expected authenticated Google invitation result, got %+v", body)
 	}
-	assertAccessOrganization(t, ctx, h, body.Session.AccessToken, organizationID)
+	assertCookieSessionOrganization(t, ctx, h, rr, *body.Session, organizationID)
+}
+
+func assertCookieInvitationSession(t *testing.T, ctx context.Context, h *APIHandler, rr *httptest.ResponseRecorder, organizationID contract.OrganizationID) {
+	t.Helper()
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+	var body contract.AuthSession
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	assertCookieSessionOrganization(t, ctx, h, rr, body, organizationID)
+}
+
+func assertCookieSessionOrganization(t *testing.T, ctx context.Context, h *APIHandler, rr *httptest.ResponseRecorder, session contract.AuthSession, organizationID contract.OrganizationID) {
+	t.Helper()
+	if session.AccessToken != "" || session.RefreshToken != "" {
+		t.Fatalf("browser response exposed bearer credentials")
+	}
+	for _, cookie := range rr.Result().Cookies() {
+		if cookie.Name == "authara_access" && cookie.Value != "" {
+			assertAccessOrganization(t, ctx, h, cookie.Value, organizationID)
+			return
+		}
+	}
+	t.Fatal("missing authara_access cookie")
 }
 
 func assertInvitationTokens(t *testing.T, ctx context.Context, h *APIHandler, rr *httptest.ResponseRecorder, organizationID contract.OrganizationID) {
