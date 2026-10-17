@@ -106,6 +106,63 @@ func TestVerifyGoogleAuthorizationCodeDoesNotRequireNonceCookie(t *testing.T) {
 	}
 }
 
+func TestLinkCurrentUserGoogleAcceptsTokenTransportChallenge(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email: "google-native-link@example.com", Username: "google-native-link",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		passwordHash := "password-hash"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID: user.ID, Provider: domain.ProviderPassword, PasswordHash: &passwordHash,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		userSession, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID: user.ID, ActiveOrganizationID: organization.ID, ExpiresAt: time.Now().Add(time.Hour),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		h := newGoogleAPIHandler(t, tdb)
+		h.Google = fakeGoogleVerifier{identity: &google.Identity{
+			OAuthID: "google-native-link-id", Email: user.Email, EmailVerified: true,
+		}}
+		h.OAuthChallenges = oauth.NewChallengeService(tdb.Store, tdb.Tx)
+		challenge, err := h.OAuthChallenges.Create(ctx, domain.ProviderGoogle, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		request := httptest.NewRequest(http.MethodPost, "/auth/api/v1/account/auth-methods/google", nil)
+		requestCtx := httpctx.WithSessionID(httpctx.WithUserID(ctx, user.ID), userSession.ID)
+		responseObject, err := h.LinkCurrentUserGoogle(contractCtx(requestCtx, request), contract.LinkCurrentUserGoogleRequestObject{
+			Body: &contract.GoogleLoginRequest{
+				ChallengeId: &challenge.ID,
+				Credential:  testString("id-token"),
+				Nonce:       testString(challenge.Nonce),
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder := httptest.NewRecorder()
+		writeContractResponse(t, recorder, responseObject)
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("expected status %d, got %d body=%s", http.StatusNoContent, recorder.Code, recorder.Body.String())
+		}
+	})
+}
+
 type capturingSecurityEvents struct {
 	securityevent.NoopRecorder
 	login []securityevent.Authentication
@@ -218,9 +275,12 @@ func TestGoogleReauthenticationRequiresIdentityLinkedToCurrentUser(t *testing.T)
 		}
 
 		h := newGoogleAPIHandler(t, tdb)
-		nonce := "reauth-nonce"
+		h.OAuthChallenges = oauth.NewChallengeService(tdb.Store, tdb.Tx)
+		oauthChallenge, err := h.OAuthChallenges.Create(ctx, domain.ProviderGoogle, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
 		request := httptest.NewRequest(http.MethodPost, "/auth/api/v1/reauthenticate/google", nil)
-		request.AddCookie(&http.Cookie{Name: "authara_oauth_nonce", Value: nonce})
 		requestCtx := httpctx.WithSessionID(httpctx.WithUserID(ctx, user.ID), session.ID)
 		requestCtx = contractCtx(requestCtx, request)
 		authenticationChallenge, err := h.Session.StartAuthenticationChallenge(ctx, user.ID, session.ID, time.Now().UTC())
@@ -232,8 +292,9 @@ func TestGoogleReauthenticationRequiresIdentityLinkedToCurrentUser(t *testing.T)
 		responseObject, err := h.ReauthenticateWithGoogle(requestCtx, contract.ReauthenticateWithGoogleRequestObject{
 			Body: &contract.GoogleReauthenticationRequest{
 				AuthenticationChallengeId: authenticationChallenge.ID,
+				ChallengeId:               &oauthChallenge.ID,
 				Credential:                testString("id-token"),
-				Nonce:                     testString(nonce),
+				Nonce:                     testString(oauthChallenge.Nonce),
 			},
 		})
 		if err != nil {
@@ -246,11 +307,16 @@ func TestGoogleReauthenticationRequiresIdentityLinkedToCurrentUser(t *testing.T)
 		}
 
 		h.Google = fakeGoogleVerifier{identity: &google.Identity{OAuthID: linkedOAuthID}}
+		oauthChallenge, err = h.OAuthChallenges.Create(ctx, domain.ProviderGoogle, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
 		responseObject, err = h.ReauthenticateWithGoogle(requestCtx, contract.ReauthenticateWithGoogleRequestObject{
 			Body: &contract.GoogleReauthenticationRequest{
 				AuthenticationChallengeId: authenticationChallenge.ID,
+				ChallengeId:               &oauthChallenge.ID,
 				Credential:                testString("id-token"),
-				Nonce:                     testString(nonce),
+				Nonce:                     testString(oauthChallenge.Nonce),
 			},
 		})
 		if err != nil {

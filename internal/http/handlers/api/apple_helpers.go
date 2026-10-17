@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/apple"
+	"github.com/google/uuid"
 )
 
 func (h *APIHandler) discardAppleAuthorization(ctx context.Context, refreshToken string) {
@@ -53,7 +55,12 @@ func (h *APIHandler) verifyAppleAuthorization(
 	r *http.Request,
 	code string,
 	state string,
+	challengeIDs ...*uuid.UUID,
 ) (apple.ExchangeResult, http.Header, response.ErrorCode, string, bool) {
+	var challengeID *uuid.UUID
+	if len(challengeIDs) > 0 {
+		challengeID = challengeIDs[0]
+	}
 	if _, ok := h.appleProvider(); !ok || h.Apple == nil {
 		return apple.ExchangeResult{}, nil, response.CodeNotFound, "Apple login is not enabled.", false
 	}
@@ -63,11 +70,25 @@ func (h *APIHandler) verifyAppleAuthorization(
 		return apple.ExchangeResult{}, nil, response.CodeInvalidRequest, "Apple authorization code and state required.", false
 	}
 	header := make(http.Header)
-	flow, ok := applestate.Consume(contract.HeaderWriter(header), r, state)
-	if !ok {
+	expectedNonce := ""
+	if challengeID != nil && h.OAuthChallenges != nil {
+		challenge, err := h.OAuthChallenges.Consume(ctx, *challengeID, domain.ProviderApple, state, time.Now().UTC())
+		if err != nil && !errors.Is(err, oauth.ErrInvalidAuthenticationChallenge) {
+			return apple.ExchangeResult{}, header, response.CodeInternalError, "Apple login setup error.", false
+		}
+		if err == nil {
+			expectedNonce = challenge.Nonce
+		}
+	} else if challengeID == nil {
+		flow, ok := applestate.Consume(contract.HeaderWriter(header), r, state)
+		if ok {
+			expectedNonce = flow.Nonce
+		}
+	}
+	if expectedNonce == "" {
 		return apple.ExchangeResult{}, nil, response.CodeUnauthorized, "Invalid Apple authorization.", false
 	}
-	result, err := h.Apple.Exchange(ctx, code, flow.Nonce)
+	result, err := h.Apple.Exchange(ctx, code, expectedNonce)
 	if err != nil || result.Identity.OAuthID == "" {
 		return apple.ExchangeResult{}, header, response.CodeUnauthorized, "Invalid Apple authorization.", false
 	}

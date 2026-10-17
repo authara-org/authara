@@ -15,7 +15,6 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/oauth/apple"
-	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 )
 
@@ -29,6 +28,22 @@ func (h *APIHandler) GetAppleLoginOptions(ctx context.Context, _ contract.GetApp
 		return getAppleLoginOptionsError(response.CodeNotFound, "Apple login is not enabled."), nil
 	}
 	header := make(http.Header)
+	if tokenSessionRequested(r) {
+		if h.OAuthChallenges == nil {
+			return getAppleLoginOptionsError(response.CodeInternalError, "Apple login setup error."), nil
+		}
+		challenge, err := h.OAuthChallenges.Create(ctx, domain.ProviderApple, time.Now().UTC())
+		if err != nil {
+			return getAppleLoginOptionsError(response.CodeInternalError, "Apple login setup error."), nil
+		}
+		return contract.GetAppleLoginOptions200HeadersResponse{
+			Header: header,
+			Body: contract.AppleLoginOptions{
+				ClientId: provider.ClientID, RedirectUri: provider.RedirectURI,
+				State: challenge.State, Nonce: challenge.Nonce, ChallengeId: &challenge.ID,
+			},
+		}, nil
+	}
 	flow, err := applestate.Create(contract.HeaderWriter(header), r)
 	if err != nil {
 		return getAppleLoginOptionsError(response.CodeInternalError, "Apple login setup error."), nil
@@ -54,7 +69,7 @@ func (h *APIHandler) LoginWithApple(ctx context.Context, request contract.LoginW
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	result, header, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State)
+	result, header, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State, request.Body.ChallengeId)
 	if !ok {
 		if code == response.CodeUnauthorized {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidAssertion); err != nil {
@@ -133,9 +148,7 @@ func (h *APIHandler) contractAppleLogin(
 	case response.CodeInternalError:
 		return appleLoginErrorWithHeaders(response.CodeInternalError, "Session error.", header)
 	}
-	cookiePolicy := h.sessionCookiePolicy()
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	copyHeaders(header, sessionHeader(h, r, accessToken, refreshToken))
 	return contract.LoginWithApple200HeadersResponse{Header: header, Body: toContractAuthSession(user, accessToken, refreshToken)}
 }
 

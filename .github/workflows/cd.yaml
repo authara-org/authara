@@ -211,7 +211,7 @@ jobs:
           CORE_SHA: ${{ github.sha }}
           CORE_BUMP: ${{ needs.deploy.outputs.core_bump }}
         run: |
-          for repository in authara-go authara-browser; do
+          for repository in authara-go authara-browser authara-react-native; do
             gh api --method POST "repos/authara-org/${repository}/dispatches" \
               -f event_type=authara-core-released \
               -f "client_payload[core_tag]=${CORE_TAG}" \

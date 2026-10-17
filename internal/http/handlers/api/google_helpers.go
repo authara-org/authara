@@ -6,13 +6,16 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
+	"github.com/google/uuid"
 )
 
 func (h *APIHandler) googleClientID() (string, bool) {
@@ -42,7 +45,12 @@ func (h *APIHandler) verifyGoogleAuthorization(
 	nonce *string,
 	code *string,
 	redirectURI *string,
+	challengeIDs ...*uuid.UUID,
 ) (*google.Identity, http.Header, response.ErrorCode, string, bool) {
+	var challengeID *uuid.UUID
+	if len(challengeIDs) > 0 {
+		challengeID = challengeIDs[0]
+	}
 	if _, ok := h.googleClientID(); !ok || h.Google == nil {
 		return nil, nil, response.CodeNotFound, "Google login is not enabled.", false
 	}
@@ -60,10 +68,25 @@ func (h *APIHandler) verifyGoogleAuthorization(
 	var err error
 	header := make(http.Header)
 	if codeProvided {
+		if challengeID != nil {
+			return nil, header, response.CodeInvalidRequest, "challenge_id is only valid with a Google credential and nonce.", false
+		}
 		identity, err = h.Google.ExchangeAuthorizationCode(ctx, codeValue, redirectURIValue)
 	} else {
-		expectedNonce, ok := oauthstate.Consume(contract.HeaderWriter(header), r, nonceValue)
-		if !ok || subtle.ConstantTimeCompare([]byte(nonceValue), []byte(expectedNonce)) != 1 {
+		expectedNonce := ""
+		if challengeID != nil && h.OAuthChallenges != nil {
+			challenge, challengeErr := h.OAuthChallenges.Consume(ctx, *challengeID, domain.ProviderGoogle, "", time.Now().UTC())
+			if challengeErr != nil {
+				if !errors.Is(challengeErr, oauth.ErrInvalidAuthenticationChallenge) {
+					return nil, header, response.CodeInternalError, "Google login setup error.", false
+				}
+			} else {
+				expectedNonce = challenge.Nonce
+			}
+		} else if challengeID == nil {
+			expectedNonce, _ = oauthstate.Consume(contract.HeaderWriter(header), r, nonceValue)
+		}
+		if expectedNonce == "" || subtle.ConstantTimeCompare([]byte(nonceValue), []byte(expectedNonce)) != 1 {
 			return nil, header, response.CodeUnauthorized, "Invalid Google credential.", false
 		}
 		identity, err = h.Google.VerifyIDToken(ctx, credentialValue, expectedNonce)

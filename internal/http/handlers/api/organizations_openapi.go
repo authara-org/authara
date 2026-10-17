@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"net/http"
 	"time"
 
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
@@ -97,7 +96,7 @@ func (h *APIHandler) ListCurrentOrganizationMembers(ctx context.Context, request
 }
 
 func (h *APIHandler) SwitchOrganization(ctx context.Context, request contract.SwitchOrganizationRequestObject) (contract.SwitchOrganizationResponseObject, error) {
-	_, ok := contractRequest(ctx)
+	r, ok := contractRequest(ctx)
 	if !ok {
 		return switchOrganizationError(responseCodeInternalError(), "API contract error."), nil
 	}
@@ -127,10 +126,7 @@ func (h *APIHandler) SwitchOrganization(ctx context.Context, request contract.Sw
 	case err != nil:
 		return switchOrganizationError(responseCodeInternalError(), "Session error."), nil
 	}
-	header := make(http.Header)
-	cookiePolicy := h.sessionCookiePolicy()
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	header := sessionHeader(h, r, accessToken, refreshToken)
 	return contract.SwitchOrganization200HeadersResponse{
 		Header: header,
 		Body:   contract.Tokens{AccessToken: accessToken, RefreshToken: refreshToken},

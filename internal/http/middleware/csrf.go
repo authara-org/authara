@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/authara-org/authara/internal/http/kit/csrf"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/requesterror"
 	"github.com/authara-org/authara/internal/http/kit/response"
 )
@@ -52,6 +53,10 @@ func RequireCSRF(next http.Handler) http.Handler {
 
 func RequireAPICSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if transport, ok := httpctx.AuthenticationTransport(r.Context()); ok && transport == httpctx.AuthTransportBearer {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if err := validateCSRF(r); err != nil {
 			response.ErrorJSON(
 				w,
@@ -63,5 +68,16 @@ func RequireAPICSRF(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+func RequirePublicAPICSRF(next http.Handler) http.Handler {
+	requireCSRF := RequireAPICSRF(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("session_transport") == "token" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		requireCSRF.ServeHTTP(w, r)
 	})
 }

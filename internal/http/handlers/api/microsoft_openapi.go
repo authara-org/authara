@@ -16,9 +16,11 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/microsoft"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
+	"github.com/google/uuid"
 )
 
 func (h *APIHandler) microsoftClientID() (string, bool) {
@@ -35,7 +37,12 @@ func (h *APIHandler) verifyMicrosoftAuthorization(
 	r *http.Request,
 	credential string,
 	nonce string,
+	challengeIDs ...*uuid.UUID,
 ) (*microsoft.Identity, http.Header, response.ErrorCode, string, bool, bool) {
+	var challengeID *uuid.UUID
+	if len(challengeIDs) > 0 {
+		challengeID = challengeIDs[0]
+	}
 	if _, ok := h.microsoftClientID(); !ok || h.Microsoft == nil {
 		return nil, nil, response.CodeNotFound, "Microsoft login is not enabled.", false, false
 	}
@@ -45,8 +52,19 @@ func (h *APIHandler) verifyMicrosoftAuthorization(
 		return nil, nil, response.CodeInvalidRequest, "Microsoft credential and nonce required.", false, false
 	}
 	header := make(http.Header)
-	expectedNonce, ok := oauthstate.Consume(contract.HeaderWriter(header), r, nonce)
-	if !ok || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
+	expectedNonce := ""
+	if challengeID != nil && h.OAuthChallenges != nil {
+		challenge, err := h.OAuthChallenges.Consume(ctx, *challengeID, domain.ProviderMicrosoft, "", time.Now().UTC())
+		if err != nil && !errors.Is(err, oauth.ErrInvalidAuthenticationChallenge) {
+			return nil, header, response.CodeInternalError, "Microsoft login setup error.", false, false
+		}
+		if err == nil {
+			expectedNonce = challenge.Nonce
+		}
+	} else if challengeID == nil {
+		expectedNonce, _ = oauthstate.Consume(contract.HeaderWriter(header), r, nonce)
+	}
+	if expectedNonce == "" || subtle.ConstantTimeCompare([]byte(nonce), []byte(expectedNonce)) != 1 {
 		return nil, header, response.CodeUnauthorized, "Invalid Microsoft credential.", false, false
 	}
 	if h.Limiter != nil {
@@ -82,6 +100,21 @@ func (h *APIHandler) GetMicrosoftLoginOptions(ctx context.Context, _ contract.Ge
 		return getMicrosoftLoginOptionsError(response.CodeNotFound, "Microsoft login is not enabled."), nil
 	}
 	header := make(http.Header)
+	if tokenSessionRequested(r) {
+		if h.OAuthChallenges == nil {
+			return getMicrosoftLoginOptionsError(response.CodeInternalError, "Microsoft login setup error."), nil
+		}
+		challenge, err := h.OAuthChallenges.Create(ctx, domain.ProviderMicrosoft, time.Now().UTC())
+		if err != nil {
+			return getMicrosoftLoginOptionsError(response.CodeInternalError, "Microsoft login setup error."), nil
+		}
+		return contract.GetMicrosoftLoginOptions200HeadersResponse{
+			Header: header,
+			Body: contract.MicrosoftLoginOptions{
+				ClientId: clientID, Authority: h.Microsoft.Authority(), Nonce: challenge.Nonce, ChallengeId: &challenge.ID,
+			},
+		}, nil
+	}
 	nonce, err := oauthstate.Create(contract.HeaderWriter(header), r)
 	if err != nil {
 		return getMicrosoftLoginOptionsError(response.CodeInternalError, "Microsoft login setup error."), nil
@@ -108,7 +141,7 @@ func (h *APIHandler) LoginWithMicrosoft(ctx context.Context, request contract.Lo
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	identity, header, code, message, ok, throttled := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok, throttled := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.ChallengeId)
 	if !ok {
 		if code == response.CodeUnauthorized && !throttled {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodMicrosoft, domain.SecurityEventReasonInvalidAssertion); err != nil {
@@ -150,9 +183,7 @@ func (h *APIHandler) LoginWithMicrosoft(ctx context.Context, request contract.Lo
 	case response.CodeInternalError:
 		return microsoftLoginErrorWithHeaders(response.CodeInternalError, "Session error.", header), nil
 	}
-	cookiePolicy := h.sessionCookiePolicy()
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	copyHeaders(header, sessionHeader(h, r, accessToken, refreshToken))
 	return contract.LoginWithMicrosoft200HeadersResponse{Header: header, Body: toContractAuthSession(user, accessToken, refreshToken)}, nil
 }
 
@@ -169,7 +200,7 @@ func (h *APIHandler) LinkCurrentUserMicrosoft(ctx context.Context, request contr
 	if request.Body == nil {
 		return linkCurrentUserMicrosoftError(response.CodeInvalidRequest, "Invalid Microsoft credential."), nil
 	}
-	identity, header, code, message, ok, _ := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok, _ := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.ChallengeId)
 	if !ok {
 		return microsoftLinkErrorWithHeaders(code, message, header), nil
 	}
@@ -210,7 +241,7 @@ func (h *APIHandler) ReauthenticateWithMicrosoft(ctx context.Context, request co
 		}
 		return reauthenticateWithMicrosoftError(response.CodeInternalError, "Session error."), nil
 	}
-	identity, header, code, message, ok, throttled := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, header, code, message, ok, throttled := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.ChallengeId)
 	if !ok {
 		if code == response.CodeUnauthorized && !throttled {
 			if err := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodMicrosoft, domain.SecurityEventReasonInvalidAssertion); err != nil {
@@ -255,7 +286,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithMicrosoft(ctx context.Contex
 			return completeAccountRecoveryLinkWithMicrosoftError(code, message), nil
 		}
 	}
-	identity, nonceHeader, code, message, ok, _ := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce)
+	identity, nonceHeader, code, message, ok, _ := h.verifyMicrosoftAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.ChallengeId)
 	if !ok {
 		return microsoftRecoveryErrorWithHeaders(code, message, nonceHeader), nil
 	}

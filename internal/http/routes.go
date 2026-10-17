@@ -53,6 +53,9 @@ func hasOAuthProvider(cfg ServerConfig, name domain.Provider) bool {
 
 func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	pass := func(next http.Handler) http.Handler { return next }
+	if mw.RequirePublicAPICSRF == nil {
+		mw.RequirePublicAPICSRF = mw.RequireAPICSRF
+	}
 	if mw.RequireAppVerifiedEmailUI == nil {
 		mw.RequireAppVerifiedEmailUI = pass
 	}
@@ -325,7 +328,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Get("/invitations/preview", contracth.PreviewInvitation)
 
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireAPICSRF)
+				r.Use(mw.RequirePublicAPICSRF)
 
 				r.Post("/oauth/google", contracth.LoginWithGoogle)
 				r.Post("/oauth/apple", contracth.LoginWithApple)
@@ -346,11 +349,14 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Post("/challenges/resend", contracth.ResendChallenge)
 				r.Post("/passkeys/authenticate/options", contracth.BeginPasskeyAuthentication)
 				r.Post("/passkeys/authenticate/finish", contracth.FinishPasskeyAuthentication)
+			})
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireAPICSRF)
 				r.Post("/sessions/logout", contracth.Logout)
 				r.Post("/sessions/refresh", contracth.RefreshSession)
-
 			})
 			r.Post("/tokens/refresh", contracth.RefreshTokens)
+			r.Post("/tokens/revoke", contracth.RevokeTokens)
 
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireAppAccessAuthAPI)

@@ -69,6 +69,17 @@ func (h *APIHandler) RefreshTokens(ctx context.Context, request contract.Refresh
 	return contract.RefreshTokens200JSONResponse(tokens), nil
 }
 
+func (h *APIHandler) RevokeTokens(ctx context.Context, request contract.RevokeTokensRequestObject) (contract.RevokeTokensResponseObject, error) {
+	if request.Body == nil || strings.TrimSpace(request.Body.RefreshToken) == "" {
+		body := apiErrorBody(responseCodeInvalidRequest(), "Refresh token required.")
+		return contract.RevokeTokens400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}, nil
+	}
+	if err := h.Session.Logout(ctx, strings.TrimSpace(request.Body.RefreshToken), ""); err != nil {
+		return contract.RevokeTokens500JSONResponse(apiErrorBody(responseCodeInternalError(), "Session error.")), nil
+	}
+	return contract.RevokeTokens204Response{}, nil
+}
+
 func (h *APIHandler) contractRefreshTokens(
 	ctx context.Context,
 	refreshToken string,

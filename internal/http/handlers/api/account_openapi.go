@@ -291,7 +291,7 @@ func (h *APIHandler) LinkCurrentUserGoogle(ctx context.Context, request contract
 	if request.Body == nil {
 		return linkCurrentUserGoogleError(responseCodeInvalidRequest(), "Invalid Google credential."), nil
 	}
-	identity, header, code, message, verified := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
+	identity, header, code, message, verified := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri, request.Body.ChallengeId)
 	if !verified {
 		return linkCurrentUserGoogleError(code, message), nil
 	}
@@ -325,7 +325,7 @@ func (h *APIHandler) LinkCurrentUserApple(ctx context.Context, request contract.
 	if request.Body == nil {
 		return linkCurrentUserAppleError(responseCodeInvalidRequest(), "Invalid Apple authorization."), nil
 	}
-	result, header, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State)
+	result, header, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State, request.Body.ChallengeId)
 	if !ok {
 		return appleLinkErrorWithHeaders(code, message, header), nil
 	}

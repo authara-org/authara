@@ -184,9 +184,6 @@ func (h *APIHandler) contractSession(
 	case response.CodeInternalError:
 		return contract.AuthSession{}, nil, response.CodeInternalError, "Session error.", false
 	}
-	header := make(http.Header)
-	cookiePolicy := h.sessionCookiePolicy()
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	header := sessionHeader(h, r, accessToken, refreshToken)
 	return toContractAuthSession(user, accessToken, refreshToken), header, "", "", true
 }

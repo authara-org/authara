@@ -164,6 +164,57 @@ func TestTokenRefreshReuseReturnsUnauthorized(t *testing.T) {
 	})
 }
 
+func TestTokenRevokeIsIdempotentAndInvalidatesRefreshToken(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Now().Add(-time.Minute)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email: "api-token-revoke@example.com", Username: "api-token-revoke",
+		})
+		if err != nil {
+			t.Fatalf("CreateUser failed: %v", err)
+		}
+		if _, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username); err != nil {
+			t.Fatalf("EnsureDefaultOrganizationForUser failed: %v", err)
+		}
+
+		sessionService := newAPIHandlerTestSessionService(t, tdb)
+		_, refreshToken, err := sessionService.CreateSession(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "")
+		if err != nil {
+			t.Fatalf("CreateSession failed: %v", err)
+		}
+		h := &APIHandler{Session: sessionService}
+
+		for attempt := 1; attempt <= 2; attempt++ {
+			resp, err := h.RevokeTokens(ctx, contract.RevokeTokensRequestObject{
+				Body: &contract.TokenRevocationRequest{RefreshToken: refreshToken},
+			})
+			if err != nil {
+				t.Fatalf("RevokeTokens attempt %d failed: %v", attempt, err)
+			}
+			rr := httptest.NewRecorder()
+			writeContractResponse(t, rr, resp)
+			if rr.Code != http.StatusNoContent {
+				t.Fatalf("revoke attempt %d status = %d", attempt, rr.Code)
+			}
+		}
+
+		audience := contract.TokenRefreshRequestAudience(token.AudienceApp)
+		resp, err := h.RefreshTokens(ctx, contract.RefreshTokensRequestObject{
+			Body: &contract.TokenRefreshRequest{RefreshToken: refreshToken, Audience: &audience},
+		})
+		if err != nil {
+			t.Fatalf("RefreshTokens failed: %v", err)
+		}
+		rr := httptest.NewRecorder()
+		writeContractResponse(t, rr, resp)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("refresh after revoke status = %d, want %d", rr.Code, http.StatusUnauthorized)
+		}
+	})
+}
+
 func TestRefreshPostDisabledUserReturnsUnauthorized(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

@@ -47,6 +47,8 @@ paths:
       summary: Get Google login options
       description: Returns the Google client ID and nonce needed to start the Google sign-in flow.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/SessionTransport"
       x-authara-access: public
       x-authara-availability: google-enabled
       x-authara-set-cookies: [authara_oauth_nonce]
@@ -73,6 +75,7 @@ paths:
       description: Exchanges either a Google authorization code or a legacy verified Google ID token for Authara session cookies and JSON tokens. Account collisions return a pending recovery link in the error response.
       parameters:
         - $ref: "#/components/parameters/Audience"
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -121,6 +124,8 @@ paths:
       summary: Get Apple login options
       description: Returns the Apple Services ID, redirect URI, state, and nonce needed to start Sign in with Apple.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/SessionTransport"
       x-authara-access: public
       x-authara-availability: apple-enabled
       x-authara-set-cookies: [authara_apple_oauth]
@@ -147,6 +152,7 @@ paths:
       description: Exchanges a one-time Apple authorization code for Authara session cookies and JSON tokens. Account collisions return a pending recovery link in the error response.
       parameters:
         - $ref: "#/components/parameters/Audience"
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -195,6 +201,8 @@ paths:
       summary: Get Microsoft login options
       description: Returns the Microsoft client ID, authority, and nonce needed to start the Microsoft popup flow.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/SessionTransport"
       x-authara-access: public
       x-authara-availability: microsoft-enabled
       x-authara-set-cookies: [authara_oauth_nonce]
@@ -221,6 +229,7 @@ paths:
       description: Exchanges a nonce-bound Microsoft ID token for Authara session cookies and JSON tokens. Account collisions return a pending recovery link in the error response.
       parameters:
         - $ref: "#/components/parameters/Audience"
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -704,6 +713,7 @@ paths:
       description: Authenticates a user with an email address and password and creates a new Authara session. When AUTHARA_USERNAME_LOGIN_ENABLED=true, the identifier field also accepts a username.
       parameters:
         - $ref: "#/components/parameters/Audience"
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -748,6 +758,7 @@ paths:
       description: Creates a user account immediately when challenge-based signup is disabled.
       parameters:
         - $ref: "#/components/parameters/AppAudience"
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -793,6 +804,7 @@ paths:
       description: Starts signup by creating and delivering a verification challenge for the email address.
       parameters:
         - $ref: "#/components/parameters/AppAudience"
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -837,6 +849,7 @@ paths:
       description: Verifies the signup challenge code, creates the account, and starts an Authara session.
       parameters:
         - $ref: "#/components/parameters/AppAudience"
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -885,6 +898,8 @@ paths:
         Unknown and passwordless accounts receive the same accepted response but
         no reset code. Passwordless users must authenticate with an existing
         provider or passkey before adding a password.
+      parameters:
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -926,6 +941,8 @@ paths:
         Verifies the emailed code, atomically changes an existing password,
         revokes all existing sessions, and consumes the challenge. This operation
         never adds a password provider to a passwordless account.
+      parameters:
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -960,6 +977,8 @@ paths:
       tags: [Authentication]
       summary: Request another challenge verification code
       description: Queues another verification code for an existing signup or recovery challenge.
+      parameters:
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -994,6 +1013,8 @@ paths:
       tags: [Passkeys]
       summary: Start passkey authentication
       description: Creates a passkey authentication challenge and returns WebAuthn options for the client.
+      parameters:
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -1025,6 +1046,7 @@ paths:
       description: Verifies the passkey assertion and creates an Authara session for the matching user.
       parameters:
         - $ref: "#/components/parameters/Audience"
+        - $ref: "#/components/parameters/SessionTransport"
       security:
         - csrfCookie: []
           csrfHeader: []
@@ -1486,6 +1508,31 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/api/v1/tokens/revoke:
+    post:
+      operationId: revokeTokens
+      tags: [Sessions]
+      summary: Revoke a token-backed session
+      description: Revokes the session family identified by a JSON refresh token. Repeated revocation is successful.
+      security: []
+      x-authara-access: public
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRevocationRequest"
+      responses:
+        "204":
+          description: Token family revoked or already absent
+        "400":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -2885,6 +2932,11 @@ components:
       type: apiKey
       in: cookie
       name: authara_access
+    accessBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      x-authara-auth-mode: access_bearer
     refreshCookie:
       type: apiKey
       in: cookie
@@ -2911,6 +2963,15 @@ components:
       x-authara-auth-mode: internal_bearer
 
   parameters:
+    SessionTransport:
+      name: session_transport
+      in: query
+      required: false
+      description: Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+      schema:
+        type: string
+        enum: [cookie, token]
+        default: cookie
     SessionsCursor:
       name: sessions_cursor
       in: query
@@ -3070,6 +3131,9 @@ components:
       additionalProperties: false
       required: [client_id, nonce]
       properties:
+        challenge_id:
+          type: string
+          format: uuid
         client_id:
           type: string
         nonce:
@@ -3078,6 +3142,9 @@ components:
       type: object
       additionalProperties: false
       properties:
+        challenge_id:
+          type: string
+          format: uuid
         credential:
           type: string
           description: Legacy Google ID token. Must be provided together with nonce when code is omitted.
@@ -3096,6 +3163,9 @@ components:
       additionalProperties: false
       required: [client_id, redirect_uri, state, nonce]
       properties:
+        challenge_id:
+          type: string
+          format: uuid
         client_id:
           type: string
         redirect_uri:
@@ -3110,6 +3180,9 @@ components:
       additionalProperties: false
       required: [code, state]
       properties:
+        challenge_id:
+          type: string
+          format: uuid
         code:
           type: string
         state:
@@ -3121,6 +3194,9 @@ components:
       additionalProperties: false
       required: [client_id, authority, nonce]
       properties:
+        challenge_id:
+          type: string
+          format: uuid
         client_id:
           type: string
         authority:
@@ -3133,6 +3209,9 @@ components:
       additionalProperties: false
       required: [credential, nonce]
       properties:
+        challenge_id:
+          type: string
+          format: uuid
         credential:
           type: string
           description: Microsoft v2 ID token returned by the popup authorization-code flow.
@@ -3194,6 +3273,10 @@ components:
       type: object
       additionalProperties: false
       properties:
+        challenge_id:
+          type: string
+          format: uuid
+          description: OAuth challenge returned by the login-options endpoint for token-transport clients.
         credential:
           type: string
           description: Legacy Google ID token. Must be provided together with nonce when code is omitted.
@@ -3214,6 +3297,10 @@ components:
       additionalProperties: false
       required: [code, state]
       properties:
+        challenge_id:
+          type: string
+          format: uuid
+          description: OAuth challenge returned by the login-options endpoint for token-transport clients.
         code:
           type: string
         state:
@@ -3225,6 +3312,10 @@ components:
       additionalProperties: false
       required: [credential, nonce]
       properties:
+        challenge_id:
+          type: string
+          format: uuid
+          description: OAuth challenge returned by the login-options endpoint for token-transport clients.
         credential:
           type: string
         nonce:
@@ -3323,6 +3414,9 @@ components:
         authentication_challenge_id:
           type: string
           format: uuid
+        challenge_id:
+          type: string
+          format: uuid
         credential:
           type: string
           description: Legacy Google ID token. Must be provided together with nonce when code is omitted.
@@ -3344,6 +3438,9 @@ components:
         authentication_challenge_id:
           type: string
           format: uuid
+        challenge_id:
+          type: string
+          format: uuid
         code:
           type: string
         state:
@@ -3354,6 +3451,9 @@ components:
       required: [authentication_challenge_id, credential, nonce]
       properties:
         authentication_challenge_id:
+          type: string
+          format: uuid
+        challenge_id:
           type: string
           format: uuid
         credential:
@@ -3572,6 +3672,13 @@ components:
           type: string
           enum: [app, admin, operator]
           default: app
+    TokenRevocationRequest:
+      type: object
+      additionalProperties: false
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
 
     CurrentUser:
       type: object

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"net/http"
 	"strings"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
-	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -117,10 +115,7 @@ func (h *APIHandler) VerifySignupChallenge(ctx context.Context, request contract
 		}
 		return verifySignupChallengeError(responseCodeInternalError(), "Challenge error."), nil
 	}
-	header := make(http.Header)
-	cookiePolicy := h.sessionCookiePolicy()
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	header := sessionHeader(h, r, accessToken, refreshToken)
 	return contract.VerifySignupChallenge201HeadersResponse{
 		Header: header,
 		Body:   toContractAuthSession(user, accessToken, refreshToken),

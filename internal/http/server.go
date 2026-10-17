@@ -60,8 +60,9 @@ type Middlewares struct {
 	RequireAdminRole                     func(http.Handler) http.Handler
 	RequireOperatorRole                  func(http.Handler) http.Handler
 
-	RequireCSRF    func(http.Handler) http.Handler
-	RequireAPICSRF func(http.Handler) http.Handler
+	RequireCSRF          func(http.Handler) http.Handler
+	RequireAPICSRF       func(http.Handler) http.Handler
+	RequirePublicAPICSRF func(http.Handler) http.Handler
 
 	ReturnTo                  func(http.Handler) http.Handler
 	HTMX                      func(http.Handler) http.Handler

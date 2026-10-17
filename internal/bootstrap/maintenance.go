@@ -49,6 +49,14 @@ func newCleanupCoordinator(app *App) (*maintenance.Coordinator, error) {
 			},
 		},
 		{
+			Name:     "oauth_authentication_challenges",
+			Interval: cfg.Session.CleanupInterval,
+			RunBatch: func(ctx context.Context, now time.Time) (int64, bool, error) {
+				rows, err := app.Store.DeleteExpiredOAuthAuthenticationChallenges(ctx, now, cleanupBatchSize)
+				return rows, rows == int64(cleanupBatchSize), err
+			},
+		},
+		{
 			Name:     "email_sent",
 			Interval: cfg.Email.CleanupInterval,
 			RunBatch: func(ctx context.Context, now time.Time) (int64, bool, error) {
