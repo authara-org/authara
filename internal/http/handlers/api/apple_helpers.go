@@ -9,6 +9,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/applestate"
+	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/oauth"
@@ -56,25 +57,25 @@ func (h *APIHandler) verifyAppleAuthorization(
 	code string,
 	state string,
 	challengeIDs ...*uuid.UUID,
-) (apple.ExchangeResult, http.Header, response.ErrorCode, string, bool) {
+) (apple.ExchangeResult, http.Header, response.ErrorCode, string, bool, bool) {
 	var challengeID *uuid.UUID
 	if len(challengeIDs) > 0 {
 		challengeID = challengeIDs[0]
 	}
 	if _, ok := h.appleProvider(); !ok || h.Apple == nil {
-		return apple.ExchangeResult{}, nil, response.CodeNotFound, "Apple login is not enabled.", false
+		return apple.ExchangeResult{}, nil, response.CodeNotFound, "Apple login is not enabled.", false, false
 	}
 	code = strings.TrimSpace(code)
 	state = strings.TrimSpace(state)
 	if code == "" || state == "" {
-		return apple.ExchangeResult{}, nil, response.CodeInvalidRequest, "Apple authorization code and state required.", false
+		return apple.ExchangeResult{}, nil, response.CodeInvalidRequest, "Apple authorization code and state required.", false, false
 	}
 	header := make(http.Header)
 	expectedNonce := ""
 	if challengeID != nil && h.OAuthChallenges != nil {
 		challenge, err := h.OAuthChallenges.Consume(ctx, *challengeID, domain.ProviderApple, state, time.Now().UTC())
 		if err != nil && !errors.Is(err, oauth.ErrInvalidAuthenticationChallenge) {
-			return apple.ExchangeResult{}, header, response.CodeInternalError, "Apple login setup error.", false
+			return apple.ExchangeResult{}, header, response.CodeInternalError, "Apple login setup error.", false, false
 		}
 		if err == nil {
 			expectedNonce = challenge.Nonce
@@ -86,13 +87,22 @@ func (h *APIHandler) verifyAppleAuthorization(
 		}
 	}
 	if expectedNonce == "" {
-		return apple.ExchangeResult{}, nil, response.CodeUnauthorized, "Invalid Apple authorization.", false
+		return apple.ExchangeResult{}, nil, response.CodeUnauthorized, "Invalid Apple authorization.", false, false
+	}
+	if h.Limiter != nil {
+		allowed, err := h.Limiter.AllowOAuthAttempt(ctx, httputil.ClientIP(r))
+		if code, message, ok := h.rateLimitResult(allowed, err, "Too many Apple authentication attempts. Please try again later."); !ok {
+			if code == response.CodeRateLimited {
+				return apple.ExchangeResult{}, header, response.CodeUnauthorized, "Invalid Apple authorization.", false, true
+			}
+			return apple.ExchangeResult{}, header, code, message, false, false
+		}
 	}
 	result, err := h.Apple.Exchange(ctx, code, expectedNonce)
 	if err != nil || result.Identity.OAuthID == "" {
-		return apple.ExchangeResult{}, header, response.CodeUnauthorized, "Invalid Apple authorization.", false
+		return apple.ExchangeResult{}, header, response.CodeUnauthorized, "Invalid Apple authorization.", false, false
 	}
-	return result, header, "", "", true
+	return result, header, "", "", true, false
 }
 
 type loginWithAppleHeadersResponse struct {

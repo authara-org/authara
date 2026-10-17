@@ -184,7 +184,11 @@ func (h *APIHandler) LoginWithMicrosoft(ctx context.Context, request contract.Lo
 		return microsoftLoginErrorWithHeaders(response.CodeInternalError, "Session error.", header), nil
 	}
 	copyHeaders(header, sessionHeader(h, r, accessToken, refreshToken))
-	return contract.LoginWithMicrosoft200HeadersResponse{Header: header, Body: toContractAuthSession(user, accessToken, refreshToken)}, nil
+	body := toContractAuthSession(user, accessToken, refreshToken)
+	if !tokenSessionRequested(r) {
+		body = toContractCookieAuthSession(user)
+	}
+	return contract.LoginWithMicrosoft200HeadersResponse{Header: header, Body: body}, nil
 }
 
 func (h *APIHandler) LinkCurrentUserMicrosoft(ctx context.Context, request contract.LinkCurrentUserMicrosoftRequestObject) (contract.LinkCurrentUserMicrosoftResponseObject, error) {
@@ -302,6 +306,9 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithMicrosoft(ctx context.Contex
 	body, header, code, message, ok := h.finishRecoverySession(ctx, r, user, invitationToken, audience, domain.AuthenticationMethodMicrosoft)
 	if !ok {
 		return microsoftRecoveryErrorWithHeaders(code, message, nonceHeader), nil
+	}
+	if !tokenSessionRequested(r) {
+		body = toContractCookieAuthSession(user)
 	}
 	copyHeaders(header, nonceHeader)
 	return contract.CompleteAccountRecoveryLinkWithMicrosoft200HeadersResponse{Header: header, Body: body}, nil

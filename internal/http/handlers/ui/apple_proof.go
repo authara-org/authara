@@ -10,6 +10,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/applestate"
+	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/google/uuid"
 )
@@ -45,6 +46,19 @@ func (h *UIHandler) AppleProviderProofPost(w http.ResponseWriter, r *http.Reques
 		h.recordAppleProofDenial(r.Context())
 		response.ErrorJSON(w, http.StatusUnauthorized, response.CodeUnauthorized, "Invalid Apple authentication.")
 		return
+	}
+	if h.Limiter != nil {
+		allowed, err := h.Limiter.AllowOAuthAttempt(r.Context(), httputil.ClientIP(r))
+		if status, message, ok := h.rateLimitResult(allowed, err, "Too many Apple authentication attempts. Please try again later."); !ok {
+			code := response.CodeInternalError
+			if status == http.StatusTooManyRequests {
+				status = http.StatusUnauthorized
+				code = response.CodeUnauthorized
+				message = "Invalid Apple authentication."
+			}
+			response.ErrorJSON(w, status, code, message)
+			return
+		}
 	}
 	result, err := h.Apple.Exchange(r.Context(), body.Code, flow.Nonce)
 	if err != nil || result.Identity.OAuthID == "" {

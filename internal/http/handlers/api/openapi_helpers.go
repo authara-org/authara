@@ -55,6 +55,10 @@ func toContractAuthSession(user domain.User, accessToken, refreshToken string) c
 	}
 }
 
+func toContractCookieAuthSession(user domain.User) contract.AuthSession {
+	return toContractAuthSession(user, "", "")
+}
+
 func toContractOrganizationSummary(org domain.Organization, role domain.OrganizationRole) contract.OrganizationSummary {
 	return contract.OrganizationSummary{
 		Id:   org.ID,

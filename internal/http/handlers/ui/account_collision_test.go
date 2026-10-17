@@ -28,11 +28,40 @@ type fakeUIAppleClient struct {
 	err     error
 	nonce   string
 	revoked string
+	calls   int
 }
 
 func (f *fakeUIAppleClient) Exchange(_ context.Context, _ string, nonce string) (appleoauth.ExchangeResult, error) {
+	f.calls++
 	f.nonce = nonce
 	return f.result, f.err
+}
+
+func TestAppleProviderProofIsRateLimitedBeforeExchange(t *testing.T) {
+	client := &fakeUIAppleClient{err: context.DeadlineExceeded}
+	h := &UIHandler{
+		Auth: authsvc.New(authsvc.Config{}),
+		Limiter: ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{
+			LoginIPLimit: 1, LoginIPWindow: time.Minute,
+		}),
+		Apple: client,
+	}
+	verify := func(state string) {
+		body := strings.NewReader(`{"code":"code","state":"` + state + `","link_id":"00000000-0000-0000-0000-000000000001"}`)
+		request := httptest.NewRequest(http.MethodPost, "/auth/oauth/apple/proof", body)
+		request.RemoteAddr = "192.0.2.1:1234"
+		request.AddCookie(&http.Cookie{Name: "authara_apple_oauth", Value: state + ".nonce"})
+		recorder := httptest.NewRecorder()
+		h.AppleProviderProofPost(recorder, request)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+		}
+	}
+	verify("first")
+	verify("second")
+	if client.calls != 1 {
+		t.Fatalf("provider exchange calls = %d, want 1", client.calls)
+	}
 }
 
 func (f *fakeUIAppleClient) Revoke(_ context.Context, token string) error {
