@@ -29,6 +29,8 @@ var (
 	ErrWebAuthnChallengeNotFound            = errors.New("webauthn challenge not found")
 	ErrWebAuthnChallengeAlreadyConsumed     = errors.New("webauthn challenge already consumed")
 	ErrAuthenticationChallengeNotFound      = errors.New("authentication challenge not found")
+	ErrOAuthAuthenticationChallengeNotFound = errors.New("oauth authentication challenge not found")
+	ErrOAuthAuthenticationChallengeConsumed = errors.New("oauth authentication challenge already consumed")
 	ErrEmailVerificationTransactionNotFound = errors.New("email verification transaction not found")
 	ErrAllowedEmailNotFound                 = errors.New("allowed email not found")
 	ErrAllowedEmailAlreadyExists            = errors.New("allowed email already exists")

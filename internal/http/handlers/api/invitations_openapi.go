@@ -37,6 +37,7 @@ func (h *APIHandler) PreviewInvitation(ctx context.Context, request contract.Pre
 }
 
 func (h *APIHandler) AcceptInvitation(ctx context.Context, request contract.AcceptInvitationRequestObject) (contract.AcceptInvitationResponseObject, error) {
+	r, _ := contractRequest(ctx)
 	userID, ok := httpctx.UserID(ctx)
 	if !ok {
 		return acceptInvitationError(response.CodeUnauthorized, "Unauthorized."), nil
@@ -67,7 +68,7 @@ func (h *APIHandler) AcceptInvitation(ctx context.Context, request contract.Acce
 		code, message := invitationSessionError(err)
 		return acceptInvitationError(code, message), nil
 	}
-	header := sessionHeader(h, accessToken, refreshToken)
+	header := sessionHeaderForContext(h, ctx, r, accessToken, refreshToken)
 	return contract.AcceptInvitation200HeadersResponse{
 		Header: header,
 		Body:   contract.Tokens{AccessToken: accessToken, RefreshToken: refreshToken},
@@ -275,7 +276,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithGoogle(ctx context.Context, 
 			return completeAccountRecoveryLinkWithGoogleError(code, message), nil
 		}
 	}
-	identity, nonceHeader, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
+	identity, nonceHeader, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri, request.Body.ChallengeId)
 	if !ok {
 		return completeAccountRecoveryLinkWithGoogleError(code, message), nil
 	}
@@ -314,7 +315,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithApple(ctx context.Context, r
 			return completeAccountRecoveryLinkWithAppleError(code, message), nil
 		}
 	}
-	result, appleHeader, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State)
+	result, appleHeader, code, message, ok := h.verifyAppleAuthorization(ctx, r, request.Body.Code, request.Body.State, request.Body.ChallengeId)
 	if !ok {
 		if code == response.CodeUnauthorized {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidAssertion); err != nil {
@@ -473,11 +474,23 @@ func (h *APIHandler) contractInvitationSession(ctx context.Context, r *http.Requ
 		code, message := invitationSessionError(err)
 		return contract.AuthSession{}, nil, code, message, false
 	}
-	return toContractAuthSession(user, accessToken, refreshToken), sessionHeader(h, accessToken, refreshToken), "", "", true
+	return toContractAuthSession(user, accessToken, refreshToken), sessionHeader(h, r, accessToken, refreshToken), "", "", true
 }
 
-func sessionHeader(h *APIHandler, accessToken string, refreshToken string) http.Header {
+func sessionHeader(h *APIHandler, r *http.Request, accessToken string, refreshToken string) http.Header {
+	ctx := context.Background()
+	if r != nil {
+		ctx = r.Context()
+	}
+	return sessionHeaderForContext(h, ctx, r, accessToken, refreshToken)
+}
+
+func sessionHeaderForContext(h *APIHandler, ctx context.Context, r *http.Request, accessToken string, refreshToken string) http.Header {
 	header := make(http.Header)
+	transport, bearer := httpctx.AuthenticationTransport(ctx)
+	if tokenSessionRequested(r) || (bearer && transport == httpctx.AuthTransportBearer) {
+		return header
+	}
 	cookiePolicy := h.sessionCookiePolicy()
 	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
 	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))

@@ -12,7 +12,6 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/oauth/google"
-	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/session/token"
 )
 
@@ -28,7 +27,7 @@ func (h *APIHandler) LoginWithGoogle(ctx context.Context, request contract.Login
 	if request.Params.Audience != nil {
 		audience = token.Audience(*request.Params.Audience)
 	}
-	identity, header, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri)
+	identity, header, code, message, ok := h.verifyGoogleAuthorization(ctx, r, request.Body.Credential, request.Body.Nonce, request.Body.Code, request.Body.RedirectUri, request.Body.ChallengeId)
 	if !ok {
 		if code == response.CodeUnauthorized {
 			if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidAssertion); err != nil {
@@ -50,6 +49,19 @@ func (h *APIHandler) GetGoogleLoginOptions(ctx context.Context, _ contract.GetGo
 		return getGoogleLoginOptionsError(responseCodeNotFound(), "Google login is not enabled."), nil
 	}
 	header := make(http.Header)
+	if tokenSessionRequested(r) {
+		if h.OAuthChallenges == nil {
+			return getGoogleLoginOptionsError(responseCodeInternalError(), "Google login setup error."), nil
+		}
+		challenge, err := h.OAuthChallenges.Create(ctx, domain.ProviderGoogle, time.Now().UTC())
+		if err != nil {
+			return getGoogleLoginOptionsError(responseCodeInternalError(), "Google login setup error."), nil
+		}
+		return contract.GetGoogleLoginOptions200HeadersResponse{
+			Header: header,
+			Body:   contract.GoogleLoginOptions{ClientId: clientID, Nonce: challenge.Nonce, ChallengeId: &challenge.ID},
+		}, nil
+	}
 	nonce, err := oauthstate.Create(contract.HeaderWriter(header), r)
 	if err != nil {
 		return getGoogleLoginOptionsError(responseCodeInternalError(), "Google login setup error."), nil
@@ -96,8 +108,6 @@ func (h *APIHandler) contractGoogleLogin(
 	case response.CodeInternalError:
 		return googleLoginErrorWithHeaders(response.CodeInternalError, "Session error.", header)
 	}
-	cookiePolicy := h.sessionCookiePolicy()
-	session.SetAccessToken(contract.HeaderWriter(header), accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-	session.SetRefreshToken(contract.HeaderWriter(header), refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	copyHeaders(header, sessionHeader(h, r, accessToken, refreshToken))
 	return contract.LoginWithGoogle200HeadersResponse{Header: header, Body: toContractAuthSession(user, accessToken, refreshToken)}
 }

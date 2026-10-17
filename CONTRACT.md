@@ -148,6 +148,29 @@ The JWKS contains only public Ed25519 verification keys. Access tokens use
 
 Any documented OAuth callback endpoint used by browser-based integrations is part of the public contract once released and documented.
 
+### Native token transport
+
+Public JSON authentication operations that declare `session_transport` accept
+`cookie` (the default) or `token`. Token transport does not use browser CSRF
+credentials and never emits access or refresh cookies; successful session
+operations return the token pair in JSON. Cookie-only session refresh and
+logout endpoints always retain CSRF protection.
+
+Protected public JSON operations accept either the stable `authara_access`
+cookie or `Authorization: Bearer <access-token>`. Cookie authentication
+requires CSRF proof for mutations. A successfully validated bearer credential
+does not, because it is not ambient browser authority. If an Authorization
+header is present but malformed or invalid, Core does not fall back to a
+cookie.
+
+Native Google, Apple, and Microsoft login options may return a short-lived
+`challenge_id`. The challenge is provider-bound, nonce-bound, shared through
+the database for multi-replica deployments, and consumed at most once. Browser
+OAuth cookie flows remain the default and continue to work unchanged.
+
+`POST /auth/api/v1/tokens/revoke` accepts a JSON refresh token, revokes its
+session family, and is idempotent for unknown or already-revoked tokens.
+
 ## 4.2 Method stability
 
 For stable public endpoints:

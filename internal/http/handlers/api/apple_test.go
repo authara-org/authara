@@ -288,7 +288,7 @@ func TestAppleLoginDoesNotMergeAnExistingEmail(t *testing.T) {
 	})
 }
 
-func TestGoogleProofCompletesAppleAccountRecovery(t *testing.T) {
+func TestGoogleTokenProofCompletesAppleAccountRecovery(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "google-proof@example.com", Username: "google-proof"})
@@ -324,8 +324,9 @@ func TestGoogleProofCompletesAppleAccountRecovery(t *testing.T) {
 			}),
 			Session: newAPIHandlerTestSessionService(t, tdb), OAuthProviders: providers,
 			Apple: appleClient, AppleCredentials: credentials,
-			Google:    fakeGoogleVerifier{identity: &google.Identity{OAuthID: googleSubject, Email: user.Email, EmailVerified: true}},
-			AccessTTL: time.Minute, RefreshTTL: time.Hour,
+			Google:          fakeGoogleVerifier{identity: &google.Identity{OAuthID: googleSubject, Email: user.Email, EmailVerified: true}},
+			OAuthChallenges: oauth.NewChallengeService(tdb.Store, tdb.Tx),
+			AccessTTL:       time.Minute, RefreshTTL: time.Hour,
 		}
 
 		appleRequest := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/apple", nil)
@@ -346,13 +347,17 @@ func TestGoogleProofCompletesAppleAccountRecovery(t *testing.T) {
 			t.Fatalf("unexpected recovery response: %+v", collision.Recovery)
 		}
 
-		googleRequest := googleAPIRequest(ctx, "/auth/api/v1/provider-links/recovery/"+collision.Recovery.LinkId.String()+"/google", "proof-nonce")
+		challenge, err := h.OAuthChallenges.Create(ctx, domain.ProviderGoogle, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		googleRequest := httptest.NewRequest(http.MethodPost, "/auth/api/v1/provider-links/recovery/"+collision.Recovery.LinkId.String()+"/google", nil)
 		googleResponse, err := h.CompleteAccountRecoveryLinkWithGoogle(
 			contractCtx(ctx, googleRequest),
 			contract.CompleteAccountRecoveryLinkWithGoogleRequestObject{
 				LinkID: collision.Recovery.LinkId,
 				Body: &contract.AccountRecoveryGoogleProofRequest{
-					Credential: testString("existing-google"), Nonce: testString("proof-nonce"),
+					ChallengeId: &challenge.ID, Credential: testString("existing-google"), Nonce: testString(challenge.Nonce),
 				},
 			},
 		)
@@ -555,18 +560,21 @@ func TestAppleLinkUsesSubjectWithoutRequiringAppleEmail(t *testing.T) {
 		}}
 		credentials := &fakeAppleCredentials{}
 		h := newAppleAPIHandler(t, tdb, client, credentials)
+		oauthChallenge, err := h.OAuthChallenges.Create(ctx, domain.ProviderApple, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
 		request := httptest.NewRequest(http.MethodPost, "/auth/api/v1/account/auth-methods/apple", nil)
-		request.AddCookie(&http.Cookie{Name: "authara_apple_oauth", Value: "state.nonce"})
 		requestContext := httpctx.WithSessionID(httpctx.WithUserID(ctx, user.ID), userSession.ID)
 		response, err := h.LinkCurrentUserApple(contractCtx(requestContext, request), contract.LinkCurrentUserAppleRequestObject{
-			Body: &contract.AppleAuthorizationRequest{Code: "code", State: "state"},
+			Body: &contract.AppleAuthorizationRequest{ChallengeId: &oauthChallenge.ID, Code: "code", State: oauthChallenge.State},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		recorder := httptest.NewRecorder()
 		writeContractResponse(t, recorder, response)
-		if recorder.Code != http.StatusNoContent || credentials.token != "linked-refresh-token" {
+		if recorder.Code != http.StatusNoContent || credentials.token != "linked-refresh-token" || client.nonce != oauthChallenge.Nonce {
 			t.Fatalf("status = %d, stored=%q, body=%s", recorder.Code, credentials.token, recorder.Body.String())
 		}
 		provider, err := tdb.Store.GetAuthProviderByMethodAndUserID(ctx, domain.ProviderApple, user.ID)
@@ -606,11 +614,14 @@ func TestAppleReauthenticationRequiresLinkedSubject(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		oauthChallenge, err := h.OAuthChallenges.Create(ctx, domain.ProviderApple, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
 		request := httptest.NewRequest(http.MethodPost, "/auth/api/v1/reauthenticate/apple", nil)
-		request.AddCookie(&http.Cookie{Name: "authara_apple_oauth", Value: "state.nonce"})
 		requestContext := httpctx.WithSessionID(httpctx.WithUserID(ctx, user.ID), userSession.ID)
 		response, err := h.ReauthenticateWithApple(contractCtx(requestContext, request), contract.ReauthenticateWithAppleRequestObject{
-			Body: &contract.AppleReauthenticationRequest{AuthenticationChallengeId: challenge.ID, Code: "code", State: "state"},
+			Body: &contract.AppleReauthenticationRequest{AuthenticationChallengeId: challenge.ID, ChallengeId: &oauthChallenge.ID, Code: "code", State: oauthChallenge.State},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -623,10 +634,13 @@ func TestAppleReauthenticationRequiresLinkedSubject(t *testing.T) {
 
 		client.result.Identity.OAuthID = linkedSubject
 		client.result.RefreshToken = "current-refresh-token"
+		oauthChallenge, err = h.OAuthChallenges.Create(ctx, domain.ProviderApple, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
 		request = httptest.NewRequest(http.MethodPost, "/auth/api/v1/reauthenticate/apple", nil)
-		request.AddCookie(&http.Cookie{Name: "authara_apple_oauth", Value: "state.nonce"})
 		response, err = h.ReauthenticateWithApple(contractCtx(requestContext, request), contract.ReauthenticateWithAppleRequestObject{
-			Body: &contract.AppleReauthenticationRequest{AuthenticationChallengeId: challenge.ID, Code: "code", State: "state"},
+			Body: &contract.AppleReauthenticationRequest{AuthenticationChallengeId: challenge.ID, ChallengeId: &oauthChallenge.ID, Code: "code", State: oauthChallenge.State},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -649,7 +663,8 @@ func newAppleAPIHandler(t *testing.T, tdb *testutil.TestDB, client AppleClient, 
 			Organizations: organizations, AppleCredentials: credentials,
 		}),
 		Session: newAPIHandlerTestSessionService(t, tdb), OAuthProviders: providers,
-		Apple: client, AppleCredentials: credentials, AccessTTL: time.Minute, RefreshTTL: time.Hour,
+		OAuthChallenges: oauth.NewChallengeService(tdb.Store, tdb.Tx),
+		Apple:           client, AppleCredentials: credentials, AccessTTL: time.Minute, RefreshTTL: time.Hour,
 	}
 }
 

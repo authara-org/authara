@@ -20,13 +20,14 @@ Authara Core and its SDKs are versioned independently. The OpenAPI contract in
    version.
 6. CD deploys Core, attaches `authara-images.env`, adds the compatible image
    tags and digests to the release notes, and publishes the completed release.
-7. Core CD dispatches the immutable tag, commit, and release type to the Go and
-   browser SDK repositories.
+7. Core CD dispatches the immutable tag, commit, and release type to the Go,
+   browser, and React Native SDK repositories.
 8. Each SDK regenerates from that exact Core tag, tests the result, and opens an
    update pull request when its generated output changed.
 9. SDK generated-update and release pull requests automatically merge after
    their required checks pass. Each changed SDK is tagged with its own version.
-10. Browser releases are published to npm from the Release Please workflow.
+10. Browser and React Native releases are published to npm from their Release
+    Please workflows.
 
 Merging a releasable change pull request is therefore the release decision. No
 second manual merge, version edit, or tag command is required. A `docs:`,
@@ -64,18 +65,18 @@ manually.
 
 ## Repository settings
 
-The `AUTHARA_SDK_RELEASE_TOKEN` secret must be available to all three
+The `AUTHARA_SDK_RELEASE_TOKEN` secret must be available to Core and all SDK
 repositories. It needs access to create pull requests, push automation branches,
 enable auto-merge, create releases, and dispatch workflows across the Authara
 repositories.
 
-Enable pull-request auto-merge in Core and both SDK repositories. Require the
+Enable pull-request auto-merge in Core and every SDK repository. Require the
 `pr-title` check plus each repository's normal CI checks. Release automation
 must fail visibly if it cannot enable auto-merge; it must never bypass branch
 protection.
 
-The npm Trusted Publisher must authorize
-`.github/workflows/publish.yaml` in `authara-org/authara-browser`.
+npm Trusted Publishers must authorize `.github/workflows/publish.yaml` in both
+`authara-org/authara-browser` and `authara-org/authara-react-native`.
 
 ## Generated files
 

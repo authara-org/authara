@@ -34,6 +34,7 @@ type Services struct {
 	EmailWorker      *challenge.Worker
 	WebhookWorker    *webhook.Worker
 	OAuthProviders   oauth.OAuthProviders
+	OAuthChallenges  *oauth.ChallengeService
 	SecurityEvents   *securityevent.Service
 	Apple            *apple.Client
 	AppleCredentials *apple.Credentials
@@ -162,6 +163,7 @@ func NewServices(app *App) (Services, error) {
 	}
 
 	verificationCodeService := newVerificationCodeService(app)
+	oauthChallengeService := oauth.NewChallengeService(app.Store, txManager)
 	emailTemplateService := email.NewTemplateService(app.Store)
 	challengeService := challenge.New(challenge.Config{
 		Store:                  app.Store,
@@ -204,6 +206,7 @@ func NewServices(app *App) (Services, error) {
 		EmailWorker:      emailWorker,
 		WebhookWorker:    webhookWorker,
 		OAuthProviders:   oauthProviders,
+		OAuthChallenges:  oauthChallengeService,
 		SecurityEvents:   securityEventService,
 		Apple:            appleClient,
 		AppleCredentials: appleCredentials,

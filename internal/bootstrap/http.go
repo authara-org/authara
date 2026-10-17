@@ -84,6 +84,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		RequireOperatorRole:                 httpmiddleware.RequireOperator,
 		RequireCSRF:                         httpmiddleware.RequireCSRF,
 		RequireAPICSRF:                      httpmiddleware.RequireAPICSRF,
+		RequirePublicAPICSRF:                httpmiddleware.RequirePublicAPICSRF,
 		ReturnTo:                            httpmiddleware.ReturnToWithPolicy(app.Config),
 		HTMX:                                httpmiddleware.HTMXMiddleware,
 		RequireChallengeEnabled:             httpmiddleware.RequireChallengeEnabled(enabledFeatures.ChallengeEnabled),
@@ -118,6 +119,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 	apiHandler.Apple = app.Services.Apple
 	apiHandler.AppleCredentials = app.Services.AppleCredentials
 	apiHandler.Microsoft = app.Services.Microsoft
+	apiHandler.OAuthChallenges = app.Services.OAuthChallenges
 	uiHandler := ui.New(
 		app.Services.Admin,
 		app.Services.Auth,

@@ -77,6 +77,7 @@ type APIHandler struct {
 	Microsoft        MicrosoftVerifier
 	AppleCredentials AppleCredentialStore
 	OAuthProviders   oauth.OAuthProviders
+	OAuthChallenges  *oauth.ChallengeService
 	Config           RuntimePolicyReader
 
 	ChallengeEnabled     bool

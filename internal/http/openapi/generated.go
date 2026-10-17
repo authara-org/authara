@@ -347,6 +347,42 @@ func (e AuthProvider) Valid() bool {
 	}
 }
 
+// Defines values for SessionTransport.
+const (
+	SessionTransportCookie SessionTransport = "cookie"
+	SessionTransportToken  SessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the SessionTransport enum.
+func (e SessionTransport) Valid() bool {
+	switch e {
+	case SessionTransportCookie:
+		return true
+	case SessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResendChallengeParamsSessionTransport.
+const (
+	ResendChallengeParamsSessionTransportCookie ResendChallengeParamsSessionTransport = "cookie"
+	ResendChallengeParamsSessionTransportToken  ResendChallengeParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the ResendChallengeParamsSessionTransport enum.
+func (e ResendChallengeParamsSessionTransport) Valid() bool {
+	switch e {
+	case ResendChallengeParamsSessionTransportCookie:
+		return true
+	case ResendChallengeParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AcceptInvitationParamsAudience.
 const (
 	AcceptInvitationParamsAudienceApp AcceptInvitationParamsAudience = "app"
@@ -413,6 +449,24 @@ func (e LoginWithPasswordParamsAudience) Valid() bool {
 	}
 }
 
+// Defines values for LoginWithPasswordParamsSessionTransport.
+const (
+	LoginWithPasswordParamsSessionTransportCookie LoginWithPasswordParamsSessionTransport = "cookie"
+	LoginWithPasswordParamsSessionTransportToken  LoginWithPasswordParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the LoginWithPasswordParamsSessionTransport enum.
+func (e LoginWithPasswordParamsSessionTransport) Valid() bool {
+	switch e {
+	case LoginWithPasswordParamsSessionTransportCookie:
+		return true
+	case LoginWithPasswordParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LoginWithAppleParamsAudience.
 const (
 	LoginWithAppleParamsAudienceAdmin    LoginWithAppleParamsAudience = "admin"
@@ -428,6 +482,42 @@ func (e LoginWithAppleParamsAudience) Valid() bool {
 	case LoginWithAppleParamsAudienceApp:
 		return true
 	case LoginWithAppleParamsAudienceOperator:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LoginWithAppleParamsSessionTransport.
+const (
+	LoginWithAppleParamsSessionTransportCookie LoginWithAppleParamsSessionTransport = "cookie"
+	LoginWithAppleParamsSessionTransportToken  LoginWithAppleParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the LoginWithAppleParamsSessionTransport enum.
+func (e LoginWithAppleParamsSessionTransport) Valid() bool {
+	switch e {
+	case LoginWithAppleParamsSessionTransportCookie:
+		return true
+	case LoginWithAppleParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAppleLoginOptionsParamsSessionTransport.
+const (
+	GetAppleLoginOptionsParamsSessionTransportCookie GetAppleLoginOptionsParamsSessionTransport = "cookie"
+	GetAppleLoginOptionsParamsSessionTransportToken  GetAppleLoginOptionsParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the GetAppleLoginOptionsParamsSessionTransport enum.
+func (e GetAppleLoginOptionsParamsSessionTransport) Valid() bool {
+	switch e {
+	case GetAppleLoginOptionsParamsSessionTransportCookie:
+		return true
+	case GetAppleLoginOptionsParamsSessionTransportToken:
 		return true
 	default:
 		return false
@@ -455,6 +545,42 @@ func (e LoginWithGoogleParamsAudience) Valid() bool {
 	}
 }
 
+// Defines values for LoginWithGoogleParamsSessionTransport.
+const (
+	LoginWithGoogleParamsSessionTransportCookie LoginWithGoogleParamsSessionTransport = "cookie"
+	LoginWithGoogleParamsSessionTransportToken  LoginWithGoogleParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the LoginWithGoogleParamsSessionTransport enum.
+func (e LoginWithGoogleParamsSessionTransport) Valid() bool {
+	switch e {
+	case LoginWithGoogleParamsSessionTransportCookie:
+		return true
+	case LoginWithGoogleParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetGoogleLoginOptionsParamsSessionTransport.
+const (
+	GetGoogleLoginOptionsParamsSessionTransportCookie GetGoogleLoginOptionsParamsSessionTransport = "cookie"
+	GetGoogleLoginOptionsParamsSessionTransportToken  GetGoogleLoginOptionsParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the GetGoogleLoginOptionsParamsSessionTransport enum.
+func (e GetGoogleLoginOptionsParamsSessionTransport) Valid() bool {
+	switch e {
+	case GetGoogleLoginOptionsParamsSessionTransportCookie:
+		return true
+	case GetGoogleLoginOptionsParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LoginWithMicrosoftParamsAudience.
 const (
 	LoginWithMicrosoftParamsAudienceAdmin    LoginWithMicrosoftParamsAudience = "admin"
@@ -470,6 +596,42 @@ func (e LoginWithMicrosoftParamsAudience) Valid() bool {
 	case LoginWithMicrosoftParamsAudienceApp:
 		return true
 	case LoginWithMicrosoftParamsAudienceOperator:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LoginWithMicrosoftParamsSessionTransport.
+const (
+	LoginWithMicrosoftParamsSessionTransportCookie LoginWithMicrosoftParamsSessionTransport = "cookie"
+	LoginWithMicrosoftParamsSessionTransportToken  LoginWithMicrosoftParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the LoginWithMicrosoftParamsSessionTransport enum.
+func (e LoginWithMicrosoftParamsSessionTransport) Valid() bool {
+	switch e {
+	case LoginWithMicrosoftParamsSessionTransportCookie:
+		return true
+	case LoginWithMicrosoftParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetMicrosoftLoginOptionsParamsSessionTransport.
+const (
+	GetMicrosoftLoginOptionsParamsSessionTransportCookie GetMicrosoftLoginOptionsParamsSessionTransport = "cookie"
+	GetMicrosoftLoginOptionsParamsSessionTransportToken  GetMicrosoftLoginOptionsParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the GetMicrosoftLoginOptionsParamsSessionTransport enum.
+func (e GetMicrosoftLoginOptionsParamsSessionTransport) Valid() bool {
+	switch e {
+	case GetMicrosoftLoginOptionsParamsSessionTransportCookie:
+		return true
+	case GetMicrosoftLoginOptionsParamsSessionTransportToken:
 		return true
 	default:
 		return false
@@ -512,6 +674,78 @@ func (e FinishPasskeyAuthenticationParamsAudience) Valid() bool {
 	case FinishPasskeyAuthenticationParamsAudienceApp:
 		return true
 	case FinishPasskeyAuthenticationParamsAudienceOperator:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FinishPasskeyAuthenticationParamsSessionTransport.
+const (
+	FinishPasskeyAuthenticationParamsSessionTransportCookie FinishPasskeyAuthenticationParamsSessionTransport = "cookie"
+	FinishPasskeyAuthenticationParamsSessionTransportToken  FinishPasskeyAuthenticationParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the FinishPasskeyAuthenticationParamsSessionTransport enum.
+func (e FinishPasskeyAuthenticationParamsSessionTransport) Valid() bool {
+	switch e {
+	case FinishPasskeyAuthenticationParamsSessionTransportCookie:
+		return true
+	case FinishPasskeyAuthenticationParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BeginPasskeyAuthenticationParamsSessionTransport.
+const (
+	BeginPasskeyAuthenticationParamsSessionTransportCookie BeginPasskeyAuthenticationParamsSessionTransport = "cookie"
+	BeginPasskeyAuthenticationParamsSessionTransportToken  BeginPasskeyAuthenticationParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the BeginPasskeyAuthenticationParamsSessionTransport enum.
+func (e BeginPasskeyAuthenticationParamsSessionTransport) Valid() bool {
+	switch e {
+	case BeginPasskeyAuthenticationParamsSessionTransportCookie:
+		return true
+	case BeginPasskeyAuthenticationParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StartPasswordResetChallengeParamsSessionTransport.
+const (
+	StartPasswordResetChallengeParamsSessionTransportCookie StartPasswordResetChallengeParamsSessionTransport = "cookie"
+	StartPasswordResetChallengeParamsSessionTransportToken  StartPasswordResetChallengeParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the StartPasswordResetChallengeParamsSessionTransport enum.
+func (e StartPasswordResetChallengeParamsSessionTransport) Valid() bool {
+	switch e {
+	case StartPasswordResetChallengeParamsSessionTransportCookie:
+		return true
+	case StartPasswordResetChallengeParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerifyPasswordResetChallengeParamsSessionTransport.
+const (
+	VerifyPasswordResetChallengeParamsSessionTransportCookie VerifyPasswordResetChallengeParamsSessionTransport = "cookie"
+	VerifyPasswordResetChallengeParamsSessionTransportToken  VerifyPasswordResetChallengeParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the VerifyPasswordResetChallengeParamsSessionTransport enum.
+func (e VerifyPasswordResetChallengeParamsSessionTransport) Valid() bool {
+	switch e {
+	case VerifyPasswordResetChallengeParamsSessionTransportCookie:
+		return true
+	case VerifyPasswordResetChallengeParamsSessionTransportToken:
 		return true
 	default:
 		return false
@@ -614,6 +848,24 @@ func (e StartSignupChallengeParamsAudience) Valid() bool {
 	}
 }
 
+// Defines values for StartSignupChallengeParamsSessionTransport.
+const (
+	StartSignupChallengeParamsSessionTransportCookie StartSignupChallengeParamsSessionTransport = "cookie"
+	StartSignupChallengeParamsSessionTransportToken  StartSignupChallengeParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the StartSignupChallengeParamsSessionTransport enum.
+func (e StartSignupChallengeParamsSessionTransport) Valid() bool {
+	switch e {
+	case StartSignupChallengeParamsSessionTransportCookie:
+		return true
+	case StartSignupChallengeParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VerifySignupChallengeParamsAudience.
 const (
 	VerifySignupChallengeParamsAudienceApp VerifySignupChallengeParamsAudience = "app"
@@ -629,6 +881,24 @@ func (e VerifySignupChallengeParamsAudience) Valid() bool {
 	}
 }
 
+// Defines values for VerifySignupChallengeParamsSessionTransport.
+const (
+	VerifySignupChallengeParamsSessionTransportCookie VerifySignupChallengeParamsSessionTransport = "cookie"
+	VerifySignupChallengeParamsSessionTransportToken  VerifySignupChallengeParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the VerifySignupChallengeParamsSessionTransport enum.
+func (e VerifySignupChallengeParamsSessionTransport) Valid() bool {
+	switch e {
+	case VerifySignupChallengeParamsSessionTransportCookie:
+		return true
+	case VerifySignupChallengeParamsSessionTransportToken:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SignupDirectParamsAudience.
 const (
 	SignupDirectParamsAudienceApp SignupDirectParamsAudience = "app"
@@ -638,6 +908,24 @@ const (
 func (e SignupDirectParamsAudience) Valid() bool {
 	switch e {
 	case SignupDirectParamsAudienceApp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SignupDirectParamsSessionTransport.
+const (
+	SignupDirectParamsSessionTransportCookie SignupDirectParamsSessionTransport = "cookie"
+	SignupDirectParamsSessionTransportToken  SignupDirectParamsSessionTransport = "token"
+)
+
+// Valid indicates whether the value is a known member of the SignupDirectParamsSessionTransport enum.
+func (e SignupDirectParamsSessionTransport) Valid() bool {
+	switch e {
+	case SignupDirectParamsSessionTransportCookie:
+		return true
+	case SignupDirectParamsSessionTransportToken:
 		return true
 	default:
 		return false
@@ -670,13 +958,18 @@ type AccountPasskey struct {
 
 // AccountRecoveryAppleProofRequest defines model for AccountRecoveryAppleProofRequest.
 type AccountRecoveryAppleProofRequest struct {
-	Code            string  `json:"code"`
-	InvitationToken *string `json:"invitation_token,omitempty"`
-	State           string  `json:"state"`
+	// ChallengeId OAuth challenge returned by the login-options endpoint for token-transport clients.
+	ChallengeId     *openapi_types.UUID `json:"challenge_id,omitempty"`
+	Code            string              `json:"code"`
+	InvitationToken *string             `json:"invitation_token,omitempty"`
+	State           string              `json:"state"`
 }
 
 // AccountRecoveryGoogleProofRequest defines model for AccountRecoveryGoogleProofRequest.
 type AccountRecoveryGoogleProofRequest struct {
+	// ChallengeId OAuth challenge returned by the login-options endpoint for token-transport clients.
+	ChallengeId *openapi_types.UUID `json:"challenge_id,omitempty"`
+
 	// Code One-time Google authorization code. Must be provided together with redirect_uri.
 	Code *string `json:"code,omitempty"`
 
@@ -708,9 +1001,11 @@ type AccountRecoveryLinkProvider string
 
 // AccountRecoveryMicrosoftProofRequest defines model for AccountRecoveryMicrosoftProofRequest.
 type AccountRecoveryMicrosoftProofRequest struct {
-	Credential      string  `json:"credential"`
-	InvitationToken *string `json:"invitation_token,omitempty"`
-	Nonce           string  `json:"nonce"`
+	// ChallengeId OAuth challenge returned by the login-options endpoint for token-transport clients.
+	ChallengeId     *openapi_types.UUID `json:"challenge_id,omitempty"`
+	Credential      string              `json:"credential"`
+	InvitationToken *string             `json:"invitation_token,omitempty"`
+	Nonce           string              `json:"nonce"`
 }
 
 // AccountRecoveryPasswordProofRequest defines model for AccountRecoveryPasswordProofRequest.
@@ -730,24 +1025,27 @@ type AccountSession struct {
 
 // AppleAuthorizationRequest defines model for AppleAuthorizationRequest.
 type AppleAuthorizationRequest struct {
-	Code            string  `json:"code"`
-	InvitationToken *string `json:"invitation_token,omitempty"`
-	State           string  `json:"state"`
+	ChallengeId     *openapi_types.UUID `json:"challenge_id,omitempty"`
+	Code            string              `json:"code"`
+	InvitationToken *string             `json:"invitation_token,omitempty"`
+	State           string              `json:"state"`
 }
 
 // AppleLoginOptions defines model for AppleLoginOptions.
 type AppleLoginOptions struct {
-	ClientId    string `json:"client_id"`
-	Nonce       string `json:"nonce"`
-	RedirectUri string `json:"redirect_uri"`
-	State       string `json:"state"`
+	ChallengeId *openapi_types.UUID `json:"challenge_id,omitempty"`
+	ClientId    string              `json:"client_id"`
+	Nonce       string              `json:"nonce"`
+	RedirectUri string              `json:"redirect_uri"`
+	State       string              `json:"state"`
 }
 
 // AppleReauthenticationRequest defines model for AppleReauthenticationRequest.
 type AppleReauthenticationRequest struct {
-	AuthenticationChallengeId openapi_types.UUID `json:"authentication_challenge_id"`
-	Code                      string             `json:"code"`
-	State                     string             `json:"state"`
+	AuthenticationChallengeId openapi_types.UUID  `json:"authentication_challenge_id"`
+	ChallengeId               *openapi_types.UUID `json:"challenge_id,omitempty"`
+	Code                      string              `json:"code"`
+	State                     string              `json:"state"`
 }
 
 // AuthMethod defines model for AuthMethod.
@@ -875,12 +1173,15 @@ type ErrorResponse struct {
 
 // GoogleLoginOptions defines model for GoogleLoginOptions.
 type GoogleLoginOptions struct {
-	ClientId string `json:"client_id"`
-	Nonce    string `json:"nonce"`
+	ChallengeId *openapi_types.UUID `json:"challenge_id,omitempty"`
+	ClientId    string              `json:"client_id"`
+	Nonce       string              `json:"nonce"`
 }
 
 // GoogleLoginRequest defines model for GoogleLoginRequest.
 type GoogleLoginRequest struct {
+	ChallengeId *openapi_types.UUID `json:"challenge_id,omitempty"`
+
 	// Code One-time Google authorization code. Must be provided together with redirect_uri.
 	Code *string `json:"code,omitempty"`
 
@@ -896,7 +1197,8 @@ type GoogleLoginRequest struct {
 
 // GoogleReauthenticationRequest defines model for GoogleReauthenticationRequest.
 type GoogleReauthenticationRequest struct {
-	AuthenticationChallengeId openapi_types.UUID `json:"authentication_challenge_id"`
+	AuthenticationChallengeId openapi_types.UUID  `json:"authentication_challenge_id"`
+	ChallengeId               *openapi_types.UUID `json:"challenge_id,omitempty"`
 
 	// Code One-time Google authorization code. Must be provided together with redirect_uri.
 	Code *string `json:"code,omitempty"`
@@ -1012,13 +1314,16 @@ type MembershipWithOrganization struct {
 
 // MicrosoftLoginOptions defines model for MicrosoftLoginOptions.
 type MicrosoftLoginOptions struct {
-	Authority string `json:"authority"`
-	ClientId  string `json:"client_id"`
-	Nonce     string `json:"nonce"`
+	Authority   string              `json:"authority"`
+	ChallengeId *openapi_types.UUID `json:"challenge_id,omitempty"`
+	ClientId    string              `json:"client_id"`
+	Nonce       string              `json:"nonce"`
 }
 
 // MicrosoftLoginRequest defines model for MicrosoftLoginRequest.
 type MicrosoftLoginRequest struct {
+	ChallengeId *openapi_types.UUID `json:"challenge_id,omitempty"`
+
 	// Credential Microsoft v2 ID token returned by the popup authorization-code flow.
 	Credential      string  `json:"credential"`
 	InvitationToken *string `json:"invitation_token,omitempty"`
@@ -1027,9 +1332,10 @@ type MicrosoftLoginRequest struct {
 
 // MicrosoftReauthenticationRequest defines model for MicrosoftReauthenticationRequest.
 type MicrosoftReauthenticationRequest struct {
-	AuthenticationChallengeId openapi_types.UUID `json:"authentication_challenge_id"`
-	Credential                string             `json:"credential"`
-	Nonce                     string             `json:"nonce"`
+	AuthenticationChallengeId openapi_types.UUID  `json:"authentication_challenge_id"`
+	ChallengeId               *openapi_types.UUID `json:"challenge_id,omitempty"`
+	Credential                string              `json:"credential"`
+	Nonce                     string              `json:"nonce"`
 }
 
 // Organization defines model for Organization.
@@ -1213,6 +1519,11 @@ type TokenRefreshRequest struct {
 // TokenRefreshRequestAudience defines model for TokenRefreshRequest.Audience.
 type TokenRefreshRequestAudience string
 
+// TokenRevocationRequest defines model for TokenRevocationRequest.
+type TokenRevocationRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 // Tokens defines model for Tokens.
 type Tokens struct {
 	AccessToken  string `json:"access_token"`
@@ -1272,6 +1583,9 @@ type ProviderLinkID = openapi_types.UUID
 // SessionID defines model for SessionID.
 type SessionID = openapi_types.UUID
 
+// SessionTransport defines model for SessionTransport.
+type SessionTransport string
+
 // SessionsCursor defines model for SessionsCursor.
 type SessionsCursor = string
 
@@ -1294,6 +1608,15 @@ type GetCurrentAccountParams struct {
 	PasskeysCursor *PasskeysCursor `form:"passkeys_cursor,omitempty" json:"passkeys_cursor,omitempty"`
 	PasskeysLimit  *PasskeysLimit  `form:"passkeys_limit,omitempty" json:"passkeys_limit,omitempty"`
 }
+
+// ResendChallengeParams defines parameters for ResendChallenge.
+type ResendChallengeParams struct {
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *ResendChallengeParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
+}
+
+// ResendChallengeParamsSessionTransport defines parameters for ResendChallenge.
+type ResendChallengeParamsSessionTransport string
 
 // AcceptInvitationParams defines parameters for AcceptInvitation.
 type AcceptInvitationParams struct {
@@ -1327,34 +1650,85 @@ type PreviewInvitationParams struct {
 // LoginWithPasswordParams defines parameters for LoginWithPassword.
 type LoginWithPasswordParams struct {
 	Audience *LoginWithPasswordParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *LoginWithPasswordParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
 }
 
 // LoginWithPasswordParamsAudience defines parameters for LoginWithPassword.
 type LoginWithPasswordParamsAudience string
 
+// LoginWithPasswordParamsSessionTransport defines parameters for LoginWithPassword.
+type LoginWithPasswordParamsSessionTransport string
+
 // LoginWithAppleParams defines parameters for LoginWithApple.
 type LoginWithAppleParams struct {
 	Audience *LoginWithAppleParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *LoginWithAppleParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
 }
 
 // LoginWithAppleParamsAudience defines parameters for LoginWithApple.
 type LoginWithAppleParamsAudience string
 
+// LoginWithAppleParamsSessionTransport defines parameters for LoginWithApple.
+type LoginWithAppleParamsSessionTransport string
+
+// GetAppleLoginOptionsParams defines parameters for GetAppleLoginOptions.
+type GetAppleLoginOptionsParams struct {
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *GetAppleLoginOptionsParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
+}
+
+// GetAppleLoginOptionsParamsSessionTransport defines parameters for GetAppleLoginOptions.
+type GetAppleLoginOptionsParamsSessionTransport string
+
 // LoginWithGoogleParams defines parameters for LoginWithGoogle.
 type LoginWithGoogleParams struct {
 	Audience *LoginWithGoogleParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *LoginWithGoogleParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
 }
 
 // LoginWithGoogleParamsAudience defines parameters for LoginWithGoogle.
 type LoginWithGoogleParamsAudience string
 
+// LoginWithGoogleParamsSessionTransport defines parameters for LoginWithGoogle.
+type LoginWithGoogleParamsSessionTransport string
+
+// GetGoogleLoginOptionsParams defines parameters for GetGoogleLoginOptions.
+type GetGoogleLoginOptionsParams struct {
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *GetGoogleLoginOptionsParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
+}
+
+// GetGoogleLoginOptionsParamsSessionTransport defines parameters for GetGoogleLoginOptions.
+type GetGoogleLoginOptionsParamsSessionTransport string
+
 // LoginWithMicrosoftParams defines parameters for LoginWithMicrosoft.
 type LoginWithMicrosoftParams struct {
 	Audience *LoginWithMicrosoftParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *LoginWithMicrosoftParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
 }
 
 // LoginWithMicrosoftParamsAudience defines parameters for LoginWithMicrosoft.
 type LoginWithMicrosoftParamsAudience string
+
+// LoginWithMicrosoftParamsSessionTransport defines parameters for LoginWithMicrosoft.
+type LoginWithMicrosoftParamsSessionTransport string
+
+// GetMicrosoftLoginOptionsParams defines parameters for GetMicrosoftLoginOptions.
+type GetMicrosoftLoginOptionsParams struct {
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *GetMicrosoftLoginOptionsParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
+}
+
+// GetMicrosoftLoginOptionsParamsSessionTransport defines parameters for GetMicrosoftLoginOptions.
+type GetMicrosoftLoginOptionsParamsSessionTransport string
 
 // ListCurrentUserOrganizationsParams defines parameters for ListCurrentUserOrganizations.
 type ListCurrentUserOrganizationsParams struct {
@@ -1403,10 +1777,43 @@ type SwitchOrganizationParamsAudience string
 // FinishPasskeyAuthenticationParams defines parameters for FinishPasskeyAuthentication.
 type FinishPasskeyAuthenticationParams struct {
 	Audience *FinishPasskeyAuthenticationParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *FinishPasskeyAuthenticationParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
 }
 
 // FinishPasskeyAuthenticationParamsAudience defines parameters for FinishPasskeyAuthentication.
 type FinishPasskeyAuthenticationParamsAudience string
+
+// FinishPasskeyAuthenticationParamsSessionTransport defines parameters for FinishPasskeyAuthentication.
+type FinishPasskeyAuthenticationParamsSessionTransport string
+
+// BeginPasskeyAuthenticationParams defines parameters for BeginPasskeyAuthentication.
+type BeginPasskeyAuthenticationParams struct {
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *BeginPasskeyAuthenticationParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
+}
+
+// BeginPasskeyAuthenticationParamsSessionTransport defines parameters for BeginPasskeyAuthentication.
+type BeginPasskeyAuthenticationParamsSessionTransport string
+
+// StartPasswordResetChallengeParams defines parameters for StartPasswordResetChallenge.
+type StartPasswordResetChallengeParams struct {
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *StartPasswordResetChallengeParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
+}
+
+// StartPasswordResetChallengeParamsSessionTransport defines parameters for StartPasswordResetChallenge.
+type StartPasswordResetChallengeParamsSessionTransport string
+
+// VerifyPasswordResetChallengeParams defines parameters for VerifyPasswordResetChallenge.
+type VerifyPasswordResetChallengeParams struct {
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *VerifyPasswordResetChallengeParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
+}
+
+// VerifyPasswordResetChallengeParamsSessionTransport defines parameters for VerifyPasswordResetChallenge.
+type VerifyPasswordResetChallengeParamsSessionTransport string
 
 // CompleteAccountRecoveryLinkWithAppleParams defines parameters for CompleteAccountRecoveryLinkWithApple.
 type CompleteAccountRecoveryLinkWithAppleParams struct {
@@ -1451,26 +1858,44 @@ type RefreshSessionParamsAudience string
 // StartSignupChallengeParams defines parameters for StartSignupChallenge.
 type StartSignupChallengeParams struct {
 	Audience *StartSignupChallengeParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *StartSignupChallengeParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
 }
 
 // StartSignupChallengeParamsAudience defines parameters for StartSignupChallenge.
 type StartSignupChallengeParamsAudience string
 
+// StartSignupChallengeParamsSessionTransport defines parameters for StartSignupChallenge.
+type StartSignupChallengeParamsSessionTransport string
+
 // VerifySignupChallengeParams defines parameters for VerifySignupChallenge.
 type VerifySignupChallengeParams struct {
 	Audience *VerifySignupChallengeParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *VerifySignupChallengeParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
 }
 
 // VerifySignupChallengeParamsAudience defines parameters for VerifySignupChallenge.
 type VerifySignupChallengeParamsAudience string
 
+// VerifySignupChallengeParamsSessionTransport defines parameters for VerifySignupChallenge.
+type VerifySignupChallengeParamsSessionTransport string
+
 // SignupDirectParams defines parameters for SignupDirect.
 type SignupDirectParams struct {
 	Audience *SignupDirectParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+
+	// SessionTransport Use token for native or other non-cookie clients. Token transport returns JSON tokens without setting session cookies and does not require browser CSRF credentials.
+	SessionTransport *SignupDirectParamsSessionTransport `form:"session_transport,omitempty" json:"session_transport,omitempty"`
 }
 
 // SignupDirectParamsAudience defines parameters for SignupDirect.
 type SignupDirectParamsAudience string
+
+// SignupDirectParamsSessionTransport defines parameters for SignupDirect.
+type SignupDirectParamsSessionTransport string
 
 // ListPublicUserMembershipsParams defines parameters for ListPublicUserMemberships.
 type ListPublicUserMembershipsParams struct {
@@ -1592,6 +2017,9 @@ type SignupDirectJSONRequestBody = SignupRequest
 // RefreshTokensJSONRequestBody defines body for RefreshTokens for application/json ContentType.
 type RefreshTokensJSONRequestBody = TokenRefreshRequest
 
+// RevokeTokensJSONRequestBody defines body for RevokeTokens for application/json ContentType.
+type RevokeTokensJSONRequestBody = TokenRevocationRequest
+
 // SetCurrentUserPasswordJSONRequestBody defines body for SetCurrentUserPassword for application/json ContentType.
 type SetCurrentUserPasswordJSONRequestBody = SetPasswordRequest
 
@@ -1659,7 +2087,7 @@ type ServerInterface interface {
 	GetPublicCapabilities(w http.ResponseWriter, r *http.Request)
 	// ResendChallenge Request another challenge verification code
 	// (POST /auth/api/v1/challenges/resend)
-	ResendChallenge(w http.ResponseWriter, r *http.Request)
+	ResendChallenge(w http.ResponseWriter, r *http.Request, params ResendChallengeParams)
 	// GetCsrfToken Get a CSRF token
 	// (GET /auth/api/v1/csrf)
 	GetCsrfToken(w http.ResponseWriter, r *http.Request)
@@ -1683,19 +2111,19 @@ type ServerInterface interface {
 	LoginWithApple(w http.ResponseWriter, r *http.Request, params LoginWithAppleParams)
 	// GetAppleLoginOptions Get Apple login options
 	// (GET /auth/api/v1/oauth/apple/options)
-	GetAppleLoginOptions(w http.ResponseWriter, r *http.Request)
+	GetAppleLoginOptions(w http.ResponseWriter, r *http.Request, params GetAppleLoginOptionsParams)
 	// LoginWithGoogle Log in with Google
 	// (POST /auth/api/v1/oauth/google)
 	LoginWithGoogle(w http.ResponseWriter, r *http.Request, params LoginWithGoogleParams)
 	// GetGoogleLoginOptions Get Google login options
 	// (GET /auth/api/v1/oauth/google/options)
-	GetGoogleLoginOptions(w http.ResponseWriter, r *http.Request)
+	GetGoogleLoginOptions(w http.ResponseWriter, r *http.Request, params GetGoogleLoginOptionsParams)
 	// LoginWithMicrosoft Log in with Microsoft
 	// (POST /auth/api/v1/oauth/microsoft)
 	LoginWithMicrosoft(w http.ResponseWriter, r *http.Request, params LoginWithMicrosoftParams)
 	// GetMicrosoftLoginOptions Get Microsoft login options
 	// (GET /auth/api/v1/oauth/microsoft/options)
-	GetMicrosoftLoginOptions(w http.ResponseWriter, r *http.Request)
+	GetMicrosoftLoginOptions(w http.ResponseWriter, r *http.Request, params GetMicrosoftLoginOptionsParams)
 	// ListCurrentUserOrganizations List organizations for the authenticated user
 	// (GET /auth/api/v1/organizations)
 	ListCurrentUserOrganizations(w http.ResponseWriter, r *http.Request, params ListCurrentUserOrganizationsParams)
@@ -1737,7 +2165,7 @@ type ServerInterface interface {
 	FinishPasskeyAuthentication(w http.ResponseWriter, r *http.Request, params FinishPasskeyAuthenticationParams)
 	// BeginPasskeyAuthentication Start passkey authentication
 	// (POST /auth/api/v1/passkeys/authenticate/options)
-	BeginPasskeyAuthentication(w http.ResponseWriter, r *http.Request)
+	BeginPasskeyAuthentication(w http.ResponseWriter, r *http.Request, params BeginPasskeyAuthenticationParams)
 	// FinishPasskeyRegistration Finish passkey registration
 	// (POST /auth/api/v1/passkeys/register/finish)
 	FinishPasskeyRegistration(w http.ResponseWriter, r *http.Request)
@@ -1746,10 +2174,10 @@ type ServerInterface interface {
 	BeginPasskeyRegistration(w http.ResponseWriter, r *http.Request)
 	// StartPasswordResetChallenge Start a password reset challenge
 	// (POST /auth/api/v1/password-reset/challenges)
-	StartPasswordResetChallenge(w http.ResponseWriter, r *http.Request)
+	StartPasswordResetChallenge(w http.ResponseWriter, r *http.Request, params StartPasswordResetChallengeParams)
 	// VerifyPasswordResetChallenge Verify a password reset challenge
 	// (POST /auth/api/v1/password-reset/challenges/verify)
-	VerifyPasswordResetChallenge(w http.ResponseWriter, r *http.Request)
+	VerifyPasswordResetChallenge(w http.ResponseWriter, r *http.Request, params VerifyPasswordResetChallengeParams)
 	// StartGoogleAccountRecoveryLink Start linking Google to an existing account with the same email
 	// (POST /auth/api/v1/provider-links/recovery/google)
 	StartGoogleAccountRecoveryLink(w http.ResponseWriter, r *http.Request)
@@ -1804,6 +2232,9 @@ type ServerInterface interface {
 	// RefreshTokens Refresh tokens supplied in JSON
 	// (POST /auth/api/v1/tokens/refresh)
 	RefreshTokens(w http.ResponseWriter, r *http.Request)
+	// RevokeTokens Revoke a token-backed session
+	// (POST /auth/api/v1/tokens/revoke)
+	RevokeTokens(w http.ResponseWriter, r *http.Request)
 	// GetCurrentUser Get the authenticated user
 	// (GET /auth/api/v1/user)
 	GetCurrentUser(w http.ResponseWriter, r *http.Request)
@@ -1929,7 +2360,7 @@ func (_ Unimplemented) GetPublicCapabilities(w http.ResponseWriter, r *http.Requ
 
 // ResendChallenge Request another challenge verification code
 // (POST /auth/api/v1/challenges/resend)
-func (_ Unimplemented) ResendChallenge(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) ResendChallenge(w http.ResponseWriter, r *http.Request, params ResendChallengeParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1977,7 +2408,7 @@ func (_ Unimplemented) LoginWithApple(w http.ResponseWriter, r *http.Request, pa
 
 // GetAppleLoginOptions Get Apple login options
 // (GET /auth/api/v1/oauth/apple/options)
-func (_ Unimplemented) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request, params GetAppleLoginOptionsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1989,7 +2420,7 @@ func (_ Unimplemented) LoginWithGoogle(w http.ResponseWriter, r *http.Request, p
 
 // GetGoogleLoginOptions Get Google login options
 // (GET /auth/api/v1/oauth/google/options)
-func (_ Unimplemented) GetGoogleLoginOptions(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) GetGoogleLoginOptions(w http.ResponseWriter, r *http.Request, params GetGoogleLoginOptionsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2001,7 +2432,7 @@ func (_ Unimplemented) LoginWithMicrosoft(w http.ResponseWriter, r *http.Request
 
 // GetMicrosoftLoginOptions Get Microsoft login options
 // (GET /auth/api/v1/oauth/microsoft/options)
-func (_ Unimplemented) GetMicrosoftLoginOptions(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) GetMicrosoftLoginOptions(w http.ResponseWriter, r *http.Request, params GetMicrosoftLoginOptionsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2085,7 +2516,7 @@ func (_ Unimplemented) FinishPasskeyAuthentication(w http.ResponseWriter, r *htt
 
 // BeginPasskeyAuthentication Start passkey authentication
 // (POST /auth/api/v1/passkeys/authenticate/options)
-func (_ Unimplemented) BeginPasskeyAuthentication(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) BeginPasskeyAuthentication(w http.ResponseWriter, r *http.Request, params BeginPasskeyAuthenticationParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2103,13 +2534,13 @@ func (_ Unimplemented) BeginPasskeyRegistration(w http.ResponseWriter, r *http.R
 
 // StartPasswordResetChallenge Start a password reset challenge
 // (POST /auth/api/v1/password-reset/challenges)
-func (_ Unimplemented) StartPasswordResetChallenge(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) StartPasswordResetChallenge(w http.ResponseWriter, r *http.Request, params StartPasswordResetChallengeParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // VerifyPasswordResetChallenge Verify a password reset challenge
 // (POST /auth/api/v1/password-reset/challenges/verify)
-func (_ Unimplemented) VerifyPasswordResetChallenge(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) VerifyPasswordResetChallenge(w http.ResponseWriter, r *http.Request, params VerifyPasswordResetChallengeParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2218,6 +2649,12 @@ func (_ Unimplemented) SignupDirect(w http.ResponseWriter, r *http.Request, para
 // RefreshTokens Refresh tokens supplied in JSON
 // (POST /auth/api/v1/tokens/refresh)
 func (_ Unimplemented) RefreshTokens(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RevokeTokens Revoke a token-backed session
+// (POST /auth/api/v1/tokens/revoke)
+func (_ Unimplemented) RevokeTokens(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2589,8 +3026,27 @@ func (siw *ServerInterfaceWrapper) GetPublicCapabilities(w http.ResponseWriter, 
 // ResendChallenge operation middleware
 func (siw *ServerInterfaceWrapper) ResendChallenge(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ResendChallengeParams
+
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ResendChallenge(w, r)
+		siw.Handler.ResendChallenge(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2768,6 +3224,19 @@ func (siw *ServerInterfaceWrapper) LoginWithPassword(w http.ResponseWriter, r *h
 		return
 	}
 
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.LoginWithPassword(w, r, params)
 	}))
@@ -2801,6 +3270,19 @@ func (siw *ServerInterfaceWrapper) LoginWithApple(w http.ResponseWriter, r *http
 		return
 	}
 
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.LoginWithApple(w, r, params)
 	}))
@@ -2815,8 +3297,27 @@ func (siw *ServerInterfaceWrapper) LoginWithApple(w http.ResponseWriter, r *http
 // GetAppleLoginOptions operation middleware
 func (siw *ServerInterfaceWrapper) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAppleLoginOptionsParams
+
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAppleLoginOptions(w, r)
+		siw.Handler.GetAppleLoginOptions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2848,6 +3349,19 @@ func (siw *ServerInterfaceWrapper) LoginWithGoogle(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.LoginWithGoogle(w, r, params)
 	}))
@@ -2862,8 +3376,27 @@ func (siw *ServerInterfaceWrapper) LoginWithGoogle(w http.ResponseWriter, r *htt
 // GetGoogleLoginOptions operation middleware
 func (siw *ServerInterfaceWrapper) GetGoogleLoginOptions(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetGoogleLoginOptionsParams
+
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetGoogleLoginOptions(w, r)
+		siw.Handler.GetGoogleLoginOptions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2895,6 +3428,19 @@ func (siw *ServerInterfaceWrapper) LoginWithMicrosoft(w http.ResponseWriter, r *
 		return
 	}
 
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.LoginWithMicrosoft(w, r, params)
 	}))
@@ -2909,8 +3455,27 @@ func (siw *ServerInterfaceWrapper) LoginWithMicrosoft(w http.ResponseWriter, r *
 // GetMicrosoftLoginOptions operation middleware
 func (siw *ServerInterfaceWrapper) GetMicrosoftLoginOptions(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMicrosoftLoginOptionsParams
+
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetMicrosoftLoginOptions(w, r)
+		siw.Handler.GetMicrosoftLoginOptions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3392,6 +3957,19 @@ func (siw *ServerInterfaceWrapper) FinishPasskeyAuthentication(w http.ResponseWr
 		return
 	}
 
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.FinishPasskeyAuthentication(w, r, params)
 	}))
@@ -3406,8 +3984,27 @@ func (siw *ServerInterfaceWrapper) FinishPasskeyAuthentication(w http.ResponseWr
 // BeginPasskeyAuthentication operation middleware
 func (siw *ServerInterfaceWrapper) BeginPasskeyAuthentication(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params BeginPasskeyAuthenticationParams
+
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.BeginPasskeyAuthentication(w, r)
+		siw.Handler.BeginPasskeyAuthentication(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3448,8 +4045,27 @@ func (siw *ServerInterfaceWrapper) BeginPasskeyRegistration(w http.ResponseWrite
 // StartPasswordResetChallenge operation middleware
 func (siw *ServerInterfaceWrapper) StartPasswordResetChallenge(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartPasswordResetChallengeParams
+
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.StartPasswordResetChallenge(w, r)
+		siw.Handler.StartPasswordResetChallenge(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3462,8 +4078,27 @@ func (siw *ServerInterfaceWrapper) StartPasswordResetChallenge(w http.ResponseWr
 // VerifyPasswordResetChallenge operation middleware
 func (siw *ServerInterfaceWrapper) VerifyPasswordResetChallenge(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params VerifyPasswordResetChallengeParams
+
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.VerifyPasswordResetChallenge(w, r)
+		siw.Handler.VerifyPasswordResetChallenge(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3822,6 +4457,19 @@ func (siw *ServerInterfaceWrapper) StartSignupChallenge(w http.ResponseWriter, r
 		return
 	}
 
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StartSignupChallenge(w, r, params)
 	}))
@@ -3851,6 +4499,19 @@ func (siw *ServerInterfaceWrapper) VerifySignupChallenge(w http.ResponseWriter, 
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "audience"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "audience", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
 		}
 		return
 	}
@@ -3888,6 +4549,19 @@ func (siw *ServerInterfaceWrapper) SignupDirect(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// ------------- Optional query parameter "session_transport" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "session_transport", r.URL.Query(), &params.SessionTransport, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "session_transport"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_transport", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SignupDirect(w, r, params)
 	}))
@@ -3904,6 +4578,20 @@ func (siw *ServerInterfaceWrapper) RefreshTokens(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RefreshTokens(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeTokens operation middleware
+func (siw *ServerInterfaceWrapper) RevokeTokens(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeTokens(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4442,6 +5130,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/api/v1/tokens/refresh", wrapper.RefreshTokens)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/api/v1/tokens/revoke", wrapper.RevokeTokens)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/auth/api/v1/user", wrapper.GetCurrentUser)
@@ -5809,7 +6500,8 @@ func (response GetPublicCapabilities500JSONResponse) VisitGetPublicCapabilitiesR
 }
 
 type ResendChallengeRequestObject struct {
-	Body *ResendChallengeJSONRequestBody
+	Params ResendChallengeParams
+	Body   *ResendChallengeJSONRequestBody
 }
 
 type ResendChallengeResponseObject interface {
@@ -6529,6 +7221,7 @@ func (response LoginWithApple500JSONResponse) VisitLoginWithAppleResponse(w http
 }
 
 type GetAppleLoginOptionsRequestObject struct {
+	Params GetAppleLoginOptionsParams
 }
 
 type GetAppleLoginOptionsResponseObject interface {
@@ -6685,6 +7378,7 @@ func (response LoginWithGoogle500JSONResponse) VisitLoginWithGoogleResponse(w ht
 }
 
 type GetGoogleLoginOptionsRequestObject struct {
+	Params GetGoogleLoginOptionsParams
 }
 
 type GetGoogleLoginOptionsResponseObject interface {
@@ -6841,6 +7535,7 @@ func (response LoginWithMicrosoft500JSONResponse) VisitLoginWithMicrosoftRespons
 }
 
 type GetMicrosoftLoginOptionsRequestObject struct {
+	Params GetMicrosoftLoginOptionsParams
 }
 
 type GetMicrosoftLoginOptionsResponseObject interface {
@@ -8067,6 +8762,7 @@ func (response FinishPasskeyAuthentication500JSONResponse) VisitFinishPasskeyAut
 }
 
 type BeginPasskeyAuthenticationRequestObject struct {
+	Params BeginPasskeyAuthenticationParams
 }
 
 type BeginPasskeyAuthenticationResponseObject interface {
@@ -8321,7 +9017,8 @@ func (response BeginPasskeyRegistration500JSONResponse) VisitBeginPasskeyRegistr
 }
 
 type StartPasswordResetChallengeRequestObject struct {
-	Body *StartPasswordResetChallengeJSONRequestBody
+	Params StartPasswordResetChallengeParams
+	Body   *StartPasswordResetChallengeJSONRequestBody
 }
 
 type StartPasswordResetChallengeResponseObject interface {
@@ -8399,7 +9096,8 @@ func (response StartPasswordResetChallenge500JSONResponse) VisitStartPasswordRes
 }
 
 type VerifyPasswordResetChallengeRequestObject struct {
-	Body *VerifyPasswordResetChallengeJSONRequestBody
+	Params VerifyPasswordResetChallengeParams
+	Body   *VerifyPasswordResetChallengeJSONRequestBody
 }
 
 type VerifyPasswordResetChallengeResponseObject interface {
@@ -10073,6 +10771,50 @@ func (response RefreshTokens500JSONResponse) VisitRefreshTokensResponse(w http.R
 	return err
 }
 
+type RevokeTokensRequestObject struct {
+	Body *RevokeTokensJSONRequestBody
+}
+
+type RevokeTokensResponseObject interface {
+	VisitRevokeTokensResponse(w http.ResponseWriter) error
+}
+
+type RevokeTokens204Response struct {
+}
+
+func (response RevokeTokens204Response) VisitRevokeTokensResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeTokens400JSONResponse struct{ ErrorJSONResponse }
+
+func (response RevokeTokens400JSONResponse) VisitRevokeTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeTokens500JSONResponse ErrorResponse
+
+func (response RevokeTokens500JSONResponse) VisitRevokeTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetCurrentUserRequestObject struct {
 }
 
@@ -11310,6 +12052,9 @@ type StrictServerInterface interface {
 	// RefreshTokens Refresh tokens supplied in JSON
 	// (POST /auth/api/v1/tokens/refresh)
 	RefreshTokens(ctx context.Context, request RefreshTokensRequestObject) (RefreshTokensResponseObject, error)
+	// RevokeTokens Revoke a token-backed session
+	// (POST /auth/api/v1/tokens/revoke)
+	RevokeTokens(ctx context.Context, request RevokeTokensRequestObject) (RevokeTokensResponseObject, error)
 	// GetCurrentUser Get the authenticated user
 	// (GET /auth/api/v1/user)
 	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
@@ -11785,8 +12530,10 @@ func (sh *strictHandler) GetPublicCapabilities(w http.ResponseWriter, r *http.Re
 }
 
 // ResendChallenge operation middleware
-func (sh *strictHandler) ResendChallenge(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ResendChallenge(w http.ResponseWriter, r *http.Request, params ResendChallengeParams) {
 	var request ResendChallengeRequestObject
+
+	request.Params = params
 
 	var body ResendChallengeJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -12031,8 +12778,10 @@ func (sh *strictHandler) LoginWithApple(w http.ResponseWriter, r *http.Request, 
 }
 
 // GetAppleLoginOptions operation middleware
-func (sh *strictHandler) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) GetAppleLoginOptions(w http.ResponseWriter, r *http.Request, params GetAppleLoginOptionsParams) {
 	var request GetAppleLoginOptionsRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetAppleLoginOptions(ctx, request.(GetAppleLoginOptionsRequestObject))
@@ -12088,8 +12837,10 @@ func (sh *strictHandler) LoginWithGoogle(w http.ResponseWriter, r *http.Request,
 }
 
 // GetGoogleLoginOptions operation middleware
-func (sh *strictHandler) GetGoogleLoginOptions(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) GetGoogleLoginOptions(w http.ResponseWriter, r *http.Request, params GetGoogleLoginOptionsParams) {
 	var request GetGoogleLoginOptionsRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetGoogleLoginOptions(ctx, request.(GetGoogleLoginOptionsRequestObject))
@@ -12145,8 +12896,10 @@ func (sh *strictHandler) LoginWithMicrosoft(w http.ResponseWriter, r *http.Reque
 }
 
 // GetMicrosoftLoginOptions operation middleware
-func (sh *strictHandler) GetMicrosoftLoginOptions(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) GetMicrosoftLoginOptions(w http.ResponseWriter, r *http.Request, params GetMicrosoftLoginOptionsParams) {
 	var request GetMicrosoftLoginOptionsRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetMicrosoftLoginOptions(ctx, request.(GetMicrosoftLoginOptionsRequestObject))
@@ -12533,8 +13286,10 @@ func (sh *strictHandler) FinishPasskeyAuthentication(w http.ResponseWriter, r *h
 }
 
 // BeginPasskeyAuthentication operation middleware
-func (sh *strictHandler) BeginPasskeyAuthentication(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) BeginPasskeyAuthentication(w http.ResponseWriter, r *http.Request, params BeginPasskeyAuthenticationParams) {
 	var request BeginPasskeyAuthenticationRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.BeginPasskeyAuthentication(ctx, request.(BeginPasskeyAuthenticationRequestObject))
@@ -12612,8 +13367,10 @@ func (sh *strictHandler) BeginPasskeyRegistration(w http.ResponseWriter, r *http
 }
 
 // StartPasswordResetChallenge operation middleware
-func (sh *strictHandler) StartPasswordResetChallenge(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) StartPasswordResetChallenge(w http.ResponseWriter, r *http.Request, params StartPasswordResetChallengeParams) {
 	var request StartPasswordResetChallengeRequestObject
+
+	request.Params = params
 
 	var body StartPasswordResetChallengeJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -12643,8 +13400,10 @@ func (sh *strictHandler) StartPasswordResetChallenge(w http.ResponseWriter, r *h
 }
 
 // VerifyPasswordResetChallenge operation middleware
-func (sh *strictHandler) VerifyPasswordResetChallenge(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) VerifyPasswordResetChallenge(w http.ResponseWriter, r *http.Request, params VerifyPasswordResetChallengeParams) {
 	var request VerifyPasswordResetChallengeRequestObject
+
+	request.Params = params
 
 	var body VerifyPasswordResetChallengeJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -13230,6 +13989,37 @@ func (sh *strictHandler) RefreshTokens(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// RevokeTokens operation middleware
+func (sh *strictHandler) RevokeTokens(w http.ResponseWriter, r *http.Request) {
+	var request RevokeTokensRequestObject
+
+	var body RevokeTokensJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeTokens(ctx, request.(RevokeTokensRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeTokens")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeTokensResponseObject); ok {
+		if err := validResponse.VisitRevokeTokensResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetCurrentUser operation middleware
 func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	var request GetCurrentUserRequestObject
@@ -13568,165 +14358,170 @@ func (sh *strictHandler) DeleteInternalUser(w http.ResponseWriter, r *http.Reque
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"fyjnQjkP8nP88eXH/x8A",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -11,10 +11,13 @@ import (
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
+	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/microsoft"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/ratelimiter"
+	"github.com/authara-org/authara/internal/testutil"
 )
 
 type fakeMicrosoftVerifier struct {
@@ -124,6 +127,98 @@ func TestMicrosoftLoginRejectsNonceMismatchBeforeVerification(t *testing.T) {
 	if len(securityEvents.login) != 1 || securityEvents.login[0].AuthenticationMethod != domain.AuthenticationMethodMicrosoft {
 		t.Fatalf("unexpected denial event: %+v", securityEvents.login)
 	}
+}
+
+func TestMicrosoftLinkAndReauthenticationAcceptTokenTransportChallenges(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email: "microsoft-native-link@example.com", Username: "microsoft-native-link",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		passwordHash := "password-hash"
+		if _, err := tdb.Store.CreateAuthProvider(ctx, domain.AuthProvider{
+			UserID: user.ID, Provider: domain.ProviderPassword, PasswordHash: &passwordHash,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		organizationService := organization.New(organization.Config{
+			Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeSingle,
+		})
+		organization, _, err := tdb.Store.EnsureDefaultOrganizationForUser(ctx, user.ID, user.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		userSession, err := tdb.Store.CreateSession(ctx, domain.Session{
+			UserID: user.ID, ActiveOrganizationID: organization.ID, ExpiresAt: time.Now().Add(time.Hour),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		providers := microsoftTestProviders()
+		h := &APIHandler{
+			Auth: auth.New(auth.Config{
+				Store: tdb.Store, Tx: tdb.Tx, OAuthProviders: providers, Organizations: organizationService,
+			}),
+			Session: newAPIHandlerTestSessionService(t, tdb),
+			Microsoft: fakeMicrosoftVerifier{identity: &microsoft.Identity{
+				OAuthID: "microsoft-native-link-id", Email: user.Email, EmailVerified: true,
+			}},
+			OAuthProviders:  providers,
+			OAuthChallenges: oauth.NewChallengeService(tdb.Store, tdb.Tx),
+		}
+		challenge, err := h.OAuthChallenges.Create(ctx, domain.ProviderMicrosoft, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		request := httptest.NewRequest(http.MethodPost, "/auth/api/v1/account/auth-methods/microsoft", nil)
+		requestCtx := httpctx.WithSessionID(httpctx.WithUserID(ctx, user.ID), userSession.ID)
+		responseObject, err := h.LinkCurrentUserMicrosoft(contractCtx(requestCtx, request), contract.LinkCurrentUserMicrosoftRequestObject{
+			Body: &contract.MicrosoftLoginRequest{
+				ChallengeId: &challenge.ID,
+				Credential:  "id-token",
+				Nonce:       challenge.Nonce,
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder := httptest.NewRecorder()
+		writeContractResponse(t, recorder, responseObject)
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("expected status %d, got %d body=%s", http.StatusNoContent, recorder.Code, recorder.Body.String())
+		}
+
+		authenticationChallenge, err := h.Session.StartAuthenticationChallenge(ctx, user.ID, userSession.ID, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		challenge, err = h.OAuthChallenges.Create(ctx, domain.ProviderMicrosoft, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		request = httptest.NewRequest(http.MethodPost, "/auth/api/v1/reauthenticate/microsoft", nil)
+		reauthenticationResponse, err := h.ReauthenticateWithMicrosoft(contractCtx(requestCtx, request), contract.ReauthenticateWithMicrosoftRequestObject{
+			Body: &contract.MicrosoftReauthenticationRequest{
+				AuthenticationChallengeId: authenticationChallenge.ID,
+				ChallengeId:               &challenge.ID,
+				Credential:                "id-token",
+				Nonce:                     challenge.Nonce,
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder = httptest.NewRecorder()
+		writeContractResponse(t, recorder, reauthenticationResponse)
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("expected reauthentication status %d, got %d body=%s", http.StatusNoContent, recorder.Code, recorder.Body.String())
+		}
+	})
 }
 
 func microsoftTestProviders() oauth.OAuthProviders {
