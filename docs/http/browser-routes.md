@@ -9,9 +9,10 @@ All browser routes are served under the `/auth` base path.
 Example:
 
 ```
-/auth/login
-/auth/signup
-/auth/logout
+GET  /auth/login
+GET  /auth/signup
+GET  /auth/account
+POST /auth/sessions/logout
 ```
 
 Applications typically redirect users to these routes when authentication is required.
@@ -28,7 +29,8 @@ Displays the login page.
 
 The login page allows users to authenticate using:
 
-- email and password
+- email and password, or username and password when enabled
+- a registered passkey
 - configured OAuth providers (if enabled)
 
 ### Query Parameters
@@ -45,11 +47,9 @@ Example:
 
 If the `return_to` parameter is provided, Authara redirects the user to that path after successful login.
 
-If the parameter is not provided, Authara redirects to:
-
-```
-/
-```
+If the parameter is not provided, Authara redirects to
+`AUTHARA_DEFAULT_RETURN_TO`, which defaults to `/`. An operator may change the
+default at runtime when the environment variable is absent.
 
 ### Security
 
@@ -90,7 +90,7 @@ The default is `/`.
 # Logout
 
 ```
-POST /auth/logout
+POST /auth/sessions/logout
 ```
 
 Logs out the current user session.
@@ -118,15 +118,12 @@ See the [CSRF documentation](../api/cookies.md) for details.
 ### Example
 
 ```
-POST /auth/logout
+POST /auth/sessions/logout
 X-CSRF-Token: <csrf-token>
 ```
 
-After logout, Authara clears the authentication cookies and redirects the user to:
-
-```
-/
-```
+After logout, Authara clears the authentication cookies and redirects the user
+to the effective `AUTHARA_DEFAULT_RETURN_TO` path.
 
 ---
 
@@ -139,7 +136,6 @@ Example providers:
 - Google
 - Apple
 - Microsoft
-- GitHub (future)
 
 Provider identity validation and account selection are handled by Authara. The
 hosted UI uses each provider's official browser SDK to obtain a credential or

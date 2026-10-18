@@ -12,37 +12,38 @@ Authara provides this information through the authenticated session.
 
 ---
 
-# Using the SDK
+# Reading authentication facts with the Go SDK
 
-The recommended way to retrieve the authenticated user is through the Authara SDK.
-
-Example using `authara-go`:
+The Go SDK middleware validates the access token and adds stable authentication
+facts to the request context:
 
 ```go
-user, err := authara.GetUser(r)
-
-if err != nil {
-    // user is not authenticated
-}
+r.Use(sdk.RequireAuth)
 ```
 
-If authentication succeeds, the SDK returns the authenticated user.
-
-Example user object:
-
-```
-{
-  id
-  email
-  username
-  roles
-  organization
-  disabled
-  created_at
-}
+```go
+userID, ok := authara.UserIDFromContext(r.Context())
+roles, _ := authara.RolesFromContext(r.Context())
+organizationID, _ := authara.OrganizationIDFromContext(r.Context())
+organizationRole, _ := authara.OrganizationRoleFromContext(r.Context())
 ```
 
----
+Use these context values for identity facts needed on a hot request path. The
+SDK deliberately does not turn them into application authorization policy.
+
+When the handler needs the current profile rather than token facts, call the
+generated client and forward the incoming request:
+
+```go
+client := authara.NewClient("http://authara:8080")
+user, err := client.CallGetCurrentUser(r.Context(), r)
+```
+
+The browser SDK exposes the same endpoint through its generated client:
+
+```ts
+const user = await authara.getCurrentUser();
+```
 
 # Using the HTTP API
 
@@ -59,6 +60,13 @@ GET /auth/api/v1/user
 Cookie: authara_access=<token>
 ```
 
+Native clients can use a bearer token instead:
+
+```http
+GET /auth/api/v1/user
+Authorization: Bearer <access-token>
+```
+
 ---
 
 # Successful response
@@ -73,6 +81,8 @@ Example response:
 {
   "id": "a8f7c1f5-5d2b-4a3a-91c5-1c87b6e19c41",
   "email": "user@example.com",
+  "email_verified": true,
+  "email_verified_at": "2026-01-01T11:30:00Z",
   "username": "user",
   "roles": [],
   "organization": {

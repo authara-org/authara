@@ -117,8 +117,8 @@ existing session, refresh-token, or Redis revocation behavior.
 
 ## Migration from shared HS256 keys
 
-This release removes HS256 access-token signing and the
-`AUTHARA_JWT_KEYS` setting. Replace it with `AUTHARA_JWT_PRIVATE_KEYS`, and
+Deployments upgrading from an HS256-based Core version must replace the removed
+`AUTHARA_JWT_KEYS` setting with `AUTHARA_JWT_PRIVATE_KEYS`, and
 configure relying services with Authara's base URL or JWKS URL instead of a
 shared secret.
 
@@ -126,5 +126,5 @@ If Core and relying services are deployed independently, release the
 JWKS-capable SDK first, update each service, and then deploy the EdDSA-signing
 Core version. There is intentionally no dual-algorithm period: accepting both
 HS256 and EdDSA would preserve the secret-sharing design and widen the
-algorithm-confusion surface. Because no production consumers exist yet, the
-cleanest rollout is a coordinated breaking deployment.
+algorithm-confusion surface. Use a coordinated deployment after every relying
+service can validate EdDSA tokens through JWKS.

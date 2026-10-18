@@ -46,12 +46,14 @@ POSTGRESQL_HOST
 POSTGRESQL_DATABASE
 POSTGRESQL_USERNAME
 POSTGRESQL_PASSWORD
+POSTGRESQL_TIMEZONE
+POSTGRESQL_LOG_SQL
 POSTGRESQL_SSL_MODE
 POSTGRESQL_SSL_ROOT_CERT
 ```
 
 Core and the migrations image use the same TLS values. See
-`configuration/database-connection.md`.
+[Database Connection](database-connection.md).
 
 ---
 
@@ -59,7 +61,7 @@ Core and the migrations image use the same TLS values. See
 
 Configures the optional cache backend.
 
-→ See: `configuration/cache.md`
+See [Cache](cache.md).
 
 Examples:
 

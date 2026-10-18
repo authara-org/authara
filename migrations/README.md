@@ -2,7 +2,7 @@
 
 This directory contains the **database schema migrations required by Authara**.
 
-Authara **does not manage database schema automatically**.  
+Authara **does not manage database schema automatically**.
 Migrations must be applied **explicitly** before running the Authara server.
 
 ---
@@ -16,7 +16,7 @@ Migrations must be applied **explicitly** before running the Authara server.
 
 This design is intentional and ensures:
 - explicit infrastructure changes
-- safe upgrades and rollbacks
+- controlled upgrades and explicit rollback decisions
 - no hidden side effects at runtime
 
 ---
@@ -40,11 +40,11 @@ The migration image:
 You must provide database connection details via environment variables, for example:
 
 ```env
-POSTGRESQL_HOST=localhost  
-POSTGRESQL_PORT=5432  
-POSTGRESQL_DATABASE=authara  
-POSTGRESQL_USERNAME=authara  
-POSTGRESQL_PASSWORD=secret  
+POSTGRESQL_HOST=localhost
+POSTGRESQL_PORT=5432
+POSTGRESQL_DATABASE=authara
+POSTGRESQL_USERNAME=authara
+POSTGRESQL_PASSWORD=secret
 POSTGRESQL_SSL_MODE=disable
 ```
 
@@ -61,10 +61,12 @@ publicly trusted CA.
 
 ### Apply migrations
 
+```bash
 docker run --rm \
   --env-file .env \
   ghcr.io/authara-org/authara-migrations:<version> \
-  up -env=default -config=dbconfig.yaml
+  up -env=default -config=/migrations/dbconfig.yaml
+```
 
 This command:
 - connects to the database
@@ -75,21 +77,25 @@ This command:
 
 ## Checking Migration Status
 
+```bash
 docker run --rm \
   --env-file .env \
   ghcr.io/authara-org/authara-migrations:<version> \
-  status -env=default -config=dbconfig.yaml
+  status -env=default -config=/migrations/dbconfig.yaml
+```
 
 ---
 
 ## Rolling Back (Advanced)
 
+```bash
 docker run --rm \
   --env-file .env \
   ghcr.io/authara-org/authara-migrations:<version> \
-  down -env=default -config=dbconfig.yaml
+  down -env=default -config=/migrations/dbconfig.yaml
+```
 
-⚠️ **Warning:** Rolling back migrations may result in data loss.  
+⚠️ **Warning:** Rolling back migrations may result in data loss.
 Only perform rollbacks if you fully understand the impact.
 
 ---
@@ -100,9 +106,9 @@ Authara **validates schema compatibility on startup**.
 
 If the database schema version does not match the version required by the Authara server, startup will fail with an error similar to:
 
-database schema version mismatch  
-current: 002_users  
-required: 003_sessions  
+```text
+database schema version mismatch: current=38 required=39
+```
 
 In this case, apply the correct migrations before starting Authara.
 

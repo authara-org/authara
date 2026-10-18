@@ -58,7 +58,7 @@ Example:
 ```bash
 docker run --rm \
   --env-file .env \
-  ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20} \
+  ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.4.0} \
   up -env=default -config=/migrations/dbconfig.yaml
 ```
 
@@ -215,3 +215,19 @@ before deploying the matching Core binary. Because migration 035 is
 non-transactional, it drops its own known index names before rebuilding them;
 this makes an interrupted run safe to retry even if PostgreSQL left an invalid
 concurrent index behind.
+
+## Email verification and provider upgrades
+
+Schema version 36 adds persistent email-verification state and the
+session-bound transactions used when verification becomes mandatory for an
+existing account. Schema versions 37 and 38 extend authentication provenance
+for Apple and Microsoft; version 37 also adds encrypted Apple refresh-token
+storage and its durable revocation queue.
+
+## Native OAuth challenge upgrade
+
+Schema version 39 adds short-lived, provider-bound OAuth authentication
+challenges. They let native Google, Apple, and Microsoft clients validate state
+and nonce without browser OAuth cookies and are cleaned up after expiry. Apply
+migration 039 before deploying Core versions that expose
+`session_transport=token` for provider authentication.

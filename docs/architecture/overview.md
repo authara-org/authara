@@ -58,7 +58,9 @@ Applications remain responsible for:
 - business logic
 - application data
 
-Authara intentionally **does not implement authorization policies**.
+Authara enforces access to its own accounts, sessions, administrative
+workspaces, and organization records. It intentionally does **not** implement
+your application's product authorization policies.
 
 ---
 
@@ -89,12 +91,14 @@ This separation keeps authentication logic explicit and prevents hidden database
 
 ## Session Model
 
-Authara uses a **two-token session model**.
+Authara uses a **two-token session model**. Browser sessions use cookies;
+native clients can request a JSON token pair and authenticate API requests with
+a bearer access token.
 
 ### Access token
 
 - short-lived JWT
-- stored in an HTTP-only cookie
+- stored in an HTTP-only cookie for browser sessions
 - used for request authentication
 
 ### Refresh token

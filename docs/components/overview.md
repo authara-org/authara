@@ -18,6 +18,9 @@ Authara Core provides:
 - session management
 - refresh token rotation
 - OAuth login
+- passkey login and account management
+- native token sessions for mobile clients
+- organization membership and invitation flows
 - authentication APIs
 
 Authara Core is implemented as a Go HTTP server backed by PostgreSQL.
@@ -50,13 +53,16 @@ https://github.com/authara-org/authara-gateway
 # SDKs
 
 Authara provides optional SDKs that simplify integration with applications.
-
-SDKs are intentionally thin and wrap the public HTTP API.
+They remain explicit about authentication and authorization policy while
+handling the transport details appropriate to each platform.
 
 Available SDKs include:
 
 - **authara-go** — Go integration helpers
 - **@authara/browser** — browser helpers for CSRF, refresh, and logout
+- **@authara/react** — Google, Apple, and Microsoft buttons for browser apps
+- **@authara/react-native** — native token lifecycle, React hooks, secure
+  storage adapters, and provider sign-in buttons
 
 Applications may always call the HTTP API directly if preferred.
 

@@ -31,9 +31,10 @@ Browser routes provide the built-in authentication interface used by end users.
 Examples include:
 
 ```
-/auth/login
-/auth/signup
-/auth/logout
+GET  /auth/login
+GET  /auth/signup
+GET  /auth/account
+POST /auth/sessions/logout
 ```
 
 These endpoints return **HTML pages** and are intended to be accessed directly by a web browser.
@@ -62,7 +63,7 @@ For detailed behavior of browser routes, see:
 
 # JSON API
 
-Authara also exposes a minimal JSON API for programmatic access.
+Authara also exposes a versioned JSON API for programmatic access.
 
 All API endpoints are available under:
 
@@ -85,6 +86,11 @@ POST /auth/api/v1/sessions/refresh
 POST /auth/api/v1/tokens/refresh
 ```
 
+Browser clients normally use cookie sessions. Native and other non-browser
+clients can request `session_transport=token` on authentication operations,
+refresh through `/auth/api/v1/tokens/refresh`, and authenticate protected API
+calls with `Authorization: Bearer <access-token>`.
+
 See the API documentation for details:
 
 - [API Overview](../api/overview.md)
@@ -94,7 +100,7 @@ See the API documentation for details:
 
 # Authentication
 
-Authenticated API requests rely on **session cookies** issued by Authara.
+Browser API requests normally rely on **session cookies** issued by Authara.
 
 The most important cookies include:
 
@@ -106,13 +112,17 @@ For full details, see:
 
 - [Cookies](../api/cookies.md)
 
+Token-transport clients keep the returned access and refresh tokens in their
+platform's secure storage instead. Bearer-authenticated mutations do not
+require browser CSRF proof; cookie-authenticated mutations still do.
+
 ---
 
 # CSRF Protection
 
 State-changing requests require CSRF protection.
 
-Clients must include the CSRF token in the request header:
+Cookie-authenticated clients must include the CSRF token in the request header:
 
 ```
 X-CSRF-Token: <csrf-token>
@@ -175,5 +185,5 @@ Authara's HTTP interface consists of two clearly separated layers:
 Applications typically interact with Authara by:
 
 - redirecting users to browser routes such as `/auth/login`
-- consuming authenticated session state through cookies
+- consuming authenticated session state through cookies or bearer tokens
 - optionally calling the JSON API when needed

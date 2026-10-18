@@ -55,8 +55,8 @@ Authara requires a PostgreSQL database with the correct schema.
 Run the migrations container:
 
 ```bash
-export AUTHARA_CORE_VERSION=v0.21.1
-export AUTHARA_MIGRATIONS_VERSION=v0.1.20
+export AUTHARA_CORE_VERSION=v0.26.1
+export AUTHARA_MIGRATIONS_VERSION=v0.4.0
 
 docker run --rm \
   --env-file .env \
@@ -146,7 +146,7 @@ services:
     image: nginx:alpine
 
   authara-migrations:
-    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
+    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.4.0}
     env_file:
       - .env
     environment:
@@ -157,7 +157,7 @@ services:
         condition: service_healthy
 
   authara:
-    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
+    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.26.1}
     env_file:
       - .env
     environment:
@@ -203,6 +203,6 @@ http://localhost:3000/auth/login
 
 ## Next steps
 
-- Configuration overview
-- Architecture overview
-- Deployment guide
+- [Configuration overview](configuration/overview.md)
+- [Architecture overview](architecture/overview.md)
+- [Production deployment](deployment/production.md)

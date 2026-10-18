@@ -14,10 +14,12 @@ Authara uses three cookies:
 |------|------|
 | `authara_access` | Short-lived access token used for request authentication |
 | `authara_refresh` | Refresh token used to obtain new access tokens |
-| `authara_csrf` | CSRF protection token for browser POST requests |
+| `authara_csrf` | CSRF protection token for state-changing browser requests |
 
-All authentication state is stored in cookies.  
-Applications do not need to store tokens manually.
+Browser authentication state is stored in cookies, so browser applications do
+not need to store tokens manually. Native clients can instead request token
+transport and keep the returned token pair in platform secure storage; see the
+[API overview](overview.md#native-token-transport).
 
 ---
 
@@ -93,7 +95,11 @@ Properties:
 
 # CSRF Protection
 
-State-changing requests (for example login, logout, or refresh) require the CSRF token to be provided with the request.
+State-changing cookie-transport requests (for example login, logout, or
+refresh) require the CSRF token to be provided with the request. A public
+authentication request made with `session_transport=token`, or a protected
+request authenticated with a bearer access token, does not use ambient browser
+credentials and does not require CSRF proof.
 
 The token must match the value stored in the `authara_csrf` cookie.
 
@@ -124,7 +130,7 @@ For traditional HTML form submissions and SSR apps, the CSRF token may be includ
 Example:
 
 ```html
-<form method="POST" action="/auth/logout">
+<form method="POST" action="/auth/sessions/logout">
   <input type="hidden" name="csrf_token" value="<csrf-token>">
   <button type="submit">Logout</button>
 </form>
