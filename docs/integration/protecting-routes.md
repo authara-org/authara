@@ -7,6 +7,8 @@ Instead, the application checks whether a user is authenticated and redirects to
 
 The recommended approach is to use the **Authara SDK middleware**.
 
+The examples below assume a configured `*authara.SDK` named `sdk`.
+
 ---
 
 # Middleware
@@ -15,28 +17,25 @@ The `authara-go` SDK provides middleware that validates the session for incoming
 
 Two variants are available:
 
-- **RequireAuth** — strict authentication check
-- **RequireAuthWithRefresh** — automatically refreshes sessions
+- **`sdk.RequireAuth`** — verifies the access token without refreshing it
+- **`sdk.RequireAuthWithRefresh`** — attempts one best-effort session refresh
 
 ---
 
 # Strict authentication
 
-The strict middleware validates the access token and returns `401` if the user is not authenticated.
+The strict middleware validates the access token without calling Authara's
+refresh endpoint.
 
 Example:
 
 ```go
-router.Use(authara.RequireAuth())
+router.Use(sdk.RequireAuth)
 ```
 
-If the access token is invalid or expired:
-
-```
-401 Unauthorized
-```
-
-The application can then decide how to handle the response (for example redirecting to login).
+If the access token is invalid or expired, browser navigations receive a `302`
+redirect to `/auth/login`, HTMX requests receive `HX-Redirect`, and API/SPA
+requests receive `401 Unauthorized`.
 
 This mode is useful for:
 
@@ -53,7 +52,7 @@ The refresh middleware attempts to refresh the session if the access token has e
 Example:
 
 ```go
-router.Use(authara.RequireAuthWithRefresh())
+router.Use(sdk.RequireAuthWithRefresh)
 ```
 
 Behavior:
@@ -61,7 +60,8 @@ Behavior:
 1. Access token is validated
 2. If expired, the SDK attempts a refresh
 3. If refresh succeeds, the request continues
-4. If refresh fails, the request returns `401`
+4. If refresh fails, the middleware uses the same browser, HTMX, or API
+   unauthenticated response as `RequireAuth`
 
 This approach works well for:
 

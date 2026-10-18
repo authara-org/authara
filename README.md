@@ -42,7 +42,7 @@ services:
     image: nginx:alpine
 
   authara-migrations:
-    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
+    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.4.0}
     env_file:
       - .env
     environment:
@@ -53,7 +53,7 @@ services:
         condition: service_healthy
 
   authara:
-    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
+    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.26.1}
     env_file:
       - .env
     environment:
@@ -115,6 +115,8 @@ Features include:
 - cookie-based sessions
 - refresh token rotation and reuse detection
 - OAuth provider login
+- passkey authentication
+- native token sessions for mobile clients
 - CSRF protection for browser flows
 - a thin integration surface for applications and SDKs
 - a stable OpenAPI contract for public and internal JSON APIs
@@ -129,7 +131,7 @@ The goal is simple:
 
 Authara is typically deployed together with a reverse proxy that routes requests between your application and Authara.
 
-The system usually consists of three components:
+The system usually consists of four components:
 
 1. **Authara** — the authentication server  
 2. **Authara Migrations** — migrations for PostgreSQL  
@@ -164,13 +166,15 @@ Authara handles these concerns centrally.
 
 # Sessions and tokens
 
-Authara uses a two-token session model.
+Authara uses a two-token session model. Browser clients receive both tokens in
+HTTP-only cookies; native clients can request a JSON token pair and keep the
+refresh token in platform secure storage.
 
 ## Access token
 
 - short-lived
 - JWT-based
-- stored in an HTTP-only cookie
+- stored in an HTTP-only cookie for browser sessions
 - used for request authentication
 
 ## Refresh token
@@ -192,7 +196,7 @@ This model allows:
 Authara protects state-changing browser requests with a CSRF mechanism:
 
 - CSRF token stored in a cookie
-- token required for protected POST requests
+- token required for state-changing cookie-authenticated requests
 - HTML auth flows automatically include CSRF tokens
 - browser authentication flows remain explicit and predictable
 
@@ -202,8 +206,8 @@ Authara protects state-changing browser requests with a CSRF mechanism:
 
 Authara currently implements a minimal role model.
 
-- built-in `admin` role
-- regular users are simply non-admin users
+- built-in `authara:admin` and `authara:operator` platform roles
+- regular users have neither platform role
 - roles are facts carried in sessions and tokens
 
 ---
@@ -258,7 +262,8 @@ https://docs.authara.org
 
 # Examples
 
-Example applications demonstrating how to integrate Authara with different technology stacks are available in a separate repository:
+Example applications demonstrating hosted HTMX and application-owned React
+integration styles are available in a separate repository:
 
 https://github.com/authara-org/authara-examples
 

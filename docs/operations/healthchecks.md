@@ -92,7 +92,7 @@ spec:
   terminationGracePeriodSeconds: 15
   containers:
     - name: authara
-      image: ghcr.io/authara-org/authara-core:v0.21.1
+      image: ghcr.io/authara-org/authara-core:v0.26.1
       ports:
         - name: http
           containerPort: 8080

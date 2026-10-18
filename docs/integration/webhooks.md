@@ -181,8 +181,7 @@ HMAC_SHA256(secret, request_body)
 
 ```go
 func verifySignature(secret string, body []byte, header string) bool {
-	expected := webhook.Sign(secret, body)
-	return hmac.Equal([]byte(expected), []byte(header))
+	return authara.VerifyWebhookSignature(secret, body, header)
 }
 ```
 
@@ -233,38 +232,24 @@ Your application should:
 # Example Handler
 
 ```go
+handler := authara.WebhookHandler{
+	Secret: os.Getenv("AUTHARA_WEBHOOK_SECRET"),
+}
+
 http.HandleFunc("/webhooks/authara", func(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
-	body, err := io.ReadAll(r.Body)
+	evt, err := handler.Handle(w, r)
 	if err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 
-	signature := r.Header.Get("X-Authara-Signature")
-
-	if !verifySignature(os.Getenv("AUTHARA_WEBHOOK_SECRET"), body, signature) {
-		http.Error(w, "invalid signature", http.StatusUnauthorized)
-		return
-	}
-
-	var evt struct {
-		ID    string `json:"id"`
-		Event string `json:"type"`
-		Data  struct {
-			UserID string `json:"user_id"`
-		} `json:"data"`
-	}
-
-	if err := json.Unmarshal(body, &evt); err != nil {
-		http.Error(w, "invalid payload", http.StatusBadRequest)
-		return
-	}
-
-	switch evt.Event {
+	switch evt.Type {
 	case "user.created":
-		// handle user creation
+		data, err := authara.DecodeWebhookData[authara.UserCreatedData](evt)
+		if err != nil {
+			http.Error(w, "invalid payload", http.StatusBadRequest)
+			return
+		}
+		_ = data.UserID // create the application projection idempotently
 	case "user.updated":
 		// handle user updates
 	case "user.deleted":

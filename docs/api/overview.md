@@ -1,6 +1,7 @@
 # API Overview
 
-Authara exposes a small HTTP API used by applications and SDKs to interact with the authentication system.
+Authara exposes a versioned HTTP API used by applications and SDKs to interact
+with authentication, accounts, sessions, and organizations.
 
 The API is designed to be:
 
@@ -25,7 +26,7 @@ This contract covers:
 - versioning rules
 
 The contract is defined in
-[`contract/openapi.yaml`](../contract/openapi.yaml).
+[`contract/openapi.yaml`](https://github.com/authara-org/authara/blob/main/contract/openapi.yaml).
 
 Applications and SDKs may rely on this document when integrating with Authara.
 
@@ -64,21 +65,41 @@ A full list of available endpoints can be found in the **[Endpoints](endpoints.m
 
 # Authentication Model
 
-Authenticated API endpoints rely on the **Authara session cookies**:
+Browser clients normally rely on the **Authara session cookies**:
 
 - `authara_access`
 - `authara_refresh`
 
 These cookies are automatically sent by the browser with each request.
 
-Password, passkey, and Google login endpoints also return the access and refresh
-tokens in JSON. Authenticated v1 endpoints currently read the access token from
-the `authara_access` cookie; they do not accept an `Authorization: Bearer`
-header. Non-browser clients therefore need a cookie-aware HTTP client.
+Protected public endpoints accept either the `authara_access` cookie or an
+`Authorization: Bearer <access-token>` header. If an Authorization header is
+present but malformed or invalid, Authara does not fall back to the cookie.
 
-Authentication is performed using the **access token** contained in the `authara_access` cookie.
+Cookie-authenticated mutations require CSRF proof. Bearer-authenticated
+mutations do not, because a bearer token is not ambient browser authority.
 
 See **[Cookies](cookies.md)** for details about how Authara manages authentication cookies.
+
+## Native token transport
+
+Public authentication operations that declare the optional
+`session_transport` query parameter support:
+
+- `cookie` (default) — sets Authara session cookies and requires browser CSRF
+  credentials for state-changing requests;
+- `token` — returns the access and refresh tokens in JSON, sets no session
+  cookies, and does not require browser CSRF credentials.
+
+Token clients refresh through `POST /auth/api/v1/tokens/refresh`, revoke their
+session through `POST /auth/api/v1/tokens/revoke`, and send the returned access
+token as a bearer credential. Store the refresh token in platform secure
+storage; do not use ordinary browser storage for it.
+
+Native Google, Apple, and Microsoft options responses include a short-lived,
+provider-bound `challenge_id`. Return it with the provider proof so Core can
+validate the state and nonce without OAuth cookies. The browser cookie flow
+remains the default.
 
 ---
 
@@ -92,6 +113,8 @@ Example:
 {
   "id": "a8f7c1f5-5d2b-4a3a-91c5-1c87b6e19c41",
   "email": "user@example.com",
+  "email_verified": true,
+  "email_verified_at": "2026-01-01T11:30:00Z",
   "username": "user",
   "roles": [],
   "disabled": false,
@@ -126,9 +149,10 @@ The structure and available error codes are documented in **[Errors](errors.md)*
 
 # CSRF Protection
 
-State-changing browser-session endpoints require a **CSRF token** for
+State-changing cookie-transport endpoints require a **CSRF token** for
 protection against cross-site request forgery. This includes password auth,
-signup challenges, and passkey ceremonies under `/auth/api/v1`.
+signup challenges, and passkey ceremonies under `/auth/api/v1` when the client
+uses cookies.
 
 For browser requests, the token must be provided either:
 
@@ -162,10 +186,12 @@ The API currently includes endpoints for:
 | Category | Purpose |
 |------|------|
 | Authentication | Log in and sign up with passwords or passkeys |
-| Challenges | Verify signup email codes and request another code |
-| Passkeys | Authenticate with or register WebAuthn credentials |
-| User | Retrieve the authenticated user |
-| Session | Refresh the current session |
+| OAuth and recovery | Authenticate with Google, Apple, or Microsoft and recover account collisions |
+| Challenges | Verify signup, password-reset, and email-change codes |
+| Passkeys | Authenticate with, register, and remove WebAuthn credentials |
+| Account | Read and update the authenticated account, providers, sessions, and password |
+| Organizations | Read or manage organizations, memberships, and invitations |
+| Sessions | Refresh or revoke cookie and token sessions |
 
 All endpoints are documented in **[Endpoints](endpoints.md)**.
 
@@ -178,10 +204,11 @@ The API is primarily used by:
 - backend applications
 - SDKs
 - browser helpers
+- native applications
 
 Most applications will interact with Authara through:
 
-- session cookies
+- session cookies or bearer access tokens
 - hosted redirect-based flows or the versioned JSON authentication API
 - the `/auth/api/v1/user` endpoint
 

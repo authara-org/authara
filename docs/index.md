@@ -25,6 +25,7 @@ Features include:
 
 - login and signup flows
 - cookie-based sessions
+- native bearer-token sessions
 - refresh token rotation
 - Google, Apple, and Microsoft login
 - CSRF protection for browser flows
@@ -38,7 +39,8 @@ Your application remains responsible for:
 - business logic
 - application data
 
-Authara focuses strictly on **authentication and session management**.
+Authara focuses on **authentication, session management, and identity lifecycle
+data**. Product authorization and business policy remain in your application.
 
 ---
 
@@ -50,6 +52,9 @@ Available SDKs include:
 
 - **authara-go** – Go server-side integration
 - **@authara/browser** – browser utilities for CSRF, session refresh, and logout
+- **@authara/react** – Google, Apple, and Microsoft authentication controls
+- **@authara/react-native** – native token sessions, secure-storage adapters,
+  React hooks, and provider controls
 
 SDKs are intentionally thin and do not hide Authara's HTTP interface.  
 They are convenience helpers only.

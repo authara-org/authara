@@ -1,4 +1,4 @@
-# Configuration Overview
+# Configuration Reference
 
 Authara bootstrap and infrastructure configuration is supplied through
 **environment variables**. An explicitly registered subset of product and
@@ -48,12 +48,15 @@ POSTGRESQL_HOST
 POSTGRESQL_DATABASE
 POSTGRESQL_USERNAME
 POSTGRESQL_PASSWORD
+POSTGRESQL_TIMEZONE
+POSTGRESQL_LOG_SQL
 POSTGRESQL_SSL_MODE
 POSTGRESQL_SSL_ROOT_CERT
 ```
 
 Core and the migrations image share these TLS settings. See
-`configuration/database-connection.md` for the supported modes and CA mounting.
+[Database Connection](database-connection.md) for the supported modes and CA
+mounting.
 
 ---
 
@@ -61,7 +64,7 @@ Core and the migrations image share these TLS settings. See
 
 Configures the optional cache backend.
 
-→ See: `configuration/cache.md`
+See [Cache](cache.md).
 
 Examples:
 
@@ -220,7 +223,7 @@ through bearer authentication in either mode.
 
 Controls token signing and verification.
 
-→ See: `configuration/jwt.md`
+See [JWT](jwt.md).
 
 Examples:
 
@@ -236,7 +239,7 @@ AUTHARA_JWT_ACTIVE_KEY_ID
 
 Configures external identity providers.
 
-→ See: `configuration/oauth.md`
+See [OAuth](oauth.md).
 
 Examples:
 
@@ -261,7 +264,7 @@ AUTHARA_OAUTH_APPLE_TOKEN_KEYS
 Controls email-code verification flows. Authentication challenges for
 sensitive mutations are governed by the recent-authentication window instead.
 
-→ See: `configuration/challenge.md`
+See [Challenge](challenge.md).
 
 Examples:
 
@@ -277,7 +280,7 @@ AUTHARA_CHALLENGE_MAX_ATTEMPTS
 
 Controls email delivery via SMTP or other providers.
 
-→ See: `configuration/email.md`
+See [Email](email.md).
 
 Examples:
 
@@ -293,7 +296,7 @@ AUTHARA_EMAIL_SMTP_HOST
 
 Controls background processing of email jobs.
 
-→ See: `configuration/email.md`
+See [Email](email.md).
 
 Examples:
 
@@ -308,7 +311,7 @@ AUTHARA_EMAIL_WORKER_POLL_INTERVAL
 
 Controls retention of email job records.
 
-→ See: `configuration/email.md`
+See [Email](email.md).
 
 Examples:
 
@@ -324,7 +327,7 @@ AUTHARA_EMAIL_CLEANUP_INTERVAL
 
 Protects login, signup, and passkey challenge endpoints.
 
-→ See: `configuration/rate-limiting.md`
+See [Rate Limiting](rate-limiting.md).
 
 Examples:
 
@@ -354,7 +357,7 @@ AUTHARA_WEBHOOK_WORKER_COUNT
 
 Controls database performance and concurrency.
 
-→ See: `configuration/database-connection.md`
+See [Database Connection](database-connection.md).
 
 Examples:
 
@@ -369,7 +372,7 @@ AUTHARA_DB_MAX_IDLE_CONNS
 
 Restricts access via email allowlists.
 
-→ See: `configuration/access-policy.md`
+See [Access Policy](access-policy.md).
 
 Examples:
 
@@ -407,8 +410,13 @@ AUTHARA_SECURITY_EVENT_CLEANUP_INTERVAL
 
 ---
 
-## Configuration reference
+## Complete setting inventory
 
-For the complete list of variables:
-
-→ `configuration/reference.md`
+This page groups the settings operators most often need to discover. The
+versioned [`contract/config.yaml`](https://github.com/authara-org/authara/blob/main/contract/config.yaml)
+is the exhaustive machine-readable list of supported variables,
+including required flags and defaults. The repository's
+[`.env.example`](https://github.com/authara-org/authara/blob/main/.env.example)
+provides a deployable annotated example, and `/auth/operator/settings`
+inventories the settings consumed by the running Core version without exposing
+secret values.

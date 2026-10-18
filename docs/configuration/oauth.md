@@ -32,6 +32,17 @@ AUTHARA_OAUTH_PROVIDERS=google,apple,microsoft
 
 Multiple providers may be enabled using a comma-separated list.
 
+## Browser and native clients
+
+Browser clients use Authara's OAuth state cookies by default. Native clients
+request each provider's options and login with `session_transport=token`; Core
+then returns a short-lived `challenge_id` bound to the provider, state, and
+nonce. The native client returns that ID with the provider proof and receives
+Authara access and refresh tokens in JSON without browser cookies or CSRF
+credentials.
+See [API Endpoints](../api/endpoints.md#session-transports) for the transport
+contract.
+
 ---
 
 ## Google OAuth

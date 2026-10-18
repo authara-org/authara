@@ -1,6 +1,9 @@
 # API Endpoints
 
-This document describes the JSON API endpoints exposed by Authara.
+This document explains the main JSON API flows exposed by Authara. The
+[OpenAPI contract](https://github.com/authara-org/authara/blob/main/contract/openapi.yaml)
+is the exhaustive operation, request, response, and error reference used to
+generate the SDK clients.
 
 All endpoints are available under:
 
@@ -41,7 +44,8 @@ resend remain internal server-to-server operations.
 Public authentication endpoints do not require a session. Passkey registration
 and user or organization endpoints require a valid session.
 
-Authentication is performed using the `authara_access` cookie.
+Protected public endpoints accept either the `authara_access` cookie or an
+`Authorization: Bearer <access-token>` header.
 
 If the access token is missing or invalid, Authara returns:
 
@@ -51,9 +55,23 @@ If the access token is missing or invalid, Authara returns:
 
 See [Cookies](cookies.md) for details.
 
-All state-changing API routes require the `authara_csrf` cookie and a matching
-`X-CSRF-Token` header, except `POST /auth/api/v1/tokens/refresh`. Obtain both by
-calling `GET /auth/api/v1/csrf` first.
+State-changing requests authenticated through cookies require the
+`authara_csrf` cookie and a matching `X-CSRF-Token` header. Obtain both by
+calling `GET /auth/api/v1/csrf` first. Public authentication operations made
+with `session_transport=token`, token refresh/revocation, and protected
+requests authenticated with a bearer token do not require browser CSRF proof.
+
+## Session transports
+
+Authentication operations that declare `session_transport` accept `cookie`
+(the default) or `token`. Cookie transport sets session cookies. Token
+transport sets no session cookies and returns the access and refresh tokens in
+JSON for secure storage by a native client.
+
+For Google, Apple, and Microsoft token flows, call both the provider options
+and login endpoints with `session_transport=token`, and return the options
+response's `challenge_id` with the provider proof. The short-lived challenge
+replaces the browser OAuth cookie for state and nonce validation.
 
 ---
 
@@ -73,8 +91,8 @@ Returns `200 OK`, sets the `authara_csrf` cookie, and returns its value:
 }
 ```
 
-Send this value as `X-CSRF-Token` on the POST requests below while preserving
-the cookie.
+Send this value as `X-CSRF-Token` on cookie-transport mutations while
+preserving the cookie.
 
 ---
 
@@ -88,14 +106,19 @@ First initialize the login attempt:
 GET /auth/api/v1/oauth/google/options
 ```
 
-The response sets the HttpOnly `authara_oauth_nonce` cookie and returns:
+In the default cookie flow, the response sets the HttpOnly
+`authara_oauth_nonce` cookie. The response is:
 
 ```json
 {
+  "challenge_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
   "client_id": "<google-client-id>",
   "nonce": "<nonce>"
 }
 ```
+
+`challenge_id` is present for token transport and should be returned in the
+login body. It may be omitted in the browser cookie flow.
 
 Initialize a Google popup code client with the returned client ID and the
 `openid email profile` scopes. After Google returns its one-time authorization
@@ -114,17 +137,28 @@ Content-Type: application/json
 }
 ```
 
-For compatibility, Authara also accepts the previous `credential` and `nonce`
-pair and verifies the nonce cookie.
+The native Google flow uses the provider's nonce-bound ID token instead of the
+browser authorization code:
 
-`audience` is optional and defaults to `app`; supported values are `app` and
-`admin`. On success Authara returns the same user, access-token, and
-refresh-token response as password login and sets both session cookies.
+```json
+{
+  "challenge_id": "49f7a8b7-5f13-4ab0-9991-e924566a08ba",
+  "credential": "<google-id-token>",
+  "nonce": "<nonce-from-options>"
+}
+```
+
+The `credential` and `nonce` pair remains supported for browser clients and is
+verified against the nonce cookie when `challenge_id` is omitted.
+
+`audience` is optional and defaults to `app`; supported values are `app`,
+`admin`, and `operator`. On success, cookie transport sets both session cookies;
+token transport returns the user and token pair without setting cookies.
 
 React clients should call both the CSRF and Google-options endpoints with
-credentials enabled. Mobile clients must likewise preserve and return the
-cookies set by these endpoints; the returned access and refresh tokens can
-then be stored by the client.
+credentials enabled. Native clients should use `session_transport=token` on
+both calls, return `challenge_id`, and store the returned refresh token in
+platform secure storage.
 
 If the Google email belongs to an existing account that has not linked Google,
 the endpoint returns `409 account_link_required` with a `recovery` object. It
@@ -161,6 +195,9 @@ Content-Type: application/json
   "state": "<apple-state>"
 }
 ```
+
+Native clients also include the `challenge_id` returned by the token-transport
+options call.
 
 Authara exchanges the code server-side and validates Apple's signature,
 issuer, audience, expiry, nonce, subject, and verified email before creating a
@@ -212,6 +249,9 @@ Content-Type: application/json
 }
 ```
 
+Native clients also include the `challenge_id` returned by the token-transport
+options call.
+
 Core validates the signature, audience, tenant-specific issuer, expiry,
 nonce, tenant ID, and object ID. An email collision returns the same
 `409 account_link_required` recovery object as Google and Apple. Microsoft
@@ -219,6 +259,10 @@ email claims never merge accounts without proof from an existing sign-in
 method, and unverified claims do not mark an Authara email as verified.
 
 Errors match the other external providers.
+
+Apple and Microsoft token transport follows the same pattern as Google: use
+`session_transport=token` on both calls, return the supplied `challenge_id`
+with the provider proof, and do not send browser CSRF or OAuth cookies.
 
 ---
 
@@ -263,13 +307,15 @@ POST /auth/api/v1/provider-links/recovery/{linkID}/apple?audience=app
 POST /auth/api/v1/provider-links/recovery/{linkID}/microsoft?audience=app
 ```
 
-Password proof accepts `{ "password": "..." }`. Google proof accepts a fresh
-`code` and `redirect_uri` from the Google popup flow. Apple proof accepts a
-fresh authorization `code` and `state` from the Apple options flow. Microsoft
-proof accepts a fresh `credential` and `nonce` from the Microsoft options and
-popup flow. Successful completion consumes the pending link, links the
-attempted external identity to the existing user, returns an authenticated
-session, and sets the session cookies.
+Password proof accepts `{ "password": "..." }`. Browser Google proof accepts a
+fresh `code` and `redirect_uri`; native Google proof accepts a fresh
+nonce-bound `credential` with the provider `challenge_id`. Apple proof accepts
+a fresh authorization `code` and `state`, and Microsoft proof accepts a fresh
+`credential` and `nonce`; their native forms also return the provider
+`challenge_id`. Successful completion consumes the pending link, links the
+attempted external identity to the existing user, and returns an authenticated
+session. Cookie transport sets the session cookies; callers that add
+`session_transport=token` receive the token pair without cookies.
 
 Pending links expire after ten minutes and are single-use. Invalid or expired
 links return `400 invalid_request` or `409 provider_link_expired`; an identity
@@ -283,8 +329,8 @@ that does not belong to the existing account returns `401 unauthorized`.
 POST /auth/api/v1/login?audience=app
 ```
 
-`audience` is optional and defaults to `app`; supported values are `app` and
-`admin`.
+`audience` is optional and defaults to `app`; supported values are `app`,
+`admin`, and `operator`.
 
 ```json
 {
@@ -307,14 +353,15 @@ login uses the same request shape:
 }
 ```
 
-On success Authara returns `200 OK`, sets `authara_access` and
-`authara_refresh`, and returns:
+On success Authara returns `200 OK`. Cookie transport sets `authara_access` and
+`authara_refresh`. A token-transport response is:
 
 ```json
 {
   "user": {
     "id": "a8f7c1f5-5d2b-4a3a-91c5-1c87b6e19c41",
     "email": "user@example.com",
+    "email_verified": true,
     "username": "user",
     "disabled": false,
     "created_at": "2026-01-01T12:00:00Z"
@@ -323,6 +370,9 @@ On success Authara returns `200 OK`, sets `authara_access` and
   "refresh_token": "<refresh-token>"
 }
 ```
+
+Token transport does not set session cookies or require a CSRF cookie/header
+pair.
 
 Errors: `400 invalid_request`, `401 unauthorized`, `403 forbidden`,
 `429 rate_limited`, or `500 internal_error`.
@@ -336,8 +386,9 @@ POST /auth/api/v1/signup/direct
 ```
 
 Signup requires an email address and password and only creates app-audience
-sessions. Authara creates the account, returns `201 Created` with the
-authentication response shown above, and sets both session cookies.
+sessions. Authara creates the account and returns `201 Created`. Cookie
+transport sets both session cookies; token transport returns the authentication
+response shown above without setting cookies.
 
 This operation returns `404 not_found` when challenges are enabled.
 
@@ -382,8 +433,9 @@ POST /auth/api/v1/signup/challenges/verify
 }
 ```
 
-On success Authara creates the account, returns `201 Created` with the
-authentication response, and sets both session cookies.
+On success Authara creates the account and returns `201 Created`. Cookie
+transport sets both session cookies; token transport returns the authentication
+response without setting cookies.
 
 Errors: `400 invalid_request`, `403 forbidden`, `404 not_found` when challenges
 are disabled, `429 rate_limited`, or `500 internal_error`.
@@ -502,9 +554,14 @@ POST /auth/api/v1/passkeys/authenticate/finish?audience=app
 ```
 
 `audience` is optional and defaults to `app`. On success Authara returns
-`200 OK` with the authentication response and sets both session cookies.
+`200 OK`. Cookie transport sets both session cookies; token transport returns
+the authentication response without setting cookies.
 
-Both endpoints require a valid API CSRF token and may return `403 forbidden`.
+Pass `session_transport=token` to both the options and finish endpoints for a
+native ceremony. The finish response then returns the token pair without
+setting cookies or requiring browser CSRF credentials.
+
+Cookie transport requires a valid API CSRF token and may return `403 forbidden`.
 The options endpoint may also return `429 rate_limited` or `500 internal_error`.
 The finish endpoint may return `400 invalid_request`, `401 unauthorized`,
 `429 rate_limited`, or `500 internal_error`.
@@ -541,7 +598,8 @@ POST /auth/api/v1/passkeys/register/finish
 
 `name` and `platform_hint` are optional. Success returns `204 No Content`.
 
-Both endpoints require the access and CSRF cookies. The options endpoint may
+Both endpoints require an access cookie or bearer token. Cookie-authenticated
+requests also require CSRF proof. The options endpoint may
 return `401 unauthorized`, `403 forbidden`,
 `428 recent_authentication_required`, or `500 internal_error`.
 The finish endpoint may return `400 invalid_request`, `401 unauthorized`,
@@ -570,11 +628,13 @@ challenge bound to the current user and session:
 }
 ```
 
-Complete that challenge through one of these CSRF-protected flows:
+Complete that challenge through one of these state-changing flows. Cookie
+authentication requires CSRF proof; bearer authentication does not:
 
 ```text
 POST /auth/api/v1/reauthenticate/password
 POST /auth/api/v1/reauthenticate/google
+POST /auth/api/v1/reauthenticate/apple
 POST /auth/api/v1/reauthenticate/microsoft
 POST /auth/api/v1/reauthenticate/passkeys/options
 POST /auth/api/v1/reauthenticate/passkeys/finish
@@ -591,9 +651,10 @@ Password reauthentication accepts:
 
 Google accepts the same authorization-code fields as Google login plus
 `authentication_challenge_id`, and the identity must already be linked to the
-current user. Microsoft accepts its login credential and nonce plus the
-challenge ID, and likewise requires an identity already linked to the current
-user. Passkey options accepts `{ "authentication_challenge_id": "..." }`;
+current user. Apple accepts its authorization code and state, and Microsoft
+accepts its login credential and nonce; both also require the authentication
+challenge ID and an identity already linked to the current user. Passkey
+options accepts `{ "authentication_challenge_id": "..." }`;
 passkey finish accepts both that ID and the WebAuthn `challenge_id` returned by
 the options endpoint.
 
@@ -632,6 +693,8 @@ Example:
 {
   "id": "a8f7c1f5-5d2b-4a3a-91c5-1c87b6e19c41",
   "email": "user@example.com",
+  "email_verified": true,
+  "email_verified_at": "2026-01-01T11:30:00Z",
   "username": "user",
   "roles": [],
   "organization": {
@@ -697,8 +760,9 @@ Content-Type: application/json
 }
 ```
 
-Requires the access and CSRF cookies. Returns `204 No Content` and revokes all
-existing sessions and refresh tokens. Errors: `400 invalid_request`,
+Requires an access cookie or bearer token. Cookie authentication also requires
+CSRF proof. Returns `204 No Content` and revokes all existing sessions and
+refresh tokens. Errors: `400 invalid_request`,
 `401 unauthorized`, `403 forbidden`, `409 password_already_exists`, or
 `500 internal_error`.
 
@@ -734,7 +798,7 @@ See [Cookies](cookies.md) for details.
 
 | Parameter  | Required | Description              |
 | ---------- | -------- | ------------------------ |
-| `audience` | yes      | Requested token audience |
+| `audience` | no       | Requested token audience; defaults to `app` |
 
 Example:
 
@@ -805,6 +869,27 @@ See [Errors](errors.md).
 
 ---
 
+## Revoke tokens
+
+Revokes the token-backed session family identified by a JSON refresh token.
+The operation is idempotent for an unknown or already-revoked token.
+
+```text
+POST /auth/api/v1/tokens/revoke
+Content-Type: application/json
+```
+
+```json
+{
+  "refresh_token": "<refresh-token>"
+}
+```
+
+Success returns `204 No Content`. An invalid body returns
+`400 invalid_request`; unexpected failures return `500 internal_error`.
+
+---
+
 # Organization Management
 
 Set `AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED=true` to allow authenticated
@@ -814,17 +899,25 @@ removal, organization deletion, and user deletion remain internal-only so your
 application backend can enforce billing, subscriptions, seat limits, and
 product-data dependencies.
 
-Public organization routes require the `authara_access` cookie. State-changing
-requests also require the API CSRF token. Organization-scoped routes only accept
+Public organization routes require an access cookie or bearer access token.
+State-changing cookie requests also require the API CSRF token.
+Organization-scoped routes only accept
 the organization from the current access token. Authara ignores client-supplied
 actor IDs and applies current membership and owner/admin checks.
 
-Available routes:
+Authenticated organization-context routes are always available:
 
 ```text
 GET   /auth/api/v1/capabilities
 GET   /auth/api/v1/organizations
+GET   /auth/api/v1/organizations/current
 GET   /auth/api/v1/organizations/current/members
+POST  /auth/api/v1/organizations/{organizationID}/switch
+```
+
+Enabling public organization management adds these direct-management routes:
+
+```text
 GET   /auth/api/v1/organizations/{organizationID}
 PATCH /auth/api/v1/organizations/{organizationID}
 GET   /auth/api/v1/organizations/{organizationID}/members
@@ -851,10 +944,10 @@ Hosted administrator user details independently paginate session history and
 passkeys. The operator email-template editor also bounds version history to 25
 entries per page (maximum 100).
 
-The capabilities route remains available to authenticated clients when direct
-management is disabled and reports
-`allows_public_organization_management: false`. The other routes return `404`
-while the feature is disabled.
+The capabilities route reports
+`allows_public_organization_management: false` when direct management is
+disabled. The direct-management routes return `404` while the feature is
+disabled; organization context, listing, and switching remain available.
 
 In `single` mode, `allows_organization_leave` is `true` because a departure can
 be approved by the application backend, while `allows_org_switching` remains
@@ -1092,10 +1185,11 @@ Future versions may introduce new endpoints under `/auth/api/v2`.
 
 # Summary
 
-Authara exposes a minimal API focused on:
+Authara exposes a versioned API for:
 
-- retrieving the authenticated user
-- managing the authenticated user's organization when enabled
-- refreshing sessions
+- authentication, provider linking, passkeys, and account recovery
+- account, credential, and session management
+- user and organization lifecycle operations
+- cookie and native token transports
 
 Additional endpoints may be introduced in future versions.

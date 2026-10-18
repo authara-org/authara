@@ -64,7 +64,7 @@ services:
     image: nginx:alpine
 
   authara-migrations:
-    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.1.20}
+    image: ghcr.io/authara-org/authara-migrations:${AUTHARA_MIGRATIONS_VERSION:-v0.4.0}
     env_file:
       - .env
     environment:
@@ -75,7 +75,7 @@ services:
         condition: service_healthy
 
   authara:
-    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.21.1}
+    image: ghcr.io/authara-org/authara-core:${AUTHARA_CORE_VERSION:-v0.26.1}
     env_file:
       - .env
     environment:
