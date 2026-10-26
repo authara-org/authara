@@ -21,15 +21,16 @@ import (
 )
 
 type fakeApple struct {
-	t         *testing.T
-	server    *httptest.Server
-	mu        sync.Mutex
-	signing   *rsa.PrivateKey
-	published *rsa.PublicKey
-	kid       string
-	claims    jwt.MapClaims
-	tokenCode int
-	revoked   string
+	t           *testing.T
+	server      *httptest.Server
+	mu          sync.Mutex
+	signing     *rsa.PrivateKey
+	published   *rsa.PublicKey
+	kid         string
+	claims      jwt.MapClaims
+	tokenCode   int
+	revoked     string
+	redirectURI string
 }
 
 func newFakeApple(t *testing.T) *fakeApple {
@@ -38,7 +39,10 @@ func newFakeApple(t *testing.T) *fakeApple {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fakeApple{t: t, signing: signing, published: &signing.PublicKey, kid: "apple-key-1", tokenCode: http.StatusOK}
+	f := &fakeApple{
+		t: t, signing: signing, published: &signing.PublicKey, kid: "apple-key-1",
+		tokenCode: http.StatusOK, redirectURI: "https://auth.example.com/auth/oauth/apple/callback",
+	}
 	f.server = httptest.NewServer(http.HandlerFunc(f.serveHTTP))
 	t.Cleanup(f.server.Close)
 	f.claims = f.validClaims()
@@ -68,7 +72,7 @@ func (f *fakeApple) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = r.ParseForm()
-		if r.Form.Get("code") != "valid-code" || r.Form.Get("redirect_uri") != "https://auth.example.com/auth/oauth/apple/callback" {
+		if r.Form.Get("code") != "valid-code" || r.Form.Get("redirect_uri") != f.redirectURI {
 			f.t.Errorf("unexpected exchange form: %v", r.Form)
 		}
 		token := jwt.NewWithClaims(jwt.SigningMethodRS256, cloneClaims(f.claims))
@@ -86,6 +90,41 @@ func (f *fakeApple) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	default:
 		http.NotFound(w, r)
+	}
+}
+
+func TestNativeExchangeOmitsRedirectURI(t *testing.T) {
+	fake := newFakeApple(t)
+	fake.redirectURI = ""
+	fake.claims["aud"] = "com.example.app"
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(Config{
+		ClientID: "com.example.app", TeamID: "TEAM123", KeyID: "CLIENTKEY", PrivateKey: privateKey,
+		Native:     true,
+		HTTPClient: fake.server.Client(), Issuer: fake.server.URL, JWKSURL: fake.server.URL + "/keys",
+		TokenURL: fake.server.URL + "/token", RevokeURL: fake.server.URL + "/revoke",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Exchange(context.Background(), "valid-code", "expected-nonce"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWebClientRequiresRedirectURI(t *testing.T) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = New(Config{
+		ClientID: "com.example.web", TeamID: "TEAM123", KeyID: "CLIENTKEY", PrivateKey: privateKey,
+	})
+	if err == nil || !strings.Contains(err.Error(), "redirect URI") {
+		t.Fatalf("New error = %v", err)
 	}
 }
 

@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/admin"
@@ -37,6 +38,7 @@ type Services struct {
 	OAuthChallenges  *oauth.ChallengeService
 	SecurityEvents   *securityevent.Service
 	Apple            *apple.Client
+	AppleNative      *apple.Client
 	AppleCredentials *apple.Credentials
 	Microsoft        *microsoft.Client
 }
@@ -52,6 +54,7 @@ func NewServices(app *App) (Services, error) {
 	accessPolicy := newAccessPolicy(app)
 	oauthProviders := newOAuthProviders(app.Config.Startup())
 	var appleClient *apple.Client
+	var appleNativeClient *apple.Client
 	var appleCredentials *apple.Credentials
 	var microsoftClient *microsoft.Client
 	for _, provider := range oauthProviders.Providers {
@@ -66,11 +69,22 @@ func NewServices(app *App) (Services, error) {
 			if err != nil {
 				return Services{}, fmt.Errorf("create Apple OAuth client: %w", err)
 			}
+			if nativeClientID := strings.TrimSpace(app.Config.OAuth.AppleNativeClientID); nativeClientID != "" {
+				appleNativeClient, err = apple.New(apple.Config{
+					ClientID: nativeClientID, TeamID: app.Config.OAuth.AppleTeamID,
+					KeyID: app.Config.OAuth.AppleKeyID, PrivateKey: app.Config.OAuth.ApplePrivateKey,
+					Native: true,
+				})
+				if err != nil {
+					return Services{}, fmt.Errorf("create native Apple OAuth client: %w", err)
+				}
+			}
+			revoker := apple.NewFallbackRevoker(appleClient, appleNativeClient)
 			appleCredentials, err = apple.NewCredentials(
 				app.Store,
 				app.Config.OAuth.AppleTokenActiveKeyID,
 				app.Config.OAuth.AppleDecodedTokenKeys,
-				appleClient,
+				revoker,
 			)
 			if err != nil {
 				return Services{}, fmt.Errorf("create Apple credential store: %w", err)
@@ -209,6 +223,7 @@ func NewServices(app *App) (Services, error) {
 		OAuthChallenges:  oauthChallengeService,
 		SecurityEvents:   securityEventService,
 		Apple:            appleClient,
+		AppleNative:      appleNativeClient,
 		AppleCredentials: appleCredentials,
 		Microsoft:        microsoftClient,
 	}, nil

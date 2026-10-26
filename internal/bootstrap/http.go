@@ -117,6 +117,8 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		cookiePolicy.RefreshTokenTTL,
 	)
 	apiHandler.Apple = app.Services.Apple
+	apiHandler.AppleNative = app.Services.AppleNative
+	apiHandler.AppleNativeClientID = app.Config.OAuth.AppleNativeClientID
 	apiHandler.AppleCredentials = app.Services.AppleCredentials
 	apiHandler.Microsoft = app.Services.Microsoft
 	apiHandler.OAuthChallenges = app.Services.OAuthChallenges

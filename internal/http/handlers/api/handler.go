@@ -64,21 +64,23 @@ func (h *APIHandler) rateLimitResult(allowed bool, err error, limitedMessage str
 }
 
 type APIHandler struct {
-	Auth             *auth.Service
-	Passkeys         *passkey.Service
-	Session          *session.Service
-	Organizations    *organization.Service
-	Challenge        *challenge.Service
-	Verification     *challenge.VerificationCodeService
-	Limiter          ratelimiter.AuthLimiter
-	Logger           *slog.Logger
-	Google           GoogleVerifier
-	Apple            AppleClient
-	Microsoft        MicrosoftVerifier
-	AppleCredentials AppleCredentialStore
-	OAuthProviders   oauth.OAuthProviders
-	OAuthChallenges  *oauth.ChallengeService
-	Config           RuntimePolicyReader
+	Auth                *auth.Service
+	Passkeys            *passkey.Service
+	Session             *session.Service
+	Organizations       *organization.Service
+	Challenge           *challenge.Service
+	Verification        *challenge.VerificationCodeService
+	Limiter             ratelimiter.AuthLimiter
+	Logger              *slog.Logger
+	Google              GoogleVerifier
+	Apple               AppleClient
+	AppleNative         AppleClient
+	AppleNativeClientID string
+	Microsoft           MicrosoftVerifier
+	AppleCredentials    AppleCredentialStore
+	OAuthProviders      oauth.OAuthProviders
+	OAuthChallenges     *oauth.ChallengeService
+	Config              RuntimePolicyReader
 
 	ChallengeEnabled     bool
 	UsernameLoginEnabled bool

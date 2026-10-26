@@ -147,6 +147,8 @@ Enable Apple and configure all of these startup settings:
 ```dotenv
 AUTHARA_OAUTH_PROVIDERS=apple
 AUTHARA_OAUTH_APPLE_CLIENT_ID=com.example.web
+# Optional for native iOS token sessions:
+AUTHARA_OAUTH_APPLE_NATIVE_CLIENT_ID=com.example.app
 AUTHARA_OAUTH_APPLE_TEAM_ID=ABCDE12345
 AUTHARA_OAUTH_APPLE_KEY_ID=XYZ9876543
 AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64=<base64-encoded-p8-file>
@@ -159,6 +161,13 @@ token key encrypts Apple refresh tokens at rest so Authara can revoke Apple
 authorization when a user unlinks Apple or deletes their account. Keep both
 values in a secret manager. Generate a token key with `openssl rand -base64 32`.
 Key IDs allow a later rotation while old ciphertext is still decryptable.
+
+Set `AUTHARA_OAUTH_APPLE_NATIVE_CLIENT_ID` to the native Apple App ID (the iOS
+bundle identifier) when native clients send authorization codes to Authara.
+Authara exchanges those token-session codes with the native client ID and no
+web redirect URI. Browser sessions continue to use the Services ID and return
+URL from `AUTHARA_OAUTH_APPLE_CLIENT_ID`. The same Apple team, Sign in with
+Apple key, nonce, state, and one-time challenge protections apply to both.
 
 The hosted UI and React SPA use Apple's official browser SDK. Only the
 single-use authorization code and state reach Authara; the Apple private key
