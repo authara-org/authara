@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.0](https://github.com/authara-org/authara/compare/v0.26.1...v0.27.0) (2026-10-26)
+
+
+### Features
+
+* **oauth:** support native Apple client IDs ([#72](https://github.com/authara-org/authara/issues/72)) ([d2fed3b](https://github.com/authara-org/authara/commit/d2fed3b88ddad39f82a6e8bc9b7afb6dd878073e))
+
 ## [0.26.1](https://github.com/authara-org/authara/compare/v0.26.0...v0.26.1) (2026-10-17)
 
 
