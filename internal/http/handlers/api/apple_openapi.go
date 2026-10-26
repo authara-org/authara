@@ -36,10 +36,14 @@ func (h *APIHandler) GetAppleLoginOptions(ctx context.Context, _ contract.GetApp
 		if err != nil {
 			return getAppleLoginOptionsError(response.CodeInternalError, "Apple login setup error."), nil
 		}
+		clientID := provider.ClientID
+		if h.AppleNative != nil && strings.TrimSpace(h.AppleNativeClientID) != "" {
+			clientID = strings.TrimSpace(h.AppleNativeClientID)
+		}
 		return contract.GetAppleLoginOptions200HeadersResponse{
 			Header: header,
 			Body: contract.AppleLoginOptions{
-				ClientId: provider.ClientID, RedirectUri: provider.RedirectURI,
+				ClientId: clientID, RedirectUri: provider.RedirectURI,
 				State: challenge.State, Nonce: challenge.Nonce, ChallengeId: &challenge.ID,
 			},
 		}, nil

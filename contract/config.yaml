@@ -57,6 +57,7 @@ settings_metadata:
   AUTHARA_OAUTH_MICROSOFT_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_MICROSOFT_TENANT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_APPLE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
+  AUTHARA_OAUTH_APPLE_NATIVE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_APPLE_TEAM_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_APPLE_KEY_ID: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64: {control: env, reload: startup, sensitive: true, group: oauth}
@@ -528,6 +529,12 @@ variables:
     required_if:
       variable: AUTHARA_OAUTH_PROVIDERS
       contains: apple
+
+  - name: AUTHARA_OAUTH_APPLE_NATIVE_CLIENT_ID
+    stability: stable
+    required: false
+    type: string
+    notes: Optional native Apple App ID (bundle identifier) used for token-session authorization-code exchange. When unset, token sessions use AUTHARA_OAUTH_APPLE_CLIENT_ID for backward compatibility.
 
   - name: AUTHARA_OAUTH_APPLE_TEAM_ID
     stability: stable

@@ -145,6 +145,69 @@ func TestAppleOptionsReturnStateNonceAndCookie(t *testing.T) {
 	}
 }
 
+func TestAppleTokenOptionsAndExchangeUseNativeClient(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		web := &fakeAppleClient{}
+		native := &fakeAppleClient{result: apple.ExchangeResult{Identity: apple.Identity{OAuthID: "native-subject"}}}
+		h := &APIHandler{
+			OAuthProviders: appleTestProviders(), Apple: web, AppleNative: native,
+			AppleNativeClientID: "com.example.app",
+			OAuthChallenges:     oauth.NewChallengeService(tdb.Store, tdb.Tx),
+		}
+		request := httptest.NewRequest(http.MethodGet, "/auth/api/v1/oauth/apple/options?session_transport=token", nil).WithContext(ctx)
+		response, err := h.GetAppleLoginOptions(contractCtx(ctx, request), contract.GetAppleLoginOptionsRequestObject{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder := httptest.NewRecorder()
+		writeContractResponse(t, recorder, response)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
+		}
+		var options contract.AppleLoginOptions
+		if err := json.Unmarshal(recorder.Body.Bytes(), &options); err != nil {
+			t.Fatal(err)
+		}
+		if options.ClientId != "com.example.app" || options.ChallengeId == nil {
+			t.Fatalf("unexpected native options: %+v", options)
+		}
+
+		post := httptest.NewRequest(http.MethodPost, "/auth/api/v1/oauth/apple?session_transport=token", nil).WithContext(ctx)
+		result, _, _, _, ok, _ := h.verifyAppleAuthorization(ctx, post, "native-code", options.State, options.ChallengeId)
+		if !ok || result.Identity.OAuthID != "native-subject" {
+			t.Fatalf("native exchange result = %+v, ok=%v", result, ok)
+		}
+		if web.calls != 0 || native.calls != 1 || native.nonce != options.Nonce {
+			t.Fatalf("exchange calls = web %d, native %d, nonce %q", web.calls, native.calls, native.nonce)
+		}
+	})
+}
+
+func TestAppleTokenOptionsFallBackToWebClient(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		h := &APIHandler{
+			OAuthProviders: appleTestProviders(), Apple: &fakeAppleClient{},
+			OAuthChallenges: oauth.NewChallengeService(tdb.Store, tdb.Tx),
+		}
+		request := httptest.NewRequest(http.MethodGet, "/auth/api/v1/oauth/apple/options?session_transport=token", nil).WithContext(ctx)
+		response, err := h.GetAppleLoginOptions(contractCtx(ctx, request), contract.GetAppleLoginOptionsRequestObject{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder := httptest.NewRecorder()
+		writeContractResponse(t, recorder, response)
+		var options contract.AppleLoginOptions
+		if err := json.Unmarshal(recorder.Body.Bytes(), &options); err != nil {
+			t.Fatal(err)
+		}
+		if options.ClientId != "com.example.web" {
+			t.Fatalf("client id = %q", options.ClientId)
+		}
+	})
+}
+
 func TestAppleOptionsReturnNotFoundWhenDisabled(t *testing.T) {
 	h := &APIHandler{}
 	request := httptest.NewRequest(http.MethodGet, "/auth/api/v1/oauth/apple/options", nil)

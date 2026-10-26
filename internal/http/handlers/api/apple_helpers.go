@@ -98,7 +98,11 @@ func (h *APIHandler) verifyAppleAuthorization(
 			return apple.ExchangeResult{}, header, code, message, false, false
 		}
 	}
-	result, err := h.Apple.Exchange(ctx, code, expectedNonce)
+	client := h.Apple
+	if challengeID != nil && h.AppleNative != nil {
+		client = h.AppleNative
+	}
+	result, err := client.Exchange(ctx, code, expectedNonce)
 	if err != nil || result.Identity.OAuthID == "" {
 		return apple.ExchangeResult{}, header, response.CodeUnauthorized, "Invalid Apple authorization.", false, false
 	}

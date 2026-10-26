@@ -43,6 +43,7 @@ type Config struct {
 	KeyID       string
 	PrivateKey  *ecdsa.PrivateKey
 	RedirectURI string
+	Native      bool
 	HTTPClient  *http.Client
 	Issuer      string
 	JWKSURL     string
@@ -72,13 +73,13 @@ func New(cfg Config) (*Client, error) {
 	if cfg.PrivateKey == nil {
 		return nil, errors.New("apple private key is required")
 	}
-	if strings.TrimSpace(cfg.RedirectURI) == "" {
-		return nil, errors.New("apple redirect URI is required")
-	}
 	clientID := strings.TrimSpace(cfg.ClientID)
 	teamID := strings.TrimSpace(cfg.TeamID)
 	keyID := strings.TrimSpace(cfg.KeyID)
 	redirectURI := strings.TrimSpace(cfg.RedirectURI)
+	if redirectURI == "" && !cfg.Native {
+		return nil, errors.New("apple redirect URI is required")
+	}
 	client := cfg.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
@@ -133,7 +134,9 @@ func (c *Client) Exchange(ctx context.Context, code, expectedNonce string) (Exch
 		"client_secret": {clientSecret},
 		"code":          {code},
 		"grant_type":    {"authorization_code"},
-		"redirect_uri":  {c.redirectURI},
+	}
+	if c.redirectURI != "" {
+		form.Set("redirect_uri", c.redirectURI)
 	}
 	var response tokenResponse
 	if err := c.postForm(ctx, c.tokenURL, form, &response); err != nil {

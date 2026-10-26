@@ -18,6 +18,7 @@ type OAuth struct {
 	MicrosoftTenantID  string `env:"AUTHARA_OAUTH_MICROSOFT_TENANT_ID"`
 
 	AppleClientID         string            `env:"AUTHARA_OAUTH_APPLE_CLIENT_ID"`
+	AppleNativeClientID   string            `env:"AUTHARA_OAUTH_APPLE_NATIVE_CLIENT_ID"`
 	AppleTeamID           string            `env:"AUTHARA_OAUTH_APPLE_TEAM_ID"`
 	AppleKeyID            string            `env:"AUTHARA_OAUTH_APPLE_KEY_ID"`
 	ApplePrivateKeyBase64 string            `env:"AUTHARA_OAUTH_APPLE_PRIVATE_KEY_BASE64"`
