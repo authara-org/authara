@@ -108,7 +108,10 @@ func environmentGroup(configSection, variableName string) string {
 	case "Logging", "Observability":
 		return "Runtime"
 	case "UI":
-		if variableName == "AUTHARA_APP_NAME" {
+		switch variableName {
+		case "AUTHARA_USER_UI_ENABLED":
+			return "UI"
+		case "AUTHARA_APP_NAME":
 			return "Branding"
 		}
 		return "Public URL"

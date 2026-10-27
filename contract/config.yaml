@@ -28,6 +28,7 @@ settings_metadata:
   AUTHARA_REDIS_DB: {control: env, reload: startup, sensitive: false, group: cache}
   PUBLIC_URL: {control: env, reload: startup, sensitive: false, group: public_url}
   AUTHARA_COOKIE_DOMAIN: {control: env, reload: startup, sensitive: false, group: public_url}
+  AUTHARA_USER_UI_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: ui}
   AUTHARA_APP_NAME: {control: hybrid, reload: dynamic, sensitive: false, group: branding}
   AUTHARA_DEFAULT_RETURN_TO: {control: hybrid, reload: dynamic, sensitive: false, group: public_url}
   AUTHARA_TRUST_PROXY_HEADERS: {control: env, reload: startup, sensitive: false, group: public_url}
@@ -302,6 +303,13 @@ variables:
     required: false
     type: string
     notes: Optional parent domain for access, refresh, and CSRF cookies. Empty keeps cookies host-only. Must match the PUBLIC_URL host or be its registrable parent domain.
+
+  - name: AUTHARA_USER_UI_ENABLED
+    stability: stable
+    required: false
+    type: bool
+    default: true
+    notes: Enables end-user hosted authentication and account routes. When false, these routes return 404; admin, operator, showcase, static asset, JSON API, required provider redirect bridge, and operational routes remain available. Operator-editable when unset in the environment.
 
   - name: AUTHARA_APP_NAME
     stability: stable

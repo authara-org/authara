@@ -357,6 +357,7 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 		}
 	}
 
+	set(KeyUIUserEnabled, "false")
 	set(KeyUIAppName, "Example App")
 	set(KeyUIDefaultReturnTo, "/dashboard")
 	set(KeyAuthenticationUsernameLoginEnabled, "true")
@@ -384,7 +385,7 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	set(KeyWebhookMaintenanceBatchSize, "250")
 
 	ui := service.CurrentUI()
-	if ui.AppName != "Example App" || ui.DefaultReturnTo != "/dashboard" {
+	if ui.UserEnabled || ui.AppName != "Example App" || ui.DefaultReturnTo != "/dashboard" {
 		t.Fatalf("UI policy = %+v", ui)
 	}
 	authentication := service.CurrentAuthentication()
@@ -565,7 +566,7 @@ func TestExpiryRevocationModeRejectsUnsafeEnvironmentRemovalProjection(t *testin
 
 func TestRuntimePolicySelectionKeepsInfrastructureAndSchedulingAtStartup(t *testing.T) {
 	dynamic := []Key{
-		KeyUIAppName, KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
+		KeyUIUserEnabled, KeyUIAppName, KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
 		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationEnabled, KeySessionRecentAuthenticationWindow,
 		KeyOrganizationPublicManagementEnabled, KeyOrganizationInvitationTTL,
 		KeyAccessPolicyAllowlistEnabled, KeyAdminAuditRetention,

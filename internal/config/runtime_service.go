@@ -562,6 +562,7 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 	}
 
 	ui := UIPolicy{
+		UserEnabled:     values[KeyUIUserEnabled].(bool),
 		AppName:         values[KeyUIAppName].(string),
 		DefaultReturnTo: values[KeyUIDefaultReturnTo].(string),
 	}

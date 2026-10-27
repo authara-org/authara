@@ -51,6 +51,18 @@ func hasOAuthProvider(cfg ServerConfig, name domain.Provider) bool {
 	return false
 }
 
+func requireUserUI(enabled func() bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if enabled != nil && !enabled() {
+				http.NotFound(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	pass := func(next http.Handler) http.Handler { return next }
 	if mw.RequirePublicAPICSRF == nil {
@@ -93,6 +105,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(mw.ReturnTo)
+		userUI := requireUserUI(cfg.UserUIEnabled)
 		r.Get("/oauth/microsoft/redirect", uih.MicrosoftRedirectPage)
 		if cfg.Dev {
 			showcaseHandler := showcase.New(uih.Render)
@@ -103,11 +116,12 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 		// Auth
 		r.Group(func(r chi.Router) {
 			r.Use(mw.HTMX)
+			userRoutes := r.With(userUI)
 
 			// authara internals
-			r.Get("/successful-deletion", uih.SuccessfulDeletionPage)
+			userRoutes.Get("/successful-deletion", uih.SuccessfulDeletionPage)
 
-			r.Group(func(r chi.Router) {
+			userRoutes.Group(func(r chi.Router) {
 				r.Use(mw.RedirectIfAuthenticated)
 
 				r.Get("/login", uih.LoginPage)
@@ -115,7 +129,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/provider-links/confirm", uih.ProviderLinkConfirmPage)
 			})
 
-			r.Group(func(r chi.Router) {
+			userRoutes.Group(func(r chi.Router) {
 				r.Use(mw.RequireCSRF)
 
 				r.Post("/signup", uih.SignupPost)
@@ -130,7 +144,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Post("/sessions/refresh", uih.RefreshPost)
 			})
 
-			r.Group(func(r chi.Router) {
+			userRoutes.Group(func(r chi.Router) {
 				r.Use(mw.OptionalAppAccessIdentity)
 
 				r.Get("/invitations/accept", uih.InvitationAcceptPage)
@@ -139,7 +153,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			})
 
 			// Public recovery and challenge actions. Password reset is always available.
-			r.Group(func(r chi.Router) {
+			userRoutes.Group(func(r chi.Router) {
 				r.Use(mw.OptionalAppAccessIdentity)
 				r.Get("/password-reset", uih.PasswordResetPage)
 				r.Get("/verify-challenge/{action}", uih.VerifyChallengePage)
@@ -157,7 +171,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			})
 
 			// Email-change completion must use the initiating authenticated session.
-			r.Group(func(r chi.Router) {
+			userRoutes.Group(func(r chi.Router) {
 				r.Use(mw.RequireAppAccessAuthWithRefresh)
 				r.Use(mw.RequireAppVerifiedEmailUI)
 
@@ -172,7 +186,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			})
 
 			// Authenticated challenge-starting actions
-			r.Group(func(r chi.Router) {
+			userRoutes.Group(func(r chi.Router) {
 				r.Use(mw.RequireChallengeEnabled)
 				r.Use(mw.RequireAppAccessAuthWithRefresh)
 				r.Use(mw.RequireAppVerifiedEmailUI)
@@ -182,7 +196,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Post("/email-change", uih.EmailChangeRequestPost)
 			})
 
-			r.Route("/oauth", func(r chi.Router) {
+			userRoutes.Route("/oauth", func(r chi.Router) {
 				r.Use(mw.OptionalAppAccessIdentity)
 				r.Use(mw.RequireCSRF)
 
@@ -190,7 +204,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			})
 
 			// regular user
-			r.Group(func(r chi.Router) {
+			userRoutes.Group(func(r chi.Router) {
 				r.Use(mw.RequireAppAccessAuthWithRefresh)
 				r.Use(mw.RequireAppVerifiedEmailUI)
 

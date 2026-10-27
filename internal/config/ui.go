@@ -14,6 +14,7 @@ const (
 )
 
 type UI struct {
+	UserEnabled     bool   `env:"AUTHARA_USER_UI_ENABLED,default=true"`
 	AppName         string `env:"AUTHARA_APP_NAME,default=Authara"`
 	DefaultReturnTo string `env:"AUTHARA_DEFAULT_RETURN_TO,default=/"`
 }
