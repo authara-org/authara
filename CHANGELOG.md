@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0](https://github.com/authara-org/authara/compare/v0.27.0...v0.28.0) (2026-10-27)
+
+
+### Features
+
+* add operator-controlled user UI toggle ([#74](https://github.com/authara-org/authara/issues/74)) ([3bcdb06](https://github.com/authara-org/authara/commit/3bcdb060e1e3790ac7e0c7910fb51d0a41d542fb))
+
 ## [0.27.0](https://github.com/authara-org/authara/compare/v0.26.1...v0.27.0) (2026-10-26)
 
 
