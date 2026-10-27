@@ -309,7 +309,7 @@ variables:
     required: false
     type: bool
     default: true
-    notes: Enables end-user hosted authentication and account routes. When false, these routes return 404; admin, operator, showcase, static asset, JSON API, and operational routes remain available. Operator-editable when unset in the environment.
+    notes: Enables end-user hosted authentication and account routes. When false, these routes return 404; admin, operator, showcase, static asset, JSON API, required provider redirect bridge, and operational routes remain available. Operator-editable when unset in the environment.
 
   - name: AUTHARA_APP_NAME
     stability: stable
