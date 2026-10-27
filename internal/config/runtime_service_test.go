@@ -360,6 +360,7 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	set(KeyUIUserEnabled, "false")
 	set(KeyUIAppName, "Example App")
 	set(KeyUIDefaultReturnTo, "/dashboard")
+	set(KeyUIErrorPageNotFound, "https://app.example/errors/404")
 	set(KeyAuthenticationUsernameLoginEnabled, "true")
 	set(KeyAuthenticationPasskeyCloneResponse, PasskeyCloneResponseRestrictAndRevoke)
 	set(KeyAuthenticationPasskeyCloneNotifyUser, "false")
@@ -385,7 +386,7 @@ func TestServicePublishesAllSelectedRuntimePolicies(t *testing.T) {
 	set(KeyWebhookMaintenanceBatchSize, "250")
 
 	ui := service.CurrentUI()
-	if ui.UserEnabled || ui.AppName != "Example App" || ui.DefaultReturnTo != "/dashboard" {
+	if ui.UserEnabled || ui.AppName != "Example App" || ui.DefaultReturnTo != "/dashboard" || ui.ErrorPages.NotFound != "https://app.example/errors/404" {
 		t.Fatalf("UI policy = %+v", ui)
 	}
 	authentication := service.CurrentAuthentication()
@@ -566,7 +567,7 @@ func TestExpiryRevocationModeRejectsUnsafeEnvironmentRemovalProjection(t *testin
 
 func TestRuntimePolicySelectionKeepsInfrastructureAndSchedulingAtStartup(t *testing.T) {
 	dynamic := []Key{
-		KeyUIUserEnabled, KeyUIAppName, KeyUIDefaultReturnTo, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
+		KeyUIUserEnabled, KeyUIAppName, KeyUIDefaultReturnTo, KeyUIErrorPageNotFound, KeyAuthenticationUsernameLoginEnabled, KeyTokenAccessTTL,
 		KeySessionTTL, KeySessionRefreshTokenTTL, KeySessionRotation, KeySessionRecentAuthenticationEnabled, KeySessionRecentAuthenticationWindow,
 		KeyOrganizationPublicManagementEnabled, KeyOrganizationInvitationTTL,
 		KeyAccessPolicyAllowlistEnabled, KeyAdminAuditRetention,
@@ -1015,6 +1016,7 @@ func TestTypedParsersKeepDomainTypesAndValidation(t *testing.T) {
 		{name: "string", definition: Definition{Key: "string", Type: TypeString}, raw: "value", want: "value"},
 		{name: "enum", definition: Definition{Key: "enum", Type: TypeEnum, Allowed: []string{"safe", "strict"}}, raw: "strict", want: "strict"},
 		{name: "url", definition: Definition{Key: "url", Type: TypeURL}, raw: "https://authara.example", want: "https://authara.example"},
+		{name: "optional empty url", definition: Definition{Key: "url", Type: TypeURL}, raw: "", want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

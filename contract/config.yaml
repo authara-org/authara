@@ -31,6 +31,15 @@ settings_metadata:
   AUTHARA_USER_UI_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: ui}
   AUTHARA_APP_NAME: {control: hybrid, reload: dynamic, sensitive: false, group: branding}
   AUTHARA_DEFAULT_RETURN_TO: {control: hybrid, reload: dynamic, sensitive: false, group: public_url}
+  AUTHARA_ERROR_PAGE_BAD_REQUEST_URL: {control: hybrid, reload: dynamic, sensitive: false, group: error_pages}
+  AUTHARA_ERROR_PAGE_UNAUTHORIZED_URL: {control: hybrid, reload: dynamic, sensitive: false, group: error_pages}
+  AUTHARA_ERROR_PAGE_FORBIDDEN_URL: {control: hybrid, reload: dynamic, sensitive: false, group: error_pages}
+  AUTHARA_ERROR_PAGE_NOT_FOUND_URL: {control: hybrid, reload: dynamic, sensitive: false, group: error_pages}
+  AUTHARA_ERROR_PAGE_CONFLICT_URL: {control: hybrid, reload: dynamic, sensitive: false, group: error_pages}
+  AUTHARA_ERROR_PAGE_GONE_URL: {control: hybrid, reload: dynamic, sensitive: false, group: error_pages}
+  AUTHARA_ERROR_PAGE_UNPROCESSABLE_ENTITY_URL: {control: hybrid, reload: dynamic, sensitive: false, group: error_pages}
+  AUTHARA_ERROR_PAGE_TOO_MANY_REQUESTS_URL: {control: hybrid, reload: dynamic, sensitive: false, group: error_pages}
+  AUTHARA_ERROR_PAGE_INTERNAL_SERVER_ERROR_URL: {control: hybrid, reload: dynamic, sensitive: false, group: error_pages}
   AUTHARA_TRUST_PROXY_HEADERS: {control: env, reload: startup, sensitive: false, group: public_url}
   AUTHARA_TRUSTED_PROXY_CIDRS: {control: env, reload: startup, sensitive: false, group: public_url}
   AUTHARA_USERNAME_LOGIN_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: authentication}
@@ -324,6 +333,60 @@ variables:
     type: string
     default: /
     notes: Safe relative path used after auth flows when return_to is not provided.
+
+  - name: AUTHARA_ERROR_PAGE_BAD_REQUEST_URL
+    stability: stable
+    required: false
+    type: url
+    notes: Optional absolute HTTP(S) destination for full-page 400 browser errors. Empty uses Authara's built-in error page. Operator-editable when unset in the environment.
+
+  - name: AUTHARA_ERROR_PAGE_UNAUTHORIZED_URL
+    stability: stable
+    required: false
+    type: url
+    notes: Optional absolute HTTP(S) destination for full-page 401 browser errors. Empty uses Authara's built-in error page. Operator-editable when unset in the environment.
+
+  - name: AUTHARA_ERROR_PAGE_FORBIDDEN_URL
+    stability: stable
+    required: false
+    type: url
+    notes: Optional absolute HTTP(S) destination for full-page 403 browser errors. Empty uses Authara's built-in error page. Operator-editable when unset in the environment.
+
+  - name: AUTHARA_ERROR_PAGE_NOT_FOUND_URL
+    stability: stable
+    required: false
+    type: url
+    notes: Optional absolute HTTP(S) destination for full-page 404 browser errors. Empty uses Authara's built-in error page. Operator-editable when unset in the environment.
+
+  - name: AUTHARA_ERROR_PAGE_CONFLICT_URL
+    stability: stable
+    required: false
+    type: url
+    notes: Optional absolute HTTP(S) destination for full-page 409 browser errors. Empty uses Authara's built-in error page. Operator-editable when unset in the environment.
+
+  - name: AUTHARA_ERROR_PAGE_GONE_URL
+    stability: stable
+    required: false
+    type: url
+    notes: Optional absolute HTTP(S) destination for full-page 410 browser errors. Empty uses Authara's built-in error page. Operator-editable when unset in the environment.
+
+  - name: AUTHARA_ERROR_PAGE_UNPROCESSABLE_ENTITY_URL
+    stability: stable
+    required: false
+    type: url
+    notes: Optional absolute HTTP(S) destination for full-page 422 browser errors. Empty uses Authara's built-in error page. Operator-editable when unset in the environment.
+
+  - name: AUTHARA_ERROR_PAGE_TOO_MANY_REQUESTS_URL
+    stability: stable
+    required: false
+    type: url
+    notes: Optional absolute HTTP(S) destination for full-page 429 browser errors. Empty uses Authara's built-in error page. Operator-editable when unset in the environment.
+
+  - name: AUTHARA_ERROR_PAGE_INTERNAL_SERVER_ERROR_URL
+    stability: stable
+    required: false
+    type: url
+    notes: Optional absolute HTTP(S) destination for full-page 500 browser errors. Empty uses Authara's built-in error page. Operator-editable when unset in the environment.
 
   - name: AUTHARA_TRUST_PROXY_HEADERS
     stability: stable

@@ -114,6 +114,9 @@ func environmentGroup(configSection, variableName string) string {
 		case "AUTHARA_APP_NAME":
 			return "Branding"
 		}
+		if strings.HasPrefix(variableName, "AUTHARA_ERROR_PAGE_") {
+			return "Error pages"
+		}
 		return "Public URL"
 	case "DB":
 		return "Database"

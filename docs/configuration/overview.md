@@ -110,6 +110,29 @@ To roll back an environment-enforced disable, set
 control) and restart Core. An operator override can be changed back to `true`
 without a restart when the environment variable is absent.
 
+### Custom error pages
+
+Authara can redirect full-page browser errors to a separate absolute HTTP(S)
+URL for each supported status. Configure one or more of:
+
+```text
+AUTHARA_ERROR_PAGE_BAD_REQUEST_URL
+AUTHARA_ERROR_PAGE_UNAUTHORIZED_URL
+AUTHARA_ERROR_PAGE_FORBIDDEN_URL
+AUTHARA_ERROR_PAGE_NOT_FOUND_URL
+AUTHARA_ERROR_PAGE_CONFLICT_URL
+AUTHARA_ERROR_PAGE_GONE_URL
+AUTHARA_ERROR_PAGE_UNPROCESSABLE_ENTITY_URL
+AUTHARA_ERROR_PAGE_TOO_MANY_REQUESTS_URL
+AUTHARA_ERROR_PAGE_INTERNAL_SERVER_ERROR_URL
+```
+
+An empty or unset value keeps Authara's built-in error page for that status.
+When a variable is absent, an operator can edit its value immediately from the
+runtime settings page. An explicitly supplied environment value locks that
+individual operator control until the variable is removed and Core restarts.
+HTMX error fragments and JSON API errors are not redirected.
+
 ---
 
 ### Authentication

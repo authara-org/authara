@@ -166,6 +166,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 		Readiness:         meta.NewReadinessWithObserver(false, readinessChecker, app.Observability),
 		JWKS:              meta.JWKS(app.Config.Token.KeySet),
 		UserUIEnabled:     func() bool { return app.Config.CurrentUI().UserEnabled },
+		ErrorPageURL:      func(status int) string { return app.Config.CurrentUI().ErrorPages.URL(status) },
 	}, mw)
 
 	return server, nil

@@ -1,7 +1,9 @@
 package requesterror
 
 import (
+	"context"
 	"net/http"
+	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/http/kit/htmx"
@@ -11,12 +13,26 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 )
 
+type pageURLResolverKey struct{}
+
+func CustomPages(resolve func(int) string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), pageURLResolverKey{}, resolve)))
+		})
+	}
+}
+
 func Render(renderer render.Renderer, w http.ResponseWriter, r *http.Request, status int, message string) error {
 	status = normalizeStatus(status)
 	message = normalizeMessage(status, message)
 
 	if isPartialRequest(r) {
 		return Toast(renderer, w, r, status, message)
+	}
+	if target := customPageURL(r, status); target != "" {
+		http.Redirect(w, r, target, http.StatusSeeOther)
+		return nil
 	}
 
 	return renderWith(renderer, w, r, status, templates.ErrorPage(status, message))
@@ -89,4 +105,12 @@ func normalizeMessage(status int, message string) string {
 
 func isPartialRequest(r *http.Request) bool {
 	return httpctx.IsHTMX(r.Context()) || r.Header.Get("HX-Request") == "true"
+}
+
+func customPageURL(r *http.Request, status int) string {
+	resolve, _ := r.Context().Value(pageURLResolverKey{}).(func(int) string)
+	if resolve == nil {
+		return ""
+	}
+	return strings.TrimSpace(resolve(status))
 }

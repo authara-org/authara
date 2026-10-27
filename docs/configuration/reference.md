@@ -34,6 +34,7 @@ LOG_LEVEL
 AUTHARA_APP_NAME
 AUTHARA_DEFAULT_RETURN_TO
 AUTHARA_USER_UI_ENABLED
+AUTHARA_ERROR_PAGE_NOT_FOUND_URL
 ```
 
 ---
@@ -127,6 +128,34 @@ To roll back an environment-enforced disable, set the variable to `true` (or
 remove it to restore operator control) and restart Core. When the variable is
 absent, an operator can restore the UI immediately by setting this runtime
 value to `true`.
+
+### Custom error pages
+
+The following optional variables map Authara's full-page browser errors to
+custom destinations:
+
+| Status | Environment variable |
+| --- | --- |
+| `400 Bad Request` | `AUTHARA_ERROR_PAGE_BAD_REQUEST_URL` |
+| `401 Unauthorized` | `AUTHARA_ERROR_PAGE_UNAUTHORIZED_URL` |
+| `403 Forbidden` | `AUTHARA_ERROR_PAGE_FORBIDDEN_URL` |
+| `404 Not Found` | `AUTHARA_ERROR_PAGE_NOT_FOUND_URL` |
+| `409 Conflict` | `AUTHARA_ERROR_PAGE_CONFLICT_URL` |
+| `410 Gone` | `AUTHARA_ERROR_PAGE_GONE_URL` |
+| `422 Unprocessable Entity` | `AUTHARA_ERROR_PAGE_UNPROCESSABLE_ENTITY_URL` |
+| `429 Too Many Requests` | `AUTHARA_ERROR_PAGE_TOO_MANY_REQUESTS_URL` |
+| `500 Internal Server Error` | `AUTHARA_ERROR_PAGE_INTERNAL_SERVER_ERROR_URL` |
+
+Values must be absolute `http://` or `https://` URLs and must not contain URL
+credentials. Authara responds to a matching full-page browser error with a
+`303 See Other` redirect. Empty or unset values use the built-in Authara error
+page instead. HTMX fragments and public or internal JSON API responses retain
+their existing inline or JSON errors.
+
+Every variable is a separate hybrid runtime setting. When a variable is
+absent, operators can edit or reset its destination immediately. An explicitly
+supplied environment value locks only that destination until it is removed and
+Core restarts.
 
 ---
 

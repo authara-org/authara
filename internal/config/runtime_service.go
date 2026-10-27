@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -565,6 +564,17 @@ func (s *Service) buildSnapshot(state PersistedState) (*snapshot, error) {
 		UserEnabled:     values[KeyUIUserEnabled].(bool),
 		AppName:         values[KeyUIAppName].(string),
 		DefaultReturnTo: values[KeyUIDefaultReturnTo].(string),
+		ErrorPages: ErrorPageURLs{
+			BadRequest:          values[KeyUIErrorPageBadRequest].(string),
+			Unauthorized:        values[KeyUIErrorPageUnauthorized].(string),
+			Forbidden:           values[KeyUIErrorPageForbidden].(string),
+			NotFound:            values[KeyUIErrorPageNotFound].(string),
+			Conflict:            values[KeyUIErrorPageConflict].(string),
+			Gone:                values[KeyUIErrorPageGone].(string),
+			UnprocessableEntity: values[KeyUIErrorPageUnprocessableEntity].(string),
+			TooManyRequests:     values[KeyUIErrorPageTooManyRequests].(string),
+			InternalServerError: values[KeyUIErrorPageInternalServerError].(string),
+		},
 	}
 	if _, ok := redirect.NormalizeReturnTo(ui.DefaultReturnTo); !ok {
 		return nil, fmt.Errorf("%w: default return path must be a safe relative path", ErrInvalidValue)
@@ -892,12 +902,7 @@ func parseText(definition Definition, raw string, enforceOperatorBounds bool) (a
 			err = fmt.Errorf("must be one of %s", strings.Join(definition.Allowed, ", "))
 		}
 	case TypeURL:
-		value = strings.TrimSpace(raw)
-		var parsed *url.URL
-		parsed, err = url.Parse(value.(string))
-		if err == nil && (parsed.Scheme == "" || parsed.Host == "") {
-			err = fmt.Errorf("must include a scheme and host")
-		}
+		value, err = normalizeOptionalHTTPURL(raw)
 	default:
 		err = fmt.Errorf("unsupported type %q", definition.Type)
 	}
