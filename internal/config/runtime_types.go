@@ -13,6 +13,7 @@ import (
 type Key = configruntime.Key
 
 const (
+	KeyUIUserEnabled     Key = "ui.user_enabled"
 	KeyUIAppName         Key = "ui.app_name"
 	KeyUIDefaultReturnTo Key = "ui.default_return_to"
 
@@ -144,6 +145,7 @@ type StaticChallengePolicy struct {
 func (s StaticChallengePolicy) CurrentChallenge() ChallengePolicy { return s.Policy }
 
 type UIPolicy struct {
+	UserEnabled     bool
 	AppName         string
 	DefaultReturnTo string
 }

@@ -67,6 +67,13 @@ var runtimeDefinitions = func() []Definition {
 func generalPolicyDefinitions() []Definition {
 	return []Definition{
 		{
+			Key: KeyUIUserEnabled, Name: "User-facing UI",
+			Description: "Controls whether end-user hosted authentication and account routes are available.",
+			Environment: "AUTHARA_USER_UI_ENABLED", Control: ControlHybrid, Reload: ReloadDynamic,
+			Group: "UI", Type: TypeBool, DefaultValue: "true", HasDefault: true, defaultValue: true,
+			Impact: "Applies immediately. Admin and operator pages remain available.",
+		},
+		{
 			Key: KeyUIAppName, Name: "Application name",
 			Description: "Name displayed on the hosted sign-in and account-creation pages.",
 			Environment: "AUTHARA_APP_NAME", Control: ControlHybrid, Reload: ReloadDynamic,

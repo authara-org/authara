@@ -95,6 +95,60 @@ func TestHealthRoutesAreRegistered(t *testing.T) {
 	}
 }
 
+func TestUserUIRoutesAreBlockedWhenDisabled(t *testing.T) {
+	userUIEnabled := false
+	router := newContractTestRouterWithUserUIPolicy(func() bool { return userUIEnabled })
+
+	for _, request := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/auth/login"},
+		{http.MethodPost, "/auth/login"},
+		{http.MethodGet, "/auth/account"},
+		{http.MethodGet, "/auth/oauth/microsoft/redirect"},
+	} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(request.method, request.path, nil))
+		if response.Code != http.StatusNotFound {
+			t.Errorf("%s %s status = %d, want %d", request.method, request.path, response.Code, http.StatusNotFound)
+		}
+	}
+
+	for _, path := range []string{
+		"/auth/admin/users",
+		"/auth/operator",
+		"/auth/showcase",
+	} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Errorf("GET %s status = %d, want %d", path, response.Code, http.StatusOK)
+		}
+	}
+
+	routes := collectRoutes(t, router)
+	for _, key := range []string{
+		http.MethodGet + " /auth/static/*",
+		http.MethodGet + " /auth/api/v1/csrf",
+		http.MethodPost + " /auth/internal/v1/organizations",
+		http.MethodGet + " /auth/.well-known/jwks.json",
+		http.MethodGet + " /auth/ready",
+		http.MethodGet + " /metrics",
+	} {
+		if !routes[key] {
+			t.Errorf("route %s should remain registered when user-facing UI is disabled", key)
+		}
+	}
+
+	userUIEnabled = true
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/auth/login", nil))
+	if response.Code != http.StatusOK {
+		t.Errorf("GET /auth/login after enabling user UI status = %d, want %d", response.Code, http.StatusOK)
+	}
+}
+
 func TestReadinessRoutesFailClosedWithoutConfiguration(t *testing.T) {
 	router := newContractTestRouterWithReadiness(nil)
 	for _, path := range []string{"/auth/ready", "/auth/health"} {
@@ -154,7 +208,15 @@ func newContractTestRouterWithReadiness(readiness *meta.Readiness) chi.Router {
 	return newContractTestRouterWithDependencies(observability.New("test"), readiness)
 }
 
+func newContractTestRouterWithUserUIPolicy(enabled func() bool) chi.Router {
+	return newContractTestRouterWithOptions(observability.New("test"), nil, enabled)
+}
+
 func newContractTestRouterWithDependencies(metrics *observability.Service, readiness *meta.Readiness) chi.Router {
+	return newContractTestRouterWithOptions(metrics, readiness, nil)
+}
+
+func newContractTestRouterWithOptions(metrics *observability.Service, readiness *meta.Readiness, userUIEnabled func() bool) chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	pass := func(next http.Handler) http.Handler { return next }
@@ -170,6 +232,7 @@ func newContractTestRouterWithDependencies(metrics *observability.Service, readi
 		Logger:                   logger,
 		Observability:            metrics,
 		Readiness:                readiness,
+		UserUIEnabled:            userUIEnabled,
 		Handlers:                 newTestHandlers(logger, renderer),
 		disableOpenAPIValidation: true,
 	}

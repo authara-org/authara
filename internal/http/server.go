@@ -29,6 +29,7 @@ type ServerConfig struct {
 	Handlers          Handlers
 	Readiness         *meta.Readiness
 	JWKS              http.Handler
+	UserUIEnabled     func() bool
 
 	disableOpenAPIValidation        bool
 	strictOpenAPIResponseValidation bool

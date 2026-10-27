@@ -6,6 +6,12 @@ These routes return **HTML pages** and are intended to be accessed directly by a
 
 All browser routes are served under the `/auth` base path.
 
+Set `AUTHARA_USER_UI_ENABLED=false` to disable end-user authentication and
+account routes. When the environment variable is absent, operators can change
+it immediately from the runtime settings page. Admin and operator pages,
+development showcase routes, static assets, JSON APIs, and operational routes
+remain available.
+
 Example:
 
 ```

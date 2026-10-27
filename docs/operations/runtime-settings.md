@@ -68,6 +68,7 @@ an operator can change them without restarting Core:
 
 | Area | Settings | Runtime effect |
 | --- | --- | --- |
+| UI | `AUTHARA_USER_UI_ENABLED` | End-user hosted authentication and account routes immediately begin returning `404` or become available again. Admin and operator pages remain available. |
 | Branding | `AUTHARA_APP_NAME` | Subsequently rendered hosted sign-in and account-creation pages use the new application name. |
 | Redirects | `AUTHARA_DEFAULT_RETURN_TO` | Subsequent requests without an explicit `return_to` use the new safe relative path. |
 | Authentication | `AUTHARA_USERNAME_LOGIN_ENABLED`, `AUTHARA_EMAIL_VERIFICATION_REQUIRED`, `AUTHARA_PASSKEY_CLONE_RESPONSE`, `AUTHARA_PASSKEY_CLONE_NOTIFY_USER` | Subsequent password-login requests apply username policy. Requiring verification immediately revokes unverified sessions and directs browser users to verify or replace their address; it is rejected unless challenge and email delivery are configured. Newly detected passkey sign-counter anomalies use the selected alert/restrict/session-revocation response and notification setting. |

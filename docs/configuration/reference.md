@@ -33,6 +33,7 @@ APP_ENV
 LOG_LEVEL
 AUTHARA_APP_NAME
 AUTHARA_DEFAULT_RETURN_TO
+AUTHARA_USER_UI_ENABLED
 ```
 
 ---
@@ -111,6 +112,16 @@ transition.
 and account-creation pages. It defaults to `Authara`. When the environment
 variable is absent, operators can change it dynamically from the runtime
 settings page.
+
+### User-facing UI
+
+`AUTHARA_USER_UI_ENABLED` controls Authara's end-user hosted authentication and
+account routes. It defaults to `true`. Set it to `false` to return `404` from
+those routes. When the environment variable is absent, operators can change
+it immediately from the runtime settings page. Admin and
+operator pages, development showcase routes, `/auth/static/*` assets, public
+and internal JSON APIs, JWKS, health, readiness, version, and metrics remain
+available.
 
 ---
 
