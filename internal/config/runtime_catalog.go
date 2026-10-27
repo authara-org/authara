@@ -88,6 +88,15 @@ func generalPolicyDefinitions() []Definition {
 			Group: "Public URL", Type: TypeString, DefaultValue: "/", HasDefault: true, defaultValue: "/",
 			Impact: "Applies to subsequent requests that do not provide their own return_to value.",
 		},
+		errorPageURLDefinition(KeyUIErrorPageBadRequest, "Bad request page (400)", "AUTHARA_ERROR_PAGE_BAD_REQUEST_URL"),
+		errorPageURLDefinition(KeyUIErrorPageUnauthorized, "Unauthorized page (401)", "AUTHARA_ERROR_PAGE_UNAUTHORIZED_URL"),
+		errorPageURLDefinition(KeyUIErrorPageForbidden, "Forbidden page (403)", "AUTHARA_ERROR_PAGE_FORBIDDEN_URL"),
+		errorPageURLDefinition(KeyUIErrorPageNotFound, "Not found page (404)", "AUTHARA_ERROR_PAGE_NOT_FOUND_URL"),
+		errorPageURLDefinition(KeyUIErrorPageConflict, "Conflict page (409)", "AUTHARA_ERROR_PAGE_CONFLICT_URL"),
+		errorPageURLDefinition(KeyUIErrorPageGone, "Gone page (410)", "AUTHARA_ERROR_PAGE_GONE_URL"),
+		errorPageURLDefinition(KeyUIErrorPageUnprocessableEntity, "Unprocessable entity page (422)", "AUTHARA_ERROR_PAGE_UNPROCESSABLE_ENTITY_URL"),
+		errorPageURLDefinition(KeyUIErrorPageTooManyRequests, "Too many requests page (429)", "AUTHARA_ERROR_PAGE_TOO_MANY_REQUESTS_URL"),
+		errorPageURLDefinition(KeyUIErrorPageInternalServerError, "Internal server error page (500)", "AUTHARA_ERROR_PAGE_INTERNAL_SERVER_ERROR_URL"),
 		{
 			Key: KeyAuthenticationUsernameLoginEnabled, Name: "Username login",
 			Description: "Allows password login using either an email address or username.",
@@ -225,6 +234,16 @@ func generalPolicyDefinitions() []Definition {
 		webhookDurationDefinition(KeyWebhookDeliveredRetention, "Delivered-webhook retention", "How long successfully delivered webhook events are retained.", "AUTHARA_WEBHOOK_DELIVERED_RETENTION", 24*time.Hour, time.Hour, 365*24*time.Hour, "Applies to the next cleanup run. Reducing it can delete older delivery records."),
 		webhookDurationDefinition(KeyWebhookFailedRetention, "Failed-webhook retention", "How long permanently failed webhook events are retained.", "AUTHARA_WEBHOOK_FAILED_RETENTION", 720*time.Hour, time.Hour, 10*365*24*time.Hour, "Applies to the next cleanup run. Reducing it can delete older failure records."),
 		webhookCountDefinition(KeyWebhookMaintenanceBatchSize, "Webhook maintenance batch size", "Maximum events processed in one stale-reaper or cleanup batch.", "AUTHARA_WEBHOOK_MAINTENANCE_BATCH_SIZE", 1000, 1, 10000, "Applies to the next stale-reaper or cleanup batch."),
+	}
+}
+
+func errorPageURLDefinition(key Key, name, environment string) Definition {
+	return Definition{
+		Key: key, Name: name,
+		Description: "Optional absolute URL for this hosted error page. Empty uses Authara's built-in page.",
+		Environment: environment, Control: ControlHybrid, Reload: ReloadDynamic,
+		Group: "Error pages", Type: TypeURL, DefaultValue: "", HasDefault: true, defaultValue: "",
+		Impact: "Applies immediately to subsequent full-page browser errors; HTMX errors remain inline.",
 	}
 }
 

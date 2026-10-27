@@ -13,6 +13,12 @@ development showcase routes, static assets, JSON APIs, and operational routes
 remain available. Provider redirect bridges required by the JSON API flows,
 including `/auth/oauth/microsoft/redirect`, also remain available.
 
+Full-page browser errors can be redirected to custom destinations with the
+per-status `AUTHARA_ERROR_PAGE_*_URL` settings. Empty settings use Authara's
+built-in error page. These destinations can be changed on the operator runtime
+settings page when their environment variables are absent. HTMX error
+fragments and JSON API errors keep their existing response formats.
+
 Example:
 
 ```

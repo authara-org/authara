@@ -13,9 +13,18 @@ import (
 type Key = configruntime.Key
 
 const (
-	KeyUIUserEnabled     Key = "ui.user_enabled"
-	KeyUIAppName         Key = "ui.app_name"
-	KeyUIDefaultReturnTo Key = "ui.default_return_to"
+	KeyUIUserEnabled                  Key = "ui.user_enabled"
+	KeyUIAppName                      Key = "ui.app_name"
+	KeyUIDefaultReturnTo              Key = "ui.default_return_to"
+	KeyUIErrorPageBadRequest          Key = "ui.error_page.bad_request_url"
+	KeyUIErrorPageUnauthorized        Key = "ui.error_page.unauthorized_url"
+	KeyUIErrorPageForbidden           Key = "ui.error_page.forbidden_url"
+	KeyUIErrorPageNotFound            Key = "ui.error_page.not_found_url"
+	KeyUIErrorPageConflict            Key = "ui.error_page.conflict_url"
+	KeyUIErrorPageGone                Key = "ui.error_page.gone_url"
+	KeyUIErrorPageUnprocessableEntity Key = "ui.error_page.unprocessable_entity_url"
+	KeyUIErrorPageTooManyRequests     Key = "ui.error_page.too_many_requests_url"
+	KeyUIErrorPageInternalServerError Key = "ui.error_page.internal_server_error_url"
 
 	KeyAuthenticationUsernameLoginEnabled      Key = "authentication.username_login_enabled"
 	KeyAuthenticationEmailVerificationRequired Key = "authentication.email_verification_required"
@@ -148,6 +157,7 @@ type UIPolicy struct {
 	UserEnabled     bool
 	AppName         string
 	DefaultReturnTo string
+	ErrorPages      ErrorPageURLs
 }
 
 type UIPolicyReader interface {

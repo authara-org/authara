@@ -6,6 +6,7 @@ import (
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/handlers/meta"
+	"github.com/authara-org/authara/internal/http/kit/requesterror"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	openapicontract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/http/showcase"
@@ -17,6 +18,9 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
+	if cfg.ErrorPageURL != nil {
+		r.Use(requesterror.CustomPages(cfg.ErrorPageURL))
+	}
 	if cfg.TrustProxyHeaders && len(cfg.TrustedProxyCIDRs) > 0 {
 		r.Use(httpmiddleware.TrustedRealIP(cfg.TrustedProxyCIDRs))
 	}
