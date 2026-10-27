@@ -106,7 +106,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(mw.ReturnTo)
 		userUI := requireUserUI(cfg.UserUIEnabled)
-		r.With(userUI).Get("/oauth/microsoft/redirect", uih.MicrosoftRedirectPage)
+		r.Get("/oauth/microsoft/redirect", uih.MicrosoftRedirectPage)
 		if cfg.Dev {
 			showcaseHandler := showcase.New(uih.Render)
 			r.Get("/showcase", showcaseHandler.Gallery)

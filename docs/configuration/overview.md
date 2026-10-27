@@ -102,7 +102,13 @@ Set `AUTHARA_USER_UI_ENABLED=false` to disable end-user hosted authentication
 and account routes. Admin and operator pages, development showcase routes,
 static assets, JSON APIs, and operational routes remain available. It defaults
 to `true`. When the environment variable is absent, operators can change it
-immediately from the runtime settings page.
+immediately from the runtime settings page. Required provider redirect bridges,
+including `/auth/oauth/microsoft/redirect`, remain available.
+
+To roll back an environment-enforced disable, set
+`AUTHARA_USER_UI_ENABLED=true` (or remove the variable to restore operator
+control) and restart Core. An operator override can be changed back to `true`
+without a restart when the environment variable is absent.
 
 ---
 

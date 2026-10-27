@@ -120,8 +120,13 @@ account routes. It defaults to `true`. Set it to `false` to return `404` from
 those routes. When the environment variable is absent, operators can change
 it immediately from the runtime settings page. Admin and
 operator pages, development showcase routes, `/auth/static/*` assets, public
-and internal JSON APIs, JWKS, health, readiness, version, and metrics remain
-available.
+and internal JSON APIs, required provider redirect bridges, JWKS, health,
+readiness, version, and metrics remain available.
+
+To roll back an environment-enforced disable, set the variable to `true` (or
+remove it to restore operator control) and restart Core. When the variable is
+absent, an operator can restore the UI immediately by setting this runtime
+value to `true`.
 
 ---
 

@@ -106,7 +106,6 @@ func TestUserUIRoutesAreBlockedWhenDisabled(t *testing.T) {
 		{http.MethodGet, "/auth/login"},
 		{http.MethodPost, "/auth/login"},
 		{http.MethodGet, "/auth/account"},
-		{http.MethodGet, "/auth/oauth/microsoft/redirect"},
 	} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(request.method, request.path, nil))
@@ -116,6 +115,7 @@ func TestUserUIRoutesAreBlockedWhenDisabled(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		"/auth/oauth/microsoft/redirect",
 		"/auth/admin/users",
 		"/auth/operator",
 		"/auth/showcase",
