@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/authara-org/authara/compare/v0.28.0...v0.29.0) (2026-10-27)
+
+
+### Features
+
+* **config:** add custom browser error page URLs ([#77](https://github.com/authara-org/authara/issues/77)) ([bcd9417](https://github.com/authara-org/authara/commit/bcd941727f5362ce46e85a4e8462e8065e3c0fe0))
+
 ## [0.28.0](https://github.com/authara-org/authara/compare/v0.27.0...v0.28.0) (2026-10-27)
 
 
