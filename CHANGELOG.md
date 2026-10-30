@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0](https://github.com/authara-org/authara/compare/v0.29.0...v0.30.0) (2026-10-30)
+
+
+### Features
+
+* **organizations:** add invitation delivery profiles ([#79](https://github.com/authara-org/authara/issues/79)) ([e838fb7](https://github.com/authara-org/authara/commit/e838fb7dcb9955b0153fbdb9ae02b88eb54e5a22))
+
 ## [0.29.0](https://github.com/authara-org/authara/compare/v0.28.0...v0.29.0) (2026-10-27)
 
 
