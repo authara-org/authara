@@ -48,8 +48,16 @@ func (h *Handler) CreateInternalOrganizationInvitation(ctx context.Context, requ
 		request.Body.ActorUserId,
 		string(request.Body.Email),
 		role,
+		optionalInvitationDeliveryProfile(request.Body.DeliveryProfile),
 		metadata,
 	), nil
+}
+
+func optionalInvitationDeliveryProfile(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (h *Handler) ResendInternalOrganizationInvitation(ctx context.Context, request contract.ResendInternalOrganizationInvitationRequestObject) (contract.ResendInternalOrganizationInvitationResponseObject, error) {
@@ -92,16 +100,18 @@ func (h *Handler) createOrganizationInvitation(
 	organizationID, actorUserID openapi_types.UUID,
 	email string,
 	role domain.OrganizationRole,
+	deliveryProfile string,
 	metadata map[string]any,
 ) contract.CreateInternalOrganizationInvitationResponseObject {
 	now := time.Now().UTC()
 	out, err := h.Organizations.CreateInvitation(ctx, organization.CreateInvitationInput{
-		OrganizationID: organizationID,
-		ActorUserID:    actorUserID,
-		Email:          email,
-		Role:           role,
-		Metadata:       metadata,
-		Now:            now,
+		OrganizationID:  organizationID,
+		ActorUserID:     actorUserID,
+		Email:           email,
+		Role:            role,
+		DeliveryProfile: deliveryProfile,
+		Metadata:        metadata,
+		Now:             now,
 	})
 	if err != nil {
 		code, message := createInvitationError(err)
@@ -164,6 +174,7 @@ func createInvitationError(err error) (response.ErrorCode, string) {
 	case errors.Is(err, organization.ErrOrganizationInvitationAlreadyPending):
 		return codeInvitationAlreadyPending, "Invitation already pending"
 	case errors.Is(err, organization.ErrInvalidOrganizationInvitationEmail),
+		errors.Is(err, organization.ErrInvalidInvitationDeliveryProfile),
 		errors.Is(err, organization.ErrInvalidOrganizationInvitationMetadata),
 		errors.Is(err, organization.ErrInvalidOrganizationRole):
 		return response.CodeInvalidRequest, "Invalid invitation request"
@@ -188,6 +199,8 @@ func resendInvitationError(err error) (response.ErrorCode, string) {
 		return codeInvitationAlreadyAccepted, "Invitation already accepted"
 	case errors.Is(err, organization.ErrOrganizationInvitationRevoked):
 		return codeInvitationRevoked, "Invitation already revoked"
+	case errors.Is(err, organization.ErrInvalidInvitationDeliveryProfile):
+		return response.CodeInvalidRequest, "Invitation delivery profile is unavailable"
 	default:
 		return response.CodeInternalError, "Internal server error"
 	}

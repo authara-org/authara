@@ -41,6 +41,28 @@ Expires at: {{expires_at}}
 If you did not expect this invitation, you can ignore this email.
 
 Authara`
+
+	defaultOrganizationInvitationLinkOnlyText = `You're invited to {{organization_name}}
+
+Accept the invitation: {{invite_url}}
+
+Role: {{role}}
+Expires at: {{expires_at}}
+
+If you did not expect this invitation, you can ignore this email.
+
+Authara`
+
+	defaultOrganizationInvitationCodeOnlyText = `You're invited to {{organization_name}}
+
+Invitation code: {{invitation_code}}
+
+Role: {{role}}
+Expires at: {{expires_at}}
+
+If you did not expect this invitation, you can ignore this email.
+
+Authara`
 )
 
 var (
@@ -181,6 +203,30 @@ const defaultOrganizationInvitationHTML = `<!doctype html>
   </table>
 </body>
 </html>`
+
+var (
+	defaultOrganizationInvitationLinkOnlyHTML = strings.Replace(
+		defaultOrganizationInvitationHTML,
+		`                      <tr>
+                        <td style="padding:16px 18px;text-align:left;border-bottom:1px solid #e5e7eb;">
+                          <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:6px;">Invitation code</div>
+                          <div style="font-size:16px;line-height:1.4;font-weight:600;color:#111827;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Courier New',monospace;word-break:break-all;">{{invitation_code}}</div>
+                        </td>
+                      </tr>
+`,
+		"",
+		1,
+	)
+	defaultOrganizationInvitationCodeOnlyHTML = strings.Replace(
+		defaultOrganizationInvitationHTML,
+		`                    <div style="margin:0 auto 28px auto;max-width:320px;">
+                      <a href="{{invite_url}}" style="display:block;background-color:#2563eb;border:2px solid #2563eb;border-radius:18px;padding:18px 20px;font-size:16px;line-height:1.2;font-weight:700;color:#ffffff;text-decoration:none;">Accept invitation</a>
+                    </div>
+`,
+		"",
+		1,
+	)
+)
 
 func defaultCodeHTML(documentTitle, icon, heading, introduction, codeLabel, notice, footer string) string {
 	return strings.NewReplacer(

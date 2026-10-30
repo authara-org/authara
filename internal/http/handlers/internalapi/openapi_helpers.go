@@ -127,14 +127,19 @@ func toContractInvitation(invitation domain.OrganizationInvitation, inviteURL st
 	if len(invitation.Metadata) > 0 {
 		_ = json.Unmarshal(invitation.Metadata, &metadata)
 	}
+	var deliveryProfile *string
+	if invitation.DeliveryProfile != "" {
+		deliveryProfile = &invitation.DeliveryProfile
+	}
 	return contract.OrganizationInvitation{
-		Id:             invitation.ID,
-		OrganizationId: invitation.OrganizationID,
-		Email:          openapi_types.Email(invitation.Email),
-		Role:           contract.OrganizationRole(invitation.Role),
-		Metadata:       metadata,
-		Status:         contract.OrganizationInvitationStatus(invitation.Status(now)),
-		ExpiresAt:      invitation.ExpiresAt.UTC(),
-		InviteUrl:      url,
+		Id:              invitation.ID,
+		OrganizationId:  invitation.OrganizationID,
+		Email:           openapi_types.Email(invitation.Email),
+		Role:            contract.OrganizationRole(invitation.Role),
+		DeliveryProfile: deliveryProfile,
+		Metadata:        metadata,
+		Status:          contract.OrganizationInvitationStatus(invitation.Status(now)),
+		ExpiresAt:       invitation.ExpiresAt.UTC(),
+		InviteUrl:       url,
 	}
 }

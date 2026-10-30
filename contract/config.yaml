@@ -60,6 +60,7 @@ settings_metadata:
   AUTHARA_ORG_MODE: {control: env, reload: startup, sensitive: false, group: organizations}
   AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
   AUTHARA_ORGANIZATION_INVITATION_TTL: {control: hybrid, reload: dynamic, sensitive: false, group: organizations}
+  AUTHARA_INVITATION_DELIVERY_PROFILES_FILE: {control: env, reload: startup, sensitive: false, group: organizations}
   AUTHARA_INTERNAL_API_TOKEN: {control: env, reload: startup, sensitive: true, group: internal_api}
   AUTHARA_OAUTH_PROVIDERS: {control: env, reload: startup, sensitive: false, group: oauth}
   AUTHARA_OAUTH_GOOGLE_CLIENT_ID: {control: env, reload: startup, sensitive: false, group: oauth}
@@ -540,6 +541,12 @@ variables:
     required: false
     type: duration
     default: 168h
+
+  - name: AUTHARA_INVITATION_DELIVERY_PROFILES_FILE
+    stability: stable
+    required: false
+    type: string
+    description: Path to a startup-loaded YAML or JSON file defining immutable invitation delivery profiles and their default.
 
   - name: AUTHARA_INTERNAL_API_TOKEN
     stability: stable

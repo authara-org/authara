@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	emailpkg "github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/identity"
@@ -23,12 +24,13 @@ import (
 )
 
 type CreateInvitationInput struct {
-	OrganizationID uuid.UUID
-	ActorUserID    uuid.UUID
-	Email          string
-	Role           domain.OrganizationRole
-	Metadata       map[string]any
-	Now            time.Time
+	OrganizationID  uuid.UUID
+	ActorUserID     uuid.UUID
+	Email           string
+	Role            domain.OrganizationRole
+	DeliveryProfile string
+	Metadata        map[string]any
+	Now             time.Time
 }
 
 type InvitationWithToken struct {
@@ -94,6 +96,10 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 	if !s.mode.AllowsInvitations() {
 		return InvitationWithToken{}, ErrOrganizationInviteForbidden
 	}
+	deliveryProfileKey, deliveryProfile, err := s.invitationDeliveryProfile(in.DeliveryProfile)
+	if err != nil {
+		return InvitationWithToken{}, err
+	}
 	if in.ActorUserID == uuid.Nil {
 		return InvitationWithToken{}, ErrOrganizationActorNotMember
 	}
@@ -102,7 +108,10 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 	if err != nil {
 		return InvitationWithToken{}, err
 	}
-	inviteURL := s.inviteURL(rawToken)
+	inviteURL, err := s.inviteURL(deliveryProfile, rawToken)
+	if err != nil {
+		return InvitationWithToken{}, err
+	}
 
 	var out InvitationWithToken
 	err = s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -151,6 +160,7 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 			OrganizationID:  org.ID,
 			Email:           email,
 			Role:            role,
+			DeliveryProfile: deliveryProfileKey,
 			Metadata:        metadata,
 			TokenHash:       tokenHash,
 			InvitedByUserID: &in.ActorUserID,
@@ -165,7 +175,7 @@ func (s *Service) CreateInvitation(ctx context.Context, in CreateInvitationInput
 			return err
 		}
 
-		if err := s.enqueueInvitationEmail(txCtx, created, org, inviteURL, rawToken, now); err != nil {
+		if err := s.enqueueInvitationEmail(txCtx, created, org, deliveryProfile, inviteURL, rawToken, now); err != nil {
 			return err
 		}
 
@@ -196,12 +206,19 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 		return InvitationWithToken{}, store.ErrOrganizationInvitationNotFound
 	}
 	now := normalizeNow(in.Now)
+	deliveryProfileKey, deliveryProfile, err := s.invitationDeliveryProfile(preview.DeliveryProfile)
+	if err != nil {
+		return InvitationWithToken{}, err
+	}
 
 	rawToken, tokenHash, err := generateInvitationToken()
 	if err != nil {
 		return InvitationWithToken{}, err
 	}
-	inviteURL := s.inviteURL(rawToken)
+	inviteURL, err := s.inviteURL(deliveryProfile, rawToken)
+	if err != nil {
+		return InvitationWithToken{}, err
+	}
 
 	var out InvitationWithToken
 	var revoked domain.OrganizationInvitation
@@ -249,6 +266,7 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 			OrganizationID:  old.OrganizationID,
 			Email:           old.Email,
 			Role:            old.Role,
+			DeliveryProfile: deliveryProfileKey,
 			Metadata:        old.Metadata,
 			TokenHash:       tokenHash,
 			InvitedByUserID: old.InvitedByUserID,
@@ -261,7 +279,7 @@ func (s *Service) ResendInvitation(ctx context.Context, in ResendInvitationInput
 			return err
 		}
 
-		if err := s.enqueueInvitationEmail(txCtx, created, org, inviteURL, rawToken, now); err != nil {
+		if err := s.enqueueInvitationEmail(txCtx, created, org, deliveryProfile, inviteURL, rawToken, now); err != nil {
 			return err
 		}
 
@@ -686,25 +704,76 @@ func normalizeNow(now time.Time) time.Time {
 	return now.UTC()
 }
 
-func (s *Service) inviteURL(rawToken string) string {
-	base := s.publicURL
-	if base == "" {
-		base = "http://localhost:3000"
+func (s *Service) invitationDeliveryProfile(rawKey string) (string, config.InvitationDeliveryProfile, error) {
+	key := strings.TrimSpace(rawKey)
+	if key == "" {
+		key = s.defaultInvitationDeliveryProfile
 	}
-	u, _ := url.Parse(base + "/auth/invitations/accept")
-	q := u.Query()
-	q.Set("token", rawToken)
-	u.RawQuery = q.Encode()
-	return u.String()
+	profile, ok := s.invitationDeliveryProfiles[key]
+	if !ok {
+		return "", config.InvitationDeliveryProfile{}, ErrInvalidInvitationDeliveryProfile
+	}
+	if profile.Target == config.InvitationTargetHosted && !s.ui.CurrentUI().UserEnabled {
+		return "", config.InvitationDeliveryProfile{}, ErrInvalidInvitationDeliveryProfile
+	}
+	return key, profile, nil
 }
 
-func (s *Service) enqueueInvitationEmail(ctx context.Context, invitation domain.OrganizationInvitation, org domain.Organization, inviteURL, rawToken string, now time.Time) error {
+func (s *Service) HostedInvitationFallbackURL(rawToken string) (string, error) {
+	profile, ok := s.invitationDeliveryProfiles[s.defaultInvitationDeliveryProfile]
+	if !ok {
+		return "", ErrInvalidInvitationDeliveryProfile
+	}
+	if profile.Target != config.InvitationTargetExternal {
+		return "", nil
+	}
+	return s.inviteURL(profile, rawToken)
+}
+
+func (s *Service) inviteURL(profile config.InvitationDeliveryProfile, rawToken string) (string, error) {
+	if profile.Target == config.InvitationTargetNone {
+		return "", nil
+	}
+	base := profile.URL
+	parameter := "invitation_code"
+	if profile.Target == config.InvitationTargetHosted {
+		base = s.publicURL
+		if base == "" {
+			base = "http://localhost:3000"
+		}
+		base += "/auth/invitations/accept"
+		parameter = "token"
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", fmt.Errorf("build invitation url: %w", err)
+	}
+	values := url.Values{}
+	if profile.TokenTransport == config.InvitationTokenFragment {
+		values.Set(parameter, rawToken)
+		u.Fragment = values.Encode()
+	} else {
+		values = u.Query()
+		values.Set(parameter, rawToken)
+		u.RawQuery = values.Encode()
+	}
+	return u.String(), nil
+}
+
+func (s *Service) enqueueInvitationEmail(ctx context.Context, invitation domain.OrganizationInvitation, org domain.Organization, profile config.InvitationDeliveryProfile, inviteURL, rawToken string, now time.Time) error {
 	templateData := map[string]string{
 		"organization_name": org.Name,
 		"invite_url":        inviteURL,
 		"invitation_code":   rawToken,
 		"role":              string(invitation.Role),
 		"expires_at":        invitation.ExpiresAt.UTC().Format(time.RFC3339),
+	}
+	template := domain.EmailTemplateOrganizationInvite
+	switch profile.EmailAction {
+	case config.InvitationEmailLinkOnly:
+		template = domain.EmailTemplateOrganizationInviteLinkOnly
+	case config.InvitationEmailCodeOnly:
+		template = domain.EmailTemplateOrganizationInviteCodeOnly
 	}
 
 	data, err := json.Marshal(templateData)
@@ -714,7 +783,7 @@ func (s *Service) enqueueInvitationEmail(ctx context.Context, invitation domain.
 
 	_, err = s.store.CreateEmailJob(ctx, domain.EmailJob{
 		ToEmail:            invitation.Email,
-		Template:           domain.EmailTemplateOrganizationInvite,
+		Template:           template,
 		TemplateData:       data,
 		Status:             domain.EmailJobStatusPending,
 		NextAttemptAt:      now,

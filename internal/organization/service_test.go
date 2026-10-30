@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/store"
@@ -84,11 +86,97 @@ func TestNormalizeInvitationRoleAndMetadata(t *testing.T) {
 
 func TestInviteURLBuildsTokenURL(t *testing.T) {
 	svc := New(Config{PublicURL: "https://auth.example.com"})
-
-	got := svc.inviteURL("raw-token")
+	profile := config.InvitationDeliveryProfile{
+		Target: config.InvitationTargetHosted, EmailAction: config.InvitationEmailLinkAndCode, TokenTransport: config.InvitationTokenQuery,
+	}
+	got, err := svc.inviteURL(profile, "raw-token")
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := "https://auth.example.com/auth/invitations/accept?token=raw-token"
 	if got != want {
 		t.Fatalf("expected invite URL %q, got %q", want, got)
+	}
+}
+
+func TestInviteURLBuildsExternalQueryAndFragmentLinks(t *testing.T) {
+	svc := New(Config{})
+	queryURL, err := svc.inviteURL(config.InvitationDeliveryProfile{
+		Target:         config.InvitationTargetExternal,
+		URL:            "https://app.example.com/invitations/accept?source=email",
+		TokenTransport: config.InvitationTokenQuery,
+	}, "raw token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://app.example.com/invitations/accept?invitation_code=raw+token&source=email"; queryURL != want {
+		t.Fatalf("query URL = %q, want %q", queryURL, want)
+	}
+
+	fragmentURL, err := svc.inviteURL(config.InvitationDeliveryProfile{
+		Target:         config.InvitationTargetExternal,
+		URL:            "https://links.example.com/invitations/accept",
+		TokenTransport: config.InvitationTokenFragment,
+	}, "raw token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://links.example.com/invitations/accept#invitation_code=raw+token"; fragmentURL != want {
+		t.Fatalf("fragment URL = %q, want %q", fragmentURL, want)
+	}
+}
+
+func TestCreateInvitationRejectsUnknownDeliveryProfile(t *testing.T) {
+	svc := New(Config{Mode: OrgModeMulti})
+	_, err := svc.CreateInvitation(context.Background(), CreateInvitationInput{
+		OrganizationID: uuid.New(), ActorUserID: uuid.New(), Email: "invitee@example.com", DeliveryProfile: "missing",
+	})
+	if !errors.Is(err, ErrInvalidInvitationDeliveryProfile) {
+		t.Fatalf("CreateInvitation error = %v, want ErrInvalidInvitationDeliveryProfile", err)
+	}
+}
+
+func TestInvitationDeliveryProfileUsesConfiguredDefault(t *testing.T) {
+	svc := New(Config{
+		DefaultInvitationDeliveryProfile: "mobile",
+		InvitationDeliveryProfiles: map[string]config.InvitationDeliveryProfile{
+			"mobile": {
+				Target: config.InvitationTargetExternal, URL: "https://links.example.com/invitations/accept",
+				EmailAction: config.InvitationEmailLinkAndCode, TokenTransport: config.InvitationTokenQuery,
+			},
+		},
+	})
+	key, profile, err := svc.invitationDeliveryProfile("")
+	if err != nil || key != "mobile" || profile.URL != "https://links.example.com/invitations/accept" {
+		t.Fatalf("key = %q, profile = %+v, err = %v", key, profile, err)
+	}
+}
+
+func TestInvitationDeliveryProfileRejectsHostedWhenUserUIIsDisabled(t *testing.T) {
+	svc := New(Config{
+		UI: config.UIPolicyReaderFunc(func() config.UIPolicy { return config.UIPolicy{UserEnabled: false} }),
+	})
+	if _, _, err := svc.invitationDeliveryProfile(config.DefaultInvitationDeliveryProfile); !errors.Is(err, ErrInvalidInvitationDeliveryProfile) {
+		t.Fatalf("invitationDeliveryProfile error = %v, want ErrInvalidInvitationDeliveryProfile", err)
+	}
+}
+
+func TestHostedInvitationFallbackURLUsesExternalDefault(t *testing.T) {
+	svc := New(Config{
+		DefaultInvitationDeliveryProfile: "mobile",
+		InvitationDeliveryProfiles: map[string]config.InvitationDeliveryProfile{
+			"mobile": {
+				Target: config.InvitationTargetExternal, URL: "https://links.example.com/invitations/accept?source=email",
+				EmailAction: config.InvitationEmailLinkAndCode, TokenTransport: config.InvitationTokenQuery,
+			},
+		},
+	})
+	got, err := svc.HostedInvitationFallbackURL("raw-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://links.example.com/invitations/accept?invitation_code=raw-token&source=email"; got != want {
+		t.Fatalf("fallback URL = %q, want %q", got, want)
 	}
 }
 
@@ -292,20 +380,21 @@ func TestResendInvitationRevokesOldAndCreatesFreshInvite(t *testing.T) {
 		}
 
 		svc := New(Config{
-			Store:         tdb.Store,
-			Tx:            tdb.Tx,
-			Mode:          OrgModeMulti,
-			InvitationTTL: time.Hour,
-			PublicURL:     "https://auth.example.com",
+			Store: tdb.Store, Tx: tdb.Tx, Mode: OrgModeMulti,
+			InvitationTTL: time.Hour, PublicURL: "https://auth.example.com",
+			InvitationDeliveryProfiles: map[string]config.InvitationDeliveryProfile{
+				"custom-web": {Target: config.InvitationTargetExternal, URL: "https://app.example.com/invitations/accept", EmailAction: config.InvitationEmailLinkOnly, TokenTransport: config.InvitationTokenQuery},
+			},
 		})
 		now := time.Now().UTC()
 		first, err := svc.CreateInvitation(ctx, CreateInvitationInput{
-			OrganizationID: org.ID,
-			ActorUserID:    owner.ID,
-			Email:          "resend-invitee@example.com",
-			Role:           domain.OrganizationRoleAdmin,
-			Metadata:       map[string]any{"product_role": "manager"},
-			Now:            now,
+			OrganizationID:  org.ID,
+			ActorUserID:     owner.ID,
+			Email:           "resend-invitee@example.com",
+			Role:            domain.OrganizationRoleAdmin,
+			DeliveryProfile: "custom-web",
+			Metadata:        map[string]any{"product_role": "manager"},
+			Now:             now,
 		})
 		if err != nil {
 			t.Fatalf("CreateInvitation failed: %v", err)
@@ -328,6 +417,9 @@ func TestResendInvitationRevokesOldAndCreatesFreshInvite(t *testing.T) {
 		if resent.InviteURL == "" {
 			t.Fatal("expected fresh invite URL")
 		}
+		if !strings.HasPrefix(resent.InviteURL, "https://app.example.com/invitations/accept?invitation_code=") {
+			t.Fatalf("unexpected custom invite URL %q", resent.InviteURL)
+		}
 
 		old, err := tdb.Store.GetOrganizationInvitationByID(ctx, first.Invitation.ID)
 		if err != nil {
@@ -347,10 +439,14 @@ func TestResendInvitationRevokesOldAndCreatesFreshInvite(t *testing.T) {
 		if preview.Invitation.ID != resent.Invitation.ID ||
 			preview.Invitation.Email != first.Invitation.Email ||
 			preview.Invitation.Role != first.Invitation.Role ||
+			preview.Invitation.DeliveryProfile != "custom-web" ||
 			preview.Invitation.Status(now.Add(time.Minute)) != domain.OrganizationInvitationStatusPending {
 			t.Fatalf("unexpected resent invitation: %+v", preview.Invitation)
 		}
 		assertInvitationMetadataRole(t, preview.Invitation.Metadata, "manager")
+		if got := testutil.CountEmailJobs(t, ctx, preview.Invitation.Email, domain.EmailTemplateOrganizationInviteLinkOnly); got != 2 {
+			t.Fatalf("link-only invitation email jobs = %d, want 2", got)
+		}
 	})
 }
 
@@ -398,6 +494,49 @@ func TestCreateInvitationEmailAlwaysContainsCode(t *testing.T) {
 		}
 		if gotCode != invite.RawToken {
 			t.Fatalf("expected invitation code %q, got %q", invite.RawToken, gotCode)
+		}
+	})
+}
+
+func TestCreateInvitationUsesCodeOnlyDeliveryProfile(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "code-only-owner@example.com",
+			Username: "code-only-owner",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, owner.Username, domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		svc := New(Config{
+			Store: tdb.Store, Tx: tdb.Tx, Mode: OrgModeMulti, InvitationTTL: time.Hour,
+			InvitationDeliveryProfiles: map[string]config.InvitationDeliveryProfile{
+				"manual": {Target: config.InvitationTargetNone, EmailAction: config.InvitationEmailCodeOnly, TokenTransport: config.InvitationTokenQuery},
+			},
+		})
+		invite, err := svc.CreateInvitation(ctx, CreateInvitationInput{
+			OrganizationID:  org.ID,
+			ActorUserID:     owner.ID,
+			Email:           "code-only-invitee@example.com",
+			DeliveryProfile: "manual",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if invite.InviteURL != "" {
+			t.Fatalf("code-only invite URL = %q, want empty", invite.InviteURL)
+		}
+		if invite.Invitation.DeliveryProfile != "manual" {
+			t.Fatalf("delivery profile = %q, want manual", invite.Invitation.DeliveryProfile)
+		}
+		if got := testutil.CountEmailJobs(t, ctx, invite.Invitation.Email, domain.EmailTemplateOrganizationInviteCodeOnly); got != 1 {
+			t.Fatalf("code-only invitation email jobs = %d, want 1", got)
 		}
 	})
 }

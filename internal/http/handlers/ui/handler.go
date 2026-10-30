@@ -42,6 +42,7 @@ type UIHandler struct {
 	Verification   *challenge.VerificationCodeService
 	EmailTemplates *email.TemplateService
 	Config         *config.Service
+	UserUIEnabled  func() bool
 
 	Limiter          ratelimiter.AuthLimiter
 	Logger           *slog.Logger

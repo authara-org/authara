@@ -36,8 +36,20 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 		h.renderInvitationError(w, r, err)
 		return
 	}
-
 	statusMessage := invitationStatusMessage(preview.Invitation.Status(now))
+	if !h.userUIEnabled() {
+		if statusMessage != "" {
+			http.NotFound(w, r)
+			return
+		}
+		fallbackURL, err := h.Organizations.HostedInvitationFallbackURL(token)
+		if err != nil || fallbackURL == "" {
+			http.NotFound(w, r)
+			return
+		}
+		redirect.Redirect(w, r, fallbackURL, http.StatusSeeOther)
+		return
+	}
 
 	userID, ok := httpctx.UserID(r.Context())
 	if !ok {
@@ -130,6 +142,13 @@ func (h *UIHandler) InvitationAcceptPage(w http.ResponseWriter, r *http.Request)
 		page.Actions = nil
 	}
 	h.renderInvitationPage(w, r, page)
+}
+
+func (h *UIHandler) userUIEnabled() bool {
+	if h.UserUIEnabled != nil {
+		return h.UserUIEnabled()
+	}
+	return h.Config == nil || h.Config.CurrentUI().UserEnabled
 }
 
 type invitationPage struct {
