@@ -23,5 +23,6 @@ var (
 	ErrOrganizationOperationForbidden        = errors.New("organization operation forbidden")
 	ErrInvalidOrganizationInvitationEmail    = errors.New("invalid organization invitation email")
 	ErrInvalidOrganizationInvitationMetadata = errors.New("invalid organization invitation metadata")
+	ErrInvalidInvitationDeliveryProfile      = errors.New("invalid invitation delivery profile")
 	ErrInvalidOrganizationInvitationToken    = errors.New("invalid organization invitation token")
 )

@@ -1,0 +1,19 @@
+version: 1
+default: custom-web
+
+profiles:
+  custom-web:
+    target: external
+    url: https://app.example.com/invitations/accept
+    email_action: link_only
+    token_transport: query
+
+  mobile:
+    target: external
+    url: https://links.example.com/invitations/accept
+    email_action: link_and_code
+    token_transport: query
+
+  manual-code:
+    target: none
+    email_action: code_only

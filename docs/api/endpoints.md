@@ -1093,7 +1093,7 @@ delete their account from Authara's hosted account page. Authara emits the
 
 Creates a secure Authara organization invitation and returns the invitation link.
 
-Your application backend should call this after it has enforced product-specific rules such as billing and seat limits. `actor_user_id` is required; Authara validates that the actor is a member of the organization and is allowed to invite members. `role` controls the Authara organization role granted on acceptance and may be `member` or `admin`; it defaults to `member`. The `owner` role remains reserved for the organization creator. `metadata` is optional opaque application JSON that Authara stores and forwards unchanged.
+Your application backend should call this after it has enforced product-specific rules such as billing and seat limits. `actor_user_id` is required; Authara validates that the actor is a member of the organization and is allowed to invite members. `role` controls the Authara organization role granted on acceptance and may be `member` or `admin`; it defaults to `member`. The `owner` role remains reserved for the organization creator. `delivery_profile` selects a hosted, custom-page, app-link, or code-only profile predefined in the deployment's invitation-delivery file and defaults to that file's `default` profile. `metadata` is optional opaque application JSON that Authara stores and forwards unchanged.
 
 ```
 POST /auth/internal/v1/organizations/{organization_id}/invitations
@@ -1107,6 +1107,7 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
   "actor_user_id": "8d0b28cc-f307-4f0b-8f61-c5c9f736c4b1",
   "email": "teammate@example.com",
   "role": "admin",
+  "delivery_profile": "custom-web",
   "metadata": {
     "baufunk": {
       "role": "manager"
@@ -1124,6 +1125,7 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
     "organization_id": "68c673e7-1ff9-4113-8bbf-e00f039a9a61",
     "email": "teammate@example.com",
     "role": "admin",
+    "delivery_profile": "custom-web",
     "metadata": {
       "baufunk": {
         "role": "manager"
@@ -1131,12 +1133,15 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
     },
     "status": "pending",
     "expires_at": "2026-01-08T12:00:00Z",
-    "invite_url": "https://example.com/auth/invitations/accept?token=..."
+    "invite_url": "https://app.example.com/invitations/accept?invitation_code=..."
   }
 }
 ```
 
-Authara also enqueues an invitation email when the email worker is configured. The returned `invite_url` is always present for testing or app-owned delivery.
+Authara also enqueues an invitation email when the email worker is configured.
+`invite_url` is returned for link-capable profiles and omitted for `code_only`
+profiles. Resending preserves the invitation's delivery profile while resolving
+its current configured destination.
 
 In `single` mode, an existing account may accept an invitation only after its
 previous membership has been removed. The hosted invitation page keeps the

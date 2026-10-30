@@ -22,6 +22,8 @@ const (
 	EmailTemplatePasswordResetCode                EmailTemplate = "password_reset_code"
 	EmailTemplateEmailChangeCode                  EmailTemplate = "email_change_code"
 	EmailTemplateOrganizationInvite               EmailTemplate = "organization_invitation"
+	EmailTemplateOrganizationInviteLinkOnly       EmailTemplate = "organization_invitation_link_only"
+	EmailTemplateOrganizationInviteCodeOnly       EmailTemplate = "organization_invitation_code_only"
 	EmailTemplateAccountCreated                   EmailTemplate = "account_created"
 	EmailTemplateNewSignIn                        EmailTemplate = "new_sign_in"
 	EmailTemplateAuthMethodAdded                  EmailTemplate = "auth_method_added"
@@ -49,6 +51,8 @@ func SupportedEmailTemplates() []EmailTemplate {
 		EmailTemplatePasswordResetCode,
 		EmailTemplateEmailChangeCode,
 		EmailTemplateOrganizationInvite,
+		EmailTemplateOrganizationInviteLinkOnly,
+		EmailTemplateOrganizationInviteCodeOnly,
 		EmailTemplateAccountCreated,
 		EmailTemplateNewSignIn,
 		EmailTemplateAuthMethodAdded,

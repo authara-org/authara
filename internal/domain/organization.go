@@ -64,6 +64,7 @@ type OrganizationInvitation struct {
 	OrganizationID  uuid.UUID
 	Email           string
 	Role            OrganizationRole
+	DeliveryProfile string
 	Metadata        json.RawMessage
 	TokenHash       string
 	InvitedByUserID *uuid.UUID

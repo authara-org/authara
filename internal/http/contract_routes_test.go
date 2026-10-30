@@ -127,6 +127,12 @@ func TestUserUIRoutesAreBlockedWhenDisabled(t *testing.T) {
 		}
 	}
 
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/auth/invitations/accept", nil))
+	if response.Code != http.StatusBadRequest {
+		t.Errorf("hosted invitation fallback route status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+
 	routes := collectRoutes(t, router)
 	for _, key := range []string{
 		http.MethodGet + " /auth/static/*",
@@ -142,7 +148,7 @@ func TestUserUIRoutesAreBlockedWhenDisabled(t *testing.T) {
 	}
 
 	userUIEnabled = true
-	response := httptest.NewRecorder()
+	response = httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/auth/login", nil))
 	if response.Code != http.StatusOK {
 		t.Errorf("GET /auth/login after enabling user UI status = %d, want %d", response.Code, http.StatusOK)

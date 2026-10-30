@@ -3925,6 +3925,10 @@ components:
           format: email
         role:
           $ref: "#/components/schemas/OrganizationInvitationRole"
+        delivery_profile:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
+          description: Deployment-configured invitation delivery profile. Omit to use the profile marked as default.
         metadata:
           type: object
           additionalProperties: true
@@ -4055,6 +4059,10 @@ components:
           format: email
         role:
           $ref: "#/components/schemas/OrganizationRole"
+        delivery_profile:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
+          description: Delivery profile selected when the invitation was created.
         metadata:
           type: object
           additionalProperties: true

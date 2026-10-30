@@ -11,6 +11,7 @@ import (
 
 	"github.com/authara-org/authara/internal/accesspolicy"
 	authsvc "github.com/authara-org/authara/internal/auth"
+	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/render"
@@ -79,6 +80,58 @@ func TestSingleModeInvitationWaitsForExistingOrganizationDeparture(t *testing.T)
 		h.InvitationAcceptPage(rr, req)
 		if body := rr.Body.String(); !strings.Contains(body, `action="/auth/invitations/accept"`) || !strings.Contains(body, "Join Target") {
 			t.Fatalf("expected invitation acceptance after departure, body=%s", body)
+		}
+	})
+}
+
+func TestHostedInvitationRedirectsToExternalDefaultWhenUserUIIsDisabled(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		organizations := organization.New(organization.Config{
+			Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti, InvitationTTL: time.Hour,
+			DefaultInvitationDeliveryProfile: "mobile",
+			InvitationDeliveryProfiles: map[string]config.InvitationDeliveryProfile{
+				"mobile": {
+					Target: config.InvitationTargetExternal, URL: "https://links.example.com/invitations/accept",
+					EmailAction: config.InvitationEmailLinkAndCode, TokenTransport: config.InvitationTokenQuery,
+				},
+			},
+		})
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "fallback-owner@example.com", Username: "fallback-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, owner.Username, domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		invite, err := organizations.CreateInvitation(ctx, organization.CreateInvitationInput{
+			OrganizationID: org.ID, ActorUserID: owner.ID, Email: "fallback-invitee@example.com",
+			DeliveryProfile: config.DefaultInvitationDeliveryProfile,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		h := &UIHandler{Organizations: organizations, UserUIEnabled: func() bool { return false }}
+		req := httptest.NewRequest(http.MethodGet, "/auth/invitations/accept?token="+url.QueryEscape(invite.RawToken), nil).WithContext(ctx)
+		rr := httptest.NewRecorder()
+		h.InvitationAcceptPage(rr, req)
+
+		if rr.Code != http.StatusSeeOther {
+			t.Fatalf("status = %d, want %d", rr.Code, http.StatusSeeOther)
+		}
+		if want := "https://links.example.com/invitations/accept?invitation_code=" + url.QueryEscape(invite.RawToken); rr.Header().Get("Location") != want {
+			t.Fatalf("Location = %q, want %q", rr.Header().Get("Location"), want)
+		}
+
+		if err := tdb.Store.MarkOrganizationInvitationRevoked(ctx, invite.Invitation.ID, &owner.ID, time.Now().UTC()); err != nil {
+			t.Fatal(err)
+		}
+		rr = httptest.NewRecorder()
+		h.InvitationAcceptPage(rr, req)
+		if rr.Code != http.StatusNotFound || rr.Header().Get("Location") != "" {
+			t.Fatalf("revoked invitation response = %d, Location = %q", rr.Code, rr.Header().Get("Location"))
 		}
 	})
 }

@@ -121,6 +121,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 		r.Group(func(r chi.Router) {
 			r.Use(mw.HTMX)
 			userRoutes := r.With(userUI)
+			r.With(mw.OptionalAppAccessIdentity).Get("/invitations/accept", uih.InvitationAcceptPage)
 
 			// authara internals
 			userRoutes.Get("/successful-deletion", uih.SuccessfulDeletionPage)
@@ -151,7 +152,6 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			userRoutes.Group(func(r chi.Router) {
 				r.Use(mw.OptionalAppAccessIdentity)
 
-				r.Get("/invitations/accept", uih.InvitationAcceptPage)
 				r.Get("/invitations/signup", uih.InvitationSignupPage)
 				r.Get("/invitations/login", uih.InvitationLoginPage)
 			})

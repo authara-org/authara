@@ -143,6 +143,7 @@ func NewHTTPServer(app *App, version string) (*httpserver.Server, error) {
 	)
 	uiHandler.Apple = app.Services.Apple
 	uiHandler.AppleCredentials = app.Services.AppleCredentials
+	uiHandler.UserUIEnabled = func() bool { return app.Config.CurrentUI().UserEnabled }
 	handlers := httpserver.Handlers{
 		UI:  uiHandler,
 		API: apiHandler,

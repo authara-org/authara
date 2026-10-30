@@ -197,6 +197,7 @@ Examples:
 AUTHARA_ORG_MODE
 AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED
 AUTHARA_ORGANIZATION_INVITATION_TTL
+AUTHARA_INVITATION_DELIVERY_PROFILES_FILE
 AUTHARA_INTERNAL_API_TOKEN
 ```
 
@@ -204,6 +205,37 @@ AUTHARA_INTERNAL_API_TOKEN
 to manage non-capacity organization data directly through Authara.
 Organization creation, invitation creation, and invitation resend remain
 internal-only for backend billing and seat-limit checks.
+
+Invitation delivery profiles let an internal invitation request select an
+Authara-hosted page, a custom HTTPS page or universal/app link, or manual code
+entry. Profiles also choose whether the email displays a link, a code, or both.
+Profiles come from the read-only YAML or JSON file named by
+`AUTHARA_INVITATION_DELIVERY_PROFILES_FILE`. Core validates and loads the file
+at startup; it never accepts redirect destinations through an HTTP API or the
+operator UI. An invitation request can only select a predefined profile key,
+and omitted keys use the file's `default` profile.
+The built-in `authara-hosted` profile can create or resend invitations only
+while `AUTHARA_USER_UI_ENABLED=true`. Before disabling that UI, set the default
+to an external profile. Previously sent hosted links then redirect through the
+current external default, allowing a universal/app link to provide its normal
+web fallback. If the default is hosted or code-only, those old links return 404.
+
+Mount the file read-only in the Core container:
+
+```yaml
+services:
+  authara:
+    environment:
+      AUTHARA_INVITATION_DELIVERY_PROFILES_FILE: /etc/authara/invitation-delivery.yaml
+    volumes:
+      - ./invitation-delivery.yaml:/etc/authara/invitation-delivery.yaml:ro
+```
+
+See [`invitation-delivery.example.yaml`](invitation-delivery.example.yaml) for
+the complete shape. JSON using the same fields is also accepted. Production
+external destinations must use HTTPS; HTTP is accepted only for loopback hosts.
+Keep profile keys configured until all pending invitations that use them have
+expired; resending resolves the stored key against the current startup file.
 
 ---
 

@@ -125,14 +125,17 @@ func NewServices(app *App) (Services, error) {
 	)
 
 	organizationService := organization.New(organization.Config{
-		Store:                  app.Store,
-		Tx:                     txManager,
-		WebhookPublisher:       webhookPublisher,
-		Logger:                 app.Logger,
-		Policy:                 app.Config,
-		PublicURL:              app.Config.Values.PublicURL,
-		Mode:                   organization.OrgMode(app.Config.Organization.Mode),
-		AccessTokenRevocations: accessTokenRevocations,
+		Store:                            app.Store,
+		Tx:                               txManager,
+		WebhookPublisher:                 webhookPublisher,
+		Logger:                           app.Logger,
+		Policy:                           app.Config,
+		UI:                               app.Config,
+		PublicURL:                        app.Config.Values.PublicURL,
+		Mode:                             organization.OrgMode(app.Config.Organization.Mode),
+		InvitationDeliveryProfiles:       app.Config.Organization.InvitationDeliveryProfiles,
+		DefaultInvitationDeliveryProfile: app.Config.Organization.DefaultInvitationDeliveryProfile,
+		AccessTokenRevocations:           accessTokenRevocations,
 	})
 	app.Logger.Warn("AUTHARA_ORG_MODE is a boot-time product shape; changing it after production use is unsupported", "mode", app.Config.Organization.Mode)
 

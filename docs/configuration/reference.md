@@ -251,6 +251,7 @@ Example:
 AUTHARA_ORG_MODE
 AUTHARA_PUBLIC_ORGANIZATION_MANAGEMENT_ENABLED
 AUTHARA_ORGANIZATION_INVITATION_TTL
+AUTHARA_INVITATION_DELIVERY_PROFILES_FILE
 AUTHARA_INTERNAL_API_TOKEN
 ```
 
@@ -261,6 +262,22 @@ to manage non-capacity organization data through matching `/auth/api/v1`
 routes. Organization creation, invitation creation, and invitation resend remain
 internal-only for backend billing and seat-limit checks and remain available
 through bearer authentication in either mode.
+
+`AUTHARA_INVITATION_DELIVERY_PROFILES_FILE` names a read-only YAML or JSON file
+loaded at startup. Redirect destinations cannot be changed through the operator
+UI or an HTTP API. A profile target is Authara-hosted, an external page/app
+link, or manual code entry. Its email can contain only the link, the link and
+visible code, or only the code. External links can carry the invitation code in
+the query or fragment. Invitation requests select a predefined profile with
+`delivery_profile`; omitted keys use the file's `default` profile. The built-in
+`authara-hosted` profile remains available and preserves hosted link-and-code
+behavior. External URLs require HTTPS except for loopback development URLs.
+Creating or resending an `authara-hosted` invitation requires
+`AUTHARA_USER_UI_ENABLED=true`. Before disabling the hosted UI, select an
+external default. Existing hosted links then redirect through that external
+profile; with a hosted or code-only default they return 404.
+Keep keys referenced by pending invitations in the file so those invitations
+can still be resent.
 
 ---
 

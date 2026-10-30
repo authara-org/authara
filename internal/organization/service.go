@@ -18,26 +18,32 @@ import (
 )
 
 type Config struct {
-	Store                  *store.Store
-	Tx                     *tx.Manager
-	WebhookPublisher       webhook.Publisher
-	Logger                 *slog.Logger
-	InvitationTTL          time.Duration
-	Policy                 config.OrganizationPolicyReader
-	PublicURL              string
-	Mode                   OrgMode
-	AccessTokenRevocations *token.AccessTokenRevocations
+	Store                            *store.Store
+	Tx                               *tx.Manager
+	WebhookPublisher                 webhook.Publisher
+	Logger                           *slog.Logger
+	InvitationTTL                    time.Duration
+	Policy                           config.OrganizationPolicyReader
+	UI                               config.UIPolicyReader
+	PublicURL                        string
+	Mode                             OrgMode
+	InvitationDeliveryProfiles       map[string]config.InvitationDeliveryProfile
+	DefaultInvitationDeliveryProfile string
+	AccessTokenRevocations           *token.AccessTokenRevocations
 }
 
 type Service struct {
-	store                  *store.Store
-	tx                     *tx.Manager
-	webhookPublisher       webhook.Publisher
-	logger                 *slog.Logger
-	policy                 config.OrganizationPolicyReader
-	publicURL              string
-	mode                   OrgMode
-	accessTokenRevocations *token.AccessTokenRevocations
+	store                            *store.Store
+	tx                               *tx.Manager
+	webhookPublisher                 webhook.Publisher
+	logger                           *slog.Logger
+	policy                           config.OrganizationPolicyReader
+	ui                               config.UIPolicyReader
+	publicURL                        string
+	mode                             OrgMode
+	invitationDeliveryProfiles       map[string]config.InvitationDeliveryProfile
+	defaultInvitationDeliveryProfile string
+	accessTokenRevocations           *token.AccessTokenRevocations
 }
 
 type UserOrganization struct {
@@ -61,16 +67,38 @@ func New(cfg Config) *Service {
 			return config.OrganizationPolicy{InvitationTTL: cfg.InvitationTTL}
 		})
 	}
+	ui := cfg.UI
+	if ui == nil {
+		ui = config.UIPolicyReaderFunc(func() config.UIPolicy { return config.UIPolicy{UserEnabled: true} })
+	}
+	profiles := make(map[string]config.InvitationDeliveryProfile, len(cfg.InvitationDeliveryProfiles)+1)
+	for key, profile := range cfg.InvitationDeliveryProfiles {
+		profiles[key] = profile
+	}
+	if _, ok := profiles[config.DefaultInvitationDeliveryProfile]; !ok {
+		profiles[config.DefaultInvitationDeliveryProfile] = config.InvitationDeliveryProfile{
+			Target:         config.InvitationTargetHosted,
+			EmailAction:    config.InvitationEmailLinkAndCode,
+			TokenTransport: config.InvitationTokenQuery,
+		}
+	}
+	defaultProfile := cfg.DefaultInvitationDeliveryProfile
+	if defaultProfile == "" {
+		defaultProfile = config.DefaultInvitationDeliveryProfile
+	}
 
 	return &Service{
-		store:                  cfg.Store,
-		tx:                     cfg.Tx,
-		webhookPublisher:       pub,
-		logger:                 cfg.Logger,
-		policy:                 policy,
-		publicURL:              strings.TrimRight(cfg.PublicURL, "/"),
-		mode:                   cfg.Mode,
-		accessTokenRevocations: cfg.AccessTokenRevocations,
+		store:                            cfg.Store,
+		tx:                               cfg.Tx,
+		webhookPublisher:                 pub,
+		logger:                           cfg.Logger,
+		policy:                           policy,
+		ui:                               ui,
+		publicURL:                        strings.TrimRight(cfg.PublicURL, "/"),
+		mode:                             cfg.Mode,
+		invitationDeliveryProfiles:       profiles,
+		defaultInvitationDeliveryProfile: defaultProfile,
+		accessTokenRevocations:           cfg.AccessTokenRevocations,
 	}
 }
 
