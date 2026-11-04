@@ -28,8 +28,9 @@ type Config struct {
 }
 
 type Store struct {
-	db     *sql.DB
-	logSQL bool
+	db        *sql.DB
+	pgxConfig *pgx.ConnConfig
+	logSQL    bool
 }
 
 func (s *Store) DB() *sql.DB {
@@ -68,7 +69,7 @@ func New(cfg Config) (*Store, error) {
 	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
-	c := Store{db: sqlDB, logSQL: cfg.LogSql}
+	c := Store{db: sqlDB, pgxConfig: pgxConfig, logSQL: cfg.LogSql}
 	return &c, nil
 }
 

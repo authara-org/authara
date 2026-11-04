@@ -3,11 +3,15 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/store/model"
+	"github.com/jackc/pgx/v5"
 )
+
+const webhookEventsReadyChannel = "authara_webhook_events_ready"
 
 const webhookEventColumns = `
 	id,
@@ -70,6 +74,29 @@ func (s *Store) CreateWebhookEvent(ctx context.Context, event domain.WebhookEven
 		return domain.WebhookEvent{}, err
 	}
 	return toDomainWebhookEvent(row), nil
+}
+
+// ListenForWebhookEvents holds a dedicated PostgreSQL connection and calls
+// notify after committed webhook inserts. The queue remains the source of truth.
+func (s *Store) ListenForWebhookEvents(ctx context.Context, notify func()) error {
+	conn, err := pgx.ConnectConfig(ctx, s.pgxConfig.Copy())
+	if err != nil {
+		return fmt.Errorf("connect webhook event listener: %w", err)
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+
+	if _, err := conn.Exec(ctx, "LISTEN "+webhookEventsReadyChannel); err != nil {
+		return fmt.Errorf("listen for webhook events: %w", err)
+	}
+
+	// Cover events committed before this listener finished subscribing.
+	notify()
+	for {
+		if _, err := conn.WaitForNotification(ctx); err != nil {
+			return err
+		}
+		notify()
+	}
 }
 
 func (s *Store) GetWebhookEventByID(ctx context.Context, eventID string) (domain.WebhookEvent, error) {

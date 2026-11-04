@@ -45,7 +45,8 @@ func (a *App) StartBackgroundWorkers(ctx context.Context) *BackgroundWorkers {
 		workers.monitor("webhook worker", a.Services.WebhookWorker.Done())
 		a.Logger.Info("webhook workers started",
 			"worker_count", a.Config.Webhook.WorkerCount,
-			"poll_interval", webhook.DeliveryPoll.String(),
+			"wake_mode", "postgres_notify",
+			"fallback_poll_interval", webhook.DeliveryPoll.String(),
 		)
 	}
 
