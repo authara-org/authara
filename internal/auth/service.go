@@ -335,7 +335,7 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (domain.User, erro
 			if err := s.enqueueAccountCreated(txCtx, user, domain.ProviderPassword, now); err != nil {
 				return err
 			}
-			return s.publish(txCtx, webhook.NewUserCreated(user.ID, now))
+			return nil
 		})
 		return user, err
 
@@ -407,12 +407,11 @@ func (s *Service) signupWithPassword(ctx context.Context, in SignupInput) (domai
 
 	if initialOrgCreated {
 		now := time.Now().UTC()
-		if err := s.publish(ctx, webhook.NewOrganizationCreated(initialOrg, now)); err != nil {
+		if err := s.publish(ctx, webhook.NewRegistrationCompleted(user, initialOrg, initialMembership, now)); err != nil {
 			return domain.User{}, err
 		}
-		if err := s.publish(ctx, webhook.NewOrganizationMembershipCreated(initialMembership, now)); err != nil {
-			return domain.User{}, err
-		}
+	} else if err := s.publish(ctx, webhook.NewUserCreated(user.ID, time.Now().UTC())); err != nil {
+		return domain.User{}, err
 	}
 
 	return user, nil
@@ -699,14 +698,10 @@ func (s *Service) loginWithExternalIdentity(ctx context.Context, in LoginInput) 
 	if createdUser {
 		now := time.Now().UTC()
 		if initialOrgCreated {
-			if err := s.publish(ctx, webhook.NewOrganizationCreated(initialOrg, now)); err != nil {
+			if err := s.publish(ctx, webhook.NewRegistrationCompleted(user, initialOrg, initialMembership, now)); err != nil {
 				return domain.User{}, err
 			}
-			if err := s.publish(ctx, webhook.NewOrganizationMembershipCreated(initialMembership, now)); err != nil {
-				return domain.User{}, err
-			}
-		}
-		if err := s.publish(ctx, webhook.NewUserCreated(user.ID, now)); err != nil {
+		} else if err := s.publish(ctx, webhook.NewUserCreated(user.ID, now)); err != nil {
 			return domain.User{}, err
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/authara-org/authara/internal/webhook"
+	"github.com/google/uuid"
 )
 
 type recordingPublisher struct {
@@ -18,7 +19,7 @@ func (p *recordingPublisher) Publish(ctx context.Context, evt webhook.Envelope) 
 	return nil
 }
 
-func TestSignup_EmitsUserCreated(t *testing.T) {
+func TestSignup_EmitsRegistrationCompleted(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
@@ -41,22 +42,28 @@ func TestSignup_EmitsUserCreated(t *testing.T) {
 			t.Fatalf("Signup failed: %v", err)
 		}
 
-		if len(pub.events) != 3 {
-			t.Fatalf("expected 3 events, got %d", len(pub.events))
+		if len(pub.events) != 1 {
+			t.Fatalf("expected 1 event, got %d", len(pub.events))
 		}
 
-		evt := mustFindWebhookEvent(t, pub.events, webhook.EventUserCreated)
-		if evt.Type != webhook.EventUserCreated {
-			t.Fatalf("expected event %q, got %q", webhook.EventUserCreated, evt.Type)
+		evt := mustFindWebhookEvent(t, pub.events, webhook.EventRegistrationCompleted)
+		if evt.Type != webhook.EventRegistrationCompleted {
+			t.Fatalf("expected event %q, got %q", webhook.EventRegistrationCompleted, evt.Type)
 		}
 
-		data, ok := evt.Data.(webhook.UserData)
+		data, ok := evt.Data.(webhook.RegistrationCompletedData)
 		if !ok {
-			t.Fatalf("expected event data type webhook.UserData, got %T", evt.Data)
+			t.Fatalf("expected event data type webhook.RegistrationCompletedData, got %T", evt.Data)
 		}
 
 		if data.UserID != user.ID {
 			t.Fatalf("expected user_id %q, got %q", user.ID, data.UserID)
+		}
+		if data.OrganizationID == uuid.Nil || data.OrganizationName == "" {
+			t.Fatalf("expected complete organization snapshot, got %+v", data)
+		}
+		if data.MembershipRole == "" || string(data.MembershipMetadata) != `{}` {
+			t.Fatalf("expected complete membership snapshot, got %+v", data)
 		}
 		if evt.ID == "" {
 			t.Fatal("expected non-empty event id")

@@ -11,6 +11,7 @@ import (
 type EventType string
 
 const (
+	EventRegistrationCompleted          EventType = "registration.completed"
 	EventUserCreated                    EventType = "user.created"
 	EventUserUpdated                    EventType = "user.updated"
 	EventUserDeleted                    EventType = "user.deleted"
@@ -26,6 +27,7 @@ const (
 )
 
 var SupportedEventTypes = []EventType{
+	EventRegistrationCompleted,
 	EventUserCreated,
 	EventUserUpdated,
 	EventUserDeleted,
@@ -49,6 +51,16 @@ type Envelope struct {
 
 type UserData struct {
 	UserID uuid.UUID `json:"user_id"`
+}
+
+// RegistrationCompletedData is the complete initial identity snapshot emitted
+// after a direct registration creates its user, organization, and membership.
+type RegistrationCompletedData struct {
+	UserID             uuid.UUID       `json:"user_id"`
+	OrganizationID     uuid.UUID       `json:"organization_id"`
+	OrganizationName   string          `json:"organization_name"`
+	MembershipRole     string          `json:"membership_role"`
+	MembershipMetadata json.RawMessage `json:"membership_metadata"`
 }
 
 type OrganizationData struct {
@@ -105,6 +117,21 @@ type OrganizationInvitationRevokedData struct {
 
 func NewUserCreated(userID uuid.UUID, now time.Time) Envelope {
 	return newEnvelope(EventUserCreated, now, UserData{UserID: userID})
+}
+
+func NewRegistrationCompleted(
+	user domain.User,
+	org domain.Organization,
+	membership domain.OrganizationMembership,
+	now time.Time,
+) Envelope {
+	return newEnvelope(EventRegistrationCompleted, now, RegistrationCompletedData{
+		UserID:             user.ID,
+		OrganizationID:     org.ID,
+		OrganizationName:   org.Name,
+		MembershipRole:     string(membership.Role),
+		MembershipMetadata: json.RawMessage(`{}`),
+	})
 }
 
 func NewUserUpdated(userID uuid.UUID, now time.Time) Envelope {

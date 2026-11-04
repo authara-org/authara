@@ -181,6 +181,7 @@ func TestWebhookContract_PayloadShapes(t *testing.T) {
 	revokedInvitation.RevokedByUserID = &revokedBy
 
 	events := []Envelope{
+		NewRegistrationCompleted(domain.User{ID: userID}, fakeOrganization(), fakeMembership(), time.Now()),
 		NewUserCreated(userID, time.Now()),
 		NewUserUpdated(userID, time.Now()),
 		NewUserDeleted(userID, time.Now()),

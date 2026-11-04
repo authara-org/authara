@@ -13,6 +13,7 @@ worker pool sends HTTP POST requests to your webhook endpoint.
 
 Supported events:
 
+- `registration.completed`
 - `user.created`
 - `user.updated`
 - `user.deleted`
@@ -155,6 +156,8 @@ X-Authara-Signature: sha256=...
 }
 ```
 
+`registration.completed` replaces the separate user, organization, and membership creation events for a direct initial registration. Its snapshot contains the user id, organization id and name, membership role, and opaque membership metadata. It is queued in the same database transaction as the new identity, so consumers can project the complete initial account atomically. Later lifecycle changes continue to use their granular events.
+
 Organization events include the organization id, name, kind, and creator when available. Created-membership events also include whether the membership was created with the organization, the source invitation id when applicable, and the invitation's opaque metadata. Invitation events include the invitation id, organization id, invited email, Authara role, and opaque application metadata.
 
 ---
@@ -243,6 +246,8 @@ http.HandleFunc("/webhooks/authara", func(w http.ResponseWriter, r *http.Request
 	}
 
 	switch evt.Type {
+	case "registration.completed":
+		// create the initial user, organization, membership, and product role atomically
 	case "user.created":
 		data, err := authara.DecodeWebhookData[authara.UserCreatedData](evt)
 		if err != nil {
