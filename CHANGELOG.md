@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.1](https://github.com/authara-org/authara/compare/v0.30.0...v0.30.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **webhooks:** deliver queued events without polling delay ([#84](https://github.com/authara-org/authara/issues/84)) ([da4ed1a](https://github.com/authara-org/authara/commit/da4ed1ab83a434947a6cdece818608f78e9ddc73))
+
 ## [0.30.0](https://github.com/authara-org/authara/compare/v0.29.0...v0.30.0) (2026-10-30)
 
 
