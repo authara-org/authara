@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.30.2](https://github.com/authara-org/authara/compare/v0.30.1...v0.30.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* **migrations:** reconcile duplicate password reset rows ([#88](https://github.com/authara-org/authara/issues/88)) ([abbbcdf](https://github.com/authara-org/authara/commit/abbbcdf369522021a0f88327a91c19b6ca769ac6))
+* **migrations:** repair password reset user uniqueness ([#86](https://github.com/authara-org/authara/issues/86)) ([8079965](https://github.com/authara-org/authara/commit/8079965f408cb58a0cb58a074bb261bda14cbd9b))
+
 ## [0.30.1](https://github.com/authara-org/authara/compare/v0.30.0...v0.30.1) (2026-11-04)
 
 
