@@ -821,6 +821,7 @@ variables:
     required: false
     type: csv
     allowed_values:
+      - registration.completed
       - user.created
       - user.updated
       - user.deleted

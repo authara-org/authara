@@ -887,11 +887,13 @@ func TestLoginWithExternalIdentity_CreatesUserWhenMissing(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		pub := &recordingPublisher{}
 		svc := New(Config{
-			Store:         tdb.Store,
-			Tx:            tdb.Tx,
-			AccessPolicy:  staticAccessPolicy{allowed: true},
-			Organizations: testOrganizations(tdb),
+			Store:            tdb.Store,
+			Tx:               tdb.Tx,
+			AccessPolicy:     staticAccessPolicy{allowed: true},
+			Organizations:    testOrganizations(tdb),
+			WebhookPublisher: pub,
 			OAuthProviders: oauth.OAuthProviders{
 				Providers: []oauth.OAuthProvider{
 					oauth.NewOAuthProvider(domain.ProviderGoogle, "test-google-client-id", "http://localhost:3000"),
@@ -941,6 +943,9 @@ func TestLoginWithExternalIdentity_CreatesUserWhenMissing(t *testing.T) {
 		data := testutil.LatestEmailTemplateData(t, ctx, user.Email, domain.EmailTemplateAccountCreated)
 		if data[email.TemplateVariableAuthMethod] != string(domain.ProviderGoogle) {
 			t.Fatalf("unexpected OAuth account-created template data: %#v", data)
+		}
+		if len(pub.events) != 1 || pub.events[0].Type != webhook.EventRegistrationCompleted {
+			t.Fatalf("OAuth registration events = %+v, want one %q event", pub.events, webhook.EventRegistrationCompleted)
 		}
 	})
 }

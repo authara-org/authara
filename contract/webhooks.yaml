@@ -1,6 +1,23 @@
 version: 1
 
 events:
+  - type: registration.completed
+    stability: stable
+    headers:
+      - X-Authara-Event
+      - X-Authara-Delivery
+      - X-Authara-Signature
+    payload:
+      id: string
+      type: registration.completed
+      created_at: rfc3339
+      data:
+        user_id: uuid
+        organization_id: uuid
+        organization_name: string
+        membership_role: string
+        membership_metadata: object
+
   - type: user.created
     stability: stable
     headers:
