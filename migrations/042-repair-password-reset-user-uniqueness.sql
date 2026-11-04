@@ -1,5 +1,18 @@
 -- +migrate Up
 
+WITH ranked_resets AS (
+	SELECT id,
+		row_number() OVER (
+			PARTITION BY user_id
+			ORDER BY created_at DESC, id DESC
+		) AS position
+	FROM authara.pending_password_resets
+)
+DELETE FROM authara.pending_password_resets AS reset
+USING ranked_resets
+WHERE reset.id = ranked_resets.id
+	AND ranked_resets.position > 1;
+
 -- +migrate StatementBegin
 DO $migration$
 BEGIN
