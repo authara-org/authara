@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0](https://github.com/authara-org/authara/compare/v0.30.2...v0.31.0) (2026-11-04)
+
+
+### Features
+
+* **webhooks:** add atomic registration completion event ([#89](https://github.com/authara-org/authara/issues/89)) ([051cae9](https://github.com/authara-org/authara/commit/051cae9a1b384ddb43cd5570e898f2ac64ce9f0f))
+
 ## [0.30.2](https://github.com/authara-org/authara/compare/v0.30.1...v0.30.2) (2026-11-04)
 
 
