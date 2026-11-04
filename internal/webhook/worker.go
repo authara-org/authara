@@ -43,6 +43,7 @@ type Worker struct {
 	metrics WorkerMetrics
 	cfg     WorkerConfig
 	policy  func() WorkerPolicy
+	wake    chan struct{}
 
 	lifecycleMu sync.Mutex
 	started     bool
@@ -53,6 +54,7 @@ type Worker struct {
 }
 
 const webhookForcedShutdownGrace = time.Second
+const webhookListenerReconnectDelay = time.Second
 
 func NewWorker(store *store.Store, sender *Sender, logger *slog.Logger, cfg WorkerConfig) *Worker {
 	if logger == nil {
@@ -70,7 +72,7 @@ func NewWorker(store *store.Store, sender *Sender, logger *slog.Logger, cfg Work
 	}
 	return &Worker{
 		store: store, sender: sender, logger: logger, metrics: cfg.Metrics, cfg: cfg, policy: policy,
-		done: make(chan struct{}),
+		wake: make(chan struct{}, max(1, cfg.WorkerCount)), done: make(chan struct{}),
 	}
 }
 
@@ -93,6 +95,11 @@ func (w *Worker) Run(ctx context.Context) {
 			w.run(claimCtx, workCtx, workerID)
 		}(i + 1)
 	}
+	w.workers.Add(1)
+	go func() {
+		defer w.workers.Done()
+		w.listenForReadyEvents(claimCtx)
+	}()
 	w.workers.Add(1)
 	go func() {
 		defer w.workers.Done()
@@ -163,7 +170,7 @@ func (w *Worker) run(claimCtx, workCtx context.Context, workerID int) {
 		default:
 		}
 
-		processed, err := w.runOnce(claimCtx, workCtx, time.Now().UTC())
+		processed, err := w.runOnce(claimCtx, workCtx, time.Now().UTC(), w.wakeOne)
 		if err != nil {
 			if claimCtx.Err() != nil {
 				return
@@ -180,16 +187,17 @@ func (w *Worker) run(claimCtx, workCtx context.Context, workerID int) {
 		select {
 		case <-claimCtx.Done():
 			return
+		case <-w.wake:
 		case <-time.After(w.cfg.PollInterval):
 		}
 	}
 }
 
 func (w *Worker) RunOnce(ctx context.Context, now time.Time) (bool, error) {
-	return w.runOnce(ctx, ctx, now)
+	return w.runOnce(ctx, ctx, now, nil)
 }
 
-func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool, error) {
+func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time, onClaim func()) (bool, error) {
 	policy := w.policy()
 	pollStarted := time.Now()
 	event, err := w.store.ClaimNextWebhookEvent(claimCtx, now)
@@ -204,6 +212,9 @@ func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool
 		return false, err
 	}
 	w.observePoll("claimed", pollStarted)
+	if onClaim != nil {
+		onClaim()
+	}
 	started := time.Now()
 
 	retryable, err := w.sender.sendOnce(workCtx, EventType(event.EventType), event.ID, event.Payload)
@@ -256,6 +267,32 @@ func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool
 	)
 	w.observeJob("succeeded", started)
 	return true, nil
+}
+
+func (w *Worker) wakeOne() {
+	select {
+	case w.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (w *Worker) listenForReadyEvents(ctx context.Context) {
+	if w.store == nil {
+		<-ctx.Done()
+		return
+	}
+	for {
+		err := w.store.ListenForWebhookEvents(ctx, w.wakeOne)
+		if ctx.Err() != nil {
+			return
+		}
+		w.logger.ErrorContext(ctx, "webhook event listener failed", "error", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(webhookListenerReconnectDelay):
+		}
+	}
 }
 
 func (w *Worker) observeJob(outcome string, started time.Time) {

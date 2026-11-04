@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -78,6 +79,69 @@ func TestWorkerDeliversQueuedEvent(t *testing.T) {
 	}
 	if stored.AttemptCount != 1 {
 		t.Fatalf("expected one attempt, got %d", stored.AttemptCount)
+	}
+}
+
+func TestWorkerNotificationFansOutCommittedEvents(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	events := []Envelope{
+		NewUserCreated(uuid.New(), time.Now().UTC()),
+		NewUserCreated(uuid.New(), time.Now().UTC()),
+		NewUserCreated(uuid.New(), time.Now().UTC()),
+	}
+	for _, event := range events {
+		defer deleteWebhookEvent(t, tdb, event.ID)
+	}
+
+	started := make(chan struct{}, len(events))
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		started <- struct{}{}
+		<-release
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	cfg := testWorkerConfig()
+	cfg.WorkerCount = len(events)
+	cfg.PollInterval = time.Hour
+	worker := NewWorker(tdb.Store, NewSender(server.URL, "secret", server.Client()), nil, cfg)
+	worker.Run(context.Background())
+	defer func() {
+		releaseOnce.Do(func() { close(release) })
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := worker.Shutdown(shutdownCtx); err != nil {
+			t.Errorf("shutdown worker: %v", err)
+		}
+	}()
+
+	err := tdb.Tx.WithTransaction(context.Background(), func(ctx context.Context) error {
+		publisher := NewQueuePublisher(tdb.Store)
+		for _, event := range events {
+			if err := publisher.Publish(ctx, event); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("publish events: %v", err)
+	}
+
+	deadline := time.After(3 * time.Second)
+	for range events {
+		select {
+		case <-started:
+		case <-deadline:
+			t.Fatal("committed webhook notification did not fan out to available workers")
+		}
+	}
+	releaseOnce.Do(func() { close(release) })
+
+	for _, event := range events {
+		waitForWebhookStatus(t, tdb, event.ID, domain.WebhookEventStatusDelivered)
 	}
 }
 
@@ -274,6 +338,18 @@ func getWebhookEvent(t *testing.T, tdb *testutil.TestDB, eventID string) domain.
 		t.Fatalf("GetWebhookEventByID failed: %v", err)
 	}
 	return event
+}
+
+func waitForWebhookStatus(t *testing.T, tdb *testutil.TestDB, eventID string, want domain.WebhookEventStatus) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if event := getWebhookEvent(t, tdb, eventID); event.Status == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("webhook event %q did not reach status %q", eventID, want)
 }
 
 func assertTimeNear(t *testing.T, got, want time.Time) {
