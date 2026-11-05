@@ -1,4 +1,4 @@
-anyio==4.12.1
+anyio==4.14.2
 babel==2.18.0
 backrefs==6.2
 certifi==2026.2.25
