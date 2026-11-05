@@ -1083,11 +1083,12 @@ Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
 ```
 
 User deletion cannot bypass organization invariants: Authara rejects deletion
-when the user is the last member or sole owner of a team organization. An owned
-personal organization is deleted as part of the user deletion; in `multi` mode,
-memberships in other users' personal organizations are removed. Users can also
-delete their account from Authara's hosted account page. Authara emits the
-`user.deleted` webhook so applications can clean up product data and billing.
+when the user is the sole owner of a team organization that has other members.
+An owned sole-member team organization and an owned personal organization are
+deleted atomically with the user; in `multi` mode, memberships in other users'
+personal organizations are removed. Users can also delete their account from
+Authara's hosted account page. Authara emits `organization.deleted` before
+`user.deleted` so applications can clean up product data and billing.
 
 ## Create organization invitation
 

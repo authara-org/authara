@@ -1371,7 +1371,7 @@ func TestDeleteUserRemovesOwnedPersonalOrganization(t *testing.T) {
 	})
 }
 
-func TestDeleteUserCannotBypassOrganizationLifecycle(t *testing.T) {
+func TestDeleteUserRemovesSoleMemberTeamOrganization(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
@@ -1384,17 +1384,24 @@ func TestDeleteUserCannotBypassOrganizationLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx})
+		var events []webhook.EventType
+		pub := publisherFunc(func(_ context.Context, evt webhook.Envelope) error {
+			events = append(events, evt.Type)
+			return nil
+		})
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, WebhookPublisher: pub})
 
-		err = svc.DeleteUser(ctx, owner.ID)
-		if !errors.Is(err, organization.ErrLastOrganizationMember) {
-			t.Fatalf("expected last-member error, got %v", err)
+		if err := svc.DeleteUser(ctx, owner.ID); err != nil {
+			t.Fatalf("DeleteUser failed: %v", err)
 		}
-		if _, err := tdb.Store.GetUserByID(ctx, owner.ID); err != nil {
-			t.Fatalf("expected user to remain: %v", err)
+		if _, err := tdb.Store.GetUserByID(ctx, owner.ID); !errors.Is(err, store.ErrUserNotFound) {
+			t.Fatalf("expected user deletion, got %v", err)
 		}
-		if _, err := tdb.Store.GetOrganizationByID(ctx, org.ID); err != nil {
-			t.Fatalf("expected organization to remain: %v", err)
+		if _, err := tdb.Store.GetOrganizationByID(ctx, org.ID); !errors.Is(err, store.ErrOrganizationNotFound) {
+			t.Fatalf("expected organization deletion, got %v", err)
+		}
+		if len(events) != 2 || events[0] != webhook.EventOrganizationDeleted || events[1] != webhook.EventUserDeleted {
+			t.Fatalf("expected organization.deleted then user.deleted, got %v", events)
 		}
 	})
 }
