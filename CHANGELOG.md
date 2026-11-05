@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.1](https://github.com/authara-org/authara/compare/v0.31.0...v0.31.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* delete sole-member organization with user ([#91](https://github.com/authara-org/authara/issues/91)) ([0a0f51c](https://github.com/authara-org/authara/commit/0a0f51ccdcc37771af308a98a8d364d29c217aca))
+
 ## [0.31.0](https://github.com/authara-org/authara/compare/v0.30.2...v0.31.0) (2026-11-04)
 
 
