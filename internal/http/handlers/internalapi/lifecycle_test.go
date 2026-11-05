@@ -201,6 +201,10 @@ func TestDeleteInternalUser(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, user.ID, "API Delete User", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
 		authService := auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx})
 		handler := New(authService, nil, false)
 		resp, err := handler.DeleteInternalUser(ctx, contract.DeleteInternalUserRequestObject{UserID: user.ID})
@@ -211,6 +215,53 @@ func TestDeleteInternalUser(t *testing.T) {
 		writeContractResponse(t, rr, resp)
 		if rr.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d body=%s", rr.Code, rr.Body.String())
+		}
+		if _, err := tdb.Store.GetOrganizationByID(ctx, org.ID); !errors.Is(err, store.ErrOrganizationNotFound) {
+			t.Fatalf("expected organization deletion, got %v", err)
+		}
+	})
+}
+
+func TestDeleteInternalUserReturnsOwnershipConflict(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "api-delete-owner-user@example.com", Username: "api-delete-owner-user"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		member, err := tdb.Store.CreateUser(ctx, domain.User{Email: "api-delete-member-user@example.com", Username: "api-delete-member-user"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "API Delete Owner", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tdb.Store.CreateOrganizationMembership(ctx, domain.OrganizationMembership{
+			OrganizationID: org.ID,
+			UserID:         member.ID,
+			Role:           domain.OrganizationRoleMember,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		authService := auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx})
+		handler := New(authService, nil, false)
+		resp, err := handler.DeleteInternalUser(ctx, contract.DeleteInternalUserRequestObject{UserID: owner.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rr := httptest.NewRecorder()
+		writeContractResponse(t, rr, resp)
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d body=%s", rr.Code, rr.Body.String())
+		}
+		var body contract.ErrorResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Error.Code != string(codeLastOrganizationOwner) {
+			t.Fatalf("unexpected error: %+v", body)
 		}
 	})
 }

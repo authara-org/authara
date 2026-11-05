@@ -203,8 +203,8 @@ func (s *Service) TransferOrganizationOwnership(ctx context.Context, in Transfer
 }
 
 // PrepareUserDeletion removes organization-owned state without allowing user
-// deletion to bypass last-owner and last-member rules. The caller must invoke
-// it inside the same transaction that deletes the user.
+// deletion to bypass ownership rules. The caller must invoke it inside the
+// same transaction that deletes the user.
 func (s *Service) PrepareUserDeletion(ctx context.Context, userID uuid.UUID) error {
 	memberships, err := s.store.ListOrganizationMembershipsByUserID(ctx, userID)
 	if err != nil {
@@ -252,19 +252,20 @@ func (s *Service) PrepareUserDeletion(ctx context.Context, userID uuid.UUID) err
 				return ErrPersonalOrganizationImmutable
 			}
 		}
-		if len(item.memberships) == 1 {
+		if len(item.memberships) == 1 && item.organization.Kind != domain.OrganizationKindTeam {
 			return ErrLastOrganizationMember
 		}
-		if item.membership.Role == domain.OrganizationRoleOwner && countOrganizationOwners(item.memberships) == 1 {
+		if len(item.memberships) > 1 && item.membership.Role == domain.OrganizationRoleOwner && countOrganizationOwners(item.memberships) == 1 {
 			return ErrLastOrganizationOwner
 		}
 	}
 
 	now := time.Now().UTC()
 	for _, item := range locked {
-		if item.organization.Kind == domain.OrganizationKindPersonal &&
+		if (item.organization.Kind == domain.OrganizationKindPersonal &&
 			item.organization.CreatedByUserID != nil &&
-			*item.organization.CreatedByUserID == userID {
+			*item.organization.CreatedByUserID == userID) ||
+			(item.organization.Kind == domain.OrganizationKindTeam && len(item.memberships) == 1) {
 			if err := s.deleteOrganization(ctx, item.organization, item.memberships, now, false); err != nil {
 				return err
 			}

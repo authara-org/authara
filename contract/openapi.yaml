@@ -2902,7 +2902,7 @@ paths:
       operationId: deleteInternalUser
       tags: [Internal]
       summary: Delete a user
-      description: Permanently deletes a user after the application backend has approved account-level dependencies such as active subscriptions.
+      description: Permanently deletes a user after the application backend has approved account-level dependencies such as active subscriptions. An owned sole-member team organization is deleted atomically; ownership must be transferred before deleting a sole owner from an organization with other members.
       security:
         - internalBearer: []
       x-authara-access: internal
