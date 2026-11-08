@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"log/slog"
 )
 
 func (s *Store) CurrentSchemaVersion(ctx context.Context) (int, error) {
@@ -12,10 +11,6 @@ func (s *Store) CurrentSchemaVersion(ctx context.Context) (int, error) {
 	err := s.db.QueryRowContext(ctx, `SELECT max(version) FROM public.authara_schema_version`).Scan(&version)
 
 	if err != nil {
-		slog.Error(
-			"failed to query schema version",
-			"err", err,
-		)
 		return 0, err
 	}
 

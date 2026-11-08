@@ -3,19 +3,23 @@ package email
 import (
 	"bytes"
 	"context"
-	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/authara-org/authara/internal/logging"
 )
 
 func TestNoopSenderLogsOnlyNonSensitiveMetadata(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	logger, err := logging.New(logging.Config{Level: "debug", Environment: "test", Version: "test", Writer: &buf})
+	if err != nil {
+		t.Fatal(err)
+	}
 	sender := NewNoopSender(NoopSenderConfig{Logger: logger})
 
 	recipient := "private-recipient@example.com"
 	subject := "Verification for private-subject@example.com"
-	err := sender.Send(context.Background(), recipient, Message{
+	err = sender.Send(context.Background(), recipient, Message{
 		Subject: subject,
 		Text:    "Your code is 123456",
 		HTML:    "<p>Your code is 123456</p>",
@@ -30,9 +34,14 @@ func TestNoopSenderLogsOnlyNonSensitiveMetadata(t *testing.T) {
 			t.Fatalf("noop sender logged sensitive value %q: %s", sensitive, logged)
 		}
 	}
-	if !strings.Contains(logged, "has_subject=true") ||
-		!strings.Contains(logged, "has_text=true") ||
-		!strings.Contains(logged, "has_html=true") {
-		t.Fatalf("expected noop sender metadata in log, got: %s", logged)
+	for _, want := range []string{
+		`"event":"worker_outcome"`,
+		`"worker":"email"`,
+		`"operation":"deliver"`,
+		`"outcome":"skipped"`,
+	} {
+		if !strings.Contains(logged, want) {
+			t.Fatalf("expected noop sender event field %s in log, got: %s", want, logged)
+		}
 	}
 }

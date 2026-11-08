@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math/rand/v2"
 	"sync"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
 )
@@ -48,7 +48,7 @@ type Worker struct {
 	codeSvc   *VerificationCodeService
 	templates EmailTemplateRenderer
 	sender    email.Sender
-	logger    *slog.Logger
+	logger    *logging.Logger
 	metrics   WorkerMetrics
 	cfg       WorkerConfig
 	policy    config.EmailPolicyReader
@@ -78,11 +78,11 @@ func NewWorker(
 	codeSvc *VerificationCodeService,
 	templates EmailTemplateRenderer,
 	sender email.Sender,
-	logger *slog.Logger,
+	logger *logging.Logger,
 	cfg WorkerConfig,
 ) *Worker {
 	if logger == nil {
-		logger = slog.Default()
+		logger = logging.Discard()
 	}
 	if cfg.JobMaxAttempts <= 0 {
 		cfg.JobMaxAttempts = defaultEmailMaxAttempts
@@ -219,7 +219,7 @@ func shutdownForce(ctx context.Context, reserve time.Duration) (<-chan time.Time
 	return timer.C, func() { timer.Stop() }
 }
 
-func (w *Worker) runWorker(claimCtx, workCtx context.Context, workerID int) {
+func (w *Worker) runWorker(claimCtx, workCtx context.Context, _ int) {
 	for {
 		select {
 		case <-claimCtx.Done():
@@ -232,9 +232,11 @@ func (w *Worker) runWorker(claimCtx, workCtx context.Context, workerID int) {
 			if claimCtx.Err() != nil {
 				return
 			}
-			w.logger.ErrorContext(claimCtx, "email worker iteration failed",
-				"worker_id", workerID,
-				"error", err,
+			w.logger.Log(claimCtx, logging.LevelError, logging.EventWorkerOutcome,
+				logging.WorkerField(logging.WorkerEmail),
+				logging.OperationField(logging.OperationClaim),
+				logging.OutcomeField(logging.OutcomeFailed),
+				logging.ErrorCodeField(logging.ErrorStorageUnavailable),
 			)
 
 			select {
@@ -311,16 +313,12 @@ func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool
 			w.observeJob("error", started, queueAge)
 			return true, fmt.Errorf("requeue email job: %w", requeueErr)
 		}
-		// Provider errors can echo the SMTP recipient. The classified fields are
-		// safe for broadly retained logs; job_id provides retry correlation.
-		w.logger.WarnContext(transitionCtx, "email job retry scheduled",
-			"job_id", job.ID,
-			"template", job.Template,
-			"attempt", job.AttemptCount,
-			"failure_class", failureClass,
-			"failure_reason", failureReason,
-			"next_attempt_at", nextAttemptAt,
-			"queue_age", queueAge,
+		w.logger.Log(transitionCtx, logging.LevelWarn, logging.EventWorkerOutcome,
+			logging.WorkerField(logging.WorkerEmail),
+			logging.OperationField(logging.OperationDeliver),
+			logging.OutcomeField(logging.OutcomeRetryScheduled),
+			logging.ErrorCodeField(logging.ErrorDeliveryFailed),
+			logging.Attempt(job.AttemptCount),
 		)
 		w.observeJob("retried", started, queueAge)
 		return true, nil
@@ -335,11 +333,11 @@ func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time) (bool
 		_ = w.store.SetChallengeLastSentAt(transitionCtx, *job.ChallengeID, now)
 	}
 
-	w.logger.InfoContext(transitionCtx, "email job sent",
-		"job_id", job.ID,
-		"template", job.Template,
-		"attempt", job.AttemptCount,
-		"queue_age", queueAge,
+	w.logger.Log(transitionCtx, logging.LevelInfo, logging.EventWorkerOutcome,
+		logging.WorkerField(logging.WorkerEmail),
+		logging.OperationField(logging.OperationDeliver),
+		logging.OutcomeField(logging.OutcomeSucceeded),
+		logging.Attempt(job.AttemptCount),
 	)
 	w.observeJob("succeeded", started, queueAge)
 
@@ -364,13 +362,12 @@ func (w *Worker) failJob(
 		w.observeJob("error", started, queueAge)
 		return fmt.Errorf("mark email job failed: %w", err)
 	}
-	// Do not attach deliveryErr: SMTP responses may contain the recipient.
-	w.logger.ErrorContext(ctx, "email job permanently failed",
-		"job_id", job.ID,
-		"template", job.Template,
-		"attempt", job.AttemptCount,
-		"terminal_reason", terminalReason,
-		"queue_age", queueAge,
+	w.logger.Log(ctx, logging.LevelError, logging.EventWorkerOutcome,
+		logging.WorkerField(logging.WorkerEmail),
+		logging.OperationField(logging.OperationDeliver),
+		logging.OutcomeField(logging.OutcomeExhausted),
+		logging.ErrorCodeField(emailFailureCode(terminalReason)),
+		logging.Attempt(job.AttemptCount),
 	)
 	w.observeJob("failed", started, queueAge)
 	return nil
@@ -520,10 +517,13 @@ func (w *Worker) runStaleReaperLoop(ctx context.Context) {
 			if err != nil {
 				if ctx.Err() == nil {
 					w.observeReaper("failed", started, result)
-					w.logger.ErrorContext(ctx, "failed to recover stale email jobs",
-						"retried", result.Retried,
-						"failed", result.Failed,
-						"error", err,
+					w.logger.Log(ctx, logging.LevelError, logging.EventQueueOutcome,
+						logging.QueueField(logging.QueueEmail),
+						logging.OperationField(logging.OperationRecover),
+						logging.OutcomeField(logging.OutcomeFailed),
+						logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+						logging.RetriedCount(result.Retried),
+						logging.FailedCount(result.Failed),
 					)
 				}
 			} else {
@@ -556,9 +556,26 @@ func (w *Worker) reapStale(ctx context.Context, now time.Time) (store.ReapResult
 		}
 	}
 	if total.Total() > 0 {
-		w.logger.WarnContext(ctx, "recovered stale email jobs", "retried", total.Retried, "failed", total.Failed)
+		w.logger.Log(ctx, logging.LevelWarn, logging.EventQueueOutcome,
+			logging.QueueField(logging.QueueEmail),
+			logging.OperationField(logging.OperationRecover),
+			logging.OutcomeField(logging.OutcomeRecovered),
+			logging.RetriedCount(total.Retried),
+			logging.FailedCount(total.Failed),
+		)
 	}
 	return total, nil
+}
+
+func emailFailureCode(reason string) logging.ErrorCode {
+	switch reason {
+	case "attempts_exhausted":
+		return logging.ErrorAttemptsExhausted
+	case "delivery_deadline_exceeded":
+		return logging.ErrorDeadlineExceeded
+	default:
+		return logging.ErrorDeliveryFailed
+	}
 }
 
 func (w *Worker) observeReaper(result string, started time.Time, jobs store.ReapResult) {

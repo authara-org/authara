@@ -1,12 +1,14 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/securityevent"
@@ -643,11 +646,17 @@ func TestLogin_WithPassword_Succeeds(t *testing.T) {
 		}
 
 		user := createPasswordUser(t, ctx, tdb, "login@example.com", "login-user", passwordHash)
+		var logs bytes.Buffer
+		logger, err := logging.New(logging.Config{Level: "debug", Environment: "test", Version: "test", Writer: &logs})
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		svc := New(Config{
 			Store:        tdb.Store,
 			Tx:           tdb.Tx,
 			AccessPolicy: staticAccessPolicy{allowed: true},
+			Logger:       logger,
 		})
 
 		got, err := svc.Login(ctx, LoginInput{
@@ -660,6 +669,20 @@ func TestLogin_WithPassword_Succeeds(t *testing.T) {
 		}
 		if got.ID != user.ID {
 			t.Fatalf("expected user id %q, got %q", user.ID, got.ID)
+		}
+		if _, err := svc.Login(ctx, LoginInput{Provider: domain.ProviderPassword, Email: user.Email, Password: "wrong-secret"}); !errors.Is(err, ErrInvalidCredentials) {
+			t.Fatalf("denied Login error = %v", err)
+		}
+		logged := logs.String()
+		for _, want := range []string{`"event":"authentication_outcome"`, `"operation":"login"`, `"outcome":"succeeded"`, `"outcome":"denied"`, `"error_code":"invalid_credentials"`} {
+			if !strings.Contains(logged, want) {
+				t.Errorf("login logs missing %s: %s", want, logged)
+			}
+		}
+		for _, forbidden := range []string{user.Email, user.ID.String(), "super-secret", "wrong-secret"} {
+			if strings.Contains(logged, forbidden) {
+				t.Errorf("login logs contain %q: %s", forbidden, logged)
+			}
 		}
 	})
 }

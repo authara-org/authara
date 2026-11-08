@@ -1,11 +1,11 @@
 package bootstrap
 
 import (
-	"log/slog"
 	"time"
 
 	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/session/token"
 )
 
@@ -28,22 +28,21 @@ func NewAccessTokenRevocations(
 	return token.NewAccessTokenRevocationsWithTTL(backend, ttlProvider)
 }
 
-func logAccessTokenRevocationGuarantee(cfg *config.Config, logger *slog.Logger) {
+func logAccessTokenRevocationGuarantee(cfg *config.Config, logger *logging.Logger) {
 	if cfg.Cache.AccessTokenRevocationMode == config.AccessTokenRevocationModeImmediate {
-		logger.Info(
-			"access-token revocation guarantee enabled",
-			"mode", config.AccessTokenRevocationModeImmediate,
-			"cache_provider", cfg.Cache.Provider,
-			"failure_semantics", "deny protected requests when the revocation store is unavailable",
+		logger.Info(logging.EventConfigurationStatus,
+			logging.ComponentField(logging.ComponentAuthentication),
+			logging.OperationField(logging.OperationRevocation),
+			logging.OutcomeField(logging.OutcomeSucceeded),
+			logging.ModeField(logging.ModeImmediate),
 		)
 		return
 	}
 
-	logger.Warn(
-		"access-token revocation is expiry-only",
-		"mode", config.AccessTokenRevocationModeExpiry,
-		"cache_provider", cfg.Cache.Provider,
-		"maximum_residual_access", cfg.Token.AccessTokenTTL,
-		"failure_semantics", "issued access tokens may remain valid after logout or authorization changes until expiry",
+	logger.Warn(logging.EventConfigurationStatus,
+		logging.ComponentField(logging.ComponentAuthentication),
+		logging.OperationField(logging.OperationRevocation),
+		logging.OutcomeField(logging.OutcomeDegraded),
+		logging.ModeField(logging.ModeExpiry),
 	)
 }

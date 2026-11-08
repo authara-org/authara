@@ -58,6 +58,7 @@ nav:
       - Security Events: operations/security-events.md
       - Health Checks: operations/healthchecks.md
       - Prometheus Metrics: operations/metrics.md
+      - Structured Logs: operations/logging.md
 
   - HTTP:
       - Overview: http/overview.md

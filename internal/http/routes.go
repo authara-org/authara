@@ -17,7 +17,7 @@ import (
 func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(middleware.RequestID)
+	r.Use(httpmiddleware.RequestID)
 	if cfg.ErrorPageURL != nil {
 		r.Use(requesterror.CustomPages(cfg.ErrorPageURL))
 	}
@@ -33,7 +33,7 @@ func NewRouter(cfg ServerConfig, mw Middlewares) http.Handler {
 		AllowMicrosoftOAuth: hasOAuthProvider(cfg, domain.ProviderMicrosoft),
 		AllowShowcase:       cfg.Dev,
 	}))
-	r.Use(middleware.Recoverer)
+	r.Use(httpmiddleware.Recoverer(cfg.Logger))
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(httpmiddleware.RequestLogger(cfg.Logger))
 	if !cfg.disableOpenAPIValidation {

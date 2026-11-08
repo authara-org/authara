@@ -2,13 +2,13 @@ package api
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/http/kit/response"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/authara-org/authara/internal/oauth/google"
@@ -40,6 +40,18 @@ type AppleCredentialStore interface {
 	StageProviderLink(context.Context, uuid.UUID, string, time.Time) error
 }
 
+func (h *APIHandler) logInternal(ctx context.Context, level logging.Level, component logging.Component, operation logging.Operation, errorCode logging.ErrorCode) {
+	if h.Logger == nil {
+		return
+	}
+	h.Logger.Log(ctx, level, logging.EventInternalOperation,
+		logging.ComponentField(component),
+		logging.OperationField(operation),
+		logging.OutcomeField(logging.OutcomeFailed),
+		logging.ErrorCodeField(errorCode),
+	)
+}
+
 func (h *APIHandler) passwordPolicyError(err error) (response.ErrorCode, string) {
 	message, ok := auth.PasswordPolicyMessage(err, h.Auth.PasswordMinimumLength())
 	if !ok {
@@ -55,9 +67,14 @@ func (h *APIHandler) rateLimitResult(allowed bool, err error, limitedMessage str
 	if err != nil {
 		logger := h.Logger
 		if logger == nil {
-			logger = slog.Default()
+			logger = logging.Discard()
 		}
-		logger.Error("rate limiter unavailable", "err", err)
+		logger.Error(logging.EventInternalOperation,
+			logging.ComponentField(logging.ComponentAuthentication),
+			logging.OperationField(logging.OperationRateLimit),
+			logging.OutcomeField(logging.OutcomeFailed),
+			logging.ErrorCodeField(logging.ErrorDependencyUnavailable),
+		)
 		return response.CodeInternalError, "Authentication service unavailable.", false
 	}
 	return "", "", true
@@ -71,7 +88,7 @@ type APIHandler struct {
 	Challenge           *challenge.Service
 	Verification        *challenge.VerificationCodeService
 	Limiter             ratelimiter.AuthLimiter
-	Logger              *slog.Logger
+	Logger              *logging.Logger
 	Google              GoogleVerifier
 	Apple               AppleClient
 	AppleNative         AppleClient
@@ -108,7 +125,7 @@ func New(
 	challenge *challenge.Service,
 	verification *challenge.VerificationCodeService,
 	limiter ratelimiter.AuthLimiter,
-	logger *slog.Logger,
+	logger *logging.Logger,
 	google GoogleVerifier,
 	oauthProviders oauth.OAuthProviders,
 	configuration RuntimePolicyReader,

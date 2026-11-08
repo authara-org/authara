@@ -2,8 +2,6 @@ package http
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +9,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/render"
 	"github.com/authara-org/authara/internal/http/middleware"
 	openapicontract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/logging"
 )
 
 const markerAPICSRF = 432
@@ -79,7 +78,7 @@ func newRealCSRFRouter() http.Handler {
 
 func newCSRFContractRouter(apiCSRF func(http.Handler) http.Handler, validateOpenAPI bool) http.Handler {
 	pass := func(next http.Handler) http.Handler { return next }
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 	cfg := ServerConfig{
 		Version:                  "test",
 		Logger:                   logger,

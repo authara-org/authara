@@ -3,11 +3,11 @@ package openapi
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/authara-org/authara/internal/logging"
 )
 
 func BenchmarkValidationMiddleware(b *testing.B) {
@@ -18,7 +18,7 @@ func BenchmarkValidationMiddleware(b *testing.B) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write(body)
 		})
-		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		logger := logging.Discard()
 
 		benchmarks := []struct {
 			name    string

@@ -2,8 +2,6 @@ package http
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	openapicontract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/observability"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
@@ -223,7 +222,7 @@ func newContractTestRouterWithDependencies(metrics *observability.Service, readi
 }
 
 func newContractTestRouterWithOptions(metrics *observability.Service, readiness *meta.Readiness, userUIEnabled func() bool) chi.Router {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 
 	pass := func(next http.Handler) http.Handler { return next }
 	renderer := render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
@@ -294,6 +293,6 @@ func collectRoutes(t *testing.T, r chi.Router) map[string]bool {
 	return out
 }
 
-func middlewareRequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
+func middlewareRequestLogger(logger *logging.Logger) func(http.Handler) http.Handler {
 	return httpmiddleware.RequestLogger(logger)
 }

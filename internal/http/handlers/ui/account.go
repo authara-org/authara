@@ -23,6 +23,7 @@ import (
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
 	"github.com/authara-org/authara/internal/identity"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
@@ -174,7 +175,7 @@ func (h *UIHandler) ChangeUsernamePost(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, auth.ErrInvalidUsername):
 			msg = "Invalid username"
 		default:
-			h.Logger.Error("change username failed", "err", err)
+			h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationAccountUpdate, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 			status = http.StatusInternalServerError
 			msg = "Something went wrong"
 		}
@@ -504,7 +505,7 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 			_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, message))
 			return
 		}
-		h.Logger.Error("hash password failed", "err", err)
+		h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationAccountUpdate, logging.OutcomeFailed, logging.ErrorInternalFailure)
 		htmx.ReSwap(w, "none")
 		_ = h.Render(w, r, http.StatusInternalServerError, toast.ToastMessage(toast.Error, "Something went wrong."))
 		return
@@ -522,7 +523,7 @@ func (h *UIHandler) PasswordChangePost(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, store.ErrorAuthProviderNotFound):
 			msg = "No password is set for this account."
 		default:
-			h.Logger.Error("change password failed", "err", err)
+			h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationAccountUpdate, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 			status = http.StatusInternalServerError
 			msg = "Something went wrong."
 		}

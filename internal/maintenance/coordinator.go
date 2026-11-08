@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
 )
@@ -53,7 +53,7 @@ type Config struct {
 
 type Coordinator struct {
 	store   LeaseStore
-	logger  *slog.Logger
+	logger  *logging.Logger
 	metrics Metrics
 	ownerID uuid.UUID
 	jobs    []Job
@@ -66,12 +66,12 @@ type Coordinator struct {
 	shutdownCtx context.Context
 }
 
-func New(store LeaseStore, logger *slog.Logger, metrics Metrics, jobs []Job, cfg Config) (*Coordinator, error) {
+func New(store LeaseStore, logger *logging.Logger, metrics Metrics, jobs []Job, cfg Config) (*Coordinator, error) {
 	if store == nil {
 		return nil, errors.New("maintenance lease store is required")
 	}
 	if logger == nil {
-		logger = slog.Default()
+		logger = logging.Discard()
 	}
 	if cfg.LeaseDuration <= 0 {
 		cfg.LeaseDuration = defaultLeaseDuration
@@ -161,14 +161,22 @@ func (c *Coordinator) run(ctx context.Context) {
 		if err != nil {
 			if ctx.Err() == nil {
 				c.observeLease("failed")
-				c.logger.ErrorContext(ctx, "cleanup lease acquisition failed", "error", err)
+				c.logger.Log(ctx, logging.LevelError, logging.EventMaintenanceOutcome,
+					logging.OperationField(logging.OperationLease),
+					logging.OutcomeField(logging.OutcomeFailed),
+					logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+				)
 			}
 		} else if !acquired {
 			c.observeLease("skipped")
 		} else {
 			c.observeLease("acquired")
 			c.setLeader(true)
-			c.logger.InfoContext(ctx, "cleanup leadership acquired", "generation", lease.Generation)
+			c.logger.Log(ctx, logging.LevelInfo, logging.EventMaintenanceOutcome,
+				logging.OperationField(logging.OperationLease),
+				logging.OutcomeField(logging.OutcomeSucceeded),
+				logging.Generation(lease.Generation),
+			)
 			c.runAsLeader(ctx, lease)
 			c.setLeader(false)
 		}
@@ -202,12 +210,20 @@ func (c *Coordinator) runAsLeader(parent context.Context, lease store.Maintenanc
 	released, err := c.store.ReleaseMaintenanceLease(releaseCtx, lease)
 	if err != nil {
 		c.observeLease("failed")
-		c.logger.Error("cleanup lease release failed", "error", err)
+		c.logger.Error(logging.EventMaintenanceOutcome,
+			logging.OperationField(logging.OperationLease),
+			logging.OutcomeField(logging.OutcomeFailed),
+			logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+		)
 		return
 	}
 	if released {
 		c.observeLease("released")
-		c.logger.Info("cleanup leadership released", "generation", lease.Generation)
+		c.logger.Info(logging.EventMaintenanceOutcome,
+			logging.OperationField(logging.OperationLease),
+			logging.OutcomeField(logging.OutcomeStopped),
+			logging.Generation(lease.Generation),
+		)
 	}
 }
 
@@ -222,13 +238,22 @@ func (c *Coordinator) renewLease(ctx context.Context, cancel context.CancelFunc,
 			_, renewed, err := c.store.RenewMaintenanceLease(ctx, lease, c.cfg.LeaseDuration)
 			if err != nil {
 				c.observeLease("failed")
-				c.logger.ErrorContext(ctx, "cleanup lease renewal failed", "error", err)
+				c.logger.Log(ctx, logging.LevelError, logging.EventMaintenanceOutcome,
+					logging.OperationField(logging.OperationLease),
+					logging.OutcomeField(logging.OutcomeFailed),
+					logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+				)
 				cancel()
 				return
 			}
 			if !renewed {
 				c.observeLease("lost")
-				c.logger.WarnContext(ctx, "cleanup leadership lost", "generation", lease.Generation)
+				c.logger.Log(ctx, logging.LevelWarn, logging.EventMaintenanceOutcome,
+					logging.OperationField(logging.OperationLease),
+					logging.OutcomeField(logging.OutcomeFailed),
+					logging.ErrorCodeField(logging.ErrorLeaseLost),
+					logging.Generation(lease.Generation),
+				)
 				cancel()
 				return
 			}
@@ -302,17 +327,32 @@ func (c *Coordinator) runJob(ctx context.Context, lease store.MaintenanceLease, 
 				outcome = jobRunCanceled
 			case errors.Is(err, context.DeadlineExceeded):
 				outcome = jobRunIncomplete
-				c.logger.InfoContext(ctx, "cleanup pass reached its time budget", "job", job.Name, "rows", total)
+				c.logger.Log(ctx, logging.LevelInfo, logging.EventMaintenanceOutcome,
+					logging.OperationField(logging.OperationCleanup),
+					logging.OutcomeField(logging.OutcomeIncomplete),
+					logging.ErrorCodeField(logging.ErrorDeadlineExceeded),
+					logging.ItemCount(total),
+				)
 			default:
 				outcome = jobRunFailed
-				c.logger.ErrorContext(ctx, "cleanup pass failed", "job", job.Name, "rows", total, "error", err)
+				c.logger.Log(ctx, logging.LevelError, logging.EventMaintenanceOutcome,
+					logging.OperationField(logging.OperationCleanup),
+					logging.OutcomeField(logging.OutcomeFailed),
+					logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+					logging.ItemCount(total),
+				)
 			}
 			break
 		}
 		if !owned {
 			outcome = jobRunCanceled
 			c.observeLease("lost")
-			c.logger.WarnContext(ctx, "cleanup leadership fencing check failed", "job", job.Name, "generation", lease.Generation)
+			c.logger.Log(ctx, logging.LevelWarn, logging.EventMaintenanceOutcome,
+				logging.OperationField(logging.OperationCleanup),
+				logging.OutcomeField(logging.OutcomeFailed),
+				logging.ErrorCodeField(logging.ErrorLeaseLost),
+				logging.Generation(lease.Generation),
+			)
 			break
 		}
 		if !more {
@@ -320,12 +360,21 @@ func (c *Coordinator) runJob(ctx context.Context, lease store.MaintenanceLease, 
 		}
 		if passCtx.Err() != nil {
 			outcome = jobRunIncomplete
-			c.logger.InfoContext(ctx, "cleanup pass reached its time budget", "job", job.Name, "rows", total)
+			c.logger.Log(ctx, logging.LevelInfo, logging.EventMaintenanceOutcome,
+				logging.OperationField(logging.OperationCleanup),
+				logging.OutcomeField(logging.OutcomeIncomplete),
+				logging.ErrorCodeField(logging.ErrorDeadlineExceeded),
+				logging.ItemCount(total),
+			)
 			break
 		}
 		if batchNumber == c.cfg.MaxBatches-1 {
 			outcome = jobRunIncomplete
-			c.logger.InfoContext(ctx, "cleanup pass reached its batch budget", "job", job.Name, "rows", total)
+			c.logger.Log(ctx, logging.LevelInfo, logging.EventMaintenanceOutcome,
+				logging.OperationField(logging.OperationCleanup),
+				logging.OutcomeField(logging.OutcomeIncomplete),
+				logging.ItemCount(total),
+			)
 			break
 		}
 	}
@@ -334,7 +383,11 @@ func (c *Coordinator) runJob(ctx context.Context, lease store.MaintenanceLease, 
 		c.metrics.ObserveMaintenanceRun(job.Name, string(outcome), time.Since(started), total)
 	}
 	if outcome == jobRunCompleted && total > 0 {
-		c.logger.InfoContext(ctx, "cleanup pass completed", "job", job.Name, "rows", total)
+		c.logger.Log(ctx, logging.LevelInfo, logging.EventMaintenanceOutcome,
+			logging.OperationField(logging.OperationCleanup),
+			logging.OutcomeField(logging.OutcomeSucceeded),
+			logging.ItemCount(total),
+		)
 	}
 	return outcome
 }

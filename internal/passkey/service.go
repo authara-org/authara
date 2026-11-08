@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/securityevent"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -34,7 +34,7 @@ type Config struct {
 	Store          *store.Store
 	Tx             *tx.Manager
 	ChallengeTTL   time.Duration
-	Logger         *slog.Logger
+	Logger         *logging.Logger
 	Policy         config.AuthenticationPolicyReader
 	SessionRevoker SessionRevoker
 	SecurityEvents securityevent.Recorder
@@ -49,7 +49,7 @@ type Service struct {
 	tx             *tx.Manager
 	webAuthn       *webauthn.WebAuthn
 	challengeTTL   time.Duration
-	logger         *slog.Logger
+	logger         *logging.Logger
 	policy         config.AuthenticationPolicyReader
 	sessionRevoker SessionRevoker
 	securityEvents securityevent.Recorder
@@ -721,11 +721,15 @@ func passkeyByCredentialID(passkeys []domain.Passkey, credentialID []byte) (doma
 	return domain.Passkey{}, false
 }
 
-func (s *Service) logPasskeyFailure(ctx context.Context, message string, err error) {
+func (s *Service) logPasskeyFailure(ctx context.Context, _ string, _ error) {
 	if s.logger == nil {
 		return
 	}
-	s.logger.WarnContext(ctx, message, "err", err)
+	s.logger.Log(ctx, logging.LevelWarn, logging.EventAuthenticationOutcome,
+		logging.OperationField(logging.OperationPasskey),
+		logging.OutcomeField(logging.OutcomeFailed),
+		logging.ErrorCodeField(logging.ErrorInternalFailure),
+	)
 }
 
 func marshalOptions(challengeID uuid.UUID, options any) ([]byte, error) {

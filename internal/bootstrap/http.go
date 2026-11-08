@@ -15,6 +15,7 @@ import (
 	"github.com/authara-org/authara/internal/http/handlers/ui"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/ratelimiter"
 	"github.com/authara-org/authara/internal/session/token"
@@ -177,7 +178,12 @@ func trustedProxyCIDRs(app *App) []netip.Prefix {
 	raw := strings.TrimSpace(app.Config.Values.TrustedProxyCIDRsRaw)
 	if !app.Config.Values.TrustProxyHeaders {
 		if raw != "" {
-			app.Logger.Warn("trusted proxy CIDRs are configured but proxy header trust is disabled; forwarded headers will be ignored")
+			app.Logger.Warn(logging.EventConfigurationStatus,
+				logging.ComponentField(logging.ComponentHTTP),
+				logging.OperationField(logging.OperationConfiguration),
+				logging.OutcomeField(logging.OutcomeSkipped),
+				logging.ErrorCodeField(logging.ErrorConfigurationInvalid),
+			)
 		}
 		return nil
 	}
@@ -190,18 +196,33 @@ func trustedProxyCIDRs(app *App) []netip.Prefix {
 		}
 		prefix, err := netip.ParsePrefix(value)
 		if err != nil {
-			app.Logger.Warn("invalid trusted proxy CIDR; entry will be ignored", "cidr", value)
+			app.Logger.Warn(logging.EventConfigurationStatus,
+				logging.ComponentField(logging.ComponentHTTP),
+				logging.OperationField(logging.OperationConfiguration),
+				logging.OutcomeField(logging.OutcomeSkipped),
+				logging.ErrorCodeField(logging.ErrorConfigurationInvalid),
+			)
 			continue
 		}
 		prefix = prefix.Masked()
 		prefixes = append(prefixes, prefix)
 		if prefix.Bits() == 0 {
-			app.Logger.Warn("trusted proxy CIDR permits every address; forwarded client IPs can be spoofed if Core is directly reachable", "cidr", prefix.String())
+			app.Logger.Warn(logging.EventConfigurationStatus,
+				logging.ComponentField(logging.ComponentHTTP),
+				logging.OperationField(logging.OperationConfiguration),
+				logging.OutcomeField(logging.OutcomeDegraded),
+				logging.ErrorCodeField(logging.ErrorConfigurationInvalid),
+			)
 		}
 	}
 
 	if len(prefixes) == 0 {
-		app.Logger.Warn("proxy header trust is enabled without a valid trusted proxy CIDR; forwarded headers will be ignored")
+		app.Logger.Warn(logging.EventConfigurationStatus,
+			logging.ComponentField(logging.ComponentHTTP),
+			logging.OperationField(logging.OperationConfiguration),
+			logging.OutcomeField(logging.OutcomeDegraded),
+			logging.ErrorCodeField(logging.ErrorConfigurationInvalid),
+		)
 	}
 	return prefixes
 }
@@ -214,7 +235,12 @@ func newAuthLimiter(app *App) ratelimiter.AuthLimiter {
 			return ratelimiter.NewCacheLimiterWithConfig(counter, provider)
 		}
 
-		app.Logger.Warn("configured cache does not support atomic counters; falling back to in-memory rate limiter")
+		app.Logger.Warn(logging.EventConfigurationStatus,
+			logging.ComponentField(logging.ComponentCache),
+			logging.OperationField(logging.OperationRateLimit),
+			logging.OutcomeField(logging.OutcomeDegraded),
+			logging.ErrorCodeField(logging.ErrorConfigurationInvalid),
+		)
 	}
 
 	return ratelimiter.NewInMemoryLimiterWithConfig(provider)

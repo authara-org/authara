@@ -15,6 +15,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	identitypkg "github.com/authara-org/authara/internal/identity"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
@@ -341,9 +342,7 @@ func (h *APIHandler) CompleteAccountRecoveryLinkWithApple(ctx context.Context, r
 	if result.RefreshToken != "" {
 		if err := h.Auth.SaveAppleCredential(ctx, user.ID, result.RefreshToken); err != nil {
 			h.discardAppleAuthorization(ctx, result.RefreshToken)
-			if h.Logger != nil {
-				h.Logger.Error("could not refresh Apple credential after account proof", "user_id", user.ID, "err", err)
-			}
+			h.logInternal(ctx, logging.LevelError, logging.ComponentProvider, logging.OperationProviderLink, logging.ErrorStorageUnavailable)
 		}
 	}
 	audience := token.AudienceApp

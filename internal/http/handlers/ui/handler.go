@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/features"
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/authara-org/authara/internal/oauth/google"
@@ -45,7 +45,7 @@ type UIHandler struct {
 	UserUIEnabled  func() bool
 
 	Limiter          ratelimiter.AuthLimiter
-	Logger           *slog.Logger
+	Logger           *logging.Logger
 	Google           *google.Client
 	Apple            AppleClient
 	AppleCredentials AppleCredentialStore
@@ -98,7 +98,7 @@ func New(
 	emailTemplates *email.TemplateService,
 	configuration *config.Service,
 	limiter ratelimiter.AuthLimiter,
-	logger *slog.Logger,
+	logger *logging.Logger,
 	google *google.Client,
 	oauthProviders oauth.OAuthProviders,
 	accessTTL time.Duration,

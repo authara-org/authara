@@ -1,11 +1,11 @@
 package http
 
 import (
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/authara-org/authara/internal/logging"
 )
 
 func TestShowcaseRoutesExistOnlyInDevelopment(t *testing.T) {
@@ -18,7 +18,7 @@ func TestShowcaseRoutesExistOnlyInDevelopment(t *testing.T) {
 		{name: "production", dev: false, want: http.StatusNotFound},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			logger := logging.Discard()
 			cfg := ServerConfig{
 				Dev:      tc.dev,
 				Logger:   logger,

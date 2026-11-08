@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/authara-org/authara/internal/webhook"
+	"github.com/authara-org/authara/internal/logging"
 )
 
 type BackgroundWorkers struct {
@@ -35,18 +35,21 @@ func (a *App) StartBackgroundWorkers(ctx context.Context) *BackgroundWorkers {
 	// verification is disabled, so email delivery has its own lifecycle.
 	a.Services.EmailWorker.Run(ctx)
 	workers.monitor("email worker", a.Services.EmailWorker.Done())
-	a.Logger.Info("email workers started",
-		"worker_count", a.Config.Email.WorkerCount,
-		"provider", a.Config.Email.Provider,
+	a.Logger.Info(logging.EventWorkerOutcome,
+		logging.WorkerField(logging.WorkerEmail),
+		logging.OperationField(logging.OperationStartup),
+		logging.OutcomeField(logging.OutcomeStarted),
+		logging.WorkerCount(a.Config.Email.WorkerCount),
 	)
 
 	if a.Services.WebhookWorker != nil {
 		a.Services.WebhookWorker.Run(ctx)
 		workers.monitor("webhook worker", a.Services.WebhookWorker.Done())
-		a.Logger.Info("webhook workers started",
-			"worker_count", a.Config.Webhook.WorkerCount,
-			"wake_mode", "postgres_notify",
-			"fallback_poll_interval", webhook.DeliveryPoll.String(),
+		a.Logger.Info(logging.EventWorkerOutcome,
+			logging.WorkerField(logging.WorkerWebhook),
+			logging.OperationField(logging.OperationStartup),
+			logging.OutcomeField(logging.OutcomeStarted),
+			logging.WorkerCount(a.Config.Webhook.WorkerCount),
 		)
 	}
 

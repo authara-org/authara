@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/identity"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/securityevent"
@@ -26,7 +26,7 @@ type Config struct {
 	Store                  *store.Store
 	Tx                     *tx.Manager
 	WebhookPublisher       webhook.Publisher
-	Logger                 *slog.Logger
+	Logger                 *logging.Logger
 	AccessPolicy           accesspolicy.EmailAccessPolicy
 	OAuthProviders         oauth.OAuthProviders
 	Organizations          *organization.Service
@@ -45,7 +45,7 @@ type Service struct {
 	store                  *store.Store
 	tx                     *tx.Manager
 	webhookPublisher       webhook.Publisher
-	logger                 *slog.Logger
+	logger                 *logging.Logger
 	accessPolicy           accesspolicy.EmailAccessPolicy
 	oauthProviders         oauth.OAuthProviders
 	organizations          *organization.Service
@@ -213,14 +213,19 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (domain.User, error)
 			return eventErr
 		})
 		if err != nil {
+			s.logLoginOutcome(ctx, err)
 			return domain.User{}, err
 		}
+		s.logLoginOutcome(ctx, loginErr)
 		return user, loginErr
 
 	case domain.ProviderGoogle, domain.ProviderApple, domain.ProviderMicrosoft:
-		return s.loginWithExternal(ctx, in, "")
+		user, err := s.loginWithExternal(ctx, in, "")
+		s.logLoginOutcome(ctx, err)
+		return user, err
 
 	default:
+		s.logLoginOutcome(ctx, ErrUnsupportedProvider)
 		return domain.User{}, ErrUnsupportedProvider
 	}
 }
@@ -235,7 +240,45 @@ func (s *Service) LoginWithApple(ctx context.Context, in LoginInput, refreshToke
 	if s.appleCredentials == nil {
 		return domain.User{}, errors.New("apple credential storage is unavailable")
 	}
-	return s.loginWithExternal(ctx, in, refreshToken)
+	user, err := s.loginWithExternal(ctx, in, refreshToken)
+	s.logLoginOutcome(ctx, err)
+	return user, err
+}
+
+func (s *Service) logLoginOutcome(ctx context.Context, err error) {
+	if s.logger == nil {
+		return
+	}
+	outcome := logging.OutcomeSucceeded
+	level := logging.LevelInfo
+	var errorCode logging.ErrorCode
+	if err != nil {
+		outcome = logging.OutcomeFailed
+		level = logging.LevelError
+		errorCode = logging.ErrorInternalFailure
+		switch {
+		case errors.Is(err, ErrInvalidCredentials):
+			outcome = logging.OutcomeDenied
+			level = logging.LevelWarn
+			errorCode = logging.ErrorInvalidCredentials
+		case errors.Is(err, ErrEmailNotAllowed), errors.Is(err, ErrProviderDisabled), errors.Is(err, ErrAccountExistsMustLink):
+			outcome = logging.OutcomeDenied
+			level = logging.LevelWarn
+			errorCode = logging.ErrorAccessDenied
+		case errors.Is(err, ErrUnsupportedProvider):
+			outcome = logging.OutcomeDenied
+			level = logging.LevelWarn
+			errorCode = logging.ErrorInvalidRequest
+		}
+	}
+	fields := []logging.Field{
+		logging.OperationField(logging.OperationLogin),
+		logging.OutcomeField(outcome),
+	}
+	if errorCode != "" {
+		fields = append(fields, logging.ErrorCodeField(errorCode))
+	}
+	s.logger.Log(ctx, level, logging.EventAuthenticationOutcome, fields...)
 }
 
 func (s *Service) SaveAppleCredential(ctx context.Context, userID uuid.UUID, refreshToken string) error {
@@ -552,7 +595,11 @@ func (s *Service) loginWithPassword(ctx context.Context, in LoginInput) (domain.
 				passwordHash = *authProvider.PasswordHash
 				identityValid = true
 			} else if s.logger != nil {
-				s.logger.Warn("invalid stored password hash", "user_id", user.ID, "error", decodeErr)
+				s.logger.Warn(logging.EventAuthenticationOutcome,
+					logging.OperationField(logging.OperationLogin),
+					logging.OutcomeField(logging.OutcomeFailed),
+					logging.ErrorCodeField(logging.ErrorInternalFailure),
+				)
 			}
 		case errors.Is(providerErr, store.ErrorAuthProviderNotFound):
 			// Keep the dummy hash.
@@ -1347,7 +1394,11 @@ func (s *Service) upgradePasswordHashIfNeeded(
 		verification, err = VerifyPasswordHash(password, storedHash)
 		if err != nil {
 			if s.logger != nil {
-				s.logger.Warn("invalid stored password hash", "user_id", userID, "error", err)
+				s.logger.Warn(logging.EventAuthenticationOutcome,
+					logging.OperationField(logging.OperationLogin),
+					logging.OutcomeField(logging.OutcomeFailed),
+					logging.ErrorCodeField(logging.ErrorInternalFailure),
+				)
 			}
 			return ErrInvalidCredentials
 		}
@@ -1482,7 +1533,11 @@ func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, username
 func (s *Service) publish(ctx context.Context, evt webhook.Envelope) error {
 	err := s.webhookPublisher.Publish(ctx, evt)
 	if err != nil && s.logger != nil {
-		s.logger.Error("webhook publish failed", "event", evt.Type, "event_id", evt.ID, "err", err)
+		s.logger.Log(ctx, logging.LevelError, logging.EventWebhookDelivery,
+			logging.OperationField(logging.OperationWebhookPublish),
+			logging.OutcomeField(logging.OutcomeFailed),
+			logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+		)
 	}
 	return err
 }

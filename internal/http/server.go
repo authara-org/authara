@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -13,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/http/handlers/internalapi"
 	"github.com/authara-org/authara/internal/http/handlers/meta"
 	"github.com/authara-org/authara/internal/http/handlers/ui"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/observability"
 )
@@ -23,7 +23,7 @@ type ServerConfig struct {
 	Dev               bool
 	TrustProxyHeaders bool
 	TrustedProxyCIDRs []netip.Prefix
-	Logger            *slog.Logger
+	Logger            *logging.Logger
 	Observability     *observability.Service
 	OAuthProviders    oauth.OAuthProviders
 	Handlers          Handlers
@@ -92,6 +92,7 @@ func NewServer(cfg ServerConfig, mw Middlewares) *Server {
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
+		ErrorLog:     cfg.Logger.StandardLogger(logging.ComponentHTTP, logging.OperationServeHTTP),
 	}
 
 	return &Server{httpServer: srv, readiness: readiness}

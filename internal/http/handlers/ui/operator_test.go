@@ -3,8 +3,6 @@ package ui
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/email"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -34,7 +33,7 @@ func TestOperatorRuntimeSettingMutationValidatesAndRejectsEnvironmentLocks(t *te
 	}
 	h := &UIHandler{
 		Config: runtimeSettings,
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger: logging.Discard(),
 		Render: render.New(render.Assets{}, false),
 	}
 	actor := uuid.New()
@@ -95,7 +94,7 @@ func TestOperatorRuntimeSettingHTMXMutationSwapsOnlyUpdatedRow(t *testing.T) {
 	}
 	h := &UIHandler{
 		Config: runtimeSettings,
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger: logging.Discard(),
 		Render: render.New(render.Assets{}, false),
 	}
 	actor := uuid.New()
@@ -767,7 +766,7 @@ func assertOperatorEmailTemplateSuccessToast(
 func newOperatorEmailTemplateHandler(templateStore *operatorEmailTemplateStore) *UIHandler {
 	return &UIHandler{
 		EmailTemplates: email.NewTemplateService(templateStore),
-		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger:         logging.Discard(),
 		Render:         render.New(render.Assets{}, false),
 	}
 }

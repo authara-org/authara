@@ -1,13 +1,12 @@
 package bootstrap
 
 import (
-	"log/slog"
-
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/logging"
 )
 
-func newEmailSender(cfg *config.Config, logger *slog.Logger) email.Sender {
+func newEmailSender(cfg *config.Config, logger *logging.Logger) email.Sender {
 	switch cfg.Email.Provider {
 	case "smtp":
 		return email.NewSMTPSender(
@@ -26,13 +25,15 @@ func newEmailSender(cfg *config.Config, logger *slog.Logger) email.Sender {
 	}
 }
 
-func warnIfEmailDeliveryUnavailable(cfg *config.Config, logger *slog.Logger) {
+func warnIfEmailDeliveryUnavailable(cfg *config.Config, logger *logging.Logger) {
 	if cfg.Email.IsDeliverable() {
 		return
 	}
 
-	logger.Warn(
-		"email delivery is unavailable; password recovery and security emails will not reach recipients",
-		"provider", cfg.Email.Provider,
+	logger.Warn(logging.EventConfigurationStatus,
+		logging.ComponentField(logging.ComponentEmail),
+		logging.OperationField(logging.OperationConfiguration),
+		logging.OutcomeField(logging.OutcomeDegraded),
+		logging.ErrorCodeField(logging.ErrorConfigurationInvalid),
 	)
 }

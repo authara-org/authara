@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/ratelimiter"
 )
 
@@ -34,13 +33,17 @@ func TestRateLimitResultDistinguishesLimitsFromBackendErrors(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var output strings.Builder
-			h := &APIHandler{Logger: slog.New(slog.NewTextHandler(&output, nil))}
+			logger, err := logging.New(logging.Config{Level: "debug", Environment: "test", Version: "test", Writer: &output})
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := &APIHandler{Logger: logger}
 			code, message, ok := h.rateLimitResult(test.allowed, test.err, "slow down")
 			if code != test.wantCode || message != test.wantMessage || ok != test.wantOK {
 				t.Fatalf("result = (%q, %q, %t), want (%q, %q, %t)", code, message, ok, test.wantCode, test.wantMessage, test.wantOK)
 			}
-			if test.name == "backend error" && (!strings.Contains(output.String(), "rate limiter unavailable") || !strings.Contains(output.String(), "redis unavailable")) {
-				t.Fatalf("logs = %q, want limiter and root error", output.String())
+			if test.name == "backend error" && (!strings.Contains(output.String(), `"event":"internal_operation"`) || !strings.Contains(output.String(), `"operation":"rate_limit"`) || !strings.Contains(output.String(), `"error_code":"dependency_unavailable"`)) {
+				t.Fatalf("logs = %q, want structured rate-limit failure", output.String())
 			}
 		})
 	}
@@ -63,7 +66,7 @@ func TestLoginWithPasswordReportsLimiterBackendFailureAsInternalError(t *testing
 				Limiter: ratelimiter.NewCacheLimiter(test.counter, ratelimiter.LimiterConfig{
 					LoginIPLimit: 1, LoginEmailLimit: 1,
 				}),
-				Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+				Logger: logging.Discard(),
 			}
 			req := httptest.NewRequest(http.MethodPost, "/auth/api/v1/login", nil)
 			resp, err := h.LoginWithPassword(contractCtx(context.Background(), req), contract.LoginWithPasswordRequestObject{

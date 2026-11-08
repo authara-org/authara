@@ -3,13 +3,13 @@ package bootstrap
 import (
 	"bytes"
 	"context"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/ratelimiter"
 )
 
@@ -18,7 +18,7 @@ func TestNewAuthLimiterUsesInMemoryLimiterForNoopCache(t *testing.T) {
 		Config: newTestConfigService(t, &config.Config{
 			Cache: config.Cache{Provider: "noop"},
 		}),
-		Logger: slog.Default(),
+		Logger: logging.Discard(),
 		Cache:  cache.NewNoop(),
 	}
 
@@ -34,7 +34,7 @@ func TestNewAuthLimiterUsesCacheLimiterForRedisCache(t *testing.T) {
 		Config: newTestConfigService(t, &config.Config{
 			Cache: config.Cache{Provider: "redis"},
 		}),
-		Logger: slog.Default(),
+		Logger: logging.Discard(),
 		Cache:  fakeBootstrapCounterCache{},
 	}
 
@@ -62,14 +62,14 @@ func TestTrustedProxyCIDRsWarnsAndDisablesTrustWithoutValidNetwork(t *testing.T)
 			TrustProxyHeaders:    true,
 			TrustedProxyCIDRsRaw: "not-a-cidr",
 		}}),
-		Logger: slog.New(slog.NewTextHandler(&output, nil)),
+		Logger: newBootstrapTestLogger(t, &output),
 	}
 
 	if got := trustedProxyCIDRs(app); len(got) != 0 {
 		t.Fatalf("trusted proxy CIDRs = %v, want none", got)
 	}
 	logs := output.String()
-	for _, want := range []string{"invalid trusted proxy CIDR", "forwarded headers will be ignored"} {
+	for _, want := range []string{`"event":"configuration_status"`, `"component":"http"`, `"outcome":"skipped"`, `"error_code":"configuration_invalid"`} {
 		if !strings.Contains(logs, want) {
 			t.Fatalf("logs = %q, want warning containing %q", logs, want)
 		}
@@ -83,14 +83,14 @@ func TestTrustedProxyCIDRsKeepsValidNetworksAndWarnsForTrustAll(t *testing.T) {
 			TrustProxyHeaders:    true,
 			TrustedProxyCIDRsRaw: "10.0.0.5/8, 0.0.0.0/0",
 		}}),
-		Logger: slog.New(slog.NewTextHandler(&output, nil)),
+		Logger: newBootstrapTestLogger(t, &output),
 	}
 
 	got := trustedProxyCIDRs(app)
 	if len(got) != 2 || got[0].String() != "10.0.0.0/8" || got[1].String() != "0.0.0.0/0" {
 		t.Fatalf("trusted proxy CIDRs = %v", got)
 	}
-	if !strings.Contains(output.String(), "permits every address") {
+	if !strings.Contains(output.String(), `"outcome":"degraded"`) || !strings.Contains(output.String(), `"component":"http"`) {
 		t.Fatalf("logs = %q, want trust-all warning", output.String())
 	}
 }
@@ -101,13 +101,13 @@ func TestTrustedProxyCIDRsWarnsWhenNetworksAreConfiguredButTrustIsDisabled(t *te
 		Config: newTestConfigService(t, &config.Config{Values: config.Values{
 			TrustedProxyCIDRsRaw: "10.0.0.0/8",
 		}}),
-		Logger: slog.New(slog.NewTextHandler(&output, nil)),
+		Logger: newBootstrapTestLogger(t, &output),
 	}
 
 	if got := trustedProxyCIDRs(app); len(got) != 0 {
 		t.Fatalf("trusted proxy CIDRs = %v, want none", got)
 	}
-	if !strings.Contains(output.String(), "proxy header trust is disabled") {
+	if !strings.Contains(output.String(), `"outcome":"skipped"`) || !strings.Contains(output.String(), `"component":"http"`) {
 		t.Fatalf("logs = %q, want disabled-trust warning", output.String())
 	}
 }

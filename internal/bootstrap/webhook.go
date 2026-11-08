@@ -1,11 +1,11 @@
 package bootstrap
 
 import (
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/webhook"
 )
@@ -24,7 +24,7 @@ func newWebhookPublisher(cfg *config.Service, store *store.Store) webhook.Publis
 func newWebhookWorker(
 	cfg *config.Service,
 	store *store.Store,
-	logger *slog.Logger,
+	logger *logging.Logger,
 	metrics webhook.WorkerMetrics,
 ) *webhook.Worker {
 	if !cfg.Webhook.Enabled() {

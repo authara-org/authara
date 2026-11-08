@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
@@ -36,32 +36,24 @@ func TestEmailWorkerReadsCurrentPolicy(t *testing.T) {
 
 func TestWorkerDeliveryLogsExcludeRecipientPII(t *testing.T) {
 	tests := []struct {
-		name        string
-		send        senderFunc
-		wantMessage string
-		wantAttrs   []string
+		name string
+		send senderFunc
 	}{
 		{
-			name:        "success",
-			send:        func(context.Context, string, email.Message) error { return nil },
-			wantMessage: "email job sent",
-			wantAttrs:   []string{"template=new_sign_in", "attempt=1"},
+			name: "success",
+			send: func(context.Context, string, email.Message) error { return nil },
 		},
 		{
 			name: "retry",
 			send: func(_ context.Context, recipient string, _ email.Message) error {
 				return email.TransientError("smtp_unavailable", fmt.Errorf("delivery to %s failed", recipient))
 			},
-			wantMessage: "email job retry scheduled",
-			wantAttrs:   []string{"failure_class=transient", "failure_reason=smtp_unavailable"},
 		},
 		{
 			name: "permanent failure",
 			send: func(_ context.Context, recipient string, _ email.Message) error {
 				return email.PermanentError("smtp_recipient_rejected", fmt.Errorf("recipient %s rejected", recipient))
 			},
-			wantMessage: "email job permanently failed",
-			wantAttrs:   []string{"terminal_reason=smtp_recipient_rejected"},
 		},
 	}
 
@@ -72,7 +64,11 @@ func TestWorkerDeliveryLogsExcludeRecipientPII(t *testing.T) {
 			job := createWorkerTestEmailJob(t, tdb, now, now.Add(72*time.Hour))
 			var logs bytes.Buffer
 			worker := newQueueTestWorker(tdb, test.send, job.ID)
-			worker.logger = slog.New(slog.NewTextHandler(&logs, nil))
+			logger, err := logging.New(logging.Config{Level: "debug", Environment: "test", Version: "test", Writer: &logs})
+			if err != nil {
+				t.Fatal(err)
+			}
+			worker.logger = logger
 
 			processed, err := worker.RunOnce(context.Background(), now)
 			if err != nil || !processed {
@@ -83,10 +79,14 @@ func TestWorkerDeliveryLogsExcludeRecipientPII(t *testing.T) {
 			if strings.Contains(logged, job.ToEmail) {
 				t.Fatalf("email worker logged recipient PII: %s", logged)
 			}
-			for _, want := range append([]string{test.wantMessage, "job_id=" + job.ID.String()}, test.wantAttrs...) {
+			outcome := map[string]string{"success": "succeeded", "retry": "retry_scheduled", "permanent failure": "exhausted"}[test.name]
+			for _, want := range []string{`"event":"worker_outcome"`, `"worker":"email"`, `"operation":"deliver"`, `"outcome":"` + outcome + `"`} {
 				if !strings.Contains(logged, want) {
 					t.Fatalf("email worker log missing %q: %s", want, logged)
 				}
+			}
+			if test.name != "success" && !strings.Contains(logged, `"error_code":"delivery_failed"`) {
+				t.Fatalf("email worker log missing delivery failure code: %s", logged)
 			}
 		})
 	}

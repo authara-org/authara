@@ -15,6 +15,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	authview "github.com/authara-org/authara/internal/http/templates/auth"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/google/uuid"
@@ -153,7 +154,7 @@ func (h *UIHandler) ProviderLinkConfirmPost(w http.ResponseWriter, r *http.Reque
 	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	if h.Logger != nil {
-		h.Logger.Info("provider linked after account collision", "user_id", user.ID, "provider", link.Provider)
+		h.logInternal(r.Context(), logging.LevelInfo, logging.ComponentAuthentication, logging.OperationProviderLink, logging.OutcomeSucceeded, "")
 	}
 	_ = flash.Set(w, flash.Message{Kind: "success", Message: "Sign-in provider was connected to your account."})
 
@@ -215,7 +216,7 @@ func (h *UIHandler) finishAccountRecoveryProviderProof(
 	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 
 	if h.Logger != nil {
-		h.Logger.Info("provider linked after account collision", "user_id", user.ID, "provider", targetProvider)
+		h.logInternal(r.Context(), logging.LevelInfo, logging.ComponentAuthentication, logging.OperationProviderLink, logging.OutcomeSucceeded, "")
 	}
 	_ = flash.Set(w, flash.Message{Kind: "success", Message: "Sign-in provider was connected to your account."})
 	writeOAuthRedirect(w, returnTo)

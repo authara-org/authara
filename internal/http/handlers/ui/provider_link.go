@@ -18,6 +18,7 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/go-chi/chi/v5"
@@ -241,7 +242,7 @@ func (h *UIHandler) PasswordLinkPost(w http.ResponseWriter, r *http.Request) {
 			_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, message))
 			return
 		}
-		h.Logger.Error("hash password failed", "err", err)
+		h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationProviderLink, logging.OutcomeFailed, logging.ErrorInternalFailure)
 		htmx.ReSwap(w, "none")
 		_ = h.Render(w, r, http.StatusInternalServerError, toast.ToastMessage(toast.Error, "Something went wrong."))
 		return
@@ -257,7 +258,7 @@ func (h *UIHandler) PasswordLinkPost(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, auth.ErrPasswordAlreadyExists):
 			msg = "A password is already set for this account."
 		default:
-			h.Logger.Error("add password failed", "err", err)
+			h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationProviderLink, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 			status = http.StatusInternalServerError
 			msg = "Something went wrong."
 		}

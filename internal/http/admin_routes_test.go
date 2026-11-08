@@ -2,8 +2,6 @@ package http
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +11,7 @@ import (
 	"github.com/authara-org/authara/internal/features"
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/testutil"
 	"github.com/go-chi/chi/v5"
 )
@@ -244,7 +243,7 @@ func newAdminRouteTestRouter(m adminRouteMiddlewareConfig) chi.Router {
 }
 
 func newAdminRouteTestRouterWithConfig(m adminRouteMiddlewareConfig, override adminRouteTestConfig) chi.Router {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 	if m.adminAuth == nil {
 		m.adminAuth = passMiddleware
 	}

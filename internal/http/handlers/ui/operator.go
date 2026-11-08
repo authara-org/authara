@@ -16,6 +16,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	operatorview "github.com/authara-org/authara/internal/http/templates/operator"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -122,18 +123,14 @@ func (h *UIHandler) mutateOperatorSetting(w http.ResponseWriter, r *http.Request
 		status = http.StatusConflict
 		message = "Another operator changed runtime config. Review the current values and try again."
 	case !errors.Is(err, config.ErrInvalidValue):
-		if h.Logger != nil {
-			h.Logger.Error("mutate runtime setting", "key", key, "err", err)
-		}
+		h.logInternal(r.Context(), logging.LevelError, logging.ComponentConfiguration, logging.OperationConfiguration, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 		h.renderInternalError(w, r)
 		return
 	}
 	if httpctx.IsHTMX(r.Context()) {
 		current, describeErr := h.Config.Describe(key)
 		if describeErr != nil {
-			if h.Logger != nil {
-				h.Logger.Error("describe runtime setting after failed mutation", "key", key, "err", describeErr)
-			}
+			h.logInternal(r.Context(), logging.LevelError, logging.ComponentConfiguration, logging.OperationConfiguration, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 			h.renderInternalError(w, r)
 			return
 		}
@@ -689,8 +686,6 @@ func (h *UIHandler) renderEmailTemplateMutationSuccess(
 	)
 }
 
-func (h *UIHandler) logEmailTemplateError(message string, err error) {
-	if h.Logger != nil {
-		h.Logger.Error(message, "err", err)
-	}
+func (h *UIHandler) logEmailTemplateError(_ string, _ error) {
+	h.logInternal(context.Background(), logging.LevelError, logging.ComponentOperator, logging.OperationConfiguration, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 }

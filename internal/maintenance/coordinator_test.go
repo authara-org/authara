@@ -2,12 +2,11 @@ package maintenance
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/google/uuid"
 )
@@ -370,6 +369,6 @@ func (m *fakeMetrics) ObserveMaintenanceRun(job, outcome string, _ time.Duration
 	m.lastRows = rows
 }
 
-func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+func discardLogger() *logging.Logger {
+	return logging.Discard()
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/bootstrap"
+	"github.com/authara-org/authara/internal/logging"
 )
 
 const (
@@ -39,8 +40,16 @@ func Run(version string) (retErr error) {
 		return err
 	}
 
-	app.Logger.Info("starting authara", "version", version)
-	app.Logger.Info("http server listening", "addr", listener.Addr().String())
+	app.Logger.Info(logging.EventProcessLifecycle,
+		logging.ComponentField(logging.ComponentProcess),
+		logging.OperationField(logging.OperationStartup),
+		logging.OutcomeField(logging.OutcomeStarted),
+	)
+	app.Logger.Info(logging.EventProcessLifecycle,
+		logging.ComponentField(logging.ComponentHTTP),
+		logging.OperationField(logging.OperationServeHTTP),
+		logging.OutcomeField(logging.OutcomeStarted),
+	)
 
 	signalCtx, stopSignals := signal.NotifyContext(
 		context.Background(),
@@ -70,7 +79,11 @@ func Run(version string) (retErr error) {
 	closeErr := app.Close()
 	appClosed = true
 	retErr = errors.Join(retErr, closeErr)
-	app.Logger.Info("authara stopped")
+	app.Logger.Info(logging.EventProcessLifecycle,
+		logging.ComponentField(logging.ComponentProcess),
+		logging.OperationField(logging.OperationShutdown),
+		logging.OutcomeField(logging.OutcomeStopped),
+	)
 	return retErr
 }
 

@@ -6,6 +6,7 @@ version: 1
 settings_metadata:
   APP_ENV: {control: env, reload: startup, sensitive: false, group: runtime}
   LOG_LEVEL: {control: env, reload: startup, sensitive: false, group: runtime}
+  AUTHARA_LOG_ENVIRONMENT: {control: env, reload: startup, sensitive: false, group: runtime}
   AUTHARA_METRICS_ENABLED: {control: env, reload: startup, sensitive: false, group: runtime}
   POSTGRESQL_HOST: {control: env, reload: startup, sensitive: false, group: database}
   POSTGRESQL_PORT: {control: env, reload: startup, sensitive: false, group: database}
@@ -162,6 +163,12 @@ variables:
     default:
       dev: debug
       prod: info
+
+  - name: AUTHARA_LOG_ENVIRONMENT
+    stability: stable
+    required: false
+    type: string
+    description: Bounded deployment environment recorded in structured logs. Defaults to APP_ENV.
 
   - name: AUTHARA_METRICS_ENABLED
     stability: stable

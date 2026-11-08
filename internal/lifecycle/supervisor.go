@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"time"
+
+	"github.com/authara-org/authara/internal/logging"
 )
 
 var errShutdownTimeout = errors.New("shutdown deadline exceeded")
@@ -26,7 +27,7 @@ type lifecycleWorkers interface {
 func superviseLifecycle(
 	signalCtx context.Context,
 	stopSignals func(),
-	logger *slog.Logger,
+	logger *logging.Logger,
 	server lifecycleServer,
 	workers lifecycleWorkers,
 	listener net.Listener,
@@ -61,7 +62,11 @@ func superviseLifecycle(
 	// can force termination if an external dependency ignores cancellation.
 	stopSignals()
 	server.SetReady(false)
-	logger.Info("shutting down authara")
+	logger.Info(logging.EventProcessLifecycle,
+		logging.ComponentField(logging.ComponentProcess),
+		logging.OperationField(logging.OperationShutdown),
+		logging.OutcomeField(logging.OutcomeStopping),
+	)
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
