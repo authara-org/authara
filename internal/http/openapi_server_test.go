@@ -3,7 +3,6 @@ package http
 import (
 	"bytes"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,7 +14,7 @@ import (
 func TestOpenAPIServerBridgeValidatesSignupResponse(t *testing.T) {
 	pass := func(next http.Handler) http.Handler { return next }
 	var logs bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	logger := newTestLogger(&logs)
 	handlers := newTestHandlers(logger, render.New(render.Assets{}, false))
 	handlers.API.ChallengeEnabled = true
 

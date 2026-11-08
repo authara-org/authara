@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/oauthstate"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/microsoft"
 	"github.com/authara-org/authara/internal/session"
@@ -82,9 +82,13 @@ func (h *APIHandler) verifyMicrosoftAuthorization(
 	if err != nil {
 		logger := h.Logger
 		if logger == nil {
-			logger = slog.Default()
+			logger = logging.Discard()
 		}
-		logger.WarnContext(ctx, "microsoft credential rejected", "err", err)
+		logger.Log(ctx, logging.LevelWarn, logging.EventAuthenticationOutcome,
+			logging.OperationField(logging.OperationLogin),
+			logging.OutcomeField(logging.OutcomeDenied),
+			logging.ErrorCodeField(logging.ErrorInvalidCredentials),
+		)
 		return nil, header, response.CodeUnauthorized, "Invalid Microsoft credential.", false, false
 	}
 	return identity, header, "", "", true, false

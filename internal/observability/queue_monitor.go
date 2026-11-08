@@ -3,10 +3,10 @@ package observability
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 )
 
@@ -30,7 +30,7 @@ type QueueMonitorConfig struct {
 type QueueMonitor struct {
 	store   QueueStatsStore
 	metrics *Service
-	logger  *slog.Logger
+	logger  *logging.Logger
 	cfg     QueueMonitorConfig
 
 	mu      sync.Mutex
@@ -39,7 +39,7 @@ type QueueMonitor struct {
 	done    chan struct{}
 }
 
-func NewQueueMonitor(store QueueStatsStore, metrics *Service, logger *slog.Logger, cfg QueueMonitorConfig) (*QueueMonitor, error) {
+func NewQueueMonitor(store QueueStatsStore, metrics *Service, logger *logging.Logger, cfg QueueMonitorConfig) (*QueueMonitor, error) {
 	if store == nil {
 		return nil, errors.New("queue metrics store is required")
 	}
@@ -47,7 +47,7 @@ func NewQueueMonitor(store QueueStatsStore, metrics *Service, logger *slog.Logge
 		return nil, errors.New("observability service is required")
 	}
 	if logger == nil {
-		logger = slog.Default()
+		logger = logging.Discard()
 	}
 	if cfg.Interval <= 0 {
 		cfg.Interval = defaultQueueSnapshotInterval
@@ -130,7 +130,18 @@ func (m *QueueMonitor) refreshQueue(
 	if err != nil {
 		if ctx.Err() == nil {
 			m.metrics.ObserveQueueSnapshot(queue, "failed", store.QueueStats{}, now)
-			m.logger.ErrorContext(ctx, "queue metrics snapshot failed", "queue", queue, "error", err)
+			queueName := logging.QueueOther
+			if queue == "email" {
+				queueName = logging.QueueEmail
+			} else if queue == "webhook" {
+				queueName = logging.QueueWebhook
+			}
+			m.logger.Log(ctx, logging.LevelError, logging.EventQueueOutcome,
+				logging.QueueField(queueName),
+				logging.OperationField(logging.OperationSnapshot),
+				logging.OutcomeField(logging.OutcomeFailed),
+				logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+			)
 		}
 		return
 	}

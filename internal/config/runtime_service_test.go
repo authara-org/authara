@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/google/uuid"
 )
 
@@ -879,9 +879,16 @@ func TestUnknownPersistedSettingsArePreservedAcrossMixedVersionOperations(t *tes
 	store.seed(futureKey, `"`+futureValue+`"`, 1)
 
 	var logs bytes.Buffer
+	logger, err := logging.New(logging.Config{
+		Level: "info", Environment: "test", Version: "test",
+		InstanceID: "00000000-0000-4000-8000-000000000001", Writer: &logs,
+	})
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
 	service, err := NewService(ctx, ServiceOptions{
 		Startup: &Config{}, Store: store, LookupEnvironment: environment(nil),
-		Logger: slog.New(slog.NewTextHandler(&logs, nil)),
+		Logger: logger,
 	})
 	if err != nil {
 		t.Fatalf("start older replica with future setting: %v", err)
@@ -892,11 +899,11 @@ func TestUnknownPersistedSettingsArePreservedAcrossMixedVersionOperations(t *tes
 	if len(service.current.Load().unsupportedOverrides) != 1 {
 		t.Fatalf("unsupported overrides = %+v", service.current.Load().unsupportedOverrides)
 	}
-	if output := logs.String(); !strings.Contains(output, "unsupported runtime setting preserved and ignored") ||
-		!strings.Contains(output, string(futureKey)) || !strings.Contains(output, "revision=1") {
+	if output := logs.String(); !strings.Contains(output, `"event":"configuration_status"`) ||
+		!strings.Contains(output, `"outcome":"skipped"`) {
 		t.Fatalf("unknown-setting warning = %q", output)
-	} else if strings.Contains(output, futureValue) {
-		t.Fatalf("unknown-setting warning exposed value: %q", output)
+	} else if strings.Contains(output, futureValue) || strings.Contains(output, string(futureKey)) || strings.Contains(output, "revision") {
+		t.Fatalf("unknown-setting warning exposed setting details: %q", output)
 	}
 
 	if _, err := service.Set(ctx, KeyChallengeMaxAttempts, "8", uuid.New(), 0); err != nil {

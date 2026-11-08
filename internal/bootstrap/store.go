@@ -2,10 +2,11 @@ package bootstrap
 
 import (
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 )
 
-func NewStore(cfg *config.Config) (*store.Store, error) {
+func NewStore(cfg *config.Config, logger *logging.Logger) (*store.Store, error) {
 	return store.New(store.Config{
 		Host:            cfg.DB.Host,
 		Port:            cfg.DB.Port,
@@ -14,6 +15,7 @@ func NewStore(cfg *config.Config) (*store.Store, error) {
 		Database:        cfg.DB.Database,
 		Timezone:        cfg.DB.Timezone,
 		LogSql:          cfg.DB.LogSQL,
+		Logger:          logger,
 		SSLMode:         cfg.DB.SSLMode,
 		SSLRootCert:     cfg.DB.SSLRootCert,
 		MaxOpenConns:    cfg.DB.MaxOpenConns,

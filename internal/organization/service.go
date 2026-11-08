@@ -3,13 +3,13 @@ package organization
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/authara-org/authara/internal/config"
 	"github.com/authara-org/authara/internal/domain"
 	emailpkg "github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/store/tx"
@@ -21,7 +21,7 @@ type Config struct {
 	Store                            *store.Store
 	Tx                               *tx.Manager
 	WebhookPublisher                 webhook.Publisher
-	Logger                           *slog.Logger
+	Logger                           *logging.Logger
 	InvitationTTL                    time.Duration
 	Policy                           config.OrganizationPolicyReader
 	UI                               config.UIPolicyReader
@@ -36,7 +36,7 @@ type Service struct {
 	store                            *store.Store
 	tx                               *tx.Manager
 	webhookPublisher                 webhook.Publisher
-	logger                           *slog.Logger
+	logger                           *logging.Logger
 	policy                           config.OrganizationPolicyReader
 	ui                               config.UIPolicyReader
 	publicURL                        string
@@ -446,7 +446,11 @@ func defaultOrganizationName(username, email string) string {
 func (s *Service) publish(ctx context.Context, evt webhook.Envelope) error {
 	err := s.webhookPublisher.Publish(ctx, evt)
 	if err != nil && s.logger != nil {
-		s.logger.Error("webhook publish failed", "event", evt.Type, "event_id", evt.ID, "err", err)
+		s.logger.Log(ctx, logging.LevelError, logging.EventWebhookDelivery,
+			logging.OperationField(logging.OperationWebhookPublish),
+			logging.OutcomeField(logging.OutcomeFailed),
+			logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+		)
 	}
 	return err
 }

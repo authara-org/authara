@@ -2,8 +2,6 @@ package http
 
 import (
 	"bytes"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +11,7 @@ import (
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/handlers/meta"
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/session/token"
 )
@@ -153,7 +152,7 @@ func TestDynamicRouterResponsesAreNotCacheable(t *testing.T) {
 }
 
 func newSecurityHeadersTestRouter(providers oauth.OAuthProviders) http.Handler {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 	pass := func(next http.Handler) http.Handler { return next }
 	renderer := render.Renderer(func(w http.ResponseWriter, r *http.Request, status int, c templ.Component) error {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

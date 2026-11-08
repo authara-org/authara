@@ -18,6 +18,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/redirect"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/google/uuid"
@@ -89,7 +90,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		if err := h.Auth.VerifyExternalIdentity(ctx, userID, domain.ProviderGoogle, identity.OAuthID); err != nil {
 			if errors.Is(err, auth.ErrInvalidCredentials) {
 				if recordErr := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodGoogle, domain.SecurityEventReasonInvalidCredentials); recordErr != nil && h.Logger != nil {
-					h.Logger.Error("record Google reauthentication denial", "err", recordErr)
+					h.logInternal(ctx, logging.LevelError, logging.ComponentAuthentication, logging.OperationReauthenticate, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 				}
 			}
 			h.renderGoogleFlowError(w, r, ctx, flow)
@@ -214,7 +215,7 @@ func (h *UIHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 func (h *UIHandler) recordGoogleAuthenticationDenial(ctx context.Context, r *http.Request, flow string, reasonCode string) {
 	if flow == string(viewmodel.AuthProviderFlowLogin) {
 		if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodGoogle, reasonCode); err != nil && h.Logger != nil {
-			h.Logger.Error("record Google login denial", "err", err)
+			h.logInternal(ctx, logging.LevelError, logging.ComponentAuthentication, logging.OperationLogin, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 		}
 		return
 	}
@@ -229,7 +230,7 @@ func (h *UIHandler) recordGoogleAuthenticationDenial(ctx context.Context, r *htt
 		return
 	}
 	if err := h.Session.RecordReauthenticationDenied(ctx, userID, sessionID, domain.AuthenticationMethodGoogle, reasonCode); err != nil && h.Logger != nil {
-		h.Logger.Error("record Google reauthentication denial", "err", err)
+		h.logInternal(ctx, logging.LevelError, logging.ComponentAuthentication, logging.OperationReauthenticate, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 	}
 }
 

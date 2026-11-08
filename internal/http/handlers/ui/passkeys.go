@@ -19,6 +19,7 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/go-chi/chi/v5"
@@ -63,7 +64,7 @@ func (h *UIHandler) PasskeyRegisterOptionsPost(w http.ResponseWriter, r *http.Re
 	optionsJSON, _, err := h.Passkeys.BeginRegistration(ctx, userID)
 	if err != nil {
 		if h.Logger != nil {
-			h.Logger.Error("begin passkey registration failed", "err", err)
+			h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationPasskey, logging.OutcomeFailed, logging.ErrorInternalFailure)
 		}
 		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not start passkey setup.")
 		return
@@ -111,7 +112,7 @@ func (h *UIHandler) PasskeyRegisterFinishPost(w http.ResponseWriter, r *http.Req
 			msg = "Passkey setup could not be verified."
 		default:
 			if h.Logger != nil {
-				h.Logger.Error("finish passkey registration failed", "err", err)
+				h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationPasskey, logging.OutcomeFailed, logging.ErrorInternalFailure)
 			}
 			status = http.StatusInternalServerError
 			msg = "Something went wrong."
@@ -124,7 +125,7 @@ func (h *UIHandler) PasskeyRegisterFinishPost(w http.ResponseWriter, r *http.Req
 		section, err := h.linkedProvidersSection(ctx)
 		if err != nil {
 			if h.Logger != nil {
-				h.Logger.Error("load sign-in methods after passkey registration failed", "err", err)
+				h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationPasskey, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 			}
 			response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not load sign-in methods.")
 			return
@@ -161,7 +162,7 @@ func (h *UIHandler) PasskeyAuthenticateOptionsPost(w http.ResponseWriter, r *htt
 	optionsJSON, _, err := h.Passkeys.BeginLogin(r.Context())
 	if err != nil {
 		if h.Logger != nil {
-			h.Logger.Error("begin passkey login failed", "err", err)
+			h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationPasskey, logging.OutcomeFailed, logging.ErrorInternalFailure)
 		}
 		response.ErrorJSON(w, http.StatusInternalServerError, response.CodeInternalError, "Could not start passkey sign-in.")
 		return
@@ -205,7 +206,7 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 	result, err := h.Passkeys.FinishLogin(ctx, challengeID, in.Credential, now)
 	if err != nil {
 		if h.Logger != nil {
-			h.Logger.Warn("passkey login failed", "err", err)
+			h.logInternal(r.Context(), logging.LevelWarn, logging.ComponentAuthentication, logging.OperationPasskey, logging.OutcomeFailed, logging.ErrorInvalidCredentials)
 		}
 		response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Passkey sign-in failed.")
 		return
@@ -369,7 +370,7 @@ func (h *UIHandler) PasskeyDeletePost(w http.ResponseWriter, r *http.Request) {
 			msg = "Passkey not found."
 		default:
 			if h.Logger != nil {
-				h.Logger.Error("delete passkey failed", "err", err)
+				h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationPasskey, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 			}
 		}
 		_ = h.Render(w, r, status, toast.ToastMessage(toast.Error, msg))

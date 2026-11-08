@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 )
 
@@ -39,7 +39,7 @@ type WorkerMetrics interface {
 type Worker struct {
 	store   *store.Store
 	sender  *Sender
-	logger  *slog.Logger
+	logger  *logging.Logger
 	metrics WorkerMetrics
 	cfg     WorkerConfig
 	policy  func() WorkerPolicy
@@ -56,9 +56,9 @@ type Worker struct {
 const webhookForcedShutdownGrace = time.Second
 const webhookListenerReconnectDelay = time.Second
 
-func NewWorker(store *store.Store, sender *Sender, logger *slog.Logger, cfg WorkerConfig) *Worker {
+func NewWorker(store *store.Store, sender *Sender, logger *logging.Logger, cfg WorkerConfig) *Worker {
 	if logger == nil {
-		logger = slog.Default()
+		logger = logging.Discard()
 	}
 	policy := cfg.Policy
 	if policy == nil {
@@ -162,7 +162,7 @@ func webhookShutdownForce(ctx context.Context, reserve time.Duration) (<-chan ti
 	return timer.C, func() { timer.Stop() }
 }
 
-func (w *Worker) run(claimCtx, workCtx context.Context, workerID int) {
+func (w *Worker) run(claimCtx, workCtx context.Context, _ int) {
 	for {
 		select {
 		case <-claimCtx.Done():
@@ -175,9 +175,11 @@ func (w *Worker) run(claimCtx, workCtx context.Context, workerID int) {
 			if claimCtx.Err() != nil {
 				return
 			}
-			w.logger.ErrorContext(claimCtx, "webhook worker iteration failed",
-				"worker_id", workerID,
-				"error", err,
+			w.logger.Log(claimCtx, logging.LevelError, logging.EventWorkerOutcome,
+				logging.WorkerField(logging.WorkerWebhook),
+				logging.OperationField(logging.OperationClaim),
+				logging.OutcomeField(logging.OutcomeFailed),
+				logging.ErrorCodeField(logging.ErrorStorageUnavailable),
 			)
 		}
 		if processed && err == nil {
@@ -232,12 +234,12 @@ func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time, onCla
 				w.observeJob("error", started)
 				return true, fmt.Errorf("requeue webhook event: %w", requeueErr)
 			}
-			w.logger.WarnContext(workCtx, "webhook event retry scheduled",
-				"event_id", event.ID,
-				"event_type", event.EventType,
-				"attempt", event.AttemptCount,
-				"next_attempt_at", nextAttemptAt,
-				"error", err,
+			w.logger.Log(workCtx, logging.LevelWarn, logging.EventWebhookDelivery,
+				logging.OperationField(logging.OperationWebhookDeliver),
+				logging.OutcomeField(logging.OutcomeRetryScheduled),
+				logging.ErrorCodeField(logging.ErrorDeliveryFailed),
+				logging.Attempt(event.AttemptCount),
+				logging.Retryable(true),
 			)
 			w.observeJob("retried", started)
 			return true, nil
@@ -247,11 +249,12 @@ func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time, onCla
 			w.observeJob("error", started)
 			return true, fmt.Errorf("mark failed webhook event: %w", markErr)
 		}
-		w.logger.WarnContext(workCtx, "webhook event failed",
-			"event_id", event.ID,
-			"event_type", event.EventType,
-			"attempt", event.AttemptCount,
-			"error", err,
+		w.logger.Log(workCtx, logging.LevelError, logging.EventWebhookDelivery,
+			logging.OperationField(logging.OperationWebhookDeliver),
+			logging.OutcomeField(logging.OutcomeExhausted),
+			logging.ErrorCodeField(logging.ErrorAttemptsExhausted),
+			logging.Attempt(event.AttemptCount),
+			logging.Retryable(false),
 		)
 		w.observeJob("failed", started)
 		return true, nil
@@ -261,9 +264,10 @@ func (w *Worker) runOnce(claimCtx, workCtx context.Context, now time.Time, onCla
 		w.observeJob("error", started)
 		return true, err
 	}
-	w.logger.InfoContext(workCtx, "webhook event delivered",
-		"event_id", event.ID,
-		"event_type", event.EventType,
+	w.logger.Log(workCtx, logging.LevelInfo, logging.EventWebhookDelivery,
+		logging.OperationField(logging.OperationWebhookDeliver),
+		logging.OutcomeField(logging.OutcomeSucceeded),
+		logging.Attempt(event.AttemptCount),
 	)
 	w.observeJob("succeeded", started)
 	return true, nil
@@ -282,11 +286,16 @@ func (w *Worker) listenForReadyEvents(ctx context.Context) {
 		return
 	}
 	for {
-		err := w.store.ListenForWebhookEvents(ctx, w.wakeOne)
+		_ = w.store.ListenForWebhookEvents(ctx, w.wakeOne)
 		if ctx.Err() != nil {
 			return
 		}
-		w.logger.ErrorContext(ctx, "webhook event listener failed", "error", err)
+		w.logger.Log(ctx, logging.LevelError, logging.EventWorkerOutcome,
+			logging.WorkerField(logging.WorkerWebhook),
+			logging.OperationField(logging.OperationWebhookListen),
+			logging.OutcomeField(logging.OutcomeFailed),
+			logging.ErrorCodeField(logging.ErrorDependencyUnavailable),
+		)
 		select {
 		case <-ctx.Done():
 			return
@@ -376,16 +385,25 @@ func (w *Worker) runMaintenance(ctx context.Context) {
 			if err != nil {
 				if ctx.Err() == nil {
 					w.observeReaper("failed", started, result)
-					w.logger.ErrorContext(ctx, "webhook stale reaper failed",
-						"retried", result.Retried,
-						"failed", result.Failed,
-						"error", err,
+					w.logger.Log(ctx, logging.LevelError, logging.EventQueueOutcome,
+						logging.QueueField(logging.QueueWebhook),
+						logging.OperationField(logging.OperationRecover),
+						logging.OutcomeField(logging.OutcomeFailed),
+						logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+						logging.RetriedCount(result.Retried),
+						logging.FailedCount(result.Failed),
 					)
 				}
 			} else {
 				w.observeReaper("succeeded", started, result)
 				if result.Total() > 0 {
-					w.logger.WarnContext(ctx, "stale webhook events reaped", "retried", result.Retried, "failed", result.Failed)
+					w.logger.Log(ctx, logging.LevelWarn, logging.EventQueueOutcome,
+						logging.QueueField(logging.QueueWebhook),
+						logging.OperationField(logging.OperationRecover),
+						logging.OutcomeField(logging.OutcomeRecovered),
+						logging.RetriedCount(result.Retried),
+						logging.FailedCount(result.Failed),
+					)
 				}
 			}
 		}

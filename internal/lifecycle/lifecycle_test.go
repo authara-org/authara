@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +14,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/authara-org/authara/internal/logging"
 )
 
 func TestLifecycleSIGTERM(t *testing.T) {
@@ -276,6 +276,6 @@ func assertReadinessTransitions(t *testing.T, server *fakeLifecycleServer, want 
 	}
 }
 
-func discardLifecycleLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+func discardLifecycleLogger() *logging.Logger {
+	return logging.Discard()
 }

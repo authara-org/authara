@@ -2,20 +2,21 @@ package email
 
 import (
 	"context"
-	"log/slog"
+
+	"github.com/authara-org/authara/internal/logging"
 )
 
 type NoopSenderConfig struct {
-	Logger *slog.Logger
+	Logger *logging.Logger
 }
 
 type NoopSender struct {
-	logger *slog.Logger
+	logger *logging.Logger
 }
 
 func NewNoopSender(cfg NoopSenderConfig) *NoopSender {
 	if cfg.Logger == nil {
-		cfg.Logger = slog.Default()
+		cfg.Logger = logging.Discard()
 	}
 
 	return &NoopSender{
@@ -25,10 +26,10 @@ func NewNoopSender(cfg NoopSenderConfig) *NoopSender {
 
 func (s *NoopSender) Send(ctx context.Context, _ string, msg Message) error {
 	// Recipients and rendered content may contain account PII or credentials.
-	s.logger.InfoContext(ctx, "email noop send",
-		"has_subject", msg.Subject != "",
-		"has_text", msg.Text != "",
-		"has_html", msg.HTML != "",
+	s.logger.Log(ctx, logging.LevelInfo, logging.EventWorkerOutcome,
+		logging.WorkerField(logging.WorkerEmail),
+		logging.OperationField(logging.OperationDeliver),
+		logging.OutcomeField(logging.OutcomeSkipped),
 	)
 
 	return nil

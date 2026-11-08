@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 )
@@ -18,6 +19,7 @@ type Config struct {
 	Database    string
 	Timezone    string
 	LogSql      bool
+	Logger      *logging.Logger
 	SSLMode     string
 	SSLRootCert string
 
@@ -31,6 +33,7 @@ type Store struct {
 	db        *sql.DB
 	pgxConfig *pgx.ConnConfig
 	logSQL    bool
+	logger    *logging.Logger
 }
 
 func (s *Store) DB() *sql.DB {
@@ -69,7 +72,7 @@ func New(cfg Config) (*Store, error) {
 	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
-	c := Store{db: sqlDB, pgxConfig: pgxConfig, logSQL: cfg.LogSql}
+	c := Store{db: sqlDB, pgxConfig: pgxConfig, logSQL: cfg.LogSql, logger: cfg.Logger}
 	return &c, nil
 }
 

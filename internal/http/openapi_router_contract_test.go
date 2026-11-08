@@ -2,8 +2,6 @@ package http
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +9,7 @@ import (
 
 	"github.com/authara-org/authara/internal/http/handlers/internalapi"
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/organization"
 )
 
@@ -95,7 +94,7 @@ func TestOpenAPIRouterContractFailures(t *testing.T) {
 }
 
 func newOpenAPIContractTestRouter(mode organization.OrgMode) http.Handler {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 	pass := func(next http.Handler) http.Handler { return next }
 	handlers := newTestHandlers(logger, render.New(render.Assets{}, false))
 	if mode != "" {

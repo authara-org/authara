@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
+	"strings"
 
 	"github.com/authara-org/authara/internal/lifecycle"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/operations"
 )
 
@@ -21,13 +22,40 @@ func main() {
 	}
 	if len(os.Args) > 1 && operations.IsCommand(os.Args[1]) {
 		if err := operations.Run(context.Background(), os.Args[1:], os.Stdout); err != nil {
-			log.Fatalf("operational command failed: %v", err)
+			emergencyLogger().Error(logging.EventInternalOperation,
+				logging.ComponentField(logging.ComponentProcess),
+				logging.OperationField(logging.OperationOther),
+				logging.OutcomeField(logging.OutcomeFailed),
+				logging.ErrorCodeField(logging.ErrorInternalFailure),
+			)
+			os.Exit(1)
 		}
 		return
 	}
 
 	if err := lifecycle.Run(Version); err != nil {
-		log.Print("authara failed during startup; check configuration and dependency availability")
+		emergencyLogger().Error(logging.EventProcessLifecycle,
+			logging.ComponentField(logging.ComponentProcess),
+			logging.OperationField(logging.OperationStartup),
+			logging.OutcomeField(logging.OutcomeFailed),
+			logging.ErrorCodeField(logging.ErrorConfigurationInvalid),
+		)
 		os.Exit(1)
 	}
+}
+
+func emergencyLogger() *logging.Logger {
+	environment := strings.TrimSpace(os.Getenv("AUTHARA_LOG_ENVIRONMENT"))
+	if environment == "" {
+		environment = strings.TrimSpace(os.Getenv("APP_ENV"))
+	}
+	if environment == "" {
+		environment = "unknown"
+	}
+	logger, err := logging.New(logging.Config{Level: string(logging.LevelInfo), Environment: environment, Version: Version, Writer: os.Stderr})
+	if err == nil {
+		return logger
+	}
+	logger, _ = logging.New(logging.Config{Level: string(logging.LevelInfo), Environment: "unknown", Version: "unknown", Writer: os.Stderr})
+	return logger
 }

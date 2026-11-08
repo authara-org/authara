@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"slices"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/http/kit/redirect"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/google/uuid"
 )
 
@@ -25,7 +25,7 @@ type ServiceOptions struct {
 	Store             RuntimeSettingsStore
 	LookupEnvironment func(string) (string, bool)
 	Environment       []EnvironmentVariable
-	Logger            *slog.Logger
+	Logger            *logging.Logger
 	ReconcileInterval time.Duration
 	Metrics           RuntimeSettingsMetrics
 }
@@ -67,7 +67,7 @@ type Service struct {
 	defaultValues       map[Key]any
 	environmentValues   map[Key]any
 	explicitEnvironment map[Key]bool
-	logger              *slog.Logger
+	logger              *logging.Logger
 	interval            time.Duration
 	mu                  sync.Mutex
 	current             atomic.Pointer[snapshot]
@@ -95,7 +95,7 @@ func NewService(ctx context.Context, cfg ServiceOptions) (*Service, error) {
 	}
 	logger := cfg.Logger
 	if logger == nil {
-		logger = slog.Default()
+		logger = logging.Discard()
 	}
 	s := &Service{
 		Config: cfg.Startup,
@@ -369,7 +369,12 @@ func (s *Service) refreshAfterConflict(ctx context.Context, key Key, mutationErr
 		return
 	}
 	if err := s.reloadLocked(ctx, true); err != nil {
-		s.logger.WarnContext(ctx, "refresh runtime settings after revision conflict failed", "key", key, "error", err)
+		s.logger.Log(ctx, logging.LevelWarn, logging.EventConfigurationStatus,
+			logging.ComponentField(logging.ComponentConfiguration),
+			logging.OperationField(logging.OperationConfiguration),
+			logging.OutcomeField(logging.OutcomeFailed),
+			logging.ErrorCodeField(logging.ErrorConflict),
+		)
 	}
 }
 
@@ -416,7 +421,12 @@ func (s *Service) StartReconciler(ctx context.Context) {
 				return
 			case <-ticker.C:
 				if err := s.Reconcile(reconcilerCtx); err != nil && reconcilerCtx.Err() == nil {
-					s.logger.ErrorContext(reconcilerCtx, "runtime settings reconciliation failed", "error", err)
+					s.logger.Log(reconcilerCtx, logging.LevelError, logging.EventConfigurationStatus,
+						logging.ComponentField(logging.ComponentConfiguration),
+						logging.OperationField(logging.OperationConfiguration),
+						logging.OutcomeField(logging.OutcomeFailed),
+						logging.ErrorCodeField(logging.ErrorStorageUnavailable),
+					)
 				}
 			}
 		}
@@ -481,10 +491,12 @@ func (s *Service) reloadLocked(ctx context.Context, force bool) error {
 	if s.metrics != nil {
 		s.metrics.SetRuntimeSettingsRevision(next.revision)
 	}
-	for _, override := range next.unsupportedOverrides {
-		s.logger.WarnContext(ctx, "unsupported runtime setting preserved and ignored",
-			"key", override.key,
-			"revision", override.revision,
+	for range next.unsupportedOverrides {
+		s.logger.Log(ctx, logging.LevelWarn, logging.EventConfigurationStatus,
+			logging.ComponentField(logging.ComponentConfiguration),
+			logging.OperationField(logging.OperationConfiguration),
+			logging.OutcomeField(logging.OutcomeSkipped),
+			logging.ErrorCodeField(logging.ErrorConfigurationInvalid),
 		)
 	}
 	return nil

@@ -14,6 +14,7 @@ import (
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
 	userview "github.com/authara-org/authara/internal/http/templates/user"
 	"github.com/authara-org/authara/internal/http/viewmodel"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/session"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -116,7 +117,7 @@ func (h *UIHandler) RevokeSessionPost(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, store.ErrSessionNotFound):
 			msg = "Session not found."
 		default:
-			h.Logger.Error("revoke session failed", "err", err)
+			h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationRevocation, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 			msg = "Something went wrong."
 			status = http.StatusInternalServerError
 		}
@@ -145,7 +146,7 @@ func (h *UIHandler) RevokeSessionPost(w http.ResponseWriter, r *http.Request) {
 	page, err := h.Session.ListUserSessionsPage(ctx, userID, time.Now().UTC(), session.ListOptions{})
 	if err != nil {
 		htmx.ReSwap(w, "none")
-		h.Logger.Error("list user sessions failed", "err", err)
+		h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationSnapshot, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 		_ = h.Render(
 			w,
 			r,
@@ -202,7 +203,7 @@ func (h *UIHandler) RevokeOtherSessionsPost(w http.ResponseWriter, r *http.Reque
 		if errors.Is(err, session.ErrForbidden) {
 			msg = "You are not allowed to revoke these sessions."
 		} else {
-			h.Logger.Error("revoke other sessions failed", "err", err)
+			h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationRevocation, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 			status = http.StatusInternalServerError
 			msg = "Something went wrong."
 		}
@@ -219,7 +220,7 @@ func (h *UIHandler) RevokeOtherSessionsPost(w http.ResponseWriter, r *http.Reque
 	page, err := h.Session.ListUserSessionsPage(ctx, userID, time.Now().UTC(), session.ListOptions{})
 	if err != nil {
 		htmx.ReSwap(w, "none")
-		h.Logger.Error("list user sessions failed", "err", err)
+		h.logInternal(r.Context(), logging.LevelError, logging.ComponentAuthentication, logging.OperationSnapshot, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 		_ = h.Render(
 			w,
 			r,

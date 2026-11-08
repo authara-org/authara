@@ -2,7 +2,6 @@ package http
 
 import (
 	"bytes"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -38,7 +37,7 @@ func TestRouterAppliesForwardedIPOnlyWhenProxyTrustIsEnabled(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var output bytes.Buffer
-			logger := slog.New(slog.NewTextHandler(&output, nil))
+			logger := newTestLogger(&output)
 			router := NewRouter(ServerConfig{
 				Version:                  "test",
 				Logger:                   logger,
@@ -57,8 +56,11 @@ func TestRouterAppliesForwardedIPOnlyWhenProxyTrustIsEnabled(t *testing.T) {
 			if rr.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
 			}
-			if !strings.Contains(output.String(), test.wantLogIP) {
-				t.Fatalf("logs = %q, want %q", output.String(), test.wantLogIP)
+			if strings.Contains(output.String(), test.wantLogIP) {
+				t.Fatalf("logs = %q, must not contain client network address %q", output.String(), test.wantLogIP)
+			}
+			if !strings.Contains(output.String(), `"event":"request_completed"`) {
+				t.Fatalf("logs = %q, want request completion event", output.String())
 			}
 		})
 	}

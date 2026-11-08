@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/applestate"
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/response"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/google/uuid"
 )
 
@@ -90,9 +91,7 @@ func (h *UIHandler) AppleProviderProofPost(w http.ResponseWriter, r *http.Reques
 	if result.RefreshToken != "" {
 		if err := h.Auth.SaveAppleCredential(r.Context(), user.ID, result.RefreshToken); err != nil {
 			h.discardAppleProofAuthorization(r.Context(), result.RefreshToken)
-			if h.Logger != nil {
-				h.Logger.Error("could not refresh Apple credential after account proof", "user_id", user.ID, "err", err)
-			}
+			h.logInternal(r.Context(), logging.LevelError, logging.ComponentProvider, logging.OperationProviderLink, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 		}
 	}
 
@@ -100,8 +99,8 @@ func (h *UIHandler) AppleProviderProofPost(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *UIHandler) recordAppleProofDenial(ctx context.Context) {
-	if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidAssertion); err != nil && h.Logger != nil {
-		h.Logger.Error("record Apple account-proof denial", "err", err)
+	if err := h.Auth.RecordLoginDenied(ctx, domain.AuthenticationMethodApple, domain.SecurityEventReasonInvalidAssertion); err != nil {
+		h.logInternal(ctx, logging.LevelError, logging.ComponentAuthentication, logging.OperationAccountRecovery, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 	}
 }
 
@@ -116,14 +115,12 @@ func (h *UIHandler) discardAppleProofAuthorization(ctx context.Context, refreshT
 		if err == nil {
 			return
 		}
-		if h.Logger != nil {
-			h.Logger.Error("could not queue Apple proof authorization revocation", "err", err)
-		}
+		h.logInternal(ctx, logging.LevelError, logging.ComponentProvider, logging.OperationRevocation, logging.OutcomeFailed, logging.ErrorStorageUnavailable)
 	}
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	err := h.Apple.Revoke(revokeCtx, refreshToken)
 	cancel()
-	if err != nil && h.Logger != nil {
-		h.Logger.Error("could not revoke unused Apple proof authorization", "err", err)
+	if err != nil {
+		h.logInternal(ctx, logging.LevelError, logging.ComponentProvider, logging.OperationRevocation, logging.OutcomeFailed, logging.ErrorProviderRejected)
 	}
 }

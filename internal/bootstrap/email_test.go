@@ -2,31 +2,33 @@ package bootstrap
 
 import (
 	"bytes"
-	"log/slog"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/logging"
 )
 
 func TestWarnIfEmailDeliveryUnavailable(t *testing.T) {
 	var output bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&output, nil))
+	logger := newBootstrapTestLogger(t, &output)
 
 	warnIfEmailDeliveryUnavailable(&config.Config{
 		Email: config.Email{Provider: "noop"},
 	}, logger)
 
 	logged := output.String()
-	if !strings.Contains(logged, "password recovery and security emails will not reach recipients") ||
-		!strings.Contains(logged, "provider=noop") {
-		t.Fatalf("warning = %q, want explicit recovery warning and provider", logged)
+	for _, want := range []string{`"event":"configuration_status"`, `"component":"email"`, `"operation":"configuration"`, `"outcome":"degraded"`, `"error_code":"configuration_invalid"`} {
+		if !strings.Contains(logged, want) {
+			t.Fatalf("warning = %q, want structured field %s", logged, want)
+		}
 	}
 }
 
 func TestWarnIfEmailDeliveryUnavailableSkipsDeliverableProvider(t *testing.T) {
 	var output bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&output, nil))
+	logger := newBootstrapTestLogger(t, &output)
 
 	warnIfEmailDeliveryUnavailable(&config.Config{
 		Email: config.Email{Provider: "smtp"},
@@ -35,4 +37,13 @@ func TestWarnIfEmailDeliveryUnavailableSkipsDeliverableProvider(t *testing.T) {
 	if logged := output.String(); logged != "" {
 		t.Fatalf("unexpected warning for deliverable provider: %q", logged)
 	}
+}
+
+func newBootstrapTestLogger(t *testing.T, writer io.Writer) *logging.Logger {
+	t.Helper()
+	logger, err := logging.New(logging.Config{Level: "debug", Environment: "test", Version: "test", Writer: writer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return logger
 }

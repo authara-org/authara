@@ -1,8 +1,6 @@
 package http
 
 import (
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +10,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/render"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	openapicontract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -148,7 +147,7 @@ func TestRecentAuthenticationRouteContract(t *testing.T) {
 }
 
 func newAccessContractTestRouter() chi.Router {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 
 	pass := func(next http.Handler) http.Handler { return next }
 
@@ -205,7 +204,7 @@ func newAccessContractTestRouter() chi.Router {
 }
 
 func newRecentAuthContractTestRouter() chi.Router {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 	pass := func(next http.Handler) http.Handler { return next }
 	recent := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -262,6 +261,6 @@ func assertNotAuthMarker(t *testing.T, code int) {
 	}
 }
 
-func middlewareRequestLoggerForAccessContract(logger *slog.Logger) func(http.Handler) http.Handler {
+func middlewareRequestLoggerForAccessContract(logger *logging.Logger) func(http.Handler) http.Handler {
 	return httpmiddleware.RequestLogger(logger)
 }

@@ -1,15 +1,31 @@
 package ui
 
 import (
-	"log/slog"
+	"context"
 	"net/http"
 
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/requesterror"
 	"github.com/authara-org/authara/internal/http/templates/components/toast"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/ratelimiter"
 )
+
+func (h *UIHandler) logInternal(ctx context.Context, level logging.Level, component logging.Component, operation logging.Operation, outcome logging.Outcome, errorCode logging.ErrorCode) {
+	if h.Logger == nil {
+		return
+	}
+	fields := []logging.Field{
+		logging.ComponentField(component),
+		logging.OperationField(operation),
+		logging.OutcomeField(outcome),
+	}
+	if errorCode != "" {
+		fields = append(fields, logging.ErrorCodeField(errorCode))
+	}
+	h.Logger.Log(ctx, level, logging.EventInternalOperation, fields...)
+}
 
 func (h *UIHandler) renderFormError(w http.ResponseWriter, r *http.Request, status int, msg string, form templ.Component) {
 	if !httpctx.IsHTMX(r.Context()) {
@@ -50,9 +66,14 @@ func (h *UIHandler) rateLimitResult(allowed bool, err error, limitedMessage stri
 	if err != nil {
 		logger := h.Logger
 		if logger == nil {
-			logger = slog.Default()
+			logger = logging.Discard()
 		}
-		logger.Error("rate limiter unavailable", "err", err)
+		logger.Error(logging.EventInternalOperation,
+			logging.ComponentField(logging.ComponentAuthentication),
+			logging.OperationField(logging.OperationRateLimit),
+			logging.OutcomeField(logging.OutcomeFailed),
+			logging.ErrorCodeField(logging.ErrorDependencyUnavailable),
+		)
 		return http.StatusInternalServerError, "Authentication service unavailable.", false
 	}
 	return 0, "", true

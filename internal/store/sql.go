@@ -4,7 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log/slog"
+
+	"github.com/authara-org/authara/internal/logging"
 )
 
 type rowScanner interface {
@@ -12,24 +13,29 @@ type rowScanner interface {
 }
 
 func (s *Store) exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	if s.logSQL {
-		slog.DebugContext(ctx, "sql exec", "query", query)
-	}
+	s.logDatabaseOperation(ctx, logging.OperationOther)
 	return s.query(ctx).ExecContext(ctx, query, args...)
 }
 
 func (s *Store) queryRow(ctx context.Context, query string, args ...any) *sql.Row {
-	if s.logSQL {
-		slog.DebugContext(ctx, "sql query row", "query", query)
-	}
+	s.logDatabaseOperation(ctx, logging.OperationSnapshot)
 	return s.query(ctx).QueryRowContext(ctx, query, args...)
 }
 
 func (s *Store) queryRows(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	if s.logSQL {
-		slog.DebugContext(ctx, "sql query rows", "query", query)
-	}
+	s.logDatabaseOperation(ctx, logging.OperationSnapshot)
 	return s.query(ctx).QueryContext(ctx, query, args...)
+}
+
+func (s *Store) logDatabaseOperation(ctx context.Context, operation logging.Operation) {
+	if !s.logSQL || s.logger == nil {
+		return
+	}
+	s.logger.Log(ctx, logging.LevelDebug, logging.EventInternalOperation,
+		logging.ComponentField(logging.ComponentDatabase),
+		logging.OperationField(operation),
+		logging.OutcomeField(logging.OutcomeStarted),
+	)
 }
 
 func mapNoRows(err error, mapped error) error {

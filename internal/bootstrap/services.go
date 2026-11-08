@@ -11,6 +11,7 @@ import (
 	"github.com/authara-org/authara/internal/challenge"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/email"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/authara-org/authara/internal/oauth/microsoft"
@@ -137,7 +138,12 @@ func NewServices(app *App) (Services, error) {
 		DefaultInvitationDeliveryProfile: app.Config.Organization.DefaultInvitationDeliveryProfile,
 		AccessTokenRevocations:           accessTokenRevocations,
 	})
-	app.Logger.Warn("AUTHARA_ORG_MODE is a boot-time product shape; changing it after production use is unsupported", "mode", app.Config.Organization.Mode)
+	app.Logger.Warn(logging.EventConfigurationStatus,
+		logging.ComponentField(logging.ComponentConfiguration),
+		logging.OperationField(logging.OperationConfiguration),
+		logging.OutcomeField(logging.OutcomeSucceeded),
+		logging.ModeField(logging.ModeEnabled),
+	)
 
 	authService := auth.New(auth.Config{
 		Store:                  app.Store,

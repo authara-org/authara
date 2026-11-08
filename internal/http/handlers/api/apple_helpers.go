@@ -12,6 +12,7 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httputil"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/apple"
 	"github.com/google/uuid"
@@ -28,16 +29,14 @@ func (h *APIHandler) discardAppleAuthorization(ctx context.Context, refreshToken
 		if err == nil {
 			return
 		}
-		if h.Logger != nil {
-			h.Logger.Error("could not queue Apple authorization revocation", "err", err)
-		}
+		h.logInternal(ctx, logging.LevelError, logging.ComponentProvider, logging.OperationRevocation, logging.ErrorStorageUnavailable)
 	}
 	if h.Apple != nil {
 		revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		err := h.Apple.Revoke(revokeCtx, refreshToken)
 		cancel()
-		if err != nil && h.Logger != nil {
-			h.Logger.Error("could not revoke unused Apple authorization", "err", err)
+		if err != nil {
+			h.logInternal(ctx, logging.LevelError, logging.ComponentProvider, logging.OperationRevocation, logging.ErrorProviderRejected)
 		}
 	}
 }

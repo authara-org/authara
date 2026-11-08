@@ -31,6 +31,7 @@ Examples:
 ```
 APP_ENV
 LOG_LEVEL
+AUTHARA_LOG_ENVIRONMENT
 ```
 
 ---

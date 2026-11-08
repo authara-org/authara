@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"bytes"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -11,7 +10,7 @@ import (
 
 func TestWarnIfTransportMayBeInsecureWarnsWithoutRejectingConfiguration(t *testing.T) {
 	var output bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&output, nil))
+	logger := newBootstrapTestLogger(t, &output)
 	cfg := &config.Config{
 		Values: config.Values{AppEnv: "prod", PublicURL: "http://auth.example.com"},
 		Cache:  config.Cache{Provider: "redis", RedisHost: "redis.internal", RedisPort: 6379},
@@ -20,7 +19,7 @@ func TestWarnIfTransportMayBeInsecureWarnsWithoutRejectingConfiguration(t *testi
 	warnIfTransportMayBeInsecure(cfg, logger)
 
 	logs := output.String()
-	for _, want := range []string{"PUBLIC_URL does not use HTTPS", "Redis transport is not encrypted"} {
+	for _, want := range []string{`"event":"configuration_status"`, `"operation":"transport_security"`, `"outcome":"degraded"`, `"error_code":"configuration_invalid"`} {
 		if !strings.Contains(logs, want) {
 			t.Fatalf("logs = %q, want warning containing %q", logs, want)
 		}
@@ -29,7 +28,7 @@ func TestWarnIfTransportMayBeInsecureWarnsWithoutRejectingConfiguration(t *testi
 
 func TestWarnIfTransportMayBeInsecureDoesNotWarnForHTTPSWithoutRedis(t *testing.T) {
 	var output bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&output, nil))
+	logger := newBootstrapTestLogger(t, &output)
 	cfg := &config.Config{
 		Values: config.Values{AppEnv: "prod", PublicURL: "https://auth.example.com"},
 		Cache:  config.Cache{Provider: "noop"},

@@ -3,13 +3,12 @@ package observability
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/store"
 )
 
@@ -24,7 +23,7 @@ func TestQueueMonitorRefreshesBothQueuesAndStops(t *testing.T) {
 		webhook: store.QueueStats{States: []store.QueueStateStats{{State: store.QueueStateFailed, Count: 1}}},
 	}
 	metrics := New("test")
-	monitor, err := NewQueueMonitor(statsStore, metrics, slog.New(slog.NewTextHandler(io.Discard, nil)), QueueMonitorConfig{
+	monitor, err := NewQueueMonitor(statsStore, metrics, logging.Discard(), QueueMonitorConfig{
 		Interval:          time.Hour,
 		Timeout:           time.Second,
 		EmailStaleAfter:   func() time.Duration { return 2 * time.Minute },
@@ -65,7 +64,7 @@ func TestQueueMonitorRecordsIndependentSnapshotFailures(t *testing.T) {
 		webhook:  store.QueueStats{States: []store.QueueStateStats{{State: store.QueueStatePending, Count: 1}}},
 	}
 	metrics := New("test")
-	monitor, err := NewQueueMonitor(statsStore, metrics, slog.New(slog.NewTextHandler(io.Discard, nil)), QueueMonitorConfig{
+	monitor, err := NewQueueMonitor(statsStore, metrics, logging.Discard(), QueueMonitorConfig{
 		EmailStaleAfter:   func() time.Duration { return time.Minute },
 		WebhookStaleAfter: func() time.Duration { return time.Minute },
 	})

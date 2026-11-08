@@ -2,8 +2,6 @@ package http
 
 import (
 	"errors"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +9,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -166,7 +165,7 @@ type operatorRouteMiddlewareConfig struct {
 }
 
 func newOperatorRouteTestRouter(m operatorRouteMiddlewareConfig) chi.Router {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 	if m.operatorAuth == nil {
 		m.operatorAuth = passMiddleware
 	}

@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/authara-org/authara/internal/cache"
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/maintenance"
 	"github.com/authara-org/authara/internal/observability"
 	"github.com/authara-org/authara/internal/store"
@@ -17,7 +17,7 @@ import (
 
 type App struct {
 	Config        *config.Service
-	Logger        *slog.Logger
+	Logger        *logging.Logger
 	Observability *observability.Service
 	QueueMonitor  *observability.QueueMonitor
 	Maintenance   *maintenance.Coordinator
@@ -32,7 +32,7 @@ func NewApp(version string) (*App, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(cfg, version)
 	if err != nil {
 		return nil, fmt.Errorf("create logger: %w", err)
 	}
@@ -40,7 +40,7 @@ func NewApp(version string) (*App, error) {
 	warnIfTransportMayBeInsecure(cfg, logger)
 	logAccessTokenRevocationGuarantee(cfg, logger)
 
-	st, err := NewStore(cfg)
+	st, err := NewStore(cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("connect database: %w", err)
 	}

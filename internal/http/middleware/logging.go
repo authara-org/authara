@@ -1,16 +1,19 @@
 package middleware
 
 import (
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 )
 
-func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
+func RequestLogger(logger *logging.Logger) func(http.Handler) http.Handler {
+	if logger == nil {
+		logger = logging.Discard()
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.HasPrefix(r.URL.Path, "/auth/static/") {
@@ -19,39 +22,38 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			}
 
 			start := time.Now()
-			ww := &responseWriter{
-				ResponseWriter: w,
-				status:         http.StatusOK,
-			}
+			ww := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 
 			next.ServeHTTP(ww, r)
-
-			duration := time.Since(start).Milliseconds()
 
 			route := ""
 			if rc := chi.RouteContext(r.Context()); rc != nil {
 				route = rc.RoutePattern()
 			}
 
-			args := []any{
-				"request_id", chimw.GetReqID(r.Context()),
-				"method", r.Method,
-				"path", r.URL.Path,
-				"route", route,
-				"status", ww.status,
-				"bytes_out", ww.bytes,
-				"duration_ms", duration,
-				"client_ip", r.RemoteAddr,
-				"user_agent", r.UserAgent(),
+			fields := []logging.Field{
+				logging.RequestID(chimw.GetReqID(r.Context())),
+				logging.Method(r.Method),
+				logging.Route(route),
+				logging.StatusCode(ww.status),
+				logging.StatusClassField(ww.status),
+				logging.ResponseSize(int64(ww.bytes)),
+				logging.Duration(time.Since(start)),
+			}
+			if r.ContentLength >= 0 {
+				fields = append(fields, logging.RequestSize(r.ContentLength))
 			}
 
 			switch {
 			case ww.status >= 500:
-				logger.Error("http request", args...)
+				fields = append(fields, logging.OutcomeField(logging.OutcomeServerError))
+				logger.Log(r.Context(), logging.LevelError, logging.EventRequestCompleted, fields...)
 			case ww.status >= 400:
-				logger.Warn("http request", args...)
+				fields = append(fields, logging.OutcomeField(logging.OutcomeClientError))
+				logger.Log(r.Context(), logging.LevelWarn, logging.EventRequestCompleted, fields...)
 			default:
-				logger.Info("http request", args...)
+				fields = append(fields, logging.OutcomeField(logging.OutcomeSucceeded))
+				logger.Log(r.Context(), logging.LevelInfo, logging.EventRequestCompleted, fields...)
 			}
 		})
 	}

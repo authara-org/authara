@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -51,14 +50,14 @@ func TestLogAccessTokenRevocationGuarantee(t *testing.T) {
 	} {
 		t.Run(tt.mode, func(t *testing.T) {
 			var output bytes.Buffer
-			logger := slog.New(slog.NewTextHandler(&output, nil))
+			logger := newBootstrapTestLogger(t, &output)
 			logAccessTokenRevocationGuarantee(&config.Config{
 				Cache: config.Cache{Provider: "noop", AccessTokenRevocationMode: tt.mode},
 				Token: config.Token{AccessTokenTTL: config.ExpiryOnlyMaxAccessTokenTTL},
 			}, logger)
 
-			if logged := output.String(); !strings.Contains(logged, "mode="+tt.mode) || !strings.Contains(logged, tt.want) {
-				t.Fatalf("log = %q", logged)
+			if logged := output.String(); !strings.Contains(logged, `"event":"configuration_status"`) || !strings.Contains(logged, `"operation":"revocation"`) || !strings.Contains(logged, `"mode":"`+tt.mode+`"`) {
+				t.Fatalf("log = %q; want structured revocation mode", logged)
 			}
 		})
 	}

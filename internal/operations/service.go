@@ -52,7 +52,7 @@ func executeOperationalCommandFromEnvironment(ctx context.Context, command opera
 		return "", fmt.Errorf("load config: %w", err)
 	}
 
-	st, err := bootstrap.NewStore(cfg)
+	st, err := bootstrap.NewStore(cfg, nil)
 	if err != nil {
 		return "", fmt.Errorf("connect database: %w", err)
 	}

@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"io"
-	"log/slog"
 	"time"
 
 	adminsvc "github.com/authara-org/authara/internal/admin"
@@ -14,6 +13,7 @@ import (
 	"github.com/authara-org/authara/internal/http/handlers/internalapi"
 	"github.com/authara-org/authara/internal/http/handlers/ui"
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/oauth"
 	"github.com/authara-org/authara/internal/oauth/google"
 	"github.com/authara-org/authara/internal/organization"
@@ -21,18 +21,26 @@ import (
 	"github.com/google/uuid"
 )
 
-func newTestHandlers(logger *slog.Logger, renderer render.Renderer) Handlers {
+func newTestLogger(writer io.Writer) *logging.Logger {
+	logger, err := logging.New(logging.Config{Level: "debug", Environment: "test", Version: "test", Writer: writer})
+	if err != nil {
+		panic(err)
+	}
+	return logger
+}
+
+func newTestHandlers(logger *logging.Logger, renderer render.Renderer) Handlers {
 	return newTestHandlersWithAdmin(logger, renderer, nil, features.Features{})
 }
 
 func newTestHandlersWithAdmin(
-	logger *slog.Logger,
+	logger *logging.Logger,
 	renderer render.Renderer,
 	admin *adminsvc.Service,
 	features features.Features,
 ) Handlers {
 	if logger == nil {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+		logger = logging.Discard()
 	}
 	if renderer == nil {
 		renderer = render.New(render.Assets{}, features.ChallengeEnabled)

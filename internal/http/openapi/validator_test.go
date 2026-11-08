@@ -5,13 +5,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/authara-org/authara/internal/logging"
 )
 
 func TestValidationMiddlewareAcceptsMatchingResponse(t *testing.T) {
@@ -126,7 +127,7 @@ func TestValidationMiddlewareProductionStreamsResponse(t *testing.T) {
 		<-release
 		_, _ = io.WriteString(w, "second\n")
 	})
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 	server := httptest.NewServer(ValidationMiddleware(logger, false)(handler))
 	t.Cleanup(server.Close)
 	client := server.Client()
@@ -152,7 +153,10 @@ func TestValidationMiddlewareProductionStreamsResponse(t *testing.T) {
 
 func TestValidationMiddlewareStrictFailureIsLogged(t *testing.T) {
 	var logs bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	logger, err := logging.New(logging.Config{Level: "debug", Environment: "test", Version: "test", Writer: &logs})
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{}`))
@@ -162,8 +166,8 @@ func TestValidationMiddlewareStrictFailureIsLogged(t *testing.T) {
 	validated.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/auth/api/v1/csrf", nil))
 
 	assertContractError(t, rr, http.StatusInternalServerError, "internal_error")
-	if !strings.Contains(logs.String(), "invalid response") {
-		t.Fatalf("strict validation failure was not logged: %s", logs.String())
+	if !strings.Contains(logs.String(), `"event":"internal_operation"`) || !strings.Contains(logs.String(), `"operation":"contract_validation"`) || !strings.Contains(logs.String(), `"error_code":"contract_violation"`) {
+		t.Fatalf("strict validation failure was not logged as structured event: %s", logs.String())
 	}
 }
 
@@ -174,7 +178,7 @@ func serveContractRequest(t *testing.T, handler http.Handler, method, target, bo
 
 func serveContractRequestMode(t *testing.T, handler http.Handler, validateResponses bool, method, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 	validated := ValidationMiddleware(logger, validateResponses)(handler)
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	if body != "" {

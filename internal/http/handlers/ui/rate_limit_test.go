@@ -3,8 +3,6 @@ package ui
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +11,7 @@ import (
 	"time"
 
 	"github.com/authara-org/authara/internal/http/kit/render"
+	"github.com/authara-org/authara/internal/logging"
 	"github.com/authara-org/authara/internal/passkey"
 	"github.com/authara-org/authara/internal/ratelimiter"
 )
@@ -44,7 +43,7 @@ func TestRateLimitResultDistinguishesLimitsFromBackendErrors(t *testing.T) {
 }
 
 func TestRateLimiterBackendFailureReturnsInternalErrorFromUIEndpoints(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logging.Discard()
 	limiter := ratelimiter.NewCacheLimiter(uiRateLimitCounter{err: errors.New("redis unavailable")}, ratelimiter.LimiterConfig{
 		LoginIPLimit:        1,
 		LoginEmailLimit:     1,
