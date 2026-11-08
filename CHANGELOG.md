@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/authara-org/authara/compare/v0.31.1...v0.32.0) (2026-11-08)
+
+
+### Features
+
+* **observability:** add privacy-safe structured logging ([4c6dea6](https://github.com/authara-org/authara/commit/4c6dea60d21870c8b7f7aa795fe7ee0d17bbfe4c))
+
 ## [0.31.1](https://github.com/authara-org/authara/compare/v0.31.0...v0.31.1) (2026-11-05)
 
 
