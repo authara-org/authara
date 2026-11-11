@@ -48,6 +48,24 @@ When enabled, admins can manage allowlisted emails under `/auth/admin/allowlist`
 The management page supports paginated live search. Add and remove operations are
 state-changing `POST` actions and require CSRF protection.
 
+## Bootstrap allowed emails
+
+Deployments can seed one or more allowlist entries at startup with a
+comma-separated list of canonical addresses:
+
+```
+AUTHARA_BOOTSTRAP_ALLOWED_EMAIL=founder@example.com,worker@example.com
+```
+
+Authara inserts every configured address idempotently after verifying the
+database schema. A single address remains valid. Existing allowlist entries are
+preserved, including entries added through the admin UI; removing an address
+from the environment variable does not delete it from the database. Invalid,
+non-canonical, or duplicate addresses prevent startup.
+
+This setting seeds entries only. Enable enforcement separately with
+`AUTHARA_ACCESS_POLICY_ALLOWLIST_ENABLED=true`.
+
 ---
 
 ## Behavior

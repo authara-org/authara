@@ -394,6 +394,11 @@ Authara exposes configuration via environment variables.
 
 Stable configuration variables are part of the public contract and follow the same versioning rules.
 
+`AUTHARA_BOOTSTRAP_ALLOWED_EMAIL` accepts a comma-separated list of canonical
+email addresses. Each configured address is inserted into the database
+idempotently during startup; removing an address from the variable does not
+delete an existing database entry.
+
 The machine-readable configuration contract is defined in:
 
 ```

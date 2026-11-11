@@ -124,6 +124,7 @@ func Load() (*Config, error) {
 	if err := cfg.Webhook.parse(); err != nil {
 		return nil, err
 	}
+	cfg.AccessPolicy.parse()
 	if err := cfg.Organization.parse(); err != nil {
 		return nil, err
 	}
