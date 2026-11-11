@@ -53,6 +53,10 @@ func NewApp(version string) (*App, error) {
 		_ = st.Close()
 		return nil, err
 	}
+	if err := EnsureBootstrapAllowedEmails(st, cfg.AccessPolicy.BootstrapAllowedEmails); err != nil {
+		_ = st.Close()
+		return nil, fmt.Errorf("bootstrap access policy: %w", err)
+	}
 	var metrics *observability.Service
 	if cfg.Observability.Enabled {
 		metrics = observability.New(version)
