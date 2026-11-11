@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/authara-org/authara/compare/v0.32.0...v0.33.0) (2026-11-11)
+
+
+### Features
+
+* bootstrap multiple allowed emails ([#95](https://github.com/authara-org/authara/issues/95)) ([342648c](https://github.com/authara-org/authara/commit/342648c4cc0bdc5424f0a800b6c1e6ec43746e3a))
+
 ## [0.32.0](https://github.com/authara-org/authara/compare/v0.31.1...v0.32.0) (2026-11-08)
 
 
