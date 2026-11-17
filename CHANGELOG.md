@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.1](https://github.com/authara-org/authara/compare/v0.33.0...v0.33.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **auth:** preserve allowlist entries on account deletion ([#97](https://github.com/authara-org/authara/issues/97)) ([949753b](https://github.com/authara-org/authara/commit/949753bf4f4efb030dfdc475229c7d8f10aab8e2))
+
 ## [0.33.0](https://github.com/authara-org/authara/compare/v0.32.0...v0.33.0) (2026-11-11)
 
 
