@@ -95,6 +95,12 @@ allowlist. Creating, viewing, revoking, or expiring an invitation does not add o
 remove an allowlist entry; administrators must remove an admitted email
 explicitly when access should be withdrawn.
 
+### Account deletion
+
+Deleting an account does not remove its email from the allowlist. The allowlist
+is an operator-managed admission policy, so administrators must remove the email
+explicitly when future registration or authentication should be denied.
+
 ---
 
 ## Use cases

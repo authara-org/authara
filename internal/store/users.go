@@ -305,7 +305,6 @@ func (s *Store) DeleteUserEmailReferences(ctx context.Context, userID uuid.UUID,
 		args  []any
 	}{
 		{`DELETE FROM organization_invitations WHERE lower(email) = $1 OR accepted_by_user_id = $2`, []any{email, userID}},
-		{`DELETE FROM allowed_emails WHERE lower(email) = $1`, []any{email}},
 		{`DELETE FROM email_jobs WHERE lower(to_email) = $1`, []any{email}},
 		{`DELETE FROM pending_signup_actions WHERE lower(email) = $1`, []any{email}},
 		{`DELETE FROM pending_email_changes WHERE user_id = $1 OR lower(old_email) = $2 OR lower(new_email) = $2`, []any{userID, email}},

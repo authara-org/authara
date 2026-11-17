@@ -1690,7 +1690,7 @@ func TestOwnershipTransferPreventsConcurrentNewOwnerDeletion(t *testing.T) {
 	}
 }
 
-func TestDeleteUser_RemovesEmailReferences(t *testing.T) {
+func TestDeleteUser_RemovesEmailReferencesAndPreservesAllowlist(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
@@ -1771,10 +1771,10 @@ func TestDeleteUser_RemovesEmailReferences(t *testing.T) {
 		if err != nil {
 			t.Fatalf("IsEmailAllowed failed: %v", err)
 		}
-		if allowed {
-			t.Fatal("expected deleted user email to be removed from allowlist")
+		if !allowed {
+			t.Fatal("expected deleted user email to remain in allowlist")
 		}
-		if refs := countEmailReferences(t, ctx, user.Email); refs != 0 {
+		if refs := countDirectEmailReferences(t, ctx, user.Email); refs != 0 {
 			t.Fatalf("expected deleted user email to be removed from direct references, got %d", refs)
 		}
 	})
@@ -1835,14 +1835,13 @@ func createPendingEmailReferences(t *testing.T, ctx context.Context, userID, org
 	}
 }
 
-func countEmailReferences(t *testing.T, ctx context.Context, email string) int {
+func countDirectEmailReferences(t *testing.T, ctx context.Context, email string) int {
 	t.Helper()
 
 	var count int
 	err := queryerFromTxContext(t, ctx).QueryRowContext(ctx, `
 		SELECT
 			(SELECT count(*) FROM organization_invitations WHERE lower(email) = lower($1)) +
-			(SELECT count(*) FROM allowed_emails WHERE lower(email) = lower($1)) +
 			(SELECT count(*) FROM email_jobs WHERE lower(to_email) = lower($1)) +
 			(SELECT count(*) FROM challenges WHERE lower(email) = lower($1)) +
 			(SELECT count(*) FROM pending_signup_actions WHERE lower(email) = lower($1)) +
