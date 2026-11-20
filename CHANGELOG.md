@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.0](https://github.com/authara-org/authara/compare/v0.34.0...v0.35.0) (2026-11-20)
+
+
+### Features
+
+* **auth:** support orgless single-mode sessions ([#101](https://github.com/authara-org/authara/issues/101)) ([5ca87b0](https://github.com/authara-org/authara/commit/5ca87b00344c670cacb2c42fd1ae61bfd221a716))
+
 ## [0.34.0](https://github.com/authara-org/authara/compare/v0.33.1...v0.34.0) (2026-11-20)
 
 
