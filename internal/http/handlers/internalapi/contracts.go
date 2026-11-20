@@ -42,5 +42,6 @@ var (
 	RemoveInternalOrganizationMemberErrors      = contract.MustOperationErrors("removeInternalOrganizationMember")
 	UpdateInternalOrganizationMemberErrors      = contract.MustOperationErrors("updateInternalOrganizationMember")
 	TransferInternalOrganizationOwnershipErrors = contract.MustOperationErrors("transferInternalOrganizationOwnership")
+	GetInternalUserErrors                       = contract.MustOperationErrors("getInternalUser")
 	DeleteInternalUserErrors                    = contract.MustOperationErrors("deleteInternalUser")
 )

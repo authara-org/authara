@@ -447,13 +447,16 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 			r.Use(mw.RequireInternalAPIAuth)
 
 			r.Post("/organizations", contracth.CreateInternalOrganization)
-			r.Delete("/organizations/{organizationID}", contracth.DeleteInternalOrganization)
-			r.Patch("/organizations/{organizationID}/members/{userID}", contracth.UpdateInternalOrganizationMember)
-			r.Delete("/organizations/{organizationID}/members/{userID}", contracth.RemoveInternalOrganizationMember)
 			r.Post("/organizations/{organizationID}/ownership-transfer", contracth.TransferInternalOrganizationOwnership)
 			r.Post("/organizations/{organizationID}/invitations", contracth.CreateInternalOrganizationInvitation)
 			r.Post("/organizations/{organizationID}/invitations/{invitationID}/resend", contracth.ResendInternalOrganizationInvitation)
 
+			r.Patch("/organizations/{organizationID}/members/{userID}", contracth.UpdateInternalOrganizationMember)
+
+			r.Delete("/organizations/{organizationID}", contracth.DeleteInternalOrganization)
+			r.Delete("/organizations/{organizationID}/members/{userID}", contracth.RemoveInternalOrganizationMember)
+
+			r.Get("/users/{userID}", contracth.GetInternalUser)
 			r.Delete("/users/{userID}", contracth.DeleteInternalUser)
 		})
 	})

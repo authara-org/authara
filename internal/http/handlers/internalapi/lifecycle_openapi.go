@@ -10,6 +10,7 @@ import (
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/store"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 func (h *Handler) DeleteInternalOrganization(ctx context.Context, request contract.DeleteInternalOrganizationRequestObject) (contract.DeleteInternalOrganizationResponseObject, error) {
@@ -79,6 +80,23 @@ func (h *Handler) TransferInternalOrganizationOwnership(ctx context.Context, req
 		return transferInternalOrganizationOwnershipError(code, message), nil
 	}
 	return contract.TransferInternalOrganizationOwnership204Response{}, nil
+}
+
+func (h *Handler) GetInternalUser(ctx context.Context, request contract.GetInternalUserRequestObject) (contract.GetInternalUserResponseObject, error) {
+	user, err := h.Auth.GetUser(ctx, request.UserID)
+	if err != nil {
+		code, message := userLifecycleError(err)
+		return getInternalUserError(code, message), nil
+	}
+	return contract.GetInternalUser200JSONResponse(contract.AuthUser{
+		Id:              user.ID,
+		Email:           openapi_types.Email(user.Email),
+		EmailVerified:   user.EmailVerifiedAt != nil,
+		EmailVerifiedAt: user.EmailVerifiedAt,
+		Username:        user.Username,
+		Disabled:        user.DisabledAt != nil,
+		CreatedAt:       user.CreatedAt,
+	}), nil
 }
 
 func (h *Handler) DeleteInternalUser(ctx context.Context, request contract.DeleteInternalUserRequestObject) (contract.DeleteInternalUserResponseObject, error) {
