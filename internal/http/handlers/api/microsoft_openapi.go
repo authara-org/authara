@@ -180,17 +180,18 @@ func (h *APIHandler) LoginWithMicrosoft(ctx context.Context, request contract.Lo
 		}
 		return microsoftLoginErrorWithHeaders(code, message, header), nil
 	}
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodMicrosoft, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	credentials, err := h.Session.CreateSessionWithOrganizationState(ctx, user.ID, audience, domain.AuthenticationMethodMicrosoft, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
 		return microsoftLoginErrorWithHeaders(response.CodeForbidden, "Account cannot access requested audience.", header), nil
 	case response.CodeInternalError:
 		return microsoftLoginErrorWithHeaders(response.CodeInternalError, "Session error.", header), nil
 	}
-	copyHeaders(header, sessionHeader(h, r, accessToken, refreshToken))
-	body := toContractAuthSession(user, accessToken, refreshToken)
+	copyHeaders(header, sessionHeader(h, r, credentials.AccessToken, credentials.RefreshToken))
+	state := h.organizationSessionState(credentials.ActiveOrganizationID)
+	body := toContractAuthSession(user, credentials.AccessToken, credentials.RefreshToken, state)
 	if !tokenSessionRequested(r) {
-		body = toContractCookieAuthSession(user)
+		body = toContractCookieAuthSession(user, state)
 	}
 	return contract.LoginWithMicrosoft200HeadersResponse{Header: header, Body: body}, nil
 }

@@ -85,11 +85,12 @@ func TestSignupAndLoginSetSessionCookies(t *testing.T) {
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
 		orgs := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeSingle})
 		h := &APIHandler{
-			Auth:       auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx, Organizations: orgs}),
-			Session:    newAPIHandlerTestSessionService(t, tdb),
-			Limiter:    ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{}),
-			AccessTTL:  time.Minute,
-			RefreshTTL: time.Hour,
+			Auth:          auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx, Organizations: orgs}),
+			Session:       newAPIHandlerTestSessionServiceForOrganizations(t, tdb, orgs),
+			Organizations: orgs,
+			Limiter:       ratelimiter.NewInMemoryLimiter(ratelimiter.LimiterConfig{}),
+			AccessTTL:     time.Minute,
+			RefreshTTL:    time.Hour,
 		}
 
 		signupReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/signup/direct", `{"email":" API-AUTH@example.com ","password":"password123"}`)
@@ -127,6 +128,41 @@ func TestSignupAndLoginSetSessionCookies(t *testing.T) {
 			t.Fatal("expected login to set session cookies")
 		}
 		assertResponseTokens(t, loginRR.Body.Bytes())
+
+		user, err := h.Auth.GetUserByEmail(ctx, "api-auth@example.com")
+		if err != nil {
+			t.Fatal(err)
+		}
+		memberships, err := orgs.ListUserMemberships(ctx, user.ID)
+		if err != nil || len(memberships) != 1 {
+			t.Fatalf("memberships = %+v, err = %v", memberships, err)
+		}
+		if err := orgs.DeleteOrganization(ctx, organization.DeleteOrganizationInput{
+			OrganizationID: memberships[0].Membership.OrganizationID,
+			ActorUserID:    user.ID,
+		}); err != nil {
+			t.Fatalf("DeleteOrganization failed: %v", err)
+		}
+
+		orglessReq := apiJSONRequest(ctx, http.MethodPost, "/auth/api/v1/login", `{"identifier":"api-auth@example.com","password":"password123"}`)
+		orglessRR := httptest.NewRecorder()
+		orglessResp, err := h.LoginWithPassword(contractCtx(ctx, orglessReq), contract.LoginWithPasswordRequestObject{
+			Body: passwordLoginRequest("api-auth@example.com", "password123"),
+		})
+		if err != nil {
+			t.Fatalf("orgless LoginWithPassword failed: %v", err)
+		}
+		writeContractResponse(t, orglessRR, orglessResp)
+		if orglessRR.Code != http.StatusOK {
+			t.Fatalf("orgless login status = %d, want %d body=%s", orglessRR.Code, http.StatusOK, orglessRR.Body.String())
+		}
+		var orglessSession contract.AuthSession
+		if err := json.Unmarshal(orglessRR.Body.Bytes(), &orglessSession); err != nil {
+			t.Fatal(err)
+		}
+		if orglessSession.OrganizationState.Status != contract.OrganizationRequired || !orglessSession.OrganizationState.CanAcceptInvitation || !orglessSession.OrganizationState.CanCreateOrganization {
+			t.Fatalf("unexpected orgless state: %+v", orglessSession.OrganizationState)
+		}
 	})
 }
 

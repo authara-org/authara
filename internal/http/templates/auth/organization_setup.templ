@@ -1,0 +1,41 @@
+package auth
+
+import (
+	"github.com/authara-org/authara/internal/http/templates"
+	"github.com/authara-org/authara/internal/http/templates/components/button"
+	"github.com/authara-org/authara/internal/http/templates/components/csrf"
+	"github.com/authara-org/authara/internal/http/templates/components/form"
+)
+
+templ OrganizationSetup() {
+	@templates.PartialRender() {
+		@AuthLayout() {
+			@HeaderSection("Choose an organization", "Your account is signed in but does not currently belong to an organization.")
+			@OrganizationSetupForms()
+		}
+	}
+}
+
+templ OrganizationSetupForms() {
+	<div class="space-y-8">
+		<section>
+			<h2 class="mb-2 text-lg font-semibold text-grey-900 dark:text-grey-100">Accept an invitation</h2>
+			<p class="mb-4 text-sm text-grey-700 dark:text-grey-300">Open the link from your invitation email, or paste its invitation code below.</p>
+			<form hx-post="/auth/invitations/accept" hx-target="this" hx-swap="outerHTML">
+				@csrf.CSRFInput()
+				@form.Input(form.InputConfig{ID: "invitation-code", Name: "token", Type: form.Text, Size: form.Large, Placeholder: "Invitation code", Required: true, Class: "mb-3"})
+				@button.Button(button.ButtonConfig{Label: "Accept invitation", Variant: button.Outline, Class: "w-full"})
+			</form>
+		</section>
+		<div class="border-t border-grey-100 dark:border-grey-800"></div>
+		<section>
+			<h2 class="mb-2 text-lg font-semibold text-grey-900 dark:text-grey-100">Create a new organization</h2>
+			<p class="mb-4 text-sm text-grey-700 dark:text-grey-300">You will become the owner of the new organization.</p>
+			<form hx-post="/auth/organizations/setup" hx-target="this" hx-swap="outerHTML">
+				@csrf.CSRFInput()
+				@form.Input(form.InputConfig{ID: "organization-name", Name: "name", Type: form.Text, Size: form.Large, Placeholder: "Organization name", Required: true, Class: "mb-3"})
+				@button.Button(button.ButtonConfig{Label: "Create organization", Class: "w-full"})
+			</form>
+		</section>
+	</div>
+}

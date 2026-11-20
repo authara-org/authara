@@ -101,17 +101,18 @@ func (h *APIHandler) contractGoogleLogin(
 		}
 		return googleLoginErrorWithHeaders(code, message, header)
 	}
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodGoogle, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+	credentials, err := h.Session.CreateSessionWithOrganizationState(ctx, user.ID, audience, domain.AuthenticationMethodGoogle, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	switch sessionErrorCode(err) {
 	case response.CodeForbidden:
 		return googleLoginErrorWithHeaders(response.CodeForbidden, "Account cannot access requested audience.", header)
 	case response.CodeInternalError:
 		return googleLoginErrorWithHeaders(response.CodeInternalError, "Session error.", header)
 	}
-	copyHeaders(header, sessionHeader(h, r, accessToken, refreshToken))
-	body := toContractAuthSession(user, accessToken, refreshToken)
+	copyHeaders(header, sessionHeader(h, r, credentials.AccessToken, credentials.RefreshToken))
+	state := h.organizationSessionState(credentials.ActiveOrganizationID)
+	body := toContractAuthSession(user, credentials.AccessToken, credentials.RefreshToken, state)
 	if !tokenSessionRequested(r) {
-		body = toContractCookieAuthSession(user)
+		body = toContractCookieAuthSession(user, state)
 	}
 	return contract.LoginWithGoogle200HeadersResponse{Header: header, Body: body}
 }

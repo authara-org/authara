@@ -52,6 +52,12 @@ const authenticationChallengeTTL = 5 * time.Minute
 
 var errRefreshTokenReuseDetected = errors.New("refresh token reuse detected")
 
+type Credentials struct {
+	AccessToken          string
+	RefreshToken         string
+	ActiveOrganizationID uuid.UUID
+}
+
 func New(cfg SessionConfig) *Service {
 	access := cfg.AccessPolicy
 	if access == nil {
@@ -102,6 +108,19 @@ func (s *Service) CreateSession(
 	refreshToken string,
 	err error,
 ) {
+	credentials, err := s.CreateSessionWithOrganizationState(ctx, userID, audience, authenticationMethod, userAgent, now, clientIP)
+	return credentials.AccessToken, credentials.RefreshToken, err
+}
+
+func (s *Service) CreateSessionWithOrganizationState(
+	ctx context.Context,
+	userID uuid.UUID,
+	audience token.Audience,
+	authenticationMethod domain.AuthenticationMethod,
+	userAgent string,
+	now time.Time,
+	clientIP string,
+) (Credentials, error) {
 	return s.createSession(ctx, userID, nil, audience, authenticationMethod, userAgent, now, clientIP)
 }
 
@@ -114,6 +133,19 @@ func (s *Service) CreatePasskeySession(
 	now time.Time,
 	clientIP string,
 ) (accessToken string, refreshToken string, err error) {
+	credentials, err := s.CreatePasskeySessionWithOrganizationState(ctx, userID, passkeyID, audience, userAgent, now, clientIP)
+	return credentials.AccessToken, credentials.RefreshToken, err
+}
+
+func (s *Service) CreatePasskeySessionWithOrganizationState(
+	ctx context.Context,
+	userID uuid.UUID,
+	passkeyID uuid.UUID,
+	audience token.Audience,
+	userAgent string,
+	now time.Time,
+	clientIP string,
+) (Credentials, error) {
 	return s.createSession(ctx, userID, &passkeyID, audience, domain.AuthenticationMethodPasskey, userAgent, now, clientIP)
 }
 
@@ -126,14 +158,11 @@ func (s *Service) createSession(
 	userAgent string,
 	now time.Time,
 	clientIP string,
-) (
-	accessToken string,
-	refreshToken string,
-	err error,
-) {
+) (Credentials, error) {
+	var credentials Credentials
 	policy := s.policy.CurrentSession()
 	var resultErr error
-	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+	err := s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		user, err := s.ensureUserAllowed(ctx, userID)
 		if err != nil {
 			if errors.Is(err, ErrUserNotAllowed) {
@@ -161,15 +190,18 @@ func (s *Service) createSession(
 		}
 
 		org, membership, err := s.organizations.DefaultOrganizationForUser(ctx, user.ID)
-		if err != nil {
+		orgless := errors.Is(err, store.ErrOrganizationNotFound) && s.organizations.Mode() == organization.OrgModeSingle
+		if err != nil && !orgless {
 			return err
 		}
-		if err := s.store.LockOrganizationForKeyShare(ctx, org.ID); err != nil {
-			return err
-		}
-		membership, err = s.organizations.RequireMembership(ctx, userID, org.ID)
-		if err != nil {
-			return err
+		if !orgless {
+			if err := s.store.LockOrganizationForKeyShare(ctx, org.ID); err != nil {
+				return err
+			}
+			membership, err = s.organizations.RequireMembership(ctx, userID, org.ID)
+			if err != nil {
+				return err
+			}
 		}
 
 		roleNames, err := s.store.GetUserPlatformRoleNames(ctx, userID)
@@ -210,12 +242,12 @@ func (s *Service) createSession(
 			return err
 		}
 
-		refreshToken, err = generateRefreshToken()
+		credentials.RefreshToken, err = generateRefreshToken()
 		if err != nil {
 			return err
 		}
 
-		hashedRefreshToken := hashRefreshToken(refreshToken)
+		hashedRefreshToken := hashRefreshToken(credentials.RefreshToken)
 
 		rt := domain.RefreshToken{
 			SessionID:      createdSession.ID,
@@ -229,16 +261,23 @@ func (s *Service) createSession(
 			return err
 		}
 
-		accessToken, err = s.accessTokens.GenerateWithEmailVerification(
-			userID,
-			createdSession.ID,
-			org.ID,
-			string(membership.Role),
-			audience,
-			platformRoles,
-			user.EmailVerifiedAt != nil,
-			now,
-		)
+		credentials.ActiveOrganizationID = org.ID
+		if orgless {
+			credentials.AccessToken, err = s.accessTokens.GenerateOrglessWithEmailVerification(
+				userID, createdSession.ID, audience, platformRoles, user.EmailVerifiedAt != nil, now,
+			)
+		} else {
+			credentials.AccessToken, err = s.accessTokens.GenerateWithEmailVerification(
+				userID,
+				createdSession.ID,
+				org.ID,
+				string(membership.Role),
+				audience,
+				platformRoles,
+				user.EmailVerifiedAt != nil,
+				now,
+			)
+		}
 		if err != nil {
 			return err
 		}
@@ -249,16 +288,19 @@ func (s *Service) createSession(
 		}, now); err != nil {
 			return err
 		}
-		if err := s.securityEvents.AuthenticationLogin(ctx, securityevent.Authentication{
+		event := securityevent.Authentication{
 			Outcome:              domain.SecurityEventOutcomeSuccess,
 			ActorType:            domain.SecurityEventActorUser,
 			ActorUserID:          &userID,
 			UserID:               &userID,
 			SessionID:            &createdSession.ID,
-			OrganizationID:       &org.ID,
 			PasskeyID:            passkeyID,
 			AuthenticationMethod: authenticationMethod,
-		}); err != nil {
+		}
+		if !orgless {
+			event.OrganizationID = &org.ID
+		}
+		if err := s.securityEvents.AuthenticationLogin(ctx, event); err != nil {
 			return err
 		}
 
@@ -266,13 +308,13 @@ func (s *Service) createSession(
 	})
 
 	if err != nil {
-		return "", "", err
+		return Credentials{}, err
 	}
 	if resultErr != nil {
-		return "", "", resultErr
+		return Credentials{}, resultErr
 	}
 
-	return accessToken, refreshToken, nil
+	return credentials, nil
 }
 
 func (s *Service) recordSessionAuthenticationDenied(
@@ -628,7 +670,15 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		if err := s.store.LockUserForKeyShare(ctx, session.UserID); err != nil {
 			return ErrInvalidRefreshToken
 		}
-		if err := s.store.LockOrganizationForKeyShare(ctx, rt.OrganizationID); err != nil {
+		orgless := rt.OrganizationID == uuid.Nil
+		if orgless {
+			if s.organizations.Mode() != organization.OrgModeSingle {
+				return ErrInvalidRefreshToken
+			}
+			if _, _, err := s.organizations.DefaultOrganizationForUser(ctx, session.UserID); !errors.Is(err, store.ErrOrganizationNotFound) {
+				return ErrInvalidRefreshToken
+			}
+		} else if err := s.store.LockOrganizationForKeyShare(ctx, rt.OrganizationID); err != nil {
 			return ErrInvalidRefreshToken
 		}
 
@@ -655,12 +705,15 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 		if err != nil {
 			return err
 		}
-		membership, err := s.organizations.RequireMembership(ctx, session.UserID, rt.OrganizationID)
-		if err != nil {
-			if errors.Is(err, store.ErrOrganizationMembershipNotFound) {
-				return ErrForbidden
+		var membership domain.OrganizationMembership
+		if !orgless {
+			membership, err = s.organizations.RequireMembership(ctx, session.UserID, rt.OrganizationID)
+			if err != nil {
+				if errors.Is(err, store.ErrOrganizationMembershipNotFound) {
+					return ErrForbidden
+				}
+				return err
 			}
-			return err
 		}
 
 		roleNames, err := s.store.GetUserPlatformRoleNames(ctx, session.UserID)
@@ -722,28 +775,37 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, audie
 			newRefreshToken = refreshToken
 		}
 
-		newAccessToken, err = s.accessTokens.GenerateWithEmailVerification(
-			session.UserID,
-			rt.SessionID,
-			rt.OrganizationID,
-			string(membership.Role),
-			audience,
-			platformRoles,
-			user.EmailVerifiedAt != nil,
-			now,
-		)
+		if orgless {
+			newAccessToken, err = s.accessTokens.GenerateOrglessWithEmailVerification(
+				session.UserID, rt.SessionID, audience, platformRoles, user.EmailVerifiedAt != nil, now,
+			)
+		} else {
+			newAccessToken, err = s.accessTokens.GenerateWithEmailVerification(
+				session.UserID,
+				rt.SessionID,
+				rt.OrganizationID,
+				string(membership.Role),
+				audience,
+				platformRoles,
+				user.EmailVerifiedAt != nil,
+				now,
+			)
+		}
 		if err != nil {
 			return err
 		}
-		if err := s.securityEvents.SessionRefresh(ctx, securityevent.Session{
+		event := securityevent.Session{
 			Outcome:              domain.SecurityEventOutcomeSuccess,
 			ActorType:            domain.SecurityEventActorUser,
 			ActorUserID:          &session.UserID,
 			UserID:               &session.UserID,
 			SessionID:            &session.ID,
-			OrganizationID:       &rt.OrganizationID,
 			AuthenticationMethod: session.AuthenticationMethod,
-		}); err != nil {
+		}
+		if !orgless {
+			event.OrganizationID = &rt.OrganizationID
+		}
+		if err := s.securityEvents.SessionRefresh(ctx, event); err != nil {
 			return err
 		}
 
@@ -786,14 +848,17 @@ func (s *Service) revokeReusedRefreshToken(
 		if err := s.store.RevokeSession(txCtx, rt.SessionID, observedAt); err != nil {
 			return errors.Join(cacheErr, err)
 		}
-		if err := s.securityEvents.SessionRefreshTokenReuse(txCtx, securityevent.Session{
-			Outcome:        domain.SecurityEventOutcomeDenied,
-			ReasonCode:     domain.SecurityEventReasonRefreshTokenReuse,
-			ActorType:      domain.SecurityEventActorAnonymous,
-			UserID:         &session.UserID,
-			SessionID:      &session.ID,
-			OrganizationID: &rt.OrganizationID,
-		}); err != nil {
+		event := securityevent.Session{
+			Outcome:    domain.SecurityEventOutcomeDenied,
+			ReasonCode: domain.SecurityEventReasonRefreshTokenReuse,
+			ActorType:  domain.SecurityEventActorAnonymous,
+			UserID:     &session.UserID,
+			SessionID:  &session.ID,
+		}
+		if rt.OrganizationID != uuid.Nil {
+			event.OrganizationID = &rt.OrganizationID
+		}
+		if err := s.securityEvents.SessionRefreshTokenReuse(txCtx, event); err != nil {
 			return err
 		}
 		return nil
@@ -870,14 +935,17 @@ func (s *Service) Logout(ctx context.Context, refreshToken, accessToken string) 
 	if parseErr != nil || userID == uuid.Nil || claims.SessionID == uuid.Nil {
 		return nil
 	}
-	return s.securityEvents.SessionLogout(ctx, securityevent.Session{
-		Outcome:        domain.SecurityEventOutcomeSuccess,
-		ActorType:      domain.SecurityEventActorUser,
-		ActorUserID:    &userID,
-		UserID:         &userID,
-		SessionID:      &claims.SessionID,
-		OrganizationID: &claims.OrgID,
-	})
+	event := securityevent.Session{
+		Outcome:     domain.SecurityEventOutcomeSuccess,
+		ActorType:   domain.SecurityEventActorUser,
+		ActorUserID: &userID,
+		UserID:      &userID,
+		SessionID:   &claims.SessionID,
+	}
+	if !claims.Orgless {
+		event.OrganizationID = &claims.OrgID
+	}
+	return s.securityEvents.SessionLogout(ctx, event)
 }
 
 func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error {
@@ -947,7 +1015,11 @@ func (s *Service) identityFromClaims(claims *token.AccessClaims) (*AccessIdentit
 	if err != nil || userID == uuid.Nil {
 		return nil, token.ErrInvalidToken
 	}
-	if claims.OrgID == uuid.Nil || claims.OrgRole == "" {
+	if claims.Orgless {
+		if claims.OrgID != uuid.Nil || claims.OrgRole != "" {
+			return nil, token.ErrInvalidToken
+		}
+	} else if claims.OrgID == uuid.Nil || claims.OrgRole == "" {
 		return nil, token.ErrInvalidToken
 	}
 

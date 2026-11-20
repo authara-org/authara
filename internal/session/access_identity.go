@@ -14,3 +14,7 @@ type AccessIdentity struct {
 	Roles            roles.Roles
 	EmailVerified    bool
 }
+
+func (i AccessIdentity) HasOrganization() bool {
+	return i.OrganizationID != uuid.Nil
+}

@@ -81,6 +81,28 @@ func TestAccessTokenIdentifierSupportsTokensIssuedBeforeJTI(t *testing.T) {
 	}
 }
 
+func TestAccessTokenRevocationsSkipMembershipScopeForOrglessToken(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	userID := uuid.New()
+	store := &revocationTestCache{values: map[string][]byte{}, ttls: map[string]time.Duration{}}
+	store.values[cache.RevokedAccessTokenMembershipKey(userID.String(), uuid.Nil.String())] = []byte(strconv.FormatInt(now.UnixNano(), 10))
+	revocations := NewAccessTokenRevocations(store, 10*time.Minute)
+	claims := &AccessClaims{
+		SessionID: uuid.New(),
+		Orgless:   true,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:       uuid.NewString(),
+			Subject:  userID.String(),
+			IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)),
+		},
+	}
+
+	if err := revocations.Check(ctx, "orgless-token", claims); err != nil {
+		t.Fatalf("orgless token checked membership revocation scope: %v", err)
+	}
+}
+
 func signedRevocationTestToken(t *testing.T, claims *AccessClaims) string {
 	t.Helper()
 	signed, err := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims).SignedString(

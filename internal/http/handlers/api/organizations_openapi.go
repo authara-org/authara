@@ -41,6 +41,53 @@ func (h *APIHandler) ListCurrentUserOrganizations(ctx context.Context, request c
 	return contract.ListCurrentUserOrganizations200JSONResponse(contract.OrganizationSummaries{Organizations: out, NextCursor: nextCursor}), nil
 }
 
+func (h *APIHandler) CreateOrganizationForCurrentUser(ctx context.Context, request contract.CreateOrganizationForCurrentUserRequestObject) (contract.CreateOrganizationForCurrentUserResponseObject, error) {
+	r, ok := contractRequest(ctx)
+	if !ok {
+		return createOrganizationForCurrentUserError(responseCodeInternalError(), "API contract error."), nil
+	}
+	if request.Body == nil {
+		return createOrganizationForCurrentUserError(responseCodeInvalidRequest(), "Invalid JSON body."), nil
+	}
+	userID, ok := httpctx.UserID(ctx)
+	if !ok {
+		return createOrganizationForCurrentUserError(responseCodeUnauthorized(), "Unauthorized"), nil
+	}
+	sessionID, ok := httpctx.SessionID(ctx)
+	if !ok {
+		return createOrganizationForCurrentUserError(responseCodeUnauthorized(), "Unauthorized"), nil
+	}
+	audience := token.AudienceApp
+	if request.Params.Audience != nil && string(*request.Params.Audience) != string(audience) {
+		return createOrganizationForCurrentUserError(responseCodeForbidden(), "Organization creation only supports app audience."), nil
+	}
+	org, _, err := h.Organizations.CreateOrganizationForOrglessUser(ctx, organization.CreateOrganizationInput{
+		Name:            request.Body.Name,
+		CreatedByUserID: userID,
+	})
+	switch {
+	case errors.Is(err, store.ErrInvalidOrganizationName):
+		return createOrganizationForCurrentUserError(responseCodeInvalidRequest(), "Invalid organization name."), nil
+	case errors.Is(err, organization.ErrOrganizationOperationForbidden):
+		return createOrganizationForCurrentUserError(responseCodeForbidden(), "Organization creation is unavailable."), nil
+	case errors.Is(err, organization.ErrOrganizationSingleMembershipConflict):
+		return createOrganizationForCurrentUserError(codeOrganizationMembershipConflict, "The account already belongs to an organization."), nil
+	case err != nil:
+		return createOrganizationForCurrentUserError(responseCodeInternalError(), "Organization error."), nil
+	}
+	accessToken, refreshToken, err := h.Session.SwitchSessionOrganization(ctx, userID, sessionID, org.ID, audience, time.Now().UTC())
+	if err != nil {
+		return createOrganizationForCurrentUserError(responseCodeInternalError(), "Session error."), nil
+	}
+	user, err := h.Auth.GetUser(ctx, userID)
+	if err != nil {
+		return createOrganizationForCurrentUserError(responseCodeInternalError(), "Account error."), nil
+	}
+	header := sessionHeader(h, r, accessToken, refreshToken)
+	body := toContractAuthSession(user, accessToken, refreshToken, h.organizationSessionState(org.ID))
+	return contract.CreateOrganizationForCurrentUser201HeadersResponse{Header: header, Body: body}, nil
+}
+
 func (h *APIHandler) GetCurrentOrganization(ctx context.Context, _ contract.GetCurrentOrganizationRequestObject) (contract.GetCurrentOrganizationResponseObject, error) {
 	organizationID, role, code, message, ok := currentOrganization(ctx)
 	if !ok {

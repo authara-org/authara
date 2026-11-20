@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	contract "github.com/authara-org/authara/internal/http/openapi"
@@ -15,6 +16,61 @@ import (
 	"github.com/authara-org/authara/internal/session/token"
 	"github.com/authara-org/authara/internal/testutil"
 )
+
+func TestCreateOrganizationForCurrentOrglessUser(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "api-orgless@example.com", Username: "api-orgless"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		orgs := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeSingle})
+		sessions := newAPIHandlerTestSessionServiceForOrganizations(t, tdb, orgs)
+		now := time.Now().UTC()
+		credentials, err := sessions.CreateSessionWithOrganizationState(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test", now, "")
+		if err != nil {
+			t.Fatalf("create orgless session: %v", err)
+		}
+		identity, err := sessions.ValidateAccessToken(ctx, credentials.AccessToken, token.AudienceApp, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		h := &APIHandler{
+			Auth:          auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx, Organizations: orgs}),
+			Session:       sessions,
+			Organizations: orgs,
+			AccessTTL:     time.Minute,
+			RefreshTTL:    time.Hour,
+		}
+		reqCtx := httpctx.WithUserID(ctx, user.ID)
+		reqCtx = httpctx.WithSessionID(reqCtx, identity.SessionID)
+		req := apiJSONRequest(reqCtx, http.MethodPost, "/auth/api/v1/organizations", `{"name":"Created Workspace"}`)
+		rr := httptest.NewRecorder()
+		resp, err := h.CreateOrganizationForCurrentUser(contractCtx(reqCtx, req), contract.CreateOrganizationForCurrentUserRequestObject{
+			Body: &contract.CreateOrganizationRequest{Name: "Created Workspace"},
+		})
+		if err != nil {
+			t.Fatalf("CreateOrganizationForCurrentUser failed: %v", err)
+		}
+		writeContractResponse(t, rr, resp)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d: %s", rr.Code, http.StatusCreated, rr.Body.String())
+		}
+		var body contract.AuthSession
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.OrganizationState.Status != contract.Active || body.OrganizationState.CanCreateOrganization {
+			t.Fatalf("unexpected organization state: %+v", body.OrganizationState)
+		}
+		memberships, err := orgs.ListUserMemberships(ctx, user.ID)
+		if err != nil || len(memberships) != 1 || memberships[0].Membership.Role != domain.OrganizationRoleOwner {
+			t.Fatalf("memberships = %+v, err = %v", memberships, err)
+		}
+	})
+}
 
 func TestOrganizationsGetAndCurrentGet(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)

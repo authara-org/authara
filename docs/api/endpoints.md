@@ -367,9 +367,23 @@ On success Authara returns `200 OK`. Cookie transport sets `authara_access` and
     "created_at": "2026-01-01T12:00:00Z"
   },
   "access_token": "<access-token>",
-  "refresh_token": "<refresh-token>"
+  "refresh_token": "<refresh-token>",
+  "organization_state": {
+    "status": "active",
+    "can_accept_invitation": false,
+    "can_create_organization": false
+  }
 }
 ```
+
+In `single` organization mode, an existing account with no membership still
+receives a valid Authara session. Its response uses
+`organization_state.status: organization_required` and advertises invitation
+acceptance and organization creation. The access token deliberately carries no
+organization authority, so organization-scoped routes and relying applications
+must reject it until the session is rotated by accepting an invitation or
+creating an organization. Authara's hosted UI redirects this state to
+`/auth/organizations/setup`.
 
 Token transport does not set session cookies or require a CSRF cookie/header
 pair.
@@ -910,10 +924,18 @@ Authenticated organization-context routes are always available:
 ```text
 GET   /auth/api/v1/capabilities
 GET   /auth/api/v1/organizations
+POST  /auth/api/v1/organizations
 GET   /auth/api/v1/organizations/current
 GET   /auth/api/v1/organizations/current/members
 POST  /auth/api/v1/organizations/{organizationID}/switch
 ```
+
+`POST /auth/api/v1/organizations` is narrowly available to an authenticated,
+verified user with no memberships in `single` mode. It creates a team
+organization, makes that user its owner, and rotates the current session into
+the new organization. Concurrent invitation acceptance and organization
+creation serialize on the user so only one membership can win; the other
+operation returns `409 organization_membership_conflict`.
 
 Enabling public organization management adds these direct-management routes:
 

@@ -217,6 +217,58 @@ func (s *Service) CreateOrganization(ctx context.Context, in CreateOrganizationI
 	return org, membership, nil
 }
 
+func (s *Service) CreateOrganizationForOrglessUser(ctx context.Context, in CreateOrganizationInput) (domain.Organization, domain.OrganizationMembership, error) {
+	if s.mode != OrgModeSingle {
+		return domain.Organization{}, domain.OrganizationMembership{}, ErrOrganizationOperationForbidden
+	}
+	if in.CreatedByUserID == uuid.Nil {
+		return domain.Organization{}, domain.OrganizationMembership{}, store.ErrUserNotFound
+	}
+
+	var org domain.Organization
+	var membership domain.OrganizationMembership
+	err := s.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.store.LockUserForUpdate(txCtx, in.CreatedByUserID); err != nil {
+			return err
+		}
+		memberships, err := s.store.ListOrganizationMembershipsByUserID(txCtx, in.CreatedByUserID)
+		if err != nil {
+			return err
+		}
+		if len(memberships) != 0 {
+			return ErrOrganizationSingleMembershipConflict
+		}
+
+		createdBy := in.CreatedByUserID
+		org, err = s.store.CreateOrganization(txCtx, domain.Organization{
+			Name:            in.Name,
+			Kind:            domain.OrganizationKindTeam,
+			CreatedByUserID: &createdBy,
+		})
+		if err != nil {
+			return err
+		}
+		membership, err = s.store.CreateOrganizationMembership(txCtx, domain.OrganizationMembership{
+			OrganizationID: org.ID,
+			UserID:         in.CreatedByUserID,
+			Role:           domain.OrganizationRoleOwner,
+		})
+		if err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		if err := s.publish(txCtx, webhook.NewOrganizationCreated(org, now)); err != nil {
+			return err
+		}
+		return s.publish(txCtx, webhook.NewOrganizationMembershipCreated(membership, now))
+	})
+	if err != nil {
+		return domain.Organization{}, domain.OrganizationMembership{}, err
+	}
+	return org, membership, nil
+}
+
 func (s *Service) UpdateOrganization(ctx context.Context, organizationID uuid.UUID, name string) (domain.Organization, error) {
 	if organizationID == uuid.Nil {
 		return domain.Organization{}, store.ErrOrganizationNotFound

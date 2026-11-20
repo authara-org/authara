@@ -270,7 +270,15 @@ func newAPIHandlerTestSessionService(t *testing.T, tdb *testutil.TestDB) *sessio
 	return newAPIHandlerTestSessionServiceWithRotation(t, tdb, 0)
 }
 
+func newAPIHandlerTestSessionServiceForOrganizations(t *testing.T, tdb *testutil.TestDB, organizations *organization.Service) *session.Service {
+	return newAPIHandlerTestSessionServiceWithConfig(t, tdb, 0, organizations)
+}
+
 func newAPIHandlerTestSessionServiceWithRotation(t *testing.T, tdb *testutil.TestDB, refreshTokenRotation time.Duration) *session.Service {
+	return newAPIHandlerTestSessionServiceWithConfig(t, tdb, refreshTokenRotation, nil)
+}
+
+func newAPIHandlerTestSessionServiceWithConfig(t *testing.T, tdb *testutil.TestDB, refreshTokenRotation time.Duration, organizations *organization.Service) *session.Service {
 	t.Helper()
 
 	keySet, err := token.NewKeySet("test-key", map[string][]byte{
@@ -280,6 +288,9 @@ func newAPIHandlerTestSessionServiceWithRotation(t *testing.T, tdb *testutil.Tes
 		t.Fatalf("NewKeySet failed: %v", err)
 	}
 	txManager := tx.New(tdb.Store)
+	if organizations == nil {
+		organizations = organization.New(organization.Config{Store: tdb.Store, Tx: txManager})
+	}
 
 	return session.New(session.SessionConfig{
 		Store: tdb.Store,
@@ -292,7 +303,7 @@ func newAPIHandlerTestSessionServiceWithRotation(t *testing.T, tdb *testutil.Tes
 		SessionTTL:           time.Hour,
 		RefreshTokenTTL:      time.Hour,
 		RefreshTokenRotation: refreshTokenRotation,
-		Organizations:        organization.New(organization.Config{Store: tdb.Store, Tx: txManager}),
+		Organizations:        organizations,
 	})
 }
 

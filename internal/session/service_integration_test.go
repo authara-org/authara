@@ -759,6 +759,64 @@ func TestCreateSessionAddsOrganizationContext(t *testing.T) {
 	})
 }
 
+func TestCreateSessionAllowsOrglessUserInSingleMode(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		now := time.Date(2026, 11, 20, 19, 30, 0, 0, time.UTC)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:    "orgless-session@example.com",
+			Username: "orgless-session",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		svc := newDBSessionService(t, tdb, 10*time.Minute)
+		svc.organizations = organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeSingle})
+		credentials, err := svc.CreateSessionWithOrganizationState(ctx, user.ID, token.AudienceApp, domain.AuthenticationMethodPassword, "test-agent", now, "203.0.113.42")
+		if err != nil {
+			t.Fatalf("CreateSessionWithOrganizationState failed: %v", err)
+		}
+		if credentials.ActiveOrganizationID != uuid.Nil {
+			t.Fatalf("active organization = %s, want none", credentials.ActiveOrganizationID)
+		}
+
+		identity, err := svc.ValidateAccessToken(ctx, credentials.AccessToken, token.AudienceApp, now)
+		if err != nil {
+			t.Fatalf("ValidateAccessToken failed: %v", err)
+		}
+		if identity.HasOrganization() {
+			t.Fatalf("orgless identity unexpectedly has organization %s", identity.OrganizationID)
+		}
+		persisted, err := tdb.Store.GetSessionByID(ctx, identity.SessionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if persisted.ActiveOrganizationID != uuid.Nil {
+			t.Fatalf("persisted active organization = %s, want none", persisted.ActiveOrganizationID)
+		}
+		rt, err := tdb.Store.GetRefreshTokenByHash(ctx, hashRefreshToken(credentials.RefreshToken))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rt.OrganizationID != uuid.Nil {
+			t.Fatalf("refresh organization = %s, want none", rt.OrganizationID)
+		}
+		refreshedAccess, _, err := svc.RefreshSession(ctx, credentials.RefreshToken, token.AudienceApp, now.Add(time.Minute))
+		if err != nil {
+			t.Fatalf("RefreshSession failed: %v", err)
+		}
+		refreshedIdentity, err := svc.ValidateAccessToken(ctx, refreshedAccess, token.AudienceApp, now.Add(time.Minute))
+		if err != nil {
+			t.Fatalf("ValidateAccessToken after refresh failed: %v", err)
+		}
+		if refreshedIdentity.HasOrganization() {
+			t.Fatal("refreshed orgless identity unexpectedly has an organization")
+		}
+	})
+}
+
 func TestLogoutCancelsPendingEmailChange(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 

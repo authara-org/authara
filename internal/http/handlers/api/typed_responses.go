@@ -103,6 +103,23 @@ func loginWithPasswordError(code response.ErrorCode, message string) contract.Lo
 	}
 }
 
+func createOrganizationForCurrentUserError(code response.ErrorCode, message string) contract.CreateOrganizationForCurrentUserResponseObject {
+	spec := mustRouteError(CreateOrganizationForCurrentUserErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.CreateOrganizationForCurrentUser400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.CreateOrganizationForCurrentUser401JSONResponse(body)
+	case http.StatusForbidden:
+		return contract.CreateOrganizationForCurrentUser403JSONResponse(body)
+	case http.StatusConflict:
+		return contract.CreateOrganizationForCurrentUser409JSONResponse(body)
+	default:
+		return contract.CreateOrganizationForCurrentUser500JSONResponse(body)
+	}
+}
+
 func signupDirectError(code response.ErrorCode, message string) contract.SignupDirectResponseObject {
 	spec := mustRouteError(SignupDirectErrors, code)
 	body := apiErrorBody(spec.Code, message)

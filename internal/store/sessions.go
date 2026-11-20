@@ -13,7 +13,7 @@ func toDomainSession(m model.Session) domain.Session {
 	out := domain.Session{
 		ID:                   m.ID,
 		UserID:               m.UserID,
-		ActiveOrganizationID: m.ActiveOrganizationID,
+		ActiveOrganizationID: m.ActiveOrganizationID.UUID,
 
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,
@@ -33,7 +33,7 @@ func toDomainSession(m model.Session) domain.Session {
 func toModelSession(d domain.Session) model.Session {
 	m := model.Session{
 		UserID:               d.UserID,
-		ActiveOrganizationID: d.ActiveOrganizationID,
+		ActiveOrganizationID: uuid.NullUUID{UUID: d.ActiveOrganizationID, Valid: d.ActiveOrganizationID != uuid.Nil},
 
 		CreatedAt: d.CreatedAt,
 		UpdatedAt: d.UpdatedAt,
@@ -55,7 +55,7 @@ func toDomainRefreshToken(m model.RefreshToken) domain.RefreshToken {
 	return domain.RefreshToken{
 		ID:             m.ID,
 		SessionID:      m.SessionID,
-		OrganizationID: m.OrganizationID,
+		OrganizationID: m.OrganizationID.UUID,
 
 		TokenHash: m.TokenHash,
 
@@ -68,7 +68,7 @@ func toDomainRefreshToken(m model.RefreshToken) domain.RefreshToken {
 func toModelRefreshToken(d domain.RefreshToken) model.RefreshToken {
 	return model.RefreshToken{
 		SessionID:      d.SessionID,
-		OrganizationID: d.OrganizationID,
+		OrganizationID: uuid.NullUUID{UUID: d.OrganizationID, Valid: d.OrganizationID != uuid.Nil},
 
 		TokenHash: d.TokenHash,
 

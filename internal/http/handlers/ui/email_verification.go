@@ -94,14 +94,14 @@ func (h *UIHandler) EmailVerificationCompletePost(w http.ResponseWriter, r *http
 		return
 	}
 	audience := token.Audience(transaction.Audience)
-	accessToken, refreshToken, err := h.Session.CreateSession(r.Context(), user.ID, audience, transaction.AuthenticationMethod, r.UserAgent(), now, httputil.ClientIPString(r))
+	credentials, err := h.Session.CreateSessionWithOrganizationState(r.Context(), user.ID, audience, transaction.AuthenticationMethod, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderInternalError(w, r)
 		return
 	}
 	cookiePolicy := h.sessionCookiePolicy()
-	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	session.SetAccessToken(w, credentials.AccessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, credentials.RefreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
 	session.ClearEmailVerificationTransaction(w)
-	redirect.Redirect(w, r, transaction.ReturnTo, http.StatusSeeOther)
+	redirect.Redirect(w, r, organizationSetupReturnTo(credentials, transaction.ReturnTo), http.StatusSeeOther)
 }

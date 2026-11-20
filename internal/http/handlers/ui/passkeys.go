@@ -218,7 +218,7 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 
 	returnTo := normalizedReturnTo(in.ReturnTo, httpctx.ReturnToOrDefault(ctx))
 	audience := redirect.AudienceForPath(returnTo)
-	accessToken, refreshToken, err := h.Session.CreatePasskeySession(ctx, result.User.ID, result.PasskeyID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
+	credentials, err := h.Session.CreatePasskeySessionWithOrganizationState(ctx, result.User.ID, result.PasskeyID, audience, r.UserAgent(), now, httputil.ClientIPString(r))
 	if err != nil {
 		if errors.Is(err, session.ErrAuthenticationMethodUnavailable) {
 			response.ErrorJSON(w, http.StatusUnprocessableEntity, response.CodeInvalidRequest, "Passkey sign-in failed.")
@@ -229,8 +229,9 @@ func (h *UIHandler) PasskeyAuthenticateFinishPost(w http.ResponseWriter, r *http
 	}
 
 	cookiePolicy := h.sessionCookiePolicy()
-	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	session.SetAccessToken(w, credentials.AccessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, credentials.RefreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	returnTo = organizationSetupReturnTo(credentials, returnTo)
 
 	response.JSON(w, http.StatusOK, map[string]any{
 		"ok":        true,
