@@ -2898,6 +2898,34 @@ paths:
   /auth/internal/v1/users/{userID}:
     parameters:
       - $ref: "#/components/parameters/UserID"
+    get:
+      operationId: getInternalUser
+      tags: [Internal]
+      summary: Get a user
+      description: Returns the current identity state for a trusted internal caller.
+      security:
+        - internalBearer: []
+      x-authara-access: internal
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [user_not_found]
+        "500": [internal_error]
+      responses:
+        "200":
+          description: User identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     delete:
       operationId: deleteInternalUser
       tags: [Internal]

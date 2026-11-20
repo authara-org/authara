@@ -2273,6 +2273,9 @@ type ServerInterface interface {
 	// DeleteInternalUser Delete a user
 	// (DELETE /auth/internal/v1/users/{userID})
 	DeleteInternalUser(w http.ResponseWriter, r *http.Request, userID UserID)
+	// GetInternalUser Get a user
+	// (GET /auth/internal/v1/users/{userID})
+	GetInternalUser(w http.ResponseWriter, r *http.Request, userID UserID)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -2726,6 +2729,12 @@ func (_ Unimplemented) TransferInternalOrganizationOwnership(w http.ResponseWrit
 // DeleteInternalUser Delete a user
 // (DELETE /auth/internal/v1/users/{userID})
 func (_ Unimplemented) DeleteInternalUser(w http.ResponseWriter, r *http.Request, userID UserID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetInternalUser Get a user
+// (GET /auth/internal/v1/users/{userID})
+func (_ Unimplemented) GetInternalUser(w http.ResponseWriter, r *http.Request, userID UserID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4912,6 +4921,32 @@ func (siw *ServerInterfaceWrapper) DeleteInternalUser(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// GetInternalUser operation middleware
+func (siw *ServerInterfaceWrapper) GetInternalUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userID" -------------
+	var userID UserID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userID", chi.URLParam(r, "userID"), &userID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetInternalUser(w, r, userID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -5249,6 +5284,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/auth/internal/v1/users/{userID}", wrapper.DeleteInternalUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/auth/internal/v1/users/{userID}", wrapper.GetInternalUser)
 	})
 
 	return r
@@ -11866,6 +11904,84 @@ func (response DeleteInternalUser500JSONResponse) VisitDeleteInternalUserRespons
 	return err
 }
 
+type GetInternalUserRequestObject struct {
+	UserID UserID `json:"userID"`
+}
+
+type GetInternalUserResponseObject interface {
+	VisitGetInternalUserResponse(w http.ResponseWriter) error
+}
+
+type GetInternalUser200JSONResponse AuthUser
+
+func (response GetInternalUser200JSONResponse) VisitGetInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInternalUser400JSONResponse struct{ ErrorJSONResponse }
+
+func (response GetInternalUser400JSONResponse) VisitGetInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInternalUser401JSONResponse ErrorResponse
+
+func (response GetInternalUser401JSONResponse) VisitGetInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInternalUser404JSONResponse ErrorResponse
+
+func (response GetInternalUser404JSONResponse) VisitGetInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInternalUser500JSONResponse ErrorResponse
+
+func (response GetInternalUser500JSONResponse) VisitGetInternalUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetCurrentAccount Get the authenticated user's account
@@ -12093,6 +12209,9 @@ type StrictServerInterface interface {
 	// DeleteInternalUser Delete a user
 	// (DELETE /auth/internal/v1/users/{userID})
 	DeleteInternalUser(ctx context.Context, request DeleteInternalUserRequestObject) (DeleteInternalUserResponseObject, error)
+	// GetInternalUser Get a user
+	// (GET /auth/internal/v1/users/{userID})
+	GetInternalUser(ctx context.Context, request GetInternalUserRequestObject) (GetInternalUserResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -14358,6 +14477,32 @@ func (sh *strictHandler) DeleteInternalUser(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// GetInternalUser operation middleware
+func (sh *strictHandler) GetInternalUser(w http.ResponseWriter, r *http.Request, userID UserID) {
+	var request GetInternalUserRequestObject
+
+	request.UserID = userID
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetInternalUser(ctx, request.(GetInternalUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetInternalUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetInternalUserResponseObject); ok {
+		if err := validResponse.VisitGetInternalUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
@@ -14528,8 +14673,9 @@ var swaggerSpec = []string{
 	"rMO5XetaWYnziWA45jMdTTaQV+wqbxyfMLqkwlHckKAGwHS6qf7WzWLX3wpaB28fzAJ8AHdrlzm0zmXf",
 	"YyeztSs/K0Fv94ed1a7dII7dIs8hajjlrHhZxas37BRjfPpfB2q7q7sdZ6IGJxGsIPJf/+FAF7ku3AKi",
 	"K73lIeI0gonFosplJOH2Ig3hDMV+dTpELFMu0AO4YmqrbasfmlrbSp9TQDZjdFk57pRLQt2gWHu27Z7S",
-	"H9nrQRIVHrS3y8ATv94rhf8cBgBq7uldDUHz9FSdiIe3jjJbRxOerezvUhaNXo4ulWpgaPptFOMlFGPD",
-	"tfMz+yYrU+b8LYu5d/6mYzCdPxSjtZwvsn38/vn7/w8AAP//",
+	"H9nrQRIVHrS3y8ATv94rhf8cBgBq7uldDUHz9FSdiENYRyYYr+xz0SG+7uFsS40iLqQap+OLa9zEVZb+",
+	"HUQzP++2Q09dmPrHPARarI9LRobk+t9BHDnL78x+z6xxTSS2sr9LWTR6ObpUyqshwbdRjJdQzF7Q7vns",
+	"m6yQnvO3LCvE+ZuOEnb+UIwndL7IyP798/f/HwAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

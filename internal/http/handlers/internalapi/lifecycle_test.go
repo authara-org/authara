@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/authara-org/authara/internal/auth"
 	"github.com/authara-org/authara/internal/domain"
@@ -14,6 +15,7 @@ import (
 	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/store"
 	"github.com/authara-org/authara/internal/testutil"
+	"github.com/google/uuid"
 )
 
 func TestRemoveInternalOrganizationMember(t *testing.T) {
@@ -218,6 +220,55 @@ func TestDeleteInternalUser(t *testing.T) {
 		}
 		if _, err := tdb.Store.GetOrganizationByID(ctx, org.ID); !errors.Is(err, store.ErrOrganizationNotFound) {
 			t.Fatalf("expected organization deletion, got %v", err)
+		}
+	})
+}
+
+func TestGetInternalUser(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		verifiedAt := time.Now().UTC().Truncate(time.Microsecond)
+		user, err := tdb.Store.CreateUser(ctx, domain.User{
+			Email:           "api-get-user@example.com",
+			EmailVerifiedAt: &verifiedAt,
+			Username:        "api-get-user",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		handler := New(auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx}), nil, false)
+		resp, err := handler.GetInternalUser(ctx, contract.GetInternalUserRequestObject{UserID: user.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rr := httptest.NewRecorder()
+		writeContractResponse(t, rr, resp)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+		}
+		var body contract.AuthUser
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Id != user.ID || string(body.Email) != user.Email || !body.EmailVerified || body.EmailVerifiedAt == nil {
+			t.Fatalf("unexpected user response: %+v", body)
+		}
+	})
+}
+
+func TestGetInternalUserReturnsNotFound(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		handler := New(auth.New(auth.Config{Store: tdb.Store, Tx: tdb.Tx}), nil, false)
+		resp, err := handler.GetInternalUser(ctx, contract.GetInternalUserRequestObject{UserID: uuid.New()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rr := httptest.NewRecorder()
+		writeContractResponse(t, rr, resp)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d body=%s", rr.Code, rr.Body.String())
 		}
 	})
 }

@@ -137,6 +137,21 @@ func deleteInternalUserError(code response.ErrorCode, message string) contract.D
 	}
 }
 
+func getInternalUserError(code response.ErrorCode, message string) contract.GetInternalUserResponseObject {
+	spec := mustRouteError(GetInternalUserErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.GetInternalUser400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.GetInternalUser401JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.GetInternalUser404JSONResponse(body)
+	default:
+		return contract.GetInternalUser500JSONResponse(body)
+	}
+}
+
 func getPublicOrganizationError(code response.ErrorCode, message string) contract.GetPublicOrganizationResponseObject {
 	spec := mustRouteError(GetPublicOrganizationErrors, code)
 	body := apiErrorBody(spec.Code, message)
