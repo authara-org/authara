@@ -231,3 +231,13 @@ challenges. They let native Google, Apple, and Microsoft clients validate state
 and nonce without browser OAuth cookies and are cleaned up after expiry. Apply
 migration 039 before deploying Core versions that expose
 `session_transport=token` for provider authentication.
+
+## Orgless single-organization sessions
+
+Schema version 43 makes session and refresh-token organization references
+nullable. The null state is reserved for authenticated users without a
+membership in `single` organization mode; accepting an invitation or creating
+an organization immediately rotates the session back to an organization-bound
+token family. Apply migration 043 before deploying Core versions that issue
+orgless sessions. Rolling back removes any remaining orgless session families
+before restoring the previous non-null constraints.

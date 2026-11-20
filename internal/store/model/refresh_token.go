@@ -10,8 +10,8 @@ type RefreshToken struct {
 	ID        uuid.UUID `db:"id"`
 	CreatedAt time.Time `db:"created_at"`
 
-	SessionID      uuid.UUID `db:"session_id"`
-	OrganizationID uuid.UUID `db:"organization_id"`
+	SessionID      uuid.UUID     `db:"session_id"`
+	OrganizationID uuid.NullUUID `db:"organization_id"`
 
 	TokenHash string `db:"token_hash"`
 

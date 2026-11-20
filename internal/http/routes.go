@@ -213,6 +213,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Use(mw.RequireAppVerifiedEmailUI)
 
 				r.Get("/account", uih.AccountGet)
+				r.Get("/organizations/setup", uih.OrganizationSetupPage)
 				r.Get("/passkeys/setup", uih.PasskeySetupPage)
 
 				// password pages
@@ -225,6 +226,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 					r.Use(mw.RequireCSRF)
 
 					r.Post("/user/username", uih.ChangeUsernamePost)
+					r.Post("/organizations/setup", uih.OrganizationSetupPost)
 					r.Post("/invitations/accept", uih.InvitationAcceptPost)
 
 					r.Post("/sessions/{sessionID}/revoke", uih.RevokeSessionPost)
@@ -388,6 +390,7 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 				r.Get("/organizations/current/members", contracth.ListCurrentOrganizationMembers)
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireAPICSRF)
+					r.Post("/organizations", contracth.CreateOrganizationForCurrentUser)
 					r.With(mw.RequireRecentAuthenticationAPI).Post("/reauthenticate/check", contracth.CheckRecentAuthentication)
 					r.Post("/reauthenticate/password", contracth.ReauthenticateWithPassword)
 					r.Post("/reauthenticate/google", contracth.ReauthenticateWithGoogle)

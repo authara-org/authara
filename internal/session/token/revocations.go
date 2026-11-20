@@ -76,19 +76,23 @@ func (r *AccessTokenRevocations) Check(
 		return err
 	}
 
-	values, err := r.cache.GetMany(ctx,
+	keys := []string{
 		cache.RevokedAccessTokenKey(tokenIdentifier),
 		cache.RevokedAccessTokenSessionKey(claims.SessionID.String()),
 		cache.RevokedAccessTokenUserKey(claims.Subject),
-		cache.RevokedAccessTokenMembershipKey(claims.Subject, claims.OrgID.String()),
-	)
+	}
+	if !claims.Orgless {
+		keys = append(keys, cache.RevokedAccessTokenMembershipKey(claims.Subject, claims.OrgID.String()))
+	}
+	values, err := r.cache.GetMany(ctx, keys...)
 	if err != nil {
 		return fmt.Errorf("%w: check access token revocation: %w", ErrRevocationStoreUnavailable, err)
 	}
-	if len(values) != 4 {
+	if len(values) != len(keys) {
 		return fmt.Errorf(
-			"%w: check access token revocation: expected 4 values, got %d",
+			"%w: check access token revocation: expected %d values, got %d",
 			ErrRevocationStoreUnavailable,
+			len(keys),
 			len(values),
 		)
 	}
@@ -127,7 +131,7 @@ func accessTokenIdentifier(claims *AccessClaims) (string, error) {
 		}
 		return id.String(), nil
 	}
-	if claims.SessionID == uuid.Nil || claims.OrgID == uuid.Nil || claims.Subject == "" || claims.IssuedAt == nil {
+	if claims.SessionID == uuid.Nil || claims.Subject == "" || claims.IssuedAt == nil || (claims.OrgID == uuid.Nil && !claims.Orgless) {
 		return "", ErrInvalidClaims
 	}
 

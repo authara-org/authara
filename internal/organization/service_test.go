@@ -266,6 +266,34 @@ func TestOrganizationLifecycleWebhooks(t *testing.T) {
 	})
 }
 
+func TestCreateOrganizationForOrglessUserInSingleMode(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		user, err := tdb.Store.CreateUser(ctx, domain.User{Email: "orgless-owner@example.com", Username: "orgless-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		svc := New(Config{Store: tdb.Store, Tx: tdb.Tx, Mode: OrgModeSingle})
+		org, membership, err := svc.CreateOrganizationForOrglessUser(ctx, CreateOrganizationInput{
+			Name:            "New Workspace",
+			CreatedByUserID: user.ID,
+		})
+		if err != nil {
+			t.Fatalf("CreateOrganizationForOrglessUser failed: %v", err)
+		}
+		if org.Kind != domain.OrganizationKindTeam || membership.OrganizationID != org.ID || membership.UserID != user.ID || membership.Role != domain.OrganizationRoleOwner {
+			t.Fatalf("unexpected organization or membership: org=%+v membership=%+v", org, membership)
+		}
+		if _, _, err := svc.CreateOrganizationForOrglessUser(ctx, CreateOrganizationInput{
+			Name:            "Second Workspace",
+			CreatedByUserID: user.ID,
+		}); !errors.Is(err, ErrOrganizationSingleMembershipConflict) {
+			t.Fatalf("second organization error = %v, want ErrOrganizationSingleMembershipConflict", err)
+		}
+	})
+}
+
 func TestUpdateOrganizationMemberAuthorization(t *testing.T) {
 	tdb := testutil.OpenTestDB(t)
 	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {

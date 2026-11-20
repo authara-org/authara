@@ -20,6 +20,7 @@ type AccessClaims struct {
 	SessionID     uuid.UUID    `json:"sid"`
 	OrgID         uuid.UUID    `json:"org_id"`
 	OrgRole       string       `json:"org_role"`
+	Orgless       bool         `json:"orgless,omitempty"`
 	Roles         []roles.Role `json:"roles"`
 	EmailVerified bool         `json:"email_verified"`
 
@@ -74,12 +75,38 @@ func (s *AccessTokenService) GenerateWithEmailVerification(
 	emailVerified bool,
 	now time.Time,
 ) (string, error) {
+	return s.generateWithEmailVerification(userID, sessionID, organizationID, organizationRole, false, audience, roles, emailVerified, now)
+}
+
+func (s *AccessTokenService) GenerateOrglessWithEmailVerification(
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	audience Audience,
+	roles roles.Roles,
+	emailVerified bool,
+	now time.Time,
+) (string, error) {
+	return s.generateWithEmailVerification(userID, sessionID, uuid.Nil, "", true, audience, roles, emailVerified, now)
+}
+
+func (s *AccessTokenService) generateWithEmailVerification(
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	organizationID uuid.UUID,
+	organizationRole string,
+	orgless bool,
+	audience Audience,
+	roles roles.Roles,
+	emailVerified bool,
+	now time.Time,
+) (string, error) {
 	kid, key := s.keys.SigningKey()
 
 	claims := AccessClaims{
 		SessionID:     sessionID,
 		OrgID:         organizationID,
 		OrgRole:       organizationRole,
+		Orgless:       orgless,
 		Roles:         roles.List(),
 		EmailVerified: emailVerified,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -167,7 +194,16 @@ func validateAccessClaims(claims *AccessClaims, now time.Time) error {
 		return ErrExpiredToken
 	}
 
-	if claims.IssuedAt == nil || claims.Subject == "" || claims.SessionID == uuid.Nil || claims.OrgID == uuid.Nil || claims.OrgRole == "" {
+	if claims.IssuedAt == nil || claims.Subject == "" || claims.SessionID == uuid.Nil {
+		return ErrInvalidClaims
+	}
+	if claims.Orgless {
+		if claims.OrgID != uuid.Nil || claims.OrgRole != "" {
+			return ErrInvalidClaims
+		}
+		return nil
+	}
+	if claims.OrgID == uuid.Nil || claims.OrgRole == "" {
 		return ErrInvalidClaims
 	}
 

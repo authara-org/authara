@@ -124,6 +124,53 @@ func TestAccessTokenService_EmailVerificationClaim(t *testing.T) {
 	}
 }
 
+func TestAccessTokenService_OrglessClaim(t *testing.T) {
+	svc := newTestAccessTokenService(t, 10*time.Minute)
+	now := time.Now().UTC()
+
+	tokenString, err := svc.GenerateOrglessWithEmailVerification(
+		uuid.New(), uuid.New(), AudienceApp, roles.Roles{}, true, now,
+	)
+	if err != nil {
+		t.Fatalf("GenerateOrglessWithEmailVerification failed: %v", err)
+	}
+	claims, err := svc.Parse(tokenString, AudienceApp, now)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if !claims.Orgless {
+		t.Fatal("orgless claim is false")
+	}
+	if claims.OrgID != uuid.Nil {
+		t.Fatalf("organization id = %q, want nil UUID", claims.OrgID)
+	}
+	if claims.OrgRole != "" {
+		t.Fatalf("organization role = %q, want empty", claims.OrgRole)
+	}
+	if !claims.EmailVerified {
+		t.Fatal("email_verified claim is false")
+	}
+}
+
+func TestValidateAccessClaimsRejectsMixedOrglessAuthority(t *testing.T) {
+	now := time.Now().UTC()
+	claims := &AccessClaims{
+		SessionID: uuid.New(),
+		OrgID:     uuid.New(),
+		OrgRole:   "owner",
+		Orgless:   true,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   uuid.NewString(),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
+		},
+	}
+
+	if err := validateAccessClaims(claims, now); !errors.Is(err, ErrInvalidClaims) {
+		t.Fatalf("validateAccessClaims error = %v, want ErrInvalidClaims", err)
+	}
+}
+
 func TestAccessTokenService_GenerateAndParse_AdminAudience(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	svc := newTestAccessTokenService(t, 10*time.Minute)

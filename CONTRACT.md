@@ -254,6 +254,14 @@ Stable behaviors include:
 - logout invalidation
 - CSRF protection for browser flows
 
+In `single` organization mode, an authenticated user may temporarily have no
+organization membership. Such a session is identified by the additive
+`organization_state` response and an `orgless` access-token claim. It carries
+user and session authority, an empty organization role, and the zero UUID as a
+non-authoritative organization sentinel. Organization-scoped
+operations remain unavailable until invitation acceptance or organization
+creation rotates the session into an organization.
+
 Security-relevant guarantees must not be weakened.
 
 ## 8.1 Recent-authentication contract

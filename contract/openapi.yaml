@@ -2112,6 +2112,49 @@ paths:
           $ref: "#/components/responses/Error"
 
   /auth/api/v1/organizations:
+    post:
+      operationId: createOrganizationForCurrentUser
+      tags: [Organizations]
+      summary: Create an organization for an authenticated orgless user
+      description: Creates a team organization for a user without any organization membership and rotates the current session into it.
+      parameters:
+        - $ref: "#/components/parameters/AppAudience"
+      security:
+        - accessCookie: []
+          csrfCookie: []
+          csrfHeader: []
+      x-authara-access: user
+      x-authara-csrf: required
+      x-authara-set-cookies: [authara_access, authara_refresh]
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "403": [forbidden]
+        "409": [organization_membership_conflict]
+        "500": [internal_error]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationRequest"
+      responses:
+        "201":
+          description: Organization created and session rotated into it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     get:
       operationId: listCurrentUserOrganizations
       tags: [Organizations]
@@ -3596,7 +3639,7 @@ components:
     AuthSession:
       type: object
       additionalProperties: false
-      required: [user, access_token, refresh_token]
+      required: [user, access_token, refresh_token, organization_state]
       properties:
         user:
           $ref: "#/components/schemas/AuthUser"
@@ -3604,6 +3647,20 @@ components:
           type: string
         refresh_token:
           type: string
+        organization_state:
+          $ref: "#/components/schemas/OrganizationSessionState"
+    OrganizationSessionState:
+      type: object
+      additionalProperties: false
+      required: [status, can_accept_invitation, can_create_organization]
+      properties:
+        status:
+          type: string
+          enum: [active, organization_required]
+        can_accept_invitation:
+          type: boolean
+        can_create_organization:
+          type: boolean
     AuthUser:
       type: object
       additionalProperties: false
@@ -3897,6 +3954,13 @@ components:
         created_by_user_id:
           type: string
           format: uuid
+    CreateOrganizationRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
     InternalOrganizationActorRequest:
       type: object
       additionalProperties: false

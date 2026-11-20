@@ -8,7 +8,9 @@ import (
 	"github.com/authara-org/authara/internal/http/kit/httpctx"
 	"github.com/authara-org/authara/internal/http/kit/response"
 	contract "github.com/authara-org/authara/internal/http/openapi"
+	"github.com/authara-org/authara/internal/organization"
 	"github.com/authara-org/authara/internal/session/token"
+	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -39,7 +41,11 @@ func currentOrganization(ctx context.Context) (openapi_types.UUID, domain.Organi
 	return organizationID, role, "", "", true
 }
 
-func toContractAuthSession(user domain.User, accessToken, refreshToken string) contract.AuthSession {
+func toContractAuthSession(user domain.User, accessToken, refreshToken string, states ...contract.OrganizationSessionState) contract.AuthSession {
+	state := contract.OrganizationSessionState{Status: contract.Active}
+	if len(states) != 0 {
+		state = states[0]
+	}
 	return contract.AuthSession{
 		User: contract.AuthUser{
 			Id:              user.ID,
@@ -50,13 +56,33 @@ func toContractAuthSession(user domain.User, accessToken, refreshToken string) c
 			Disabled:        user.DisabledAt != nil,
 			CreatedAt:       user.CreatedAt,
 		},
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken:       accessToken,
+		RefreshToken:      refreshToken,
+		OrganizationState: state,
 	}
 }
 
-func toContractCookieAuthSession(user domain.User) contract.AuthSession {
-	return toContractAuthSession(user, "", "")
+func (h *APIHandler) organizationSessionState(activeOrganizationID uuid.UUID) contract.OrganizationSessionState {
+	mode := organization.OrgMode("")
+	if h.Organizations != nil {
+		mode = h.Organizations.Mode()
+	}
+	if activeOrganizationID == uuid.Nil {
+		return contract.OrganizationSessionState{
+			Status:                contract.OrganizationRequired,
+			CanAcceptInvitation:   true,
+			CanCreateOrganization: mode == organization.OrgModeSingle,
+		}
+	}
+	return contract.OrganizationSessionState{
+		Status:                contract.Active,
+		CanAcceptInvitation:   mode == organization.OrgModeMulti,
+		CanCreateOrganization: mode == organization.OrgModeMulti,
+	}
+}
+
+func toContractCookieAuthSession(user domain.User, states ...contract.OrganizationSessionState) contract.AuthSession {
+	return toContractAuthSession(user, "", "", states...)
 }
 
 func toContractOrganizationSummary(org domain.Organization, role domain.OrganizationRole) contract.OrganizationSummary {

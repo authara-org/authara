@@ -69,6 +69,7 @@ var (
 	RevokeCurrentUserOtherSessionsErrors            = contract.MustOperationErrors("revokeCurrentUserOtherSessions")
 	SetCurrentUserPasswordErrors                    = contract.MustOperationErrors("setCurrentUserPassword")
 	ListCurrentUserOrganizationsErrors              = contract.MustOperationErrors("listCurrentUserOrganizations")
+	CreateOrganizationForCurrentUserErrors          = contract.MustOperationErrors("createOrganizationForCurrentUser")
 	GetCurrentOrganizationErrors                    = contract.MustOperationErrors("getCurrentOrganization")
 	ListCurrentOrganizationMembersErrors            = contract.MustOperationErrors("listCurrentOrganizationMembers")
 	SwitchOrganizationErrors                        = contract.MustOperationErrors("switchOrganization")

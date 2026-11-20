@@ -242,6 +242,15 @@ type LoginWithPassword200HeadersResponse struct {
 	Body   AuthSession
 }
 
+type CreateOrganizationForCurrentUser201HeadersResponse struct {
+	Header http.Header
+	Body   AuthSession
+}
+
+func (r CreateOrganizationForCurrentUser201HeadersResponse) VisitCreateOrganizationForCurrentUserResponse(w http.ResponseWriter) error {
+	return writeJSON(w, http.StatusCreated, r.Header, r.Body)
+}
+
 type AcceptInvitation200HeadersResponse struct {
 	Header http.Header
 	Body   Tokens

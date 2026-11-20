@@ -168,12 +168,12 @@ func (h *APIHandler) contractSession(
 	authenticationMethod domain.AuthenticationMethod,
 	passkeyIDs ...uuid.UUID,
 ) (contract.AuthSession, http.Header, response.ErrorCode, string, bool) {
-	var accessToken, refreshToken string
+	var credentials session.Credentials
 	var err error
 	if len(passkeyIDs) > 0 {
-		accessToken, refreshToken, err = h.Session.CreatePasskeySession(ctx, user.ID, passkeyIDs[0], audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+		credentials, err = h.Session.CreatePasskeySessionWithOrganizationState(ctx, user.ID, passkeyIDs[0], audience, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	} else {
-		accessToken, refreshToken, err = h.Session.CreateSession(ctx, user.ID, audience, authenticationMethod, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
+		credentials, err = h.Session.CreateSessionWithOrganizationState(ctx, user.ID, audience, authenticationMethod, r.UserAgent(), time.Now(), httputil.ClientIPString(r))
 	}
 	if errors.Is(err, session.ErrAuthenticationMethodUnavailable) {
 		return contract.AuthSession{}, nil, response.CodeUnauthorized, "Passkey sign-in failed.", false
@@ -184,6 +184,7 @@ func (h *APIHandler) contractSession(
 	case response.CodeInternalError:
 		return contract.AuthSession{}, nil, response.CodeInternalError, "Session error.", false
 	}
-	header := sessionHeader(h, r, accessToken, refreshToken)
-	return toContractAuthSession(user, accessToken, refreshToken), header, "", "", true
+	header := sessionHeader(h, r, credentials.AccessToken, credentials.RefreshToken)
+	state := h.organizationSessionState(credentials.ActiveOrganizationID)
+	return toContractAuthSession(user, credentials.AccessToken, credentials.RefreshToken, state), header, "", "", true
 }

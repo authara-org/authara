@@ -92,15 +92,16 @@ func (h *UIHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	audience := redirect.AudienceForPath(returnTo)
 	ua := r.UserAgent()
 	now := time.Now()
-	accessToken, refreshToken, err := h.Session.CreateSession(ctx, user.ID, audience, domain.AuthenticationMethodPassword, ua, now, httputil.ClientIPString(r))
+	credentials, err := h.Session.CreateSessionWithOrganizationState(ctx, user.ID, audience, domain.AuthenticationMethodPassword, ua, now, httputil.ClientIPString(r))
 	if err != nil {
 		h.renderFormError(w, r, http.StatusUnprocessableEntity, "This account is disabled.", authview.LoginForm(usernameLoginEnabled))
 		return
 	}
 
 	cookiePolicy := h.sessionCookiePolicy()
-	session.SetAccessToken(w, accessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
-	session.SetRefreshToken(w, refreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	session.SetAccessToken(w, credentials.AccessToken, int(cookiePolicy.AccessTokenTTL.Seconds()))
+	session.SetRefreshToken(w, credentials.RefreshToken, int(cookiePolicy.RefreshTokenTTL.Seconds()))
+	returnTo = organizationSetupReturnTo(credentials, returnTo)
 
 	redirect.Redirect(w, r, returnTo, http.StatusSeeOther)
 }
