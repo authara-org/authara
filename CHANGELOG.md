@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/authara-org/authara/compare/v0.33.1...v0.34.0) (2026-11-20)
+
+
+### Features
+
+* **api:** add internal user lookup ([#99](https://github.com/authara-org/authara/issues/99)) ([9c63e6d](https://github.com/authara-org/authara/commit/9c63e6d44300b48c088b1116ca01314ca4a845fe))
+
 ## [0.33.1](https://github.com/authara-org/authara/compare/v0.33.0...v0.33.1) (2026-11-17)
 
 
