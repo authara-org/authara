@@ -451,7 +451,9 @@ func registerRoutes(r chi.Router, cfg ServerConfig, mw Middlewares) {
 
 			r.Post("/organizations", contracth.CreateInternalOrganization)
 			r.Post("/organizations/{organizationID}/ownership-transfer", contracth.TransferInternalOrganizationOwnership)
+			r.Get("/organizations/{organizationID}/invitations", contracth.ListInternalOrganizationInvitations)
 			r.Post("/organizations/{organizationID}/invitations", contracth.CreateInternalOrganizationInvitation)
+			r.Post("/organizations/{organizationID}/invitations/{invitationID}/revoke", contracth.RevokeInternalOrganizationInvitation)
 			r.Post("/organizations/{organizationID}/invitations/{invitationID}/resend", contracth.ResendInternalOrganizationInvitation)
 
 			r.Patch("/organizations/{organizationID}/members/{userID}", contracth.UpdateInternalOrganizationMember)

@@ -2858,6 +2858,37 @@ paths:
   /auth/internal/v1/organizations/{organizationID}/invitations:
     parameters:
       - $ref: "#/components/parameters/OrganizationID"
+    get:
+      operationId: listInternalOrganizationInvitations
+      tags: [Internal]
+      summary: List organization invitations
+      description: Lists organization invitations for trusted internal callers.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      security:
+        - internalBearer: []
+      x-authara-access: internal
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [organization_not_found]
+        "500": [internal_error]
+      responses:
+        "200":
+          description: Organization invitations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationInvitations"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       operationId: createInternalOrganizationInvitation
       tags: [Internal]
@@ -2891,6 +2922,42 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /auth/internal/v1/organizations/{organizationID}/invitations/{invitationID}/revoke:
+    post:
+      operationId: revokeInternalOrganizationInvitation
+      tags: [Internal]
+      summary: Revoke an organization invitation
+      description: Revokes an organization invitation for trusted internal callers.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+        - $ref: "#/components/parameters/InvitationID"
+      security:
+        - internalBearer: []
+      x-authara-access: internal
+      x-authara-error-codes:
+        "400": [invalid_request]
+        "401": [unauthorized]
+        "404": [organization_not_found, invitation_not_found]
+        "409": [invitation_already_accepted, invitation_revoked, invitation_expired]
+        "500": [internal_error]
+      responses:
+        "200":
+          description: Revoked invitation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationInvitationEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
