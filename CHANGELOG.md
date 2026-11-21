@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.0](https://github.com/authara-org/authara/compare/v0.35.0...v0.36.0) (2026-11-21)
+
+
+### Features
+
+* **api:** add internal invitation management ([#103](https://github.com/authara-org/authara/issues/103)) ([0b11db1](https://github.com/authara-org/authara/commit/0b11db1e785d8c995ff6ae26646444247e320612))
+
 ## [0.35.0](https://github.com/authara-org/authara/compare/v0.34.0...v0.35.0) (2026-11-20)
 
 
