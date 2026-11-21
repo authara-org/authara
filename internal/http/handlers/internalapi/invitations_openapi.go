@@ -27,7 +27,22 @@ func (h *Handler) RevokePublicOrganizationInvitation(ctx context.Context, reques
 	if !ok {
 		return revokePublicOrganizationInvitationError(response.CodeUnauthorized, "Unauthorized"), nil
 	}
-	return h.revokeOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID, &actorUserID), nil
+	if _, code, message, authorized := h.contractAuthorizePublicOrganization(ctx, request.OrganizationID, true); !authorized {
+		return revokePublicOrganizationInvitationError(code, message), nil
+	}
+	envelope, code, message, ok := h.revokeOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID, &actorUserID)
+	if !ok {
+		return revokePublicOrganizationInvitationError(code, message), nil
+	}
+	return contract.RevokePublicOrganizationInvitation200JSONResponse(envelope), nil
+}
+
+func (h *Handler) ListInternalOrganizationInvitations(ctx context.Context, request contract.ListInternalOrganizationInvitationsRequestObject) (contract.ListInternalOrganizationInvitationsResponseObject, error) {
+	invitations, code, message, ok := h.organizationInvitations(ctx, request.OrganizationID, organizationListOptions(request.Params.Cursor, request.Params.Limit))
+	if !ok {
+		return listInternalOrganizationInvitationsError(code, message), nil
+	}
+	return contract.ListInternalOrganizationInvitations200JSONResponse(invitations), nil
 }
 
 func (h *Handler) CreateInternalOrganizationInvitation(ctx context.Context, request contract.CreateInternalOrganizationInvitationRequestObject) (contract.CreateInternalOrganizationInvitationResponseObject, error) {
@@ -64,21 +79,37 @@ func (h *Handler) ResendInternalOrganizationInvitation(ctx context.Context, requ
 	return h.resendOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID), nil
 }
 
+func (h *Handler) RevokeInternalOrganizationInvitation(ctx context.Context, request contract.RevokeInternalOrganizationInvitationRequestObject) (contract.RevokeInternalOrganizationInvitationResponseObject, error) {
+	envelope, code, message, ok := h.revokeOrganizationInvitation(ctx, request.OrganizationID, request.InvitationID, nil)
+	if !ok {
+		return revokeInternalOrganizationInvitationError(code, message), nil
+	}
+	return contract.RevokeInternalOrganizationInvitation200JSONResponse(envelope), nil
+}
+
 func (h *Handler) listOrganizationInvitations(ctx context.Context, organizationID openapi_types.UUID, options organization.ListOptions) contract.ListPublicOrganizationInvitationsResponseObject {
 	if _, code, message, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, true); !ok {
 		return listPublicOrganizationInvitationsError(code, message)
 	}
+	invitations, code, message, ok := h.organizationInvitations(ctx, organizationID, options)
+	if !ok {
+		return listPublicOrganizationInvitationsError(code, message)
+	}
+	return contract.ListPublicOrganizationInvitations200JSONResponse(invitations)
+}
+
+func (h *Handler) organizationInvitations(ctx context.Context, organizationID openapi_types.UUID, options organization.ListOptions) (contract.OrganizationInvitations, response.ErrorCode, string, bool) {
 	now := time.Now().UTC()
 	page, err := h.Organizations.ListInvitationsPage(ctx, organizationID, options)
 	if err != nil {
 		code, message := organizationError(err)
-		return listPublicOrganizationInvitationsError(code, message)
+		return contract.OrganizationInvitations{}, code, message, false
 	}
 	outInvitations := make([]contract.OrganizationInvitation, 0, len(page.Items))
 	for _, invitation := range page.Items {
 		outInvitations = append(outInvitations, toContractInvitation(invitation, "", now))
 	}
-	return contract.ListPublicOrganizationInvitations200JSONResponse(contract.OrganizationInvitations{Invitations: outInvitations, NextCursor: optionalCursor(page.NextCursor)})
+	return contract.OrganizationInvitations{Invitations: outInvitations, NextCursor: optionalCursor(page.NextCursor)}, "", "", true
 }
 
 func (h *Handler) getOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID) contract.GetPublicOrganizationInvitationResponseObject {
@@ -141,10 +172,7 @@ func (h *Handler) resendOrganizationInvitation(ctx context.Context, organization
 	})
 }
 
-func (h *Handler) revokeOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID, revokedBy *openapi_types.UUID) contract.RevokePublicOrganizationInvitationResponseObject {
-	if _, code, message, ok := h.contractAuthorizePublicOrganization(ctx, organizationID, true); !ok {
-		return revokePublicOrganizationInvitationError(code, message)
-	}
+func (h *Handler) revokeOrganizationInvitation(ctx context.Context, organizationID, invitationID openapi_types.UUID, revokedBy *openapi_types.UUID) (contract.OrganizationInvitationEnvelope, response.ErrorCode, string, bool) {
 	now := time.Now().UTC()
 	invitation, err := h.Organizations.RevokeInvitation(ctx, organization.RevokeInvitationInput{
 		OrganizationID:  organizationID,
@@ -154,11 +182,11 @@ func (h *Handler) revokeOrganizationInvitation(ctx context.Context, organization
 	})
 	if err != nil {
 		code, message := organizationError(err)
-		return revokePublicOrganizationInvitationError(code, message)
+		return contract.OrganizationInvitationEnvelope{}, code, message, false
 	}
-	return contract.RevokePublicOrganizationInvitation200JSONResponse(contract.OrganizationInvitationEnvelope{
+	return contract.OrganizationInvitationEnvelope{
 		Invitation: toContractInvitation(invitation, "", now),
-	})
+	}, "", "", true
 }
 
 func createInvitationError(err error) (response.ErrorCode, string) {

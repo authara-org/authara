@@ -1173,6 +1173,28 @@ through the application. After the application backend approves that operation
 and calls the internal API, the user can reopen the invitation, log in, and
 accept it normally.
 
+## List organization invitations
+
+Lists invitations for an organization after the application backend has
+enforced its own organization-management permissions. Results use cursor
+pagination and include pending, accepted, expired, and revoked invitations.
+
+```text
+GET /auth/internal/v1/organizations/{organization_id}/invitations?limit=50&cursor=...
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
+## Revoke organization invitation
+
+Revokes a pending invitation after the application backend has enforced its
+own organization-management permissions. A revoked invitation no longer blocks
+creating a fresh invitation for the same email address.
+
+```text
+POST /auth/internal/v1/organizations/{organization_id}/invitations/{invitation_id}/revoke
+Authorization: Bearer <AUTHARA_INTERNAL_API_TOKEN>
+```
+
 ## Resend organization invitation
 
 Replaces an existing invitation with a fresh pending invitation.

@@ -6,11 +6,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/authara-org/authara/internal/config"
+	"github.com/authara-org/authara/internal/domain"
 	httpmiddleware "github.com/authara-org/authara/internal/http/middleware"
 	contract "github.com/authara-org/authara/internal/http/openapi"
 	"github.com/authara-org/authara/internal/organization"
+	"github.com/authara-org/authara/internal/testutil"
 	"github.com/google/uuid"
 )
 
@@ -56,6 +59,71 @@ func TestCreateOrganizationInvitationRequiresActorUserID(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
 	}
+}
+
+func TestInternalInvitationManagementAllowsListingRevokingAndReinviting(t *testing.T) {
+	tdb := testutil.OpenTestDB(t)
+	testutil.WithRollbackTx(t, tdb, func(ctx context.Context) {
+		owner, err := tdb.Store.CreateUser(ctx, domain.User{Email: "internal-invite-owner@example.com", Username: "internal-invite-owner"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		org, _, err := tdb.Store.EnsureOrganizationForUser(ctx, owner.ID, "Internal Invites", domain.OrganizationKindTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		svc := organization.New(organization.Config{Store: tdb.Store, Tx: tdb.Tx, Mode: organization.OrgModeMulti, InvitationTTL: time.Hour})
+		now := time.Now().UTC()
+		created, err := svc.CreateInvitation(ctx, organization.CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			Email:          "reinvite@example.com",
+			Now:            now,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		handler := New(nil, svc, false)
+
+		listResponse, err := handler.ListInternalOrganizationInvitations(ctx, contract.ListInternalOrganizationInvitationsRequestObject{OrganizationID: org.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		listRecorder := httptest.NewRecorder()
+		writeContractResponse(t, listRecorder, listResponse)
+		if listRecorder.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", listRecorder.Code, listRecorder.Body.String())
+		}
+		var listed contract.OrganizationInvitations
+		if err := json.Unmarshal(listRecorder.Body.Bytes(), &listed); err != nil {
+			t.Fatal(err)
+		}
+		if len(listed.Invitations) != 1 || listed.Invitations[0].Id != created.Invitation.ID {
+			t.Fatalf("unexpected invitations: %+v", listed.Invitations)
+		}
+
+		revokeResponse, err := handler.RevokeInternalOrganizationInvitation(ctx, contract.RevokeInternalOrganizationInvitationRequestObject{
+			OrganizationID: org.ID,
+			InvitationID:   created.Invitation.ID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		revokeRecorder := httptest.NewRecorder()
+		writeContractResponse(t, revokeRecorder, revokeResponse)
+		if revokeRecorder.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", revokeRecorder.Code, revokeRecorder.Body.String())
+		}
+
+		if _, err := svc.CreateInvitation(ctx, organization.CreateInvitationInput{
+			OrganizationID: org.ID,
+			ActorUserID:    owner.ID,
+			Email:          created.Invitation.Email,
+			Now:            now.Add(time.Minute),
+		}); err != nil {
+			t.Fatalf("expected a fresh invitation after revocation: %v", err)
+		}
+	})
 }
 
 func TestPublicCapabilitiesGetReturnsOrganizationMode(t *testing.T) {

@@ -273,6 +273,21 @@ func listPublicOrganizationInvitationsError(code response.ErrorCode, message str
 	}
 }
 
+func listInternalOrganizationInvitationsError(code response.ErrorCode, message string) contract.ListInternalOrganizationInvitationsResponseObject {
+	spec := mustRouteError(ListInternalOrganizationInvitationsErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.ListInternalOrganizationInvitations400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.ListInternalOrganizationInvitations401JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.ListInternalOrganizationInvitations404JSONResponse(body)
+	default:
+		return contract.ListInternalOrganizationInvitations500JSONResponse(body)
+	}
+}
+
 func getPublicOrganizationInvitationError(code response.ErrorCode, message string) contract.GetPublicOrganizationInvitationResponseObject {
 	spec := mustRouteError(GetPublicOrganizationInvitationErrors, code)
 	body := apiErrorBody(spec.Code, message)
@@ -306,6 +321,23 @@ func revokePublicOrganizationInvitationError(code response.ErrorCode, message st
 		return contract.RevokePublicOrganizationInvitation409JSONResponse(body)
 	default:
 		return contract.RevokePublicOrganizationInvitation500JSONResponse(body)
+	}
+}
+
+func revokeInternalOrganizationInvitationError(code response.ErrorCode, message string) contract.RevokeInternalOrganizationInvitationResponseObject {
+	spec := mustRouteError(RevokeInternalOrganizationInvitationErrors, code)
+	body := apiErrorBody(spec.Code, message)
+	switch spec.Status {
+	case http.StatusBadRequest:
+		return contract.RevokeInternalOrganizationInvitation400JSONResponse{ErrorJSONResponse: contract.ErrorJSONResponse(body)}
+	case http.StatusUnauthorized:
+		return contract.RevokeInternalOrganizationInvitation401JSONResponse(body)
+	case http.StatusNotFound:
+		return contract.RevokeInternalOrganizationInvitation404JSONResponse(body)
+	case http.StatusConflict:
+		return contract.RevokeInternalOrganizationInvitation409JSONResponse(body)
+	default:
+		return contract.RevokeInternalOrganizationInvitation500JSONResponse(body)
 	}
 }
 
